@@ -13,10 +13,11 @@ import {
   lstat as nodeLstat,
   mkdir as nodeMkdir,
   open as nodeOpen,
+  rename as nodeRename,
   unlink as nodeUnlink,
 } from 'node:fs/promises';
 import { homedir, hostname as nodeHostname } from 'node:os';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { loadScenarioCatalog } from './scenarioCatalog.js';
@@ -39,26 +40,42 @@ const AbsolutePathSchema = z
   .max(4096)
   .refine((value) => isAbsolute(value));
 
-export const EvaluatorConfigSchema = z
+const EvaluatorConfigSharedShape = {
+  accountAlias: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._ -]*$/u)
+    .refine((value) => value === value.trim())
+    .refine((value) => /[A-Za-z]/u.test(value)),
+  userId: z
+    .string()
+    .min(1)
+    .max(512)
+    .refine((value) => value === value.trim()),
+  matrixUserId: MatrixUserIdSchema,
+  matrixAccessTokenFile: AbsolutePathSchema,
+};
+
+const LegacyEvaluatorConfigV1Schema = z
   .object({
     schemaVersion: z.literal(1),
-    accountAlias: z
-      .string()
-      .min(1)
-      .max(64)
-      .regex(/^[A-Za-z0-9][A-Za-z0-9._ -]*$/u)
-      .refine((value) => value === value.trim())
-      .refine((value) => /[A-Za-z]/u.test(value)),
-    userId: z
-      .string()
-      .min(1)
-      .max(512)
-      .refine((value) => value === value.trim()),
-    matrixUserId: MatrixUserIdSchema,
-    matrixAccessTokenFile: AbsolutePathSchema,
+    ...EvaluatorConfigSharedShape,
     matrixTargetsFile: AbsolutePathSchema,
   })
   .strict();
+
+type LegacyEvaluatorConfigV1 = z.infer<typeof LegacyEvaluatorConfigV1Schema>;
+
+export const EvaluatorConfigSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    ...EvaluatorConfigSharedShape,
+    matrixOutboundAuthTokenFile: AbsolutePathSchema,
+    matrixTargetsFile: AbsolutePathSchema,
+  })
+  .strict()
+  .refine((config) => config.matrixOutboundAuthTokenFile !== config.matrixAccessTokenFile);
 
 export type EvaluatorConfig = z.infer<typeof EvaluatorConfigSchema>;
 
@@ -89,6 +106,12 @@ export function parseEvaluatorConfigContents(contents: string): ParseResult<Eval
   return parseJsonWithSchema(contents, EvaluatorConfigSchema);
 }
 
+function parseLegacyEvaluatorConfigV1Contents(
+  contents: string
+): ParseResult<LegacyEvaluatorConfigV1> {
+  return parseJsonWithSchema(contents, LegacyEvaluatorConfigV1Schema);
+}
+
 export function parseMatrixTargetsContents(contents: string): ParseResult<MatrixTargets> {
   return parseJsonWithSchema(contents, MatrixTargetsSchema);
 }
@@ -99,6 +122,7 @@ export function canonicalizeEvaluatorConfig(config: EvaluatorConfig): string {
 
 export const CONFIG_MAX_BYTES = 64 * 1024;
 export const MATRIX_TOKEN_MAX_BYTES = 16 * 1024;
+export const MATRIX_OUTBOUND_AUTH_TOKEN_MAX_BYTES = 16 * 1024;
 export const MATRIX_TARGETS_MAX_BYTES = 256 * 1024;
 
 export const INTEX_AGENT_HEALTH_URL = 'http://127.0.0.1:8134/health';
@@ -125,11 +149,23 @@ export type ExclusiveCreateResult =
   | { state: 'exists' }
   | { state: 'failed' };
 
+export type AtomicReplaceResult =
+  | { state: 'replaced' }
+  | { state: 'conflict' }
+  | { state: 'failed' };
+
 export interface ProtectedFilePort {
   read(path: string, policy: ProtectedFilePolicy): Promise<ProtectedFileReadResult>;
   validatePrivateDirectory(path: string): Promise<PrivateDirectoryResult>;
   ensurePrivateDirectory(path: string): Promise<PrivateDirectoryResult>;
+  isAtomicReplaceIdle(path: string): Promise<boolean>;
   createExclusive(path: string, contents: string): Promise<ExclusiveCreateResult>;
+  replaceAtomic(
+    path: string,
+    expectedContents: string,
+    contents: string,
+    policy: ProtectedFilePolicy
+  ): Promise<AtomicReplaceResult>;
 }
 
 interface FileStats {
@@ -148,6 +184,7 @@ export interface NodeProtectedFileSystem {
   link(sourcePath: string, destinationPath: string): Promise<void>;
   mkdir(path: string, options: { mode: number; recursive: true }): Promise<string | undefined>;
   open(path: string, flags: number, mode?: number): Promise<FileHandle>;
+  rename(sourcePath: string, destinationPath: string): Promise<void>;
   unlink(path: string): Promise<void>;
 }
 
@@ -162,6 +199,7 @@ const NODE_FILE_SYSTEM: NodeProtectedFileSystem = {
   link: nodeLink,
   mkdir: nodeMkdir,
   open: nodeOpen,
+  rename: nodeRename,
   unlink: nodeUnlink,
 };
 
@@ -271,44 +309,70 @@ export function createNodeProtectedFilePort(
     }
   }
 
-  return {
-    async read(path, policy): Promise<ProtectedFileReadResult> {
-      let before: FileStats;
-      try {
-        before = await fileSystem.lstat(path);
-      } catch (error) {
-        return mapReadError(error);
-      }
+  async function readProtectedFile(
+    path: string,
+    policy: ProtectedFilePolicy
+  ): Promise<ProtectedFileReadResult> {
+    let before: FileStats;
+    try {
+      before = await fileSystem.lstat(path);
+    } catch (error) {
+      return mapReadError(error);
+    }
 
-      if (!isSafeFile(before, options.expectedUid, policy.mode)) {
+    if (!isSafeFile(before, options.expectedUid, policy.mode)) {
+      return { ok: false, reason: 'unsafe' };
+    }
+
+    let handle: FileHandle | undefined;
+    try {
+      handle = await fileSystem.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const after = await handle.stat();
+      if (!isSafeFile(after, options.expectedUid, policy.mode) || !hasSameIdentity(before, after)) {
         return { ok: false, reason: 'unsafe' };
       }
-
-      let handle: FileHandle | undefined;
-      try {
-        handle = await fileSystem.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-        const after = await handle.stat();
-        if (
-          !isSafeFile(after, options.expectedUid, policy.mode) ||
-          !hasSameIdentity(before, after)
-        ) {
-          return { ok: false, reason: 'unsafe' };
-        }
-        if (after.size > policy.maxBytes) {
-          return { ok: false, reason: 'too_large' };
-        }
-
-        const bytes = await readBounded(handle, policy.maxBytes);
-        if (bytes === undefined) {
-          return { ok: false, reason: 'too_large' };
-        }
-        return { ok: true, contents: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
-      } catch (error) {
-        return mapReadError(error);
-      } finally {
-        await handle?.close().catch(() => undefined);
+      if (after.size > policy.maxBytes) {
+        return { ok: false, reason: 'too_large' };
       }
-    },
+
+      const bytes = await readBounded(handle, policy.maxBytes);
+      if (bytes === undefined) {
+        return { ok: false, reason: 'too_large' };
+      }
+      return { ok: true, contents: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+    } catch (error) {
+      return mapReadError(error);
+    } finally {
+      await handle?.close().catch(() => undefined);
+    }
+  }
+
+  async function syncPrivateDirectory(path: string): Promise<boolean> {
+    let handle: FileHandle | undefined;
+    try {
+      handle = await fileSystem.open(
+        path,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+      );
+      const identity = await handle.stat();
+      if (!isSafeDirectory(identity, options.expectedUid)) {
+        return false;
+      }
+      await handle.sync();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      await handle?.close().catch(() => undefined);
+    }
+  }
+
+  function atomicReplaceLockPath(path: string): string {
+    return join(dirname(path), `.${basename(path)}.upgrade.lock`);
+  }
+
+  return {
+    read: readProtectedFile,
 
     validatePrivateDirectory,
 
@@ -324,6 +388,15 @@ export function createNodeProtectedFilePort(
         return { ok: false, reason: 'create_failed' };
       }
       return await validatePrivateDirectory(path);
+    },
+
+    async isAtomicReplaceIdle(path): Promise<boolean> {
+      try {
+        await fileSystem.lstat(atomicReplaceLockPath(path));
+        return false;
+      } catch (error) {
+        return errorCode(error) === 'ENOENT';
+      }
     },
 
     async createExclusive(path, contents): Promise<ExclusiveCreateResult> {
@@ -370,6 +443,92 @@ export function createNodeProtectedFilePort(
           await fileSystem.unlink(temporaryPath).catch(() => undefined);
         }
       }
+    },
+
+    async replaceAtomic(path, expectedContents, contents, policy): Promise<AtomicReplaceResult> {
+      let nonce: string;
+      try {
+        nonce = (options.nonce ?? nodeRandomUUID)();
+      } catch {
+        return { state: 'failed' };
+      }
+      if (!STAGING_NONCE_PATTERN.test(nonce)) {
+        return { state: 'failed' };
+      }
+
+      const directoryPath = dirname(path);
+      const temporaryPath = join(directoryPath, `.intex-agent-evals-${nonce}.tmp`);
+      const lockPath = atomicReplaceLockPath(path);
+      let lockHandle: FileHandle;
+      try {
+        lockHandle = await fileSystem.open(
+          lockPath,
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+          0o600
+        );
+      } catch (error) {
+        return errorCode(error) === 'EEXIST' ? { state: 'conflict' } : { state: 'failed' };
+      }
+
+      let result: AtomicReplaceResult = { state: 'failed' };
+      let stagingHandle: FileHandle | undefined;
+      let temporaryCreated = false;
+      try {
+        await lockHandle.chmod(0o600);
+        const lockIdentity = await lockHandle.stat();
+        if (!isSafeFile(lockIdentity, options.expectedUid, 0o600)) {
+          throw new Error('unsafe-created-lock');
+        }
+
+        const current = await readProtectedFile(path, policy);
+        if (current.ok && current.contents !== expectedContents) {
+          result = { state: 'conflict' };
+        } else if (current.ok) {
+          stagingHandle = await fileSystem.open(
+            temporaryPath,
+            constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+            0o600
+          );
+          temporaryCreated = true;
+          await stagingHandle.chmod(0o600);
+          const identity = await stagingHandle.stat();
+          if (!isSafeFile(identity, options.expectedUid, policy.mode)) {
+            throw new Error('unsafe-created-file');
+          }
+          await stagingHandle.writeFile(contents, { encoding: 'utf8' });
+          await stagingHandle.sync();
+          await stagingHandle.close();
+          stagingHandle = undefined;
+
+          await fileSystem.rename(temporaryPath, path);
+          temporaryCreated = false;
+          const published = await readProtectedFile(path, policy);
+          if (
+            published.ok &&
+            published.contents === contents &&
+            (await syncPrivateDirectory(directoryPath))
+          ) {
+            result = { state: 'replaced' };
+          }
+        }
+      } catch {
+        result = { state: 'failed' };
+      } finally {
+        await stagingHandle?.close().catch(() => undefined);
+        if (temporaryCreated) {
+          await fileSystem.unlink(temporaryPath).catch(() => undefined);
+        }
+        await lockHandle.close().catch(() => undefined);
+        try {
+          await fileSystem.unlink(lockPath);
+        } catch {
+          result = { state: 'failed' };
+        }
+        if (!(await syncPrivateDirectory(directoryPath))) {
+          result = { state: 'failed' };
+        }
+      }
+      return result;
     },
   };
 }
@@ -451,12 +610,15 @@ export type PreflightFailureCode =
   | 'SETUP_TTY_REQUIRED'
   | 'CONFIG_NOT_FOUND'
   | 'CONFIG_INVALID'
+  | 'CONFIG_UPGRADE_REQUIRED'
   | 'CONFIG_PARENT_UNSAFE'
   | 'CONFIG_FILE_UNSAFE'
   | 'CONFIG_CONFLICT'
   | 'CONFIG_WRITE_FAILED'
   | 'MATRIX_TOKEN_FILE_UNSAFE'
   | 'MATRIX_TOKEN_INVALID'
+  | 'MATRIX_OUTBOUND_AUTH_TOKEN_FILE_UNSAFE'
+  | 'MATRIX_OUTBOUND_AUTH_TOKEN_INVALID'
   | 'MATRIX_TARGETS_FILE_UNSAFE'
   | 'MATRIX_TARGETS_INVALID'
   | 'INTEX_AGENT_HEALTH_FAILED'
@@ -485,7 +647,7 @@ export type SetupResult =
   | {
       ok: true;
       exitCode: 0;
-      state: 'created' | 'already_configured';
+      state: 'created' | 'upgraded' | 'already_configured';
       accountAlias: string;
       checks: SafeCheckResult[];
     }
@@ -508,7 +670,11 @@ export type SafeHttpResult =
   | { ok: false; reason: 'timeout' | 'network' | 'invalid_json' | 'too_large' };
 
 export interface HealthHttpPort {
-  get(url: string): Promise<SafeHttpResult>;
+  get(url: string, options?: HealthHttpRequestOptions): Promise<SafeHttpResult>;
+}
+
+export interface HealthHttpRequestOptions {
+  bearerToken?: string;
 }
 
 export interface FirebaseIdentityPort {
@@ -663,6 +829,21 @@ async function validateAccountReadiness(
     return readinessFailure(checks, 'matrix_files', 'MATRIX_TOKEN_INVALID');
   }
 
+  const outboundAuthTokenRead = await ports.protectedFiles.read(
+    config.matrixOutboundAuthTokenFile,
+    {
+      mode: 0o600,
+      maxBytes: MATRIX_OUTBOUND_AUTH_TOKEN_MAX_BYTES,
+    }
+  );
+  if (!outboundAuthTokenRead.ok) {
+    return readinessFailure(checks, 'matrix_files', 'MATRIX_OUTBOUND_AUTH_TOKEN_FILE_UNSAFE');
+  }
+  const outboundAuthToken = outboundAuthTokenRead.contents.trim();
+  if (outboundAuthToken === '' || outboundAuthToken === accessToken) {
+    return readinessFailure(checks, 'matrix_files', 'MATRIX_OUTBOUND_AUTH_TOKEN_INVALID');
+  }
+
   const targetsRead = await ports.protectedFiles.read(config.matrixTargetsFile, {
     mode: 0o600,
     maxBytes: MATRIX_TARGETS_MAX_BYTES,
@@ -690,7 +871,9 @@ async function validateAccountReadiness(
     checks.push({ check: 'whatsapp_health', status: 'passed' });
   }
 
-  const matrixHealthResult = await ports.healthHttp.get(MATRIX_ADAPTER_HEALTH_URL);
+  const matrixHealthResult = await ports.healthHttp.get(MATRIX_ADAPTER_HEALTH_URL, {
+    bearerToken: outboundAuthToken,
+  });
   if (!matrixHealthResult.ok || matrixHealthResult.status !== 200) {
     return readinessFailure(checks, 'matrix_health', 'MATRIX_HEALTH_FAILED');
   }
@@ -774,6 +957,19 @@ function configsEqual(left: EvaluatorConfig, right: EvaluatorConfig): boolean {
   return canonicalizeEvaluatorConfig(left) === canonicalizeEvaluatorConfig(right);
 }
 
+function legacyConfigMatchesUpgrade(
+  legacy: LegacyEvaluatorConfigV1,
+  candidate: EvaluatorConfig
+): boolean {
+  return (
+    legacy.accountAlias === candidate.accountAlias &&
+    legacy.userId === candidate.userId &&
+    legacy.matrixUserId === candidate.matrixUserId &&
+    legacy.matrixAccessTokenFile === candidate.matrixAccessTokenFile &&
+    legacy.matrixTargetsFile === candidate.matrixTargetsFile
+  );
+}
+
 export async function setupEvaluatorConfig(
   candidate: unknown,
   ports: SetupPorts
@@ -810,6 +1006,10 @@ export async function setupEvaluatorConfig(
       );
     }
 
+    if (!(await ports.protectedFiles.isAtomicReplaceIdle(ports.configPath))) {
+      return setupFailure(checks, 'config', 'CONFIG_CONFLICT');
+    }
+
     const created = await ports.protectedFiles.createExclusive(
       ports.configPath,
       canonicalizeEvaluatorConfig(config)
@@ -828,18 +1028,46 @@ export async function setupEvaluatorConfig(
       }
       return setupFailure(checks, 'config', 'CONFIG_FILE_UNSAFE');
     }
-    const loaded = parseEvaluatorConfigContents(configRead.contents);
-    if (!loaded.ok || !configsEqual(loaded.value, config)) {
-      if (created.state === 'created') {
-        return setupFailure(checks, 'config', 'CONFIG_WRITE_FAILED');
-      }
+    if (!(await ports.protectedFiles.isAtomicReplaceIdle(ports.configPath))) {
       return setupFailure(checks, 'config', 'CONFIG_CONFLICT');
+    }
+    const loaded = parseEvaluatorConfigContents(configRead.contents);
+    if (loaded.ok && configsEqual(loaded.value, config)) {
+      return {
+        ok: true,
+        exitCode: 0,
+        state: created.state === 'created' ? 'created' : 'already_configured',
+        accountAlias: config.accountAlias,
+        checks,
+      };
+    }
+    if (created.state === 'created') {
+      return setupFailure(checks, 'config', 'CONFIG_WRITE_FAILED');
+    }
+
+    const legacy = parseLegacyEvaluatorConfigV1Contents(configRead.contents);
+    if (!legacy.ok || !legacyConfigMatchesUpgrade(legacy.value, config)) {
+      return setupFailure(checks, 'config', 'CONFIG_CONFLICT');
+    }
+
+    const replacement = await ports.protectedFiles.replaceAtomic(
+      ports.configPath,
+      configRead.contents,
+      canonicalizeEvaluatorConfig(config),
+      { mode: 0o600, maxBytes: CONFIG_MAX_BYTES }
+    );
+    if (replacement.state !== 'replaced') {
+      return setupFailure(
+        checks,
+        'config',
+        replacement.state === 'conflict' ? 'CONFIG_CONFLICT' : 'CONFIG_WRITE_FAILED'
+      );
     }
 
     return {
       ok: true,
       exitCode: 0,
-      state: created.state === 'created' ? 'created' : 'already_configured',
+      state: 'upgraded',
       accountAlias: config.accountAlias,
       checks,
     };
@@ -941,6 +1169,15 @@ async function loadAccountReadiness(
       };
     }
 
+    if (!(await ports.protectedFiles.isAtomicReplaceIdle(ports.configPath))) {
+      return {
+        ok: false,
+        check: 'config',
+        code: 'CONFIG_CONFLICT',
+        checks,
+      };
+    }
+
     const configRead = await ports.protectedFiles.read(ports.configPath, {
       mode: 0o600,
       maxBytes: CONFIG_MAX_BYTES,
@@ -953,9 +1190,24 @@ async function loadAccountReadiness(
         checks,
       };
     }
+    if (!(await ports.protectedFiles.isAtomicReplaceIdle(ports.configPath))) {
+      return {
+        ok: false,
+        check: 'config',
+        code: 'CONFIG_CONFLICT',
+        checks,
+      };
+    }
     const loadedConfig = parseEvaluatorConfigContents(configRead.contents);
     if (!loadedConfig.ok) {
-      return { ok: false, check: 'config', code: 'CONFIG_INVALID', checks };
+      return {
+        ok: false,
+        check: 'config',
+        code: parseLegacyEvaluatorConfigV1Contents(configRead.contents).ok
+          ? 'CONFIG_UPGRADE_REQUIRED'
+          : 'CONFIG_INVALID',
+        checks,
+      };
     }
     checks.push({ check: 'config', status: 'passed' });
 
@@ -1150,15 +1402,19 @@ export function createHealthHttpPort(options: HealthHttpPortOptions = {}): Healt
   const maxBytes = options.maxBytes ?? HTTP_JSON_MAX_BYTES;
 
   return {
-    async get(url): Promise<SafeHttpResult> {
+    async get(url, requestOptions): Promise<SafeHttpResult> {
       const controller = new AbortController();
       const timeout = setTimeout(() => {
         controller.abort();
       }, timeoutMs);
       try {
+        const headers: Record<string, string> = { accept: 'application/json' };
+        if (requestOptions?.bearerToken !== undefined) {
+          headers['authorization'] = `Bearer ${requestOptions.bearerToken}`;
+        }
         const response = await fetchImpl(url, {
           method: 'GET',
-          headers: { accept: 'application/json' },
+          headers,
           redirect: 'error',
           signal: controller.signal,
         });

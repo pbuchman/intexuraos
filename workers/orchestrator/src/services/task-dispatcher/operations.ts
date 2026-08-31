@@ -64,17 +64,32 @@ export async function adoptTask(
     return capacityCheck;
   }
 
+  // Adoption may emit repair/finalization logs before the worker starts. Bind the
+  // persisted task owner before any such append so no restored task can inherit
+  // the orchestrator's static fallback callback route.
+  try {
+    ctx.logForwarder.registerTask(task.taskId, task.webhookSecret, task.webhookUrl);
+  } catch (error) {
+    ctx.releaseSlot();
+    return {
+      ok: false,
+      error: {
+        type: 'service_error',
+        message: 'Failed to register adopted task log callback owner',
+        originalError: error,
+      },
+    };
+  }
+
   // INT-1454: Rehydrate worktree metadata before starting the container.
   // On orchestrator restart, `<repo>/.git/worktrees/<taskId>/` can disappear
   // while the bind-mounted worktree at `<base>/<taskId>/` survives. Without
   // repair, every `git` command inside the container fails with exit 128.
   const worktreeRehydrationError = await attemptLifecycle.rehydrateWorktreeForAdoption(task);
   if (worktreeRehydrationError !== null) {
+    ctx.logForwarder.unregisterTask(task.taskId);
     return worktreeRehydrationError;
   }
-
-  // Register with log forwarder
-  ctx.logForwarder.registerTask(task.taskId, task.webhookSecret, task.webhookUrl);
 
   // Start worker attempt with continueSession: true
   const startResult = await ctx.startWorkerAttempt(task, {

@@ -1,216 +1,139 @@
-# 03 - Cloud Build Trigger
+# 03 - Retained Cloud Build Triggers
 
-This document describes the Cloud Build CI/CD pipeline and trigger configuration.
+This document describes the current, deliberately narrow Cloud Build surface.
+Cloud Build retains the GCP repository connection and three build targets. It is
+not the deployment mechanism for the application runtime.
 
-## Overview
+> Pushing or merging `development` does not deploy Home Dev and does not start
+> Home Dev. It also does not deploy the production application. The retained DEV application
+> profile is normally hibernated and can be resumed only through the explicit
+> Home Dev mode controller and its runbook.
 
-IntexuraOS uses Cloud Build (2nd gen) to:
+## Current Ownership
 
-1. Detect which services are affected by changes
-2. Build Docker images for affected services
-3. Push images to Artifact Registry
-4. Deploy affected services to Cloud Run (one pipeline per service)
+| Target          | Purpose                                     | Invocation                         |
+| --------------- | ------------------------------------------- | ---------------------------------- |
+| `firestore`     | Deploy retained Firestore rules and indexes | Manual GitHub Actions dispatch     |
+| `transcription` | Deploy the retained Cloud Function worker   | Manual GitHub Actions dispatch     |
+| `code-worker`   | Build and push the code-worker image        | Manual dispatch or daily scheduler |
 
-CI checks (lint, typecheck, tests) run in GitHub Actions before the Cloud Build trigger starts.
+All three Terraform triggers use `ignored_files = ["**"]`; they are not
+push-driven application deployments. The `code-worker` daily scheduler is a
+separate, intentional rebuild path. There are no retained app-service, web, or
+monolithic Cloud Build triggers and no `cloudbuild/cloudbuild.yaml` application
+pipeline.
+
+Production application deployment is manual exact-SHA deployment to Hetzner.
+Use [the production runbook](../operations/hetzner-prod-runbook.md) or the
+`hetzner-prod` target in `.github/workflows/deploy.yml`.
 
 ## Architecture
 
-The Cloud Build setup consists of:
+The retained setup consists of:
 
-1. **2nd Gen Repository Connection** - Links GitHub to GCP (created manually via Console)
-2. **Webhook Trigger (development)** - Automatically triggered on push to `development` branch
-3. **Manual Trigger (main)** - Disabled by default, manually triggered for production deployments
+1. a Cloud Build 2nd Gen GitHub connection created through the GCP Console OAuth
+   flow and imported into Terraform;
+2. a linked repository resource;
+3. the `firestore`, `transcription`, and `code-worker` triggers;
+4. a dedicated Cloud Build service account and the minimum roles needed by those
+   retained targets;
+5. GitHub Workload Identity Federation for the manual deploy workflow; and
+6. the daily `code-worker` Cloud Scheduler job.
 
-## Prerequisites
+The source of truth is `terraform/modules/cloud-build/main.tf`. The operator
+entry point is `.github/workflows/deploy.yml`.
 
-Before running Terraform, you must create the GitHub connection manually.
+## Initial Connection Setup
 
-### Step 1: Create GitHub Connection in GCP Console
+This section applies only if the retained GitHub connection must be recreated.
+It is not part of ordinary deployment or DEV resume.
 
-1. Go to [Cloud Build → Repositories (2nd gen)](https://console.cloud.google.com/cloud-build/repositories/2nd-gen)
-2. Select your project and region (`europe-central2`)
-3. Click **Create host connection**
-4. Select **GitHub** as the provider
-5. Enter connection name: `intexuraos-github-dev`
-6. Click **Connect**
-7. Complete the GitHub OAuth authorization flow
-8. Grant access to your `intexuraos` repository
+1. Open [Cloud Build Repositories (2nd gen)](https://console.cloud.google.com/cloud-build/repositories/2nd-gen)
+   in the intended GCP project and region (`europe-central2`).
+2. Create a GitHub host connection and complete the GitHub OAuth flow.
+3. Grant it access to the IntexuraOS repository.
+4. Verify the connection:
 
-### Step 2: Verify Connection
+   ```bash
+   gcloud builds connections list --region=europe-central2
+   ```
 
-After completing the OAuth flow, verify the connection:
+5. Set the exact connection name through `github_connection_name` and import the
+   existing connection before any Terraform apply:
+
+   ```bash
+   cd terraform/environments/dev
+   terraform init
+   terraform import \
+     module.cloud_build.google_cloudbuildv2_connection.github \
+     projects/intexuraos-dev-pbuchman/locations/europe-central2/connections/CONNECTION_NAME
+   ```
+
+Never create a second connection to work around an import or authentication
+problem. Reconcile the existing object and Terraform state first.
+
+## Running a Retained Target
+
+Preferred path:
+
+1. Open the GitHub Actions `Deploy` workflow.
+2. Select exactly one of `firestore`, `transcription`, or `code-worker`.
+3. Dispatch it from the reviewed commit.
+4. Preserve the workflow URL, Cloud Build ID, and resolved source SHA as evidence.
+
+The workflow invokes the target with `--sha="$GITHUB_SHA"` and fails if Cloud
+Build provenance resolves to a different commit. A direct `gcloud builds
+triggers run` is an exceptional diagnostic path, not the routine deployment
+procedure.
+
+## Verification
+
+```bash
+# Inspect retained triggers.
+gcloud builds triggers list --region=europe-central2
+
+# Inspect recent builds.
+gcloud builds list --limit=5 --region=europe-central2
+
+# Inspect one build and its source provenance.
+gcloud builds describe BUILD_ID --region=europe-central2
+```
+
+Verify all of the following:
+
+- only the intended retained target ran;
+- the resolved source revision equals the approved commit SHA;
+- no app-service or web trigger exists;
+- no push to `development` caused an application deployment; and
+- the Home Dev runtime mode remains unchanged.
+
+## Troubleshooting
+
+### Connection not found
+
+Confirm the project, region, and exact imported connection name. Check:
 
 ```bash
 gcloud builds connections list --region=europe-central2
 ```
 
-You should see:
+If the installation state is pending, complete the existing connection's OAuth
+flow in the GCP Console. Do not create a replacement connection implicitly.
 
-```
-NAME                INSTALLATION_STATE
-intexuraos-github-dev   COMPLETE
-```
+### Permission denied
 
-### Step 3: Add Connection Name to Terraform Variables
+Compare the retained service-account grants in
+`terraform/modules/cloud-build/main.tf`. Do not restore historical application
+deployment roles or triggers as a shortcut.
 
-Add to your `terraform.tfvars`:
+### Unexpected build after a push
 
-```hcl
-github_connection_name = "github-pbuchman"
-```
+Treat this as configuration drift. Capture the build and trigger metadata, stop
+before changing state, and reconcile the live trigger with Terraform. A normal
+push must not deploy or start Home Dev.
 
-Or set via environment variable:
+## References
 
-```bash
-export TF_VAR_github_connection_name="github-pbuchman"
-```
-
-### Step 4: Import Connection into Terraform State
-
-Before running `terraform apply`, import the existing connection:
-
-```bash
-cd terraform/environments/dev
-
-# Initialize terraform first
-terraform init
-
-# Import the connection (adjust PROJECT_ID to your project)
-terraform import \
-  module.cloud_build.google_cloudbuildv2_connection.github \
-  projects/intexuraos-dev-pbuchman/locations/europe-central2/connections/github-pbuchman
-```
-
-### Step 5: Run Terraform
-
-```bash
-terraform apply
-```
-
-Terraform will:
-
-1. Link the `intexuraos` repository to the existing connection
-2. Create the webhook trigger for `development` branch
-3. Create the manual trigger for `main` branch
-
-## Trigger Configuration
-
-### Webhook Trigger (Development)
-
-- **Name**: `intexuraos-dev-webhook`
-- **Branch**: `development` (regex: `^development$`)
-- **Event**: Push (automatic via Cloud Build GitHub App)
-- **Config**: `cloudbuild/cloudbuild.yaml`
-
-### Manual Trigger (Main)
-
-- **Name**: `intexuraos-dev-manual`
-- **Branch**: `main` (regex: `^main$`)
-- **State**: Disabled (run manually)
-- **Config**: `cloudbuild/cloudbuild.yaml`
-
-## Build Pipeline Steps
-
-The pipeline (`cloudbuild/cloudbuild.yaml`) now runs **independent per-service chains** after the shared setup:
-
-1. Dependency installation (node:22-slim) — installs dependencies
-2. `detect-affected` (node:22) — writes `/workspace/affected.json`
-3. Per-service pipelines (each waits only on `detect-affected` → build → push → deploy):
-   - `user-service`: `build-user-service` → `push-user-service` → `deploy-user-service`
-   - `notion-service`: `build-notion-service` → `push-notion-service` → `deploy-notion-service`
-   - `whatsapp-service`: `build-whatsapp-service` → `push-whatsapp-service` → `deploy-whatsapp-service`
-   - `api-docs-hub`: `build-api-docs-hub` → `push-api-docs-hub` → `deploy-api-docs-hub`
-4. Web app: `build-web` → `deploy-web` (gated by `affected.json` or `_FORCE_DEPLOY=true`)
-5. Static assets: `sync-static-assets` (runs independently; not gated by affected services)
-
-Each pipeline stage is gated in `cloudbuild.yaml` using `/workspace/affected.json` (or `_FORCE_DEPLOY=true` to override). Deployment scripts no longer contain skip logic; the Cloud Build steps decide whether to run. There is **no shared deploy step** and no cross-service `waitFor` dependencies.
-
-## Affected Detection Logic
-
-The `detect-affected.mjs` script determines which services need deployment:
-
-```
-packages/common/** → all services
-apps/user-service/** → user-service only
-apps/notion-service/** → notion-service only
-apps/whatsapp-service/** → whatsapp-service only
-apps/api-docs-hub/** → api-docs-hub only
-apps/web/** → web only
-package.json, package-lock.json, tsconfig*.json → all services
-```
-
-## View Build Logs
-
-```bash
-# List recent builds
-gcloud builds list --limit=5 --region=europe-central2
-
-# View specific build
-gcloud builds log BUILD_ID --region=europe-central2
-
-# Stream logs of running build
-gcloud builds log BUILD_ID --stream --region=europe-central2
-```
-
-Or use the [Cloud Build Console](https://console.cloud.google.com/cloud-build/builds).
-
-## Manual Build Trigger
-
-### Trigger via gcloud
-
-```bash
-# Trigger the manual (main) build
-gcloud builds triggers run intexuraos-dev-manual \
-  --region=europe-central2 \
-  --branch=main
-
-# Trigger the webhook (development) build manually
-gcloud builds triggers run intexuraos-dev-webhook \
-  --region=europe-central2 \
-  --branch=development
-```
-
-### Trigger via Console
-
-1. Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers)
-2. Find the trigger you want to run
-3. Click **Run** → Select branch → **Run trigger**
-
-## Troubleshooting
-
-### "Connection not found"
-
-If Terraform fails with "connection not found":
-
-1. Verify the connection was created in the correct region (`europe-central2`)
-2. Verify the connection name matches `github_connection_name` variable
-3. Check connection status: `gcloud builds connections list --region=europe-central2`
-
-### "INSTALLATION_STATE: PENDING_INSTALL_APP"
-
-The GitHub App needs to be installed:
-
-1. Go to [Cloud Build → Repositories (2nd gen)](https://console.cloud.google.com/cloud-build/repositories/2nd-gen)
-2. Click on your connection
-3. Complete the GitHub App installation flow
-
-### "Permission denied" on deployment
-
-Ensure the Cloud Build service account has the required roles:
-
-- `roles/run.admin` - Deploy to Cloud Run
-- `roles/iam.serviceAccountUser` - Act as service accounts
-- `roles/artifactregistry.writer` - Push images
-- `roles/logging.logWriter` - Write logs
-
-### Build not triggering on push
-
-1. Verify the branch pattern matches your branch name
-2. Check the Cloud Build GitHub App has access to your repository
-3. Verify the trigger is not disabled
-
-## Reference
-
-- [Cloud Build 2nd Gen Documentation](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github)
-- [Cloud Build GitHub App](https://github.com/apps/google-cloud-build)
-- [cloudbuild.yaml Reference](https://cloud.google.com/build/docs/build-config-file-schema)
+- [Cloud Build 2nd Gen GitHub connection](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github)
+- [Cloud Build trigger schema](https://cloud.google.com/build/docs/api/reference/rest/v1/projects.locations.triggers)
+- [Hetzner production runbook](../operations/hetzner-prod-runbook.md)

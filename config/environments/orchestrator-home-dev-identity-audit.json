@@ -1,0 +1,388 @@
+{
+  "schemaVersion": 6,
+  "scope": "Home Dev orchestrator generated runtime environment",
+  "callbackOwner": {
+    "INTEXURAOS_CODE_AGENT_URL": {
+      "value": "https://intexuraos.cloud/api/code",
+      "valueClass": "production-code-agent-base"
+    },
+    "INTEXURAOS_USAGE_WEBHOOK_URL": {
+      "value": "https://intexuraos.cloud/api/code/internal/webhooks/usage-events",
+      "valueClass": "production-usage-webhook"
+    }
+  },
+  "fixedTags": {
+    "INTEXURAOS_ENVIRONMENT": {
+      "value": "dev",
+      "valueClass": "legacy-host-observability-tag"
+    },
+    "INTEXURAOS_RUNTIME": {
+      "value": "dev",
+      "valueClass": "legacy-host-observability-tag"
+    }
+  },
+  "runtimeWorkspaceClosure": {
+    "rootPackage": "@intexuraos/orchestrator",
+    "rootPackageJson": "workers/orchestrator/package.json",
+    "packages": [
+      {
+        "name": "@intexuraos/code-task-domain",
+        "packageJson": "packages/code-task-domain/package.json",
+        "workspaceDependencies": []
+      },
+      {
+        "name": "@intexuraos/common-core",
+        "packageJson": "packages/common-core/package.json",
+        "workspaceDependencies": []
+      },
+      {
+        "name": "@intexuraos/infra-claude",
+        "packageJson": "packages/infra-claude/package.json",
+        "workspaceDependencies": [
+          "@intexuraos/common-core",
+          "@intexuraos/llm-contract",
+          "@intexuraos/llm-pricing",
+          "@intexuraos/llm-prompts",
+          "@intexuraos/llm-utils"
+        ]
+      },
+      {
+        "name": "@intexuraos/infra-gpt",
+        "packageJson": "packages/infra-gpt/package.json",
+        "workspaceDependencies": [
+          "@intexuraos/common-core",
+          "@intexuraos/llm-contract",
+          "@intexuraos/llm-pricing",
+          "@intexuraos/llm-prompts",
+          "@intexuraos/llm-utils"
+        ]
+      },
+      {
+        "name": "@intexuraos/infra-openrouter",
+        "packageJson": "packages/infra-openrouter/package.json",
+        "workspaceDependencies": [
+          "@intexuraos/common-core",
+          "@intexuraos/llm-contract",
+          "@intexuraos/llm-pricing",
+          "@intexuraos/llm-prompts",
+          "@intexuraos/llm-utils"
+        ]
+      },
+      {
+        "name": "@intexuraos/infra-perplexity",
+        "packageJson": "packages/infra-perplexity/package.json",
+        "workspaceDependencies": [
+          "@intexuraos/common-core",
+          "@intexuraos/llm-contract",
+          "@intexuraos/llm-pricing",
+          "@intexuraos/llm-prompts",
+          "@intexuraos/llm-utils"
+        ]
+      },
+      {
+        "name": "@intexuraos/infra-sentry",
+        "packageJson": "packages/infra-sentry/package.json",
+        "workspaceDependencies": ["@intexuraos/common-core"]
+      },
+      {
+        "name": "@intexuraos/linear-domain",
+        "packageJson": "packages/linear-domain/package.json",
+        "workspaceDependencies": []
+      },
+      {
+        "name": "@intexuraos/llm-contract",
+        "packageJson": "packages/llm-contract/package.json",
+        "workspaceDependencies": ["@intexuraos/common-core"]
+      },
+      {
+        "name": "@intexuraos/llm-factory",
+        "packageJson": "packages/llm-factory/package.json",
+        "workspaceDependencies": [
+          "@intexuraos/common-core",
+          "@intexuraos/infra-claude",
+          "@intexuraos/infra-gpt",
+          "@intexuraos/infra-openrouter",
+          "@intexuraos/infra-perplexity",
+          "@intexuraos/llm-contract",
+          "@intexuraos/llm-pricing"
+        ]
+      },
+      {
+        "name": "@intexuraos/llm-pricing",
+        "packageJson": "packages/llm-pricing/package.json",
+        "workspaceDependencies": ["@intexuraos/common-core", "@intexuraos/llm-contract"]
+      },
+      {
+        "name": "@intexuraos/llm-prompts",
+        "packageJson": "packages/llm-prompts/package.json",
+        "workspaceDependencies": [
+          "@intexuraos/common-core",
+          "@intexuraos/llm-contract",
+          "@intexuraos/llm-utils"
+        ]
+      },
+      {
+        "name": "@intexuraos/llm-utils",
+        "packageJson": "packages/llm-utils/package.json",
+        "workspaceDependencies": ["@intexuraos/common-core", "@intexuraos/llm-contract"]
+      },
+      {
+        "name": "@intexuraos/orchestrator",
+        "packageJson": "workers/orchestrator/package.json",
+        "workspaceDependencies": [
+          "@intexuraos/code-task-domain",
+          "@intexuraos/common-core",
+          "@intexuraos/infra-openrouter",
+          "@intexuraos/infra-sentry",
+          "@intexuraos/linear-domain",
+          "@intexuraos/llm-contract",
+          "@intexuraos/llm-factory",
+          "@intexuraos/llm-pricing",
+          "@intexuraos/llm-utils"
+        ]
+      }
+    ]
+  },
+  "runtimeBundleClosure": {
+    "entryPoints": ["workers/orchestrator/src/index.ts"],
+    "inputCount": 166,
+    "inputsSha256": "631d9364ffa82ec41622aa273487e85a832e80d1d6d66321b5d4908b92897d41"
+  },
+  "observabilityIdentityBoundary": {
+    "bootstrapConfig": {
+      "file": "workers/orchestrator/src/bootstrap/env-config.ts",
+      "forbiddenField": "environment",
+      "reviewedSha256": "4dbc426d9f2c9e0b12e87d4afaa1773a75359cac7560a30c457cbeecc0204d25"
+    },
+    "boundaryModule": {
+      "file": "workers/orchestrator/src/bootstrap/observability-identity.ts",
+      "exportName": "initOrchestratorObservability",
+      "brandedType": "ObservabilityEnvironment",
+      "reviewedSha256": "dfe8fa0759515c1ed4cb33bd734fe5355ee4e20c0e83865c4cb0d178b823d6b9"
+    },
+    "soleImporter": {
+      "file": "workers/orchestrator/src/start.ts",
+      "reviewedSha256": "1b0598e119a8148f6882807b37211641cd375207d6d025a326fb073230d6f7f8"
+    },
+    "serviceWiring": {
+      "file": "workers/orchestrator/src/bootstrap/service-wiring.ts",
+      "reviewedSha256": "1bf8fc11281724e4802bdfe77043fc57e4476b087f6dce06decdb528de5f4163"
+    },
+    "sink": {
+      "module": "@intexuraos/infra-sentry",
+      "exportName": "initWorker",
+      "property": "environment"
+    }
+  },
+  "literalReferences": [
+    {
+      "envName": "INTEXURAOS_RUNTIME",
+      "file": "packages/infra-sentry/src/init.ts",
+      "line": 127,
+      "column": 31,
+      "nodeKind": "StringLiteral",
+      "reviewedSha256": "3c13ef14cccea7421636e53cb8bfcdeefc331f19a94b05c1a36f6a9c6623802f"
+    },
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "scripts/generate-orchestrator-env.mjs",
+      "line": 15,
+      "column": 3,
+      "nodeKind": "StringLiteral",
+      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+    },
+    {
+      "envName": "INTEXURAOS_RUNTIME",
+      "file": "scripts/generate-orchestrator-env.mjs",
+      "line": 32,
+      "column": 3,
+      "nodeKind": "StringLiteral",
+      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+    },
+    {
+      "envName": "INTEXURAOS_RUNTIME",
+      "file": "scripts/generate-orchestrator-env.mjs",
+      "line": 55,
+      "column": 3,
+      "nodeKind": "StringLiteral",
+      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+    },
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "scripts/generate-orchestrator-env.mjs",
+      "line": 136,
+      "column": 5,
+      "nodeKind": "Identifier",
+      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+    },
+    {
+      "envName": "INTEXURAOS_RUNTIME",
+      "file": "scripts/generate-orchestrator-env.mjs",
+      "line": 137,
+      "column": 5,
+      "nodeKind": "Identifier",
+      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+    },
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "workers/orchestrator/src/bootstrap/observability-identity.ts",
+      "line": 25,
+      "column": 5,
+      "nodeKind": "StringLiteral",
+      "reviewedSha256": "dfe8fa0759515c1ed4cb33bd734fe5355ee4e20c0e83865c4cb0d178b823d6b9"
+    }
+  ],
+  "consumers": [
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "scripts/generate-orchestrator-env.mjs",
+      "purpose": "Pins the legacy physical-host and observability classification in the protected systemd projection.",
+      "routingAuthority": false,
+      "sinkClassification": "generator-fixed-host-observability-tag",
+      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4",
+      "usageBindings": [
+        {
+          "usageClass": "fixed-value-assignment",
+          "line": 136,
+          "column": 5,
+          "nodeKind": "PropertyAssignment",
+          "spanSha256": "2ac7296a50a4c4848499894fbcc06b6142a96e14f58a509dbfb79ce070299905"
+        }
+      ]
+    },
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "workers/orchestrator/src/bootstrap/observability-identity.ts",
+      "purpose": "Reads the legacy host tag into a private branded value and forwards it directly to initWorker observability.",
+      "routingAuthority": false,
+      "sinkClassification": "orchestrator-observability-identity-boundary",
+      "reviewedSha256": "dfe8fa0759515c1ed4cb33bd734fe5355ee4e20c0e83865c4cb0d178b823d6b9",
+      "usageBindings": [
+        {
+          "usageClass": "environment-variable-read",
+          "line": 24,
+          "column": 10,
+          "nodeKind": "CallExpression",
+          "spanSha256": "25f652e22e0e5343aaf39732f589386f6e5e59a4039d257740605fa6df751dce"
+        },
+        {
+          "usageClass": "observability-bootstrap-forward",
+          "line": 39,
+          "column": 5,
+          "nodeKind": "PropertyAssignment",
+          "spanSha256": "6a9903de8d249720fffaee9c2e5ed1964e5aedc600d19360bb1d942c41bd212b"
+        }
+      ]
+    },
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "packages/infra-sentry/src/initWorker.ts",
+      "purpose": "Forwards the supplied environment label to Sentry initialization.",
+      "routingAuthority": false,
+      "sinkClassification": "sentry-environment-forwarder",
+      "reviewedSha256": "c0de71fdc58da9f082d5f7a41fd9e81208d40454c817a2844420eeb6af911d63",
+      "usageBindings": [
+        {
+          "usageClass": "sentry-config-forward",
+          "line": 68,
+          "column": 5,
+          "nodeKind": "PropertyAssignment",
+          "spanSha256": "b0575086a7bc17f6762d9beeb178b50c32b67040d8a8b7d4a24a95102ceccb05"
+        }
+      ]
+    },
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "packages/infra-sentry/src/init.ts",
+      "purpose": "Sets the Sentry environment field and selects its tracing default.",
+      "routingAuthority": false,
+      "sinkClassification": "sentry-environment-and-trace-sink",
+      "reviewedSha256": "3c13ef14cccea7421636e53cb8bfcdeefc331f19a94b05c1a36f6a9c6623802f",
+      "usageBindings": [
+        {
+          "usageClass": "sentry-trace-default-input",
+          "line": 105,
+          "column": 55,
+          "nodeKind": "CallExpression",
+          "spanSha256": "99719a4eccd09b67b42debb59c766842f35fa4d67d9be7d6bf75a0b220558af2"
+        },
+        {
+          "usageClass": "sentry-environment-option",
+          "line": 118,
+          "column": 5,
+          "nodeKind": "BinaryExpression",
+          "spanSha256": "7fc6a3dfdc50a7a043fe9f065b56ced056730005d885ac1cb2b323558b336dda"
+        }
+      ]
+    },
+    {
+      "envName": "INTEXURAOS_ENVIRONMENT",
+      "file": "packages/infra-sentry/src/runtimeDefaults.ts",
+      "purpose": "Maps the observability label to the default Sentry trace sample rate.",
+      "routingAuthority": false,
+      "sinkClassification": "sentry-trace-sampling-sink",
+      "reviewedSha256": "0a421a3ce6f86944b11e8f569d133aecfe4c0453ced71cf4ee21d66bb9aa31c8",
+      "usageBindings": [
+        {
+          "usageClass": "trace-sampling-decision",
+          "line": 25,
+          "column": 10,
+          "nodeKind": "ConditionalExpression",
+          "spanSha256": "b728f52b2881feee2caadb0ec14ad13016a4a102d31b73e4d79d9b2d0f00cb2f"
+        }
+      ]
+    },
+    {
+      "envName": "INTEXURAOS_RUNTIME",
+      "file": "scripts/generate-orchestrator-env.mjs",
+      "purpose": "Pins the legacy physical runtime label in the protected systemd projection.",
+      "routingAuthority": false,
+      "sinkClassification": "generator-fixed-host-observability-tag",
+      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4",
+      "usageBindings": [
+        {
+          "usageClass": "fixed-value-assignment",
+          "line": 137,
+          "column": 5,
+          "nodeKind": "PropertyAssignment",
+          "spanSha256": "e25764a3b9ad592cec1698313a3c2206d3426d5cfc36ebaf035cbec6b8af06b3"
+        }
+      ]
+    },
+    {
+      "envName": "INTEXURAOS_RUNTIME",
+      "file": "packages/infra-sentry/src/init.ts",
+      "purpose": "Adds the runtime value as a Sentry event tag.",
+      "routingAuthority": false,
+      "sinkClassification": "sentry-runtime-tag-sink",
+      "reviewedSha256": "3c13ef14cccea7421636e53cb8bfcdeefc331f19a94b05c1a36f6a9c6623802f",
+      "usageBindings": [
+        {
+          "usageClass": "runtime-environment-read",
+          "line": 127,
+          "column": 19,
+          "nodeKind": "ElementAccessExpression",
+          "spanSha256": "93f71303f27535dca746741b283ef3eaba3ef2aeffbb48cabc6a1909bbae299f"
+        },
+        {
+          "usageClass": "sentry-runtime-tag",
+          "line": 129,
+          "column": 5,
+          "nodeKind": "CallExpression",
+          "spanSha256": "393c179038de0ff566722c53f27481c69c60284a3ce24bd0e0dfc1f7dc8c100f"
+        }
+      ]
+    }
+  ],
+  "routingAuthorities": [
+    "task.webhookUrl",
+    "INTEXURAOS_CODE_AGENT_URL",
+    "INTEXURAOS_USAGE_WEBHOOK_URL"
+  ],
+  "credentialAuthorities": [
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "INTEXURAOS_INTERNAL_AUTH_TOKEN",
+    "INTEXURAOS_ORCHESTRATOR_SECRET"
+  ],
+  "pendingLiveGates": ["credential-principal-metadata", "prod-hmac-internal-auth-secret-match"]
+}

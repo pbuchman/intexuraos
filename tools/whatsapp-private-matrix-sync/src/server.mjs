@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const DEFAULT_PORT = 8099;
@@ -463,6 +463,11 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   }
 
   const matrixAccessToken = readAccessTokenFn(config.matrixAccessTokenFile);
+  const matrixOutboundAuthToken =
+    config.matrixOutboundAuthTokenFile === ''
+      ? ''
+      : readAccessTokenFn(config.matrixOutboundAuthTokenFile);
+  assertDistinctMatrixCredentials(config, matrixAccessToken, matrixOutboundAuthToken);
   const hasOidcCredentials = hasNonEmptyFileFn(config.googleApplicationCredentialsFile);
   if (matrixAccessToken === '') {
     runtime.state = 'waiting_for_matrix_access_token';
@@ -805,6 +810,11 @@ export function createHealthServer(config, runtime) {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 
       if (request.method === 'GET' && url.pathname === '/health') {
+        if (!isAuthorizedRequest(request, config)) {
+          writeJson(response, 401, { ok: false, error: 'unauthorized' });
+          return;
+        }
+
         const payload = buildHealthPayload(config, {
           hasMatrixAccessToken: readAccessToken(config.matrixAccessTokenFile) !== '',
           hasOidcCredentials: hasNonEmptyFile(config.googleApplicationCredentialsFile),
@@ -823,7 +833,7 @@ export function createHealthServer(config, runtime) {
         /^\/internal\/matrix\/outbound\/readiness\/([^/]+)\/([^/]+)$/
       );
       if (request.method === 'GET' && readinessMatch !== null) {
-        if (!isAuthorizedRequest(request, config.matrixOutboundAuthTokenFile)) {
+        if (!isAuthorizedRequest(request, config)) {
           writeJson(response, 401, { ok: false, error: 'unauthorized' });
           return;
         }
@@ -846,7 +856,7 @@ export function createHealthServer(config, runtime) {
       }
 
       if (request.method === 'POST' && url.pathname === '/internal/matrix/outbound/messages') {
-        if (!isAuthorizedRequest(request, config.matrixOutboundAuthTokenFile)) {
+        if (!isAuthorizedRequest(request, config)) {
           writeJson(response, 401, { ok: false, error: 'unauthorized' });
           return;
         }
@@ -878,6 +888,11 @@ export function createHealthServer(config, runtime) {
 }
 
 export function start(config = createConfig()) {
+  assertDistinctMatrixCredentials(
+    config,
+    readAccessToken(config.matrixAccessTokenFile),
+    readAccessToken(config.matrixOutboundAuthTokenFile)
+  );
   const runtime = {
     state: 'starting',
     counters: {},
@@ -1340,14 +1355,43 @@ function writeJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function isAuthorizedRequest(request, authTokenFile) {
-  const expectedToken = readAccessToken(authTokenFile);
+function hasMatrixCredentialReuse(config, matrixAccessToken, matrixOutboundAuthToken) {
+  const reusesPath =
+    config.matrixAccessTokenFile !== '' &&
+    config.matrixOutboundAuthTokenFile !== '' &&
+    config.matrixAccessTokenFile === config.matrixOutboundAuthTokenFile;
+  const reusesValue =
+    matrixAccessToken !== '' &&
+    matrixOutboundAuthToken !== '' &&
+    matrixAccessToken === matrixOutboundAuthToken;
+  return reusesPath || reusesValue;
+}
+
+function assertDistinctMatrixCredentials(config, matrixAccessToken, matrixOutboundAuthToken) {
+  if (hasMatrixCredentialReuse(config, matrixAccessToken, matrixOutboundAuthToken)) {
+    throw new Error('matrix_credentials_not_distinct');
+  }
+}
+
+function isAuthorizedRequest(request, config) {
+  const expectedToken = readAccessToken(config.matrixOutboundAuthTokenFile);
   if (expectedToken === '') {
     return false;
   }
 
+  const matrixAccessToken = readAccessToken(config.matrixAccessTokenFile);
+  if (hasMatrixCredentialReuse(config, matrixAccessToken, expectedToken)) {
+    return false;
+  }
+
   const authorization = request.headers.authorization;
-  return typeof authorization === 'string' && authorization === `Bearer ${expectedToken}`;
+  if (typeof authorization !== 'string') {
+    return false;
+  }
+
+  const actualDigest = createHash('sha256').update(authorization).digest();
+  const expectedDigest = createHash('sha256').update(`Bearer ${expectedToken}`).digest();
+  return timingSafeEqual(actualDigest, expectedDigest);
 }
 
 async function readJsonRequestBody(request) {

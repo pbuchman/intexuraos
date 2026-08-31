@@ -9,7 +9,8 @@ Real-time web dashboard for monitoring Pub/Sub events during local development.
 - **Expandable JSON** - Click any event to see full message payload
 - **Topic filtering** - Show/hide events by topic
 - **Event statistics** - Track total event count in real-time
-- **Auto-configured push subscriptions** - Automatically sets up push endpoints to service handlers
+- **Explicit local bridge topology** - Forwards only the tracked, classified monitor subscriptions
+- **Drain health contract** - Reports privacy-safe topology, listener, handler, and monotonic counters
 
 ## Quick Start
 
@@ -59,46 +60,44 @@ node scripts/pubsub-publish-test.mjs runtime-credential-canary
 | `llm-call`                                 | Purple       | LLM API calls               |
 | `bookmark-enrich`                          | Orange       | Bookmark metadata enriching |
 | `bookmark-summarize`                       | Teal         | Bookmark AI summarization   |
+| `pr-triage`                                | Purple       | Pull-request triage         |
 | `message-digest-runs`                      | Amber        | Message Digest generation   |
 | `intexuraos-runtime-credential-canary-dev` | Cyan         | Runtime credential canary   |
 
 ## Architecture
 
 ```
-┌─────────────────┐
-│  Pub/Sub        │
-│  Emulator       │
-│  :8102          │
-└────────┬────────┘
-         │
-         ├─────────────────────┬──────────────────────┐
-         │ (push)              │ (pull-monitor)       │
-         ▼                     ▼                      │
-  ┌─────────────┐      ┌──────────────┐              │
-  │  Services   │      │  Pub/Sub UI  │◀─────────────┘
-  │  :8113,8118 │      │  :8105       │
-  │  (POST /    │      └──────┬───────┘
-  │  internal/) │             │ (SSE)
-  └─────────────┘             ▼
-                       ┌──────────────┐
-                       │   Browser    │
-                       │  Dashboard   │
-                       └──────────────┘
+┌─────────────────┐   (pull listeners)   ┌──────────────┐
+│  Pub/Sub        │ ────────────────────▶ │  Pub/Sub UI  │
+│  Emulator :8102 │                       │  :8105       │
+└─────────────────┘                       └──────┬───────┘
+                                                │
+                         ┌──────────────────────┴─────────────────────┐
+                         │ (HTTP bridge)                              │ (SSE)
+                         ▼                                            ▼
+                ┌──────────────────┐                         ┌────────────────┐
+                │ Local services   │                         │ Browser        │
+                │ /internal/*      │                         │ Dashboard      │
+                └──────────────────┘                         └────────────────┘
 ```
 
-**The UI performs two functions:**
+The local stack separates mutation from observation:
 
-1. **Monitoring (pull subscriptions):**
-   - Creates pull subscriptions (`*-ui-monitor`) for all topics
+1. **One-shot bootstrap process (`bootstrap.mjs`):**
+   - Idempotently creates the tracked local topics and `*-ui-monitor` subscriptions
+   - Is invoked explicitly by the full local `emulators:start`/DEV resume lifecycle before the
+     long-running bridge starts
+   - Runs in a disposable `--rm` container built from the same image and closes its Pub/Sub clients;
+     it does not add a third persistent container
+
+2. **Long-running UI/bridge (`server.mjs`):**
+   - Verifies that every required topic and subscription already exists; missing resources fail closed
+   - Attaches exactly one listener to every explicitly classified monitor subscription
+   - Forwards classified events to the corresponding local service handler
    - Forwards events to browser via Server-Sent Events (SSE)
    - Displays real-time event stream in dashboard
 
-2. **Worker setup (push subscriptions):**
-   - Auto-creates push subscriptions on startup
-   - Configures Pub/Sub to POST events to service endpoints
-   - Services receive events at `/internal/*/pubsub/*` endpoints
-
-**Push endpoints configured:**
+**Bridge forwarding endpoints configured:**
 
 - `whatsapp-send-message` → `POST /internal/whatsapp/pubsub/send-message` (:8113)
 - `whatsapp-media-cleanup` → `POST /internal/whatsapp/pubsub/media-cleanup` (:8113)
@@ -110,6 +109,7 @@ node scripts/pubsub-publish-test.mjs runtime-credential-canary
 - `llm-call` → `POST /internal/llm/pubsub/process-llm-call` (:8116)
 - `bookmark-enrich` → `POST /internal/bookmarks/pubsub/enrich` (:8124)
 - `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
+- `pr-triage` → `POST /internal/code/pubsub/pr-triage` (:8128)
 - `message-digest-runs` → `POST /internal/message-digests/pubsub/run` (:8135)
 
 `intexuraos-runtime-credential-canary-dev` has no service endpoint. Its local
@@ -141,35 +141,46 @@ cd tools/pubsub-ui
 pnpm install
 PUBSUB_EMULATOR_HOST=localhost:8102 \
 PUBSUB_PROJECT_ID=demo-intexuraos \
+node bootstrap.mjs
+
+PUBSUB_EMULATOR_HOST=localhost:8102 \
+PUBSUB_PROJECT_ID=demo-intexuraos \
 PORT=8105 \
 node server.mjs
 ```
 
+## Drain health
+
+`GET /health` retains `status`, `topics`, and `clients`, and adds
+`drainContractVersion: 1` plus a privacy-safe `drain` object. Every request refreshes topology with
+non-mutating `ListTopics` and `ListSubscriptions` calls. A missing, unexpected, orphaned,
+unclassified, listener-less, duplicated, or unrefreshable subscription makes `topologyMatch`
+false. The contract exposes only resource names, classifications, counts, SHA-256 topology hashes,
+process identity fields, and timestamps; it never exposes message payloads, IDs, attributes, ack
+IDs, callback data, or secrets. `topologyObservationSequence` advances only after a successful
+topology refresh; drain evidence requires it to advance with every independently collected health
+observation while the process epoch and topology hashes remain continuous.
+`topologyRefreshErrorsTotal` is a process-lifetime monotonic counter that advances on every failed
+refresh, including failures that share a timestamp with a later successful observation.
+
 ## Adding New Topics
 
-Edit `server.mjs` and add to the `TOPICS` array:
+Edit `topology.mjs` and add one explicit entry to `TOPIC_CONFIGS`:
 
 ```javascript
-const TOPICS = [
-  'whatsapp-media-cleanup',
-  'whatsapp-send-message',
-  'whatsapp-webhook-process',
-  'whatsapp-audio-stored',
-  'whatsapp-transcription-completed',
-  'intex-message-ingest',
-  'research-process',
-  'llm-analytics',
-  'llm-call',
-  'bookmark-enrich',
-  'bookmark-summarize',
-  'message-digest-runs',
-  'your-new-topic', // Add here
+const TOPIC_CONFIGS = [
+  // ...
+  {
+    name: 'your-new-topic',
+    endpoint: 'http://host.docker.internal:8123/internal/example/pubsub/handle',
+  },
 ];
 ```
 
-The UI will automatically:
+Use `endpoint: null` only for an intentional `monitor-only` topic. Then run `pnpm run
+emulators:start`; its explicit lifecycle performs the one-shot bootstrap before starting the UI.
+The UI image entrypoint itself never mutates topology and will refuse to report a matching topology
+until the topic and its monitor subscription exist. A bridge-only restart or M7.0 telemetry
+activation must never invoke `bootstrap.mjs`.
 
-- Create the topic if it doesn't exist
-- Create a monitoring subscription
-- Start displaying events
-- Add a filter button
+- Add the matching dashboard metadata when the topic should be visible in the browser filter.

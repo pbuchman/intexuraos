@@ -150,23 +150,19 @@ write_env_line() {
 
 export_web_service_urls() {
   local manifest_path="${REPO_DIR}/apps/web/service-manifest.json"
+  local rendered_service_entries=""
   local env_var=""
   local api_path=""
 
   [[ -f "${manifest_path}" ]] || fail "Missing web service manifest: ${manifest_path}"
+  rendered_service_entries="$(
+    node "${REPO_DIR}/scripts/render-production-web-service-env.mjs" "${manifest_path}"
+  )" || fail "Failed to render production web service URLs"
 
   while IFS=$'\t' read -r env_var api_path; do
     [[ -n "${env_var}" && -n "${api_path}" ]] || continue
     export "${env_var}=${api_path}"
-  done < <(
-    node -e '
-      const { readFileSync } = require("node:fs");
-      const manifest = JSON.parse(readFileSync(process.argv[1], "utf8"));
-      for (const service of manifest.services) {
-        process.stdout.write("INTEXURAOS_" + service.envSuffix + "_URL\t" + service.apiPath + "\n");
-      }
-    ' "${manifest_path}"
-  )
+  done <<< "${rendered_service_entries}"
 }
 
 prepare_sanitized_web_env_file() {
@@ -175,6 +171,9 @@ prepare_sanitized_web_env_file() {
   local env_path=""
   local key=""
   local env_value=""
+  local rendered_service_entries=""
+  local service_env_var=""
+  local service_api_path=""
 
   [[ -d "${web_dir}" ]] || fail "Missing web app directory: ${web_dir}"
 
@@ -197,15 +196,14 @@ prepare_sanitized_web_env_file() {
     write_env_line "${WEB_SANITIZED_ENV_FILE}" "${key}" "${env_value}"
   done
 
-  node -e '
-    const { readFileSync, appendFileSync } = require("node:fs");
-    const manifest = JSON.parse(readFileSync(process.argv[1], "utf8"));
-    const outputPath = process.argv[2];
-    const quote = (value) => "\"" + String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
-    for (const service of manifest.services) {
-      appendFileSync(outputPath, "INTEXURAOS_" + service.envSuffix + "_URL=" + quote(service.apiPath) + "\n");
-    }
-  ' "${REPO_DIR}/apps/web/service-manifest.json" "${WEB_SANITIZED_ENV_FILE}"
+  rendered_service_entries="$(
+    node "${REPO_DIR}/scripts/render-production-web-service-env.mjs" \
+      "${REPO_DIR}/apps/web/service-manifest.json"
+  )" || fail "Failed to render sanitized production web service URLs"
+  while IFS=$'\t' read -r service_env_var service_api_path; do
+    [[ -n "${service_env_var}" && -n "${service_api_path}" ]] || continue
+    write_env_line "${WEB_SANITIZED_ENV_FILE}" "${service_env_var}" "${service_api_path}"
+  done <<< "${rendered_service_entries}"
 }
 
 restore_web_env_files() {

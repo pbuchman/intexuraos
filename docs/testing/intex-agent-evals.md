@@ -52,19 +52,23 @@ Its strict structure is:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "accountAlias": "operator-test",
   "userId": "canonical-firebase-uid",
   "matrixUserId": "@matrix-user:homeserver.example",
   "matrixAccessTokenFile": "/absolute/protected/matrix-token",
+  "matrixOutboundAuthTokenFile": "/absolute/protected/matrix-outbound-auth-token",
   "matrixTargetsFile": "/absolute/protected/matrix-targets.json"
 }
 ```
 
-Both referenced paths must be absolute. The token and targets must each be a
-current-UID-owned, non-symlink regular file with exact mode `0600`. The token file
-contains one non-empty Matrix access token. The targets file has this strict
-shape:
+All three referenced paths must be absolute. The two tokens and targets must each be a
+current-UID-owned, non-symlink regular file with exact mode `0600` and bounded size.
+`matrixAccessTokenFile` contains one non-empty Matrix homeserver access token.
+`matrixOutboundAuthTokenFile` is distinct from `matrixAccessTokenFile` and contains the
+separate adapter-local bearer; the files and their token values must not be reused.
+`GET http://127.0.0.1:8099/health` requires `Authorization: Bearer` with that outbound
+token. The targets file has this strict shape:
 
 ```json
 {
@@ -86,12 +90,32 @@ the WhatsApp webhook account and sender bindings. Preflight requires the configu
 puppet to appear in the room timeline and ignores unrelated historical puppets; the
 value must never be committed or printed.
 
-`setup` is interactive and reads all five values without echo. Only the validated
+`setup` is interactive and reads all six values without echo. Only the validated
 `accountAlias` can appear afterward in the closed setup result. The current Home Dev
 operator account is already configured, so normal execution never invokes `setup` and
 never asks the user for identity values. `CONFIG_NOT_FOUND` is an unexpected protected
 configuration failure: stop and restore the known machine-local configuration, or run
 `setup` only after separate authorization.
+
+### Version-one configuration upgrade
+
+A protected file with the exact legacy `schemaVersion: 1` shape is recognized
+and reported as `CONFIG_UPGRADE_REQUIRED`; it is not collapsed into `CONFIG_INVALID`.
+Run `scripts/run-intex-agent-evals-home-dev.sh setup` and enter the existing five values
+plus the distinct `matrixOutboundAuthTokenFile`. After the candidate and referenced
+credentials pass all readiness checks, setup verifies that every legacy field is unchanged,
+holds an exclusive same-directory mode-`0600` upgrade lock, creates and fsyncs a protected
+staging file, and atomically replaces the protected version-one file. The publish fsyncs the containing directory before reporting success.
+Setup and preflight require the upgrade lock to remain absent across their protected
+configuration read, so neither can accept an in-progress publish. After the durable publish,
+setup fsyncs the directory again after removing the upgrade lock.
+Success is the closed line
+`setup result PASS upgraded`; then run
+`scripts/run-intex-agent-evals-home-dev.sh preflight`. A changed legacy field, concurrent
+replacement, unsafe file, or failed publish leaves a closed failure and never prints the
+configuration, paths, or tokens. A lock left by an interrupted upgrade remains a fail-closed
+conflict; verify that no setup process is active before removing that single upgrade lock and
+retrying `setup`.
 
 ## Tracked inputs and private outputs
 
@@ -160,6 +184,12 @@ pnpm eval:intex-agent:matrix-corpus
 
 The production wrapper accepts only `matrix-corpus`. The Home Dev wrapper retains
 `setup`, `preflight`, `endpoint`, `full`, `scenario intex-eval-NNN`, and `matrix-smoke`.
+While the retained DEV profile has `MODE=hibernated`, every one of those legacy selectors exits
+before the checkout, `direnv`, or evaluator with the stable result `DEV_RUNTIME_HIBERNATED`.
+Running one requires the separately reviewed DEV resume workflow; never resume DEV merely to
+replace the supported production acceptance path. The private Home Dev transport used by the
+production `matrix-corpus` wrapper is exempt because it targets the production runtime and does
+not start DEV services.
 `scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any
 message send with `PRODUCTION_MATRIX_CORPUS_REQUIRED`.
 `scenario`, `endpoint`, `matrix-smoke`, and `full` are targeted legacy

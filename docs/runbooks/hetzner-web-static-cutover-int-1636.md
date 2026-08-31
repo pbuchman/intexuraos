@@ -113,9 +113,9 @@ URLs; this is a hard cutover with no alias or rewrite fallback.
 
 | System              | Setting                              | Required cutover value                                                                 | Notes |
 | ------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- | ----- |
-| Auth0 SPA app       | Allowed Callback URLs                | `https://intexuraos.cloud`                                                             | Keep `https://dev.intexuraos.cloud` only if the same tenant serves dev. No `*.run.app`. |
-| Auth0 SPA app       | Allowed Logout URLs                  | `https://intexuraos.cloud`                                                             | Same dev-domain note as above. |
-| Auth0 SPA app       | Allowed Web Origins                  | `https://intexuraos.cloud`                                                             | Same dev-domain note as above. |
+| Auth0 SPA app       | Allowed Callback URLs                | `https://intexuraos.cloud`                                                             | Keep `https://dev.intexuraos.cloud` only as the retained recovery callback; DEV is normally hibernated. No `*.run.app`. |
+| Auth0 SPA app       | Allowed Logout URLs                  | `https://intexuraos.cloud`                                                             | Same retained recovery-domain note as above. |
+| Auth0 SPA app       | Allowed Web Origins                  | `https://intexuraos.cloud`                                                             | Same retained recovery-domain note as above. |
 | Auth0 ChatGPT app   | Authorization URL                    | `https://intexuraos.cloud/api/user/auth/oauth/authorize`                               | Only if the ChatGPT Action app is active. |
 | Auth0 ChatGPT app   | Token URL                            | `https://intexuraos.cloud/api/user/auth/oauth/token`                                   | Must share the same root domain as Authorization URL. |
 | Auth0 ChatGPT app   | Allowed Callback URLs                | ChatGPT-provided `https://chat.openai.com/aip/.../oauth/callback` or `https://chatgpt.com/aip/.../oauth/callback` | Not an IntexuraOS domain. |

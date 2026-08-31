@@ -228,6 +228,12 @@ jobs:
       - name: Reject Credential Files
         run: node scripts/verify-credential-files.mjs
 
+      - name: Validate DEV Edge Profiles
+        run: node scripts/validate-dev-caddy-profiles.mjs
+
+      - name: Validate Production-to-DEV Dependencies
+        run: node scripts/verify-production-dev-dependencies.mjs
+
       - name: Validate PubSub
         run: node scripts/verify-pubsub.mjs
 

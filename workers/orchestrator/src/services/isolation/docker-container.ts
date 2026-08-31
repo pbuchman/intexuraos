@@ -96,6 +96,19 @@ export class DockerContainer {
     }
   }
 
+  /**
+   * Authoritative discovery for drain evidence. Unlike the operational
+   * compatibility method above, this path deliberately propagates Docker
+   * failures so an unavailable daemon can never be reported as zero workers.
+   */
+  async countDiscoveredContainersStrict(namePrefix = 'code-worker-'): Promise<number> {
+    const containers = await this.getDocker().listContainers({
+      all: true,
+      filters: { name: [namePrefix] },
+    });
+    return containers.length;
+  }
+
   extractTaskIdFromContainerName(rawName: string, namePrefix = 'code-worker-'): string | null {
     const escaped = namePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const taskId = rawName.replace(new RegExp(`^/${escaped}`), '');

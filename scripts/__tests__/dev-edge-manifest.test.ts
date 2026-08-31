@@ -72,10 +72,14 @@ describe('DEV edge manifest', () => {
   });
 
   it('generates a static, redacted Caddy origin with method gates and no Vite/webhook deployer', () => {
-    const output = execFileSync(process.execPath, [generatorPath], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
+    const output = execFileSync(
+      process.execPath,
+      [generatorPath, '--profile', 'active-pre-cutover'],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }
+    );
 
     expect(output).toContain('dev.intexuraos.cloud:80');
     expect(output).toContain('handle @forbidden {\n    respond "Not Found" 404\n  }');

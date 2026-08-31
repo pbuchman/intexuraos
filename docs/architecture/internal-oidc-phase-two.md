@@ -124,11 +124,11 @@ The metadata server is not available outside GCP. Two options:
    under `apps/code-agent/src/routes/helpers/__tests__/internalAuth.oidc.test.ts`.
    Apply the same pattern in tests for any new OIDC-protected route.
 
-For PM2 dev runs (`dev.intexuraos.cloud`), run with `INTEXURAOS_AUTH_MODE=shared-secret`
-permanently — the metadata server isn't reachable from the home-dev VM, and
-shared-secret auth remains a valid alternative as long as the token is set.
-The `authMode` config field is per-client, so this stays a per-environment
-override.
+For a temporarily resumed retained DEV profile (`dev.intexuraos.cloud`), use
+`INTEXURAOS_AUTH_MODE=shared-secret`: the metadata server is not reachable from Home Dev, and
+shared-secret auth remains the recovery-profile alternative while the token is set. DEV is
+normally hibernated, so this setting does not authorize starting its PM2 runtime. The `authMode`
+config field is per-client and remains a retained recovery-profile override.
 
 ## Rollback plan
 

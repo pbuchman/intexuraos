@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { TOPIC_ENDPOINTS, TOPICS } from '../../tools/pubsub-ui/topology.mjs';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const pubsubUiSource = readFileSync(resolve(repoRoot, 'tools/pubsub-ui/server.mjs'), 'utf8');
@@ -42,9 +43,9 @@ describe('local Pub/Sub configuration', () => {
   });
 
   it('creates and forwards the PR triage topic in the local Pub/Sub UI', () => {
-    expect(pubsubUiSource).toContain("'pr-triage'");
-    expect(pubsubUiSource).toContain(
-      "'pr-triage': 'http://host.docker.internal:8128/internal/code/pubsub/pr-triage'"
+    expect(TOPICS).toContain('pr-triage');
+    expect(TOPIC_ENDPOINTS['pr-triage']).toBe(
+      'http://host.docker.internal:8128/internal/code/pubsub/pr-triage'
     );
   });
 

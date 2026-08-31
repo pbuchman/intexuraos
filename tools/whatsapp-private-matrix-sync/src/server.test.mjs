@@ -2020,15 +2020,55 @@ test('runSyncIteration does not call Matrix or IntexuraOS while the recovery fen
   assert.equal(runtime.state, 'recovery_required');
 });
 
+test('runSyncIteration fails closed before external work when Matrix credentials reuse a path or value', async () => {
+  for (const testCase of [
+    {
+      matrixAccessTokenFile: '/run/secrets/shared-matrix-token',
+      matrixOutboundAuthTokenFile: '/run/secrets/shared-matrix-token',
+      tokens: { '/run/secrets/shared-matrix-token': 'shared-secret' },
+    },
+    {
+      matrixAccessTokenFile: '/run/secrets/matrix-access-token',
+      matrixOutboundAuthTokenFile: '/run/secrets/matrix-outbound-token',
+      tokens: {
+        '/run/secrets/matrix-access-token': 'shared-secret',
+        '/run/secrets/matrix-outbound-token': 'shared-secret',
+      },
+    },
+  ]) {
+    const runtime = { state: 'starting', counters: {} };
+    const guardedConfig = {
+      ...config,
+      matrixAccessTokenFile: testCase.matrixAccessTokenFile,
+      matrixOutboundAuthTokenFile: testCase.matrixOutboundAuthTokenFile,
+    };
+
+    await assert.rejects(
+      runSyncIteration(guardedConfig, runtime, {
+        hasMaintenanceFence: () => false,
+        readAccessToken: (filePath) => testCase.tokens[filePath] ?? '',
+        hasNonEmptyFile: () => true,
+        readSyncState: async () => {
+          throw new Error('unexpected_external_call');
+        },
+      }),
+      /matrix_credentials_not_distinct/
+    );
+    assert.equal(runtime.state, 'starting');
+  }
+});
+
 test('a fenced adapter yields to its health server while making no external calls', async () => {
   const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'whatsapp-sync-fence-'));
   const accessTokenFile = path.join(directory, 'matrix-access-token');
+  const outboundAuthTokenFile = path.join(directory, 'matrix-outbound-auth-token');
   const credentialFile = path.join(directory, 'private-sync.json');
   const stateFile = path.join(directory, 'state.json');
   const pendingMediaFile = path.join(directory, 'pending-media.json');
   const maintenanceFenceFile = path.join(directory, 'recovery-required');
   await Promise.all([
     fsp.writeFile(accessTokenFile, 'matrix-token\n', { mode: 0o600 }),
+    fsp.writeFile(outboundAuthTokenFile, 'adapter-secret\n', { mode: 0o600 }),
     fsp.writeFile(credentialFile, '{}\n', { mode: 0o600 }),
     fsp.writeFile(stateFile, '{"nextBatch":"s0","roomContexts":{}}\n', { mode: 0o600 }),
     fsp.writeFile(maintenanceFenceFile, '', { mode: 0o600 }),
@@ -2055,6 +2095,7 @@ test('a fenced adapter yields to its health server while making no external call
       MATRIX_HOMESERVER_URL: 'http://127.0.0.1:1',
       MATRIX_USER_ID: '@pbuchman:home-dev',
       MATRIX_ACCESS_TOKEN_FILE: accessTokenFile,
+      MATRIX_OUTBOUND_AUTH_TOKEN_FILE: outboundAuthTokenFile,
       INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL: 'http://127.0.0.1:1/private/events',
       INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE: credentialFile,
       INTEXURAOS_SOURCE_ACCOUNT_ID: 'private-account',
@@ -2076,6 +2117,7 @@ test('a fenced adapter yields to its health server while making no external call
     while (Date.now() < deadline) {
       try {
         response = await fetch(`http://127.0.0.1:${port}/health`, {
+          headers: { authorization: 'Bearer adapter-secret' },
           signal: AbortSignal.timeout(150),
         });
         break;
@@ -2392,10 +2434,147 @@ async function createServerHarness(configOverrides = {}) {
   };
 }
 
-test('health returns 503 with safe counts while recovery is required', async () => {
+test('health rejects a missing Authorization header', async () => {
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const harness = await createServerHarness({ matrixOutboundAuthTokenFile: authTokenFile });
+
+  try {
+    const response = await harness.request('/health');
+
+    assert.equal(response.status, 401);
+    assert.deepEqual(response.body, { ok: false, error: 'unauthorized' });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('health rejects Matrix homeserver credential reuse by path or token value', async () => {
+  const sharedTokenFile = await createTempFile('shared-matrix-token.txt', 'shared-secret\n');
+  const separateAccessTokenFile = await createTempFile(
+    'separate-matrix-access-token.txt',
+    'shared-secret\n'
+  );
+  const separateOutboundTokenFile = await createTempFile(
+    'separate-matrix-outbound-token.txt',
+    'shared-secret\n'
+  );
+
+  for (const configOverrides of [
+    {
+      matrixAccessTokenFile: sharedTokenFile,
+      matrixOutboundAuthTokenFile: sharedTokenFile,
+    },
+    {
+      matrixAccessTokenFile: separateAccessTokenFile,
+      matrixOutboundAuthTokenFile: separateOutboundTokenFile,
+    },
+  ]) {
+    const harness = await createServerHarness(configOverrides);
+    try {
+      const response = await harness.request('/health', {
+        headers: { authorization: 'Bearer shared-secret' },
+      });
+
+      assert.equal(response.status, 401);
+      assert.deepEqual(response.body, { ok: false, error: 'unauthorized' });
+    } finally {
+      await harness.close();
+    }
+  }
+});
+
+test('health rejects missing, empty, unreadable, and whitespace-only auth token files', async () => {
+  const missingTokenFile = path.join(
+    await fsp.mkdtemp(path.join(os.tmpdir(), 'whatsapp-private-matrix-sync-')),
+    'missing-token'
+  );
+  const emptyTokenFile = await createTempFile('empty-matrix-outbound-token.txt', '');
+  const whitespaceTokenFile = await createTempFile(
+    'whitespace-matrix-outbound-token.txt',
+    ' \n\t '
+  );
+  const unreadableTokenFile = await fsp.mkdtemp(
+    path.join(os.tmpdir(), 'whatsapp-private-matrix-sync-unreadable-')
+  );
+
+  for (const authTokenFile of [
+    missingTokenFile,
+    emptyTokenFile,
+    unreadableTokenFile,
+    whitespaceTokenFile,
+  ]) {
+    const harness = await createServerHarness({ matrixOutboundAuthTokenFile: authTokenFile });
+    try {
+      const response = await harness.request('/health', {
+        headers: { authorization: 'Bearer adapter-secret' },
+      });
+
+      assert.equal(response.status, 401);
+      assert.deepEqual(response.body, { ok: false, error: 'unauthorized' });
+    } finally {
+      await harness.close();
+    }
+  }
+});
+
+test('health bearer matching rejects whitespace and case changes', async () => {
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const harness = await createServerHarness({ matrixOutboundAuthTokenFile: authTokenFile });
+
+  try {
+    for (const authorization of [
+      'Bearer  adapter-secret',
+      'Bearer\tadapter-secret',
+      'bearer adapter-secret',
+      'Bearer Adapter-secret',
+    ]) {
+      const response = await harness.request('/health', { headers: { authorization } });
+      assert.equal(response.status, 401);
+      assert.deepEqual(response.body, { ok: false, error: 'unauthorized' });
+    }
+  } finally {
+    await harness.close();
+  }
+});
+
+test('health returns its exact 200 schema with the authorized bearer', async () => {
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
   const accessTokenFile = await createTempFile('matrix-access-token.txt', 'token\n');
   const credentialFile = await createTempFile('private-sync.json', '{}\n');
   const harness = await createServerHarness({
+    matrixOutboundAuthTokenFile: authTokenFile,
+    matrixAccessTokenFile: accessTokenFile,
+    googleApplicationCredentialsFile: credentialFile,
+  });
+  harness.runtime.state = 'running';
+  harness.runtime.counters = { postedEvents: 3 };
+
+  try {
+    const response = await harness.request('/health', {
+      headers: { authorization: 'Bearer adapter-secret' },
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, {
+      ok: true,
+      state: 'running',
+      homeserverUrl: 'http://synapse:8008',
+      matrixUserId: '@pbuchman:home-dev',
+      ingestUrl: 'https://intexuraos.cloud/internal/whatsapp/private/events',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      counters: { postedEvents: 3 },
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('health returns its exact 503 schema with the authorized bearer', async () => {
+  const authTokenFile = await createTempFile('matrix-outbound-token.txt', 'adapter-secret\n');
+  const accessTokenFile = await createTempFile('matrix-access-token.txt', 'token\n');
+  const credentialFile = await createTempFile('private-sync.json', '{}\n');
+  const harness = await createServerHarness({
+    matrixOutboundAuthTokenFile: authTokenFile,
     matrixAccessTokenFile: accessTokenFile,
     googleApplicationCredentialsFile: credentialFile,
   });
@@ -2403,11 +2582,19 @@ test('health returns 503 with safe counts while recovery is required', async () 
   harness.runtime.counters = { limitedTimelines: 2 };
 
   try {
-    const response = await harness.request('/health');
+    const response = await harness.request('/health', {
+      headers: { authorization: 'Bearer adapter-secret' },
+    });
     assert.equal(response.status, 503);
-    assert.equal(response.body.ok, false);
-    assert.equal(response.body.state, 'recovery_required');
-    assert.deepEqual(response.body.counters, { limitedTimelines: 2 });
+    assert.deepEqual(response.body, {
+      ok: false,
+      state: 'recovery_required',
+      homeserverUrl: 'http://synapse:8008',
+      matrixUserId: '@pbuchman:home-dev',
+      ingestUrl: 'https://intexuraos.cloud/internal/whatsapp/private/events',
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      counters: { limitedTimelines: 2 },
+    });
   } finally {
     await harness.close();
   }

@@ -9,6 +9,7 @@ import type { Logger } from 'pino';
 import { createTestWorkerConnectivityUseCase } from '../../../../domain/usecases/workerSettings/testWorkerConnectivity.js';
 import type { WorkerSettingsRepository } from '../../../../domain/ports/workerSettingsRepository.js';
 import type { WorkerConfig } from '../../../../domain/models/workerSettings.js';
+import { orchestratorHealthV2 } from '../../../helpers/orchestratorHealth.js';
 
 function makeRepo(overrides: Partial<WorkerSettingsRepository> = {}): WorkerSettingsRepository {
   const base: WorkerSettingsRepository = {
@@ -88,16 +89,7 @@ describe('testWorkerConnectivity use case', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: async () => ({
-        status: 'ready',
-        capacity: 2,
-        running: 0,
-        available: 2,
-        workerAuths: {},
-        providerApiKeys: {},
-        dockerHealthy: true,
-        diskHealthy: true,
-      }),
+      json: async () => orchestratorHealthV2(),
     });
     const useCase = createTestWorkerConnectivityUseCase({
       workerSettingsRepo: repo,
@@ -156,12 +148,13 @@ describe('testWorkerConnectivity use case', () => {
     if (result.ok) {
       expect(result.value.testStatus).toBe('failure');
       expect(result.value.testMessage).toBe(
-        'Health response missing worker capability details: workerAuths, providerApiKeys, dockerHealthy, diskHealthy'
+        'Health response missing worker capability details: healthContractVersion, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain'
       );
     }
     expect(repo.updateTestResult).toHaveBeenCalledWith('u1', 'home-mac', {
       status: 'failure',
-      message: 'Health response missing worker capability details: workerAuths, providerApiKeys, dockerHealthy, diskHealthy',
+      message:
+        'Health response missing worker capability details: healthContractVersion, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain',
     });
   });
 
@@ -244,16 +237,7 @@ describe('testWorkerConnectivity use case', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => ({
-          status: 'ready',
-          capacity: 2,
-          running: 0,
-          available: 2,
-          workerAuths: {},
-          providerApiKeys: {},
-          dockerHealthy: true,
-          diskHealthy: true,
-        }),
+        json: async () => orchestratorHealthV2(),
       } as Response);
     const useCase = createTestWorkerConnectivityUseCase({ workerSettingsRepo: repo, logger });
 

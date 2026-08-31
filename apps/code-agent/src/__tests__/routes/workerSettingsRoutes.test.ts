@@ -46,18 +46,10 @@ import type { ServiceContainer } from '../../services.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
+import { orchestratorHealthV2 } from '../helpers/orchestratorHealth.js';
 
 function dispatchCompatibleHealth(): Record<string, unknown> {
-  return {
-    status: 'ready',
-    capacity: 2,
-    running: 0,
-    available: 2,
-    workerAuths: {},
-    providerApiKeys: {},
-    dockerHealthy: true,
-    diskHealthy: true,
-  };
+  return orchestratorHealthV2();
 }
 
 describe('Worker Settings Routes', () => {

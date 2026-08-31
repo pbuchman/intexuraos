@@ -56,6 +56,27 @@ describe('Routes', () => {
       getTask: vi.fn(async () => null),
       getRunningCount: vi.fn(() => 0),
       getCapacity: vi.fn(() => 5),
+      getDrainOwnershipSnapshot: vi.fn(async () => ({
+        workerContainers: 0,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 0,
+      })),
+      getLogForwarderDrainSnapshot: vi.fn(() => ({
+        counterEpochId: '00112233445566778899aabbccddeeff',
+        processStartedAt: '2026-08-28T10:00:00.000Z',
+        activeForwarders: 0,
+        bufferedBytes: 0,
+        partialLineBytes: 0,
+        queuedChunks: 0,
+        inFlightBatches: 0,
+        inFlightChunks: 0,
+        activeFlushOperations: 0,
+        openUploadRequests: 0,
+        detachedUploadRetryPromises: 0,
+        droppedChunksTotal: 0,
+        forwarderActivityTotal: 0,
+        lastActivityAt: null,
+      })),
     } as unknown as TaskDispatcher;
 
     tokenService = {
@@ -776,11 +797,30 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json).toMatchObject({
-        healthContractVersion: 1,
+        healthContractVersion: 2,
         status: 'ready',
         capacity: 5,
         running: 0,
         available: 5,
+        workerContainers: 0,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 0,
+        logForwarderDrain: {
+          counterEpochId: '00112233445566778899aabbccddeeff',
+          processStartedAt: '2026-08-28T10:00:00.000Z',
+          activeForwarders: 0,
+          bufferedBytes: 0,
+          partialLineBytes: 0,
+          queuedChunks: 0,
+          inFlightBatches: 0,
+          inFlightChunks: 0,
+          activeFlushOperations: 0,
+          openUploadRequests: 0,
+          detachedUploadRetryPromises: 0,
+          droppedChunksTotal: 0,
+          forwarderActivityTotal: 0,
+          lastActivityAt: null,
+        },
       });
       expect(json).toHaveProperty('githubTokenExpiresAt');
       expect(json.workerAuths.claude).toMatchObject({

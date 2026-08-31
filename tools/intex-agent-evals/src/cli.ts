@@ -101,6 +101,7 @@ export type SetupPrompt =
   | 'canonical_user_id'
   | 'matrix_user_id'
   | 'matrix_access_token_file'
+  | 'matrix_outbound_auth_token_file'
   | 'matrix_targets_file';
 
 export interface ClockPort {
@@ -517,13 +518,19 @@ async function runSetup(dependencies: CliDependencies): Promise<ExitCode> {
         'matrix_access_token_file',
         true
       );
+      const matrixOutboundAuthTokenFile = await readSetupInput(
+        dependencies,
+        'matrix_outbound_auth_token_file',
+        true
+      );
       const matrixTargetsFile = await readSetupInput(dependencies, 'matrix_targets_file', true);
       setupResult = await dependencies.setup({
-        schemaVersion: 1,
+        schemaVersion: 2,
         accountAlias,
         userId,
         matrixUserId,
         matrixAccessTokenFile,
+        matrixOutboundAuthTokenFile,
         matrixTargetsFile,
       });
     }

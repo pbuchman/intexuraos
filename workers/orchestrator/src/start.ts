@@ -12,8 +12,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
-import { initWorker } from '@intexuraos/infra-sentry';
-
 import { main } from './main.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
@@ -30,6 +28,7 @@ import {
 } from './bootstrap/service-wiring.js';
 import { ensureDirectoryExists } from './bootstrap/fs-utils.js';
 import { defaultNodeEnv } from './bootstrap/node-env.js';
+import { initOrchestratorObservability } from './bootstrap/observability-identity.js';
 
 function buildOrchestratorConfig(
   env: BootstrapEnvConfig,
@@ -70,7 +69,7 @@ function readCodeVersion(): string {
  * `.catch` reports and exits.
  *
  * The body itself is unit-tested in `start.test.ts`, which mocks every
- * bootstrap module plus `node:fs`, `@intexuraos/infra-sentry`, and
+ * bootstrap module plus `node:fs`, the observability identity boundary, and
  * `node:child_process`. Only `readCodeVersion` is excluded from coverage
  * because it wraps `execSync` directly.
  *
@@ -115,9 +114,7 @@ export async function start(): Promise<void> {
     logsDir,
     privateKeyPath
   );
-  const { logger, flush } = initWorker({
-    serviceName: 'orchestrator',
-    environment: env.environment,
+  const { logger, flush } = initOrchestratorObservability({
     ...(env.sentryDsn !== undefined ? { sentryDsn: env.sentryDsn } : {}),
     ...(env.release !== undefined ? { release: env.release } : {}),
   });

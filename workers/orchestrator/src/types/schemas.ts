@@ -6,6 +6,20 @@ import {
 } from '@intexuraos/code-task-domain';
 import { z } from 'zod';
 
+function hasHttpProtocol(value: string): boolean {
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export const HttpWebhookUrlSchema = z
+  .string()
+  .url()
+  .refine(hasHttpProtocol, 'webhookUrl must use HTTP or HTTPS');
+
 // Worker type validation
 export const WorkerTypeSchema = z.enum(CODE_TASK_WORKER_TYPES);
 
@@ -84,7 +98,7 @@ export const CreateTaskRequestSchema = z.object({
   linearIssueLabels: z.array(z.string()).default([]),
   hasChildren: z.boolean().default(false),
   slug: z.string().optional(),
-  webhookUrl: z.string().url(),
+  webhookUrl: HttpWebhookUrlSchema,
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
   retriedFrom: z.string().min(1).optional(),

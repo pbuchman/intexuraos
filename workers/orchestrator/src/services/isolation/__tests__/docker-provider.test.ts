@@ -2112,6 +2112,21 @@ describe('DockerProvider', () => {
       expect(mockLogger.warn).toHaveBeenCalled();
     });
 
+    it('counts every discovered worker container through the strict drain path', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        { Id: 'container-running', Names: ['/code-worker-task-a'], State: 'running' },
+        { Id: 'container-exited', Names: ['/code-worker-task-b'], State: 'exited' },
+      ]);
+
+      await expect(provider.getDrainWorkerContainerCount()).resolves.toBe(2);
+    });
+
+    it('propagates Docker discovery failures through the strict drain path', async () => {
+      mocks.mockDocker.listContainers.mockRejectedValueOnce(new Error('docker unavailable'));
+
+      await expect(provider.getDrainWorkerContainerCount()).rejects.toThrow('docker unavailable');
+    });
+
     it('handles container names with complex taskIds', async () => {
       mocks.mockDocker.listContainers.mockResolvedValueOnce([
         {

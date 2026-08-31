@@ -51,7 +51,7 @@ describe('web static artifact security', () => {
   it('sets no-cache headers for HTML and service workers at both origins', () => {
     const caddy = execFileSync(
       process.execPath,
-      [resolve(repoRoot, 'scripts/generate-dev-caddy.mjs')],
+      [resolve(repoRoot, 'scripts/generate-dev-caddy.mjs'), '--profile', 'active-post-cutover'],
       {
         cwd: repoRoot,
         encoding: 'utf8',

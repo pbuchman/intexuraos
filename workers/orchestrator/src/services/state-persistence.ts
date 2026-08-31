@@ -5,9 +5,36 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
 import type { OrchestratorState } from '../types/index.js';
+import { HttpWebhookUrlSchema } from '../types/schemas.js';
 import type { Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
+
+function assertPersistedTaskCallbackOwnership(state: unknown): asserts state is OrchestratorState {
+  if (typeof state !== 'object' || state === null || Array.isArray(state)) {
+    throw new Error('Persisted state must be an object');
+  }
+  if (!('tasks' in state)) {
+    throw new Error('Persisted state has no tasks object');
+  }
+  const tasks = state.tasks;
+  if (typeof tasks !== 'object' || tasks === null || Array.isArray(tasks)) {
+    throw new Error('Persisted state tasks must be an object');
+  }
+  for (const [taskId, task] of Object.entries(tasks)) {
+    if (typeof task !== 'object' || task === null || Array.isArray(task)) {
+      throw new Error(`Persisted task ${taskId} must be an object`);
+    }
+    const webhookUrl = 'webhookUrl' in task ? task.webhookUrl : undefined;
+    if (!HttpWebhookUrlSchema.safeParse(webhookUrl).success) {
+      throw new Error(`Persisted task ${taskId} has an invalid required webhookUrl`);
+    }
+    const webhookSecret = 'webhookSecret' in task ? task.webhookSecret : undefined;
+    if (typeof webhookSecret !== 'string' || webhookSecret === '') {
+      throw new Error(`Persisted task ${taskId} has an invalid required webhookSecret`);
+    }
+  }
+}
 
 export class StatePersistence {
   private readonly writeMutex = new Mutex();
@@ -30,7 +57,8 @@ export class StatePersistence {
       }
 
       const content = await readFile(this.filePath, 'utf-8');
-      const state = JSON.parse(content) as OrchestratorState;
+      const state = JSON.parse(content) as unknown;
+      assertPersistedTaskCallbackOwnership(state);
       return state;
     } catch (error) {
       if (error instanceof SyntaxError) {
@@ -66,6 +94,44 @@ export class StatePersistence {
 
     // Atomic rename (POSIX guarantees atomicity)
     await rename(tempPath, this.filePath);
+  }
+
+  /**
+   * Strict, read-only view used by drain evidence. It never creates a
+   * directory, renames a corrupt file, or substitutes an empty queue for an
+   * unreadable state. A missing file is always unknown: process-local history
+   * cannot prove that a callback queue was never persisted and then lost.
+   */
+  async getPendingWebhookCountForDrain(): Promise<number | null> {
+    if (!existsSync(this.filePath)) {
+      return null;
+    }
+
+    try {
+      const content = await readFile(this.filePath, 'utf-8');
+      const parsed = JSON.parse(content) as unknown;
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        Array.isArray(parsed) ||
+        Object.keys(parsed).sort().join(',') !== 'githubToken,pendingWebhooks,tasks' ||
+        !('tasks' in parsed) ||
+        typeof parsed.tasks !== 'object' ||
+        parsed.tasks === null ||
+        Array.isArray(parsed.tasks) ||
+        !('githubToken' in parsed) ||
+        (parsed.githubToken !== null &&
+          (typeof parsed.githubToken !== 'object' || Array.isArray(parsed.githubToken))) ||
+        !('pendingWebhooks' in parsed) ||
+        !Array.isArray(parsed.pendingWebhooks)
+      ) {
+        return null;
+      }
+      return parsed.pendingWebhooks.length;
+    } catch (error) {
+      this.logger.warn({ error }, 'Unable to read state for drain evidence');
+      return null;
+    }
   }
 
   async detectOrphanWorktrees(repository: string): Promise<string[]> {

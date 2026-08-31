@@ -65,8 +65,8 @@ Validation output must contain names/counts/results only.
 | Consumer | Source | Allowed projection |
 | --- | --- | --- |
 | Local PM2/Vite | exact DEV numeric version plus versioned config | mode-`0600` `.envrc` and approved local files |
-| home-dev PM2 | exact DEV numeric version plus versioned config | mode-`0600` `.envrc`, filtered per-service env |
-| home-dev orchestrator | host-rendered DEV projection | strict env allowlist plus GitHub App PEM |
+| home-dev PM2 (retained DEV recovery) | exact DEV numeric version plus versioned config | staged mode-`0600` `.envrc`, filtered per-service env; normally stopped |
+| home-dev orchestrator (production-owned) | host-rendered DEV projection with production callback ownership | strict env allowlist plus GitHub App PEM; retained while DEV is hibernated |
 | code-worker | orchestrator projection | task-specific env/files only; no package or Secret Manager access |
 | Grafana/Alloy | exact DEV numeric version | dedicated observability env projection |
 | Hetzner services/web/nginx/TLS | exact PROD numeric version plus versioned config | target-specific files from the production renderer |
@@ -98,7 +98,7 @@ promotion, `latest`, and mutable aliases are forbidden.
 
 ## Development Workflow
 
-Refresh local or home-dev only from a reviewed DEV numeric version:
+Refresh a local active runtime only from a reviewed DEV numeric version:
 
 ```bash
 SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
@@ -106,6 +106,21 @@ SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret
 direnv allow
 pnpm run services:restart
 ```
+
+On Home Dev, the same exact version may be staged during an approved change, but staging is not a
+runtime resume:
+
+```bash
+SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
+  ./scripts/sync-secrets.sh --version <dev-numeric-version>
+direnv allow
+```
+
+Do not start or restart the retained DEV PM2 stack while the mode is `draining` or `hibernated`.
+Only an explicitly authorized `intexuraos-dev-mode resume` transaction may start that stack, and it
+must follow [the DEV hibernation runbook](./dev-hibernation.md). The production-owned Home Dev
+orchestrator is a separate retained service and is not evidence that the DEV application runtime is
+active.
 
 The loader validates CRC32C, schema, environment, exact membership, and file
 shape, then stages one immutable projection containing the package files,
@@ -219,11 +234,13 @@ must be separately protected and rotated.
 
 ## Rotation
 
-Every rotation creates a complete immutable candidate. Stop affected writers,
-publish and deploy it by exact numeric version, verify DEV and PROD, revoke the
-old credential, and destroy every superseded package version. There is no
-rollback, dual-key runtime, or compatibility reader. A failed gate leaves the
-affected service stopped and is repaired forward.
+Every rotation creates a complete immutable candidate. Stop affected writers, publish and deploy it
+to production by exact numeric version, and stage that same reviewed revision for retained DEV
+recovery. Verify the Home Dev projection without starting the DEV application stack. If live DEV
+verification is required, perform an explicitly authorized resume-and-rehibernate drill. Then
+revoke the old credential and destroy every superseded package version. There is no rollback,
+dual-key runtime, or compatibility reader. A failed gate leaves the affected service stopped and is
+repaired forward.
 
 For encryption keys, a one-time offline migrator may hold the old and new key
 while all writers are stopped. Runtime receives only the new key. Delete the
@@ -242,5 +259,6 @@ old key and migrator immediately after the complete rescan passes.
 - Never include a package payload, base64, private key, rendered environment,
   token, or reversible digest in evidence.
 
-The final destructive cleanup is governed only by
-[Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md).
+The [Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md) is a historical
+archive of the completed migration, not current execution authority. New package changes follow
+this policy plus the applicable current deployment or hibernation runbook.

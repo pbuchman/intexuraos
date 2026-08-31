@@ -3,6 +3,7 @@ import type { ExecutionMemoryPromptContext } from './execution-memory.js';
 import type { SentryIssueTaskContext } from './task.js';
 import type { WorkerType } from '../services/isolation/types.js';
 import type { WorkerAuthProvider, WorkerAuthState } from '../services/worker-auth/index.js';
+import type { LogForwarderDrainSnapshot } from '../services/log-forwarder.js';
 
 // POST /tasks request
 export interface CreateTaskRequest {
@@ -56,16 +57,20 @@ export interface CreateTaskRequest {
 
 // GET /health response
 export interface HealthResponse {
-  healthContractVersion: 1;
+  healthContractVersion: 2;
   status: OrchestratorStatus;
   capacity: number;
   running: number;
   available: number;
+  workerContainers: number | null;
+  pendingTerminalCallbacks: number | null;
+  terminalCallbackActivityTotal: number | null;
   githubTokenExpiresAt: string | null;
   dockerHealthy: boolean;
   diskHealthy: boolean;
   workerAuths: Record<WorkerAuthProvider, WorkerAuthState>;
   providerApiKeys: Record<string, ProviderApiKeyHealth>;
+  logForwarderDrain: LogForwarderDrainSnapshot;
 }
 
 export interface ProviderApiKeyHealth {

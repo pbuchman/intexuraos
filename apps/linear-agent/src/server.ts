@@ -49,10 +49,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       url: 'https://intexuraos.cloud/api/linear',
       description: 'Production',
     },
-    {
-      url: 'https://dev.intexuraos.cloud/api/linear',
-      description: 'Development',
-    },
   ];
 
   return {

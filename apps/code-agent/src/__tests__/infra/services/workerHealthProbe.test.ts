@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createWorkerHealthProbe } from '../../../infra/services/workerHealthProbe.js';
+import { orchestratorHealthV2 } from '../../helpers/orchestratorHealth.js';
 
 // Mock fetch to simulate worker responses
 global.fetch = vi.fn();
@@ -21,9 +22,7 @@ describe('WorkerHealthProbe', () => {
     enabled: true,
   };
 
-  const readyHealth = (overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> => ({
-    status: 'ready',
-    capacity: 2,
+  const readyHealth = (overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> => orchestratorHealthV2({
     running: 1,
     available: 1,
     workerAuths: {
@@ -81,10 +80,7 @@ describe('WorkerHealthProbe', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          status: 'ready',
-          capacity: 2,
-          running: 0,
-          available: 2,
+          ...orchestratorHealthV2(),
           workerAuths: {
             claude: { status: 'not_configured', message: 'Claude credentials not found' },
             codex: { status: 'expired', message: 'Codex ChatGPT access token expired' },
@@ -132,7 +128,17 @@ describe('WorkerHealthProbe', () => {
         healthy: false,
         error: 'Health response missing worker capability details',
         contractMismatch: true,
-        missingFields: ['workerAuths', 'providerApiKeys', 'dockerHealthy', 'diskHealthy'],
+        missingFields: [
+          'healthContractVersion',
+          'workerContainers',
+          'pendingTerminalCallbacks',
+          'terminalCallbackActivityTotal',
+          'workerAuths',
+          'providerApiKeys',
+          'dockerHealthy',
+          'diskHealthy',
+          'logForwarderDrain',
+        ],
       });
     });
 
@@ -157,7 +163,15 @@ describe('WorkerHealthProbe', () => {
         healthy: false,
         error: 'Health response missing worker capability details',
         contractMismatch: true,
-        missingFields: ['providerApiKeys', 'diskHealthy'],
+        missingFields: [
+          'healthContractVersion',
+          'workerContainers',
+          'pendingTerminalCallbacks',
+          'terminalCallbackActivityTotal',
+          'providerApiKeys',
+          'diskHealthy',
+          'logForwarderDrain',
+        ],
       });
     });
 

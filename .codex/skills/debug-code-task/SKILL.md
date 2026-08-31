@@ -25,9 +25,11 @@ Do not use this skill for WhatsApp Assistant session investigations.
 ## Workflow
 
 1. Extract the task ID from the URL hash or direct `task_*` input.
-2. Detect the environment from the URL.
-   - `dev.intexuraos.cloud` = dev
-   - `intexuraos.cloud` without `dev.` = prod
+2. Record link provenance without treating it as runtime routing.
+   - `dev.intexuraos.cloud` is accepted only for historical investigations.
+   - `intexuraos.cloud` is the live production UI.
+   - Home Dev is a production-owned worker host, not a live DEV application runtime.
+   - Never infer data ownership, credential mode, or callback ownership from the link hostname.
 3. Never fetch the SPA URL. The page is hash-routed; the task data lives in Firestore.
 4. Confirm the current machine with `uname -n`.
 5. Use the bundled wrapper `.codex/skills/debug-code-task/scripts/fetch-task.sh`, which resolves the local repo and runs the Firestore fetcher from the checked-out repo.
@@ -68,7 +70,9 @@ Present log evidence directly. Do not infer a root cause unless the logs or task
 
 Only do this when Firestore logs are not enough or the user asks.
 
-- Read `workerLocation` from the task document first.
+- Read `workerLocation` from the task document first. It identifies execution placement only and
+  never determines callback ownership. When ownership matters, use the persisted task callback
+  contract; public production callbacks use `https://intexuraos.cloud/api/code`.
 - If the task ran on `home-dev` and you are elsewhere, use `ssh home-dev`.
 - Orchestrator logs on `home-dev`:
 

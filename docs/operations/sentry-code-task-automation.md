@@ -14,10 +14,15 @@ issue only in Sentry.
 
 Register the code-agent webhook URL with SentryBox:
 
-| Environment | Webhook URL |
-| --- | --- |
-| Production | `https://intexuraos.cloud/api/code/webhooks/sentry` |
-| Development | `https://dev.intexuraos.cloud/api/code/webhooks/sentry` |
+| Environment           | Webhook URL                                                   |
+| --------------------- | ------------------------------------------------------------- |
+| Production            | `https://intexuraos.cloud/api/code/webhooks/sentry`           |
+| Retained DEV recovery | `https://dev.intexuraos.cloud/api/code/webhooks/sentry`       |
+
+Only production forwarding is supported during normal operation. DEV forwarding remains disabled
+while the retained runtime is hibernated; the recovery URL returns `503`. Enable it only inside a
+separately authorized recovery drill, then disable it again before re-hibernation. Keep the DEV
+ingest configuration and signing secret for reversibility; do not delete either one.
 
 The compatibility route remains `/webhooks/sentry` and accepts SentryBox
 deliveries with:
@@ -35,10 +40,9 @@ are:
 
 ## SentryBox Setup
 
-1. Configure the backend and web projects for both `dev` and `prod` in
-   SentryBox.
-2. Set each environment's Code Agent webhook to the corresponding endpoint
-   above.
+1. Retain the backend and web project definitions for both `dev` and `prod` in SentryBox.
+2. Keep production forwarding pointed at its production endpoint. Keep DEV forwarding disabled
+   unless the reviewed recovery procedure explicitly activates it.
 3. Configure the webhook HMAC value to match
    `INTEXURAOS_SENTRY_WEBHOOK_SECRET` in that Code Agent environment.
 4. Enable compatible `issue` and `event_alert` deliveries for new and regressed

@@ -225,7 +225,8 @@ export function mapLinearError(error: unknown): LinearError {
   if (
     message.includes('401') ||
     message.includes('Unauthorized') ||
-    message.includes('Invalid API key')
+    message.includes('Invalid API key') ||
+    message.includes('Authentication required, not authenticated')
   ) {
     return { code: 'INVALID_API_KEY', message: 'Invalid Linear API key' };
   }

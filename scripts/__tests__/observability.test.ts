@@ -53,7 +53,9 @@ describe('Grafana Alloy PM2 log collection', () => {
     expect(config).toContain('regex         = "^.*/(.+)-(out|error)(?:-[0-9]+)?\\\\.log$"');
     expect(config).toContain('loki.process "pm2_logs"');
     expect(config).toContain('stage.decolorize');
+    expect(config).toContain('sync_period = "10s"');
     expect(config).toContain('loki.write "grafana_cloud"');
+    expect(config).toContain('name     = "pm2_grafana_cloud"');
     expect(config).toContain('url      = sys.env("INTEXURAOS_GRAFANA_CLOUD_LOKI_URL")');
     expect(config).toContain('username = sys.env("INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME")');
     expect(config).toContain('password = sys.env("INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN")');

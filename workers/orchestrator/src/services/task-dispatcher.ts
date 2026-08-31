@@ -369,6 +369,61 @@ export class TaskDispatcher {
     return this.runningCountBox.value;
   }
 
+  getLogForwarderDrainSnapshot(): ReturnType<LogForwarder['getDrainSnapshot']> {
+    return this.logForwarder.getDrainSnapshot();
+  }
+
+  async getDrainOwnershipSnapshot(): Promise<{
+    workerContainers: number | null;
+    pendingTerminalCallbacks: number | null;
+    terminalCallbackActivityTotal: number | null;
+  }> {
+    let workerContainers: number | null = null;
+    const isolationProvider = this.isolation.provider;
+    if (isolationProvider.getDrainWorkerContainerCount !== undefined) {
+      try {
+        const count = await isolationProvider.getDrainWorkerContainerCount();
+        if (Number.isSafeInteger(count) && count >= 0) {
+          workerContainers = count;
+        } else {
+          this.logger.warn({ count }, 'Invalid worker container drain count');
+        }
+      } catch (error) {
+        this.logger.warn({ error }, 'Failed to read worker container drain count');
+      }
+    }
+
+    let pendingTerminalCallbacks: number | null = null;
+    const callbackActivityFallback = this.webhookClient.getTerminalCallbackActivityTotal();
+    let terminalCallbackActivityTotal: number | null =
+      Number.isSafeInteger(callbackActivityFallback) && callbackActivityFallback >= 0
+        ? callbackActivityFallback
+        : null;
+    try {
+      const snapshot = await this.webhookClient.getDrainCallbackSnapshot();
+      const pendingValid =
+        snapshot.pendingTerminalCallbacks === null ||
+        (Number.isSafeInteger(snapshot.pendingTerminalCallbacks) &&
+          snapshot.pendingTerminalCallbacks >= 0);
+      const activityValid =
+        Number.isSafeInteger(snapshot.terminalCallbackActivityTotal) &&
+        snapshot.terminalCallbackActivityTotal >= 0;
+      if (pendingValid) {
+        pendingTerminalCallbacks = snapshot.pendingTerminalCallbacks;
+      }
+      if (activityValid) {
+        terminalCallbackActivityTotal = snapshot.terminalCallbackActivityTotal;
+      }
+      if (!pendingValid || !activityValid) {
+        this.logger.warn({ snapshot }, 'Invalid pending terminal callback drain count');
+      }
+    } catch (error) {
+      this.logger.warn({ error }, 'Failed to read pending terminal callback drain count');
+    }
+
+    return { workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal };
+  }
+
   /**
    * INT-1551 §E.7: snapshot of currently-tracked fire-and-forget handler
    * promises. The shutdown path in `main.ts` awaits these via

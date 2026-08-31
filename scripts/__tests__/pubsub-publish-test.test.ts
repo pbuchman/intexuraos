@@ -5,10 +5,10 @@ import {
   resolvePubSubProjectId,
   resolvePubSubProjectIds,
 } from '../../tools/pubsub-ui/pubsub-forwarding.mjs';
+import { TOPIC_ENDPOINTS, TOPICS } from '../../tools/pubsub-ui/topology.mjs';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const smokeScript = readFileSync(resolve(repoRoot, 'scripts/pubsub-publish-test.mjs'), 'utf8');
-const pubsubServer = readFileSync(resolve(repoRoot, 'tools/pubsub-ui/server.mjs'), 'utf8');
 const pubsubUi = readFileSync(resolve(repoRoot, 'tools/pubsub-ui/index.html'), 'utf8');
 const readme = readFileSync(resolve(repoRoot, 'tools/pubsub-ui/README.md'), 'utf8');
 
@@ -44,9 +44,9 @@ describe('Message Digest local Pub/Sub registration', () => {
   });
 
   it('registers one canonical topic and service forwarder everywhere', () => {
-    expect(pubsubServer).toContain("'message-digest-runs'");
-    expect(pubsubServer).toContain(
-      "'message-digest-runs': 'http://host.docker.internal:8135/internal/message-digests/pubsub/run'"
+    expect(TOPICS).toContain('message-digest-runs');
+    expect(TOPIC_ENDPOINTS['message-digest-runs']).toBe(
+      'http://host.docker.internal:8135/internal/message-digests/pubsub/run'
     );
     expect(pubsubUi).toContain('<option value="message-digest-runs">message-digest-runs</option>');
     expect(readme).toContain('`message-digest-runs`');

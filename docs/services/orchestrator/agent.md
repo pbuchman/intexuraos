@@ -73,11 +73,14 @@ interface OrchestratorTools {
 
   // Check service health and capacity
   getHealth(): Promise<{
-    healthContractVersion: 1;
+    healthContractVersion: 2;
     status: 'ready' | 'initializing' | 'recovering' | 'degraded' | 'auth_degraded' | 'shutting_down';
     capacity: number;
     running: number;
     available: number;
+    workerContainers: number | null;
+    pendingTerminalCallbacks: number | null;
+    terminalCallbackActivityTotal: number | null;
     githubTokenExpiresAt: string | null;
     workerAuths: {
       claude: WorkerAuthState;
@@ -86,6 +89,22 @@ interface OrchestratorTools {
     dockerHealthy: boolean;
     diskHealthy: boolean;
     providerApiKeys: Record<string, ProviderApiKeyHealth>;
+    logForwarderDrain: {
+      counterEpochId: string;
+      processStartedAt: string;
+      activeForwarders: number;
+      bufferedBytes: number;
+      partialLineBytes: number;
+      queuedChunks: number;
+      inFlightBatches: number;
+      inFlightChunks: number;
+      activeFlushOperations: number;
+      openUploadRequests: number;
+      detachedUploadRetryPromises: number;
+      droppedChunksTotal: number;
+      forwarderActivityTotal: number;
+      lastActivityAt: string | null;
+    };
   }>;
   // Auth: None
 

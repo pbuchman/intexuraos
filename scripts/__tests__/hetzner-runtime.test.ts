@@ -2073,9 +2073,16 @@ describe('Hetzner secret loader', () => {
     );
     expect(manifest.packages.prod.envNames).not.toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL');
     expect(setupDoc).toContain(
-      'Set `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` separately in `dev.json` and `prod.json`'
+      'Keep `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` environment-specific.'
     );
-    expect(setupDoc).toContain('Do not point the URL at `localhost`');
+    expect(setupDoc).toContain(
+      'Hetzner production renders `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` from the'
+    );
+    expect(setupDoc).toContain('production overlay in versioned configuration');
+    expect(setupDoc).toContain(
+      `The tracked production value is the production-owned\n\`${prodConfig['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']}\` route.`
+    );
+    expect(setupDoc).toMatch(/Do not point\s+production at `localhost`/u);
   });
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {

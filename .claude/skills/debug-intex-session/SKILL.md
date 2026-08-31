@@ -9,21 +9,22 @@ Investigate WhatsApp Assistant session execution by fetching sanitized session m
 
 ## Invocation Detection
 
-| Input Pattern                                                              | Action                       |
-| -------------------------------------------------------------------------- | ---------------------------- |
-| `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*` | Extract session ID, env=dev  |
-| `https://intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`     | Extract session ID, env=prod |
-| `intex_session_<uuid>` + "debug"/"investigate"/"what went wrong"           | Use session ID directly      |
+| Input Pattern                                                              | Action                                         |
+| -------------------------------------------------------------------------- | ---------------------------------------------- |
+| `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*` | Extract session ID; legacy DEV-link provenance |
+| `https://intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`     | Extract session ID, env=prod                   |
+| `intex_session_<uuid>` + "debug"/"investigate"/"what went wrong"           | Use session ID directly                        |
 
 Do not use this skill for code-task URLs such as `/#/code-tasks/task_*` or direct `task_*` inputs. Use `debug-code-task` for those.
 
-## Phase 1: Environment Detection
+## Phase 1: Link Provenance
 
 Parse the URL. Do NOT fetch it - hash-routed SPA returns only shell HTML.
 
-| Signal | dev                    | prod                           |
-| ------ | ---------------------- | ------------------------------ |
-| URL    | `dev.intexuraos.cloud` | `intexuraos.cloud` (no `dev.`) |
+`dev.intexuraos.cloud` is accepted only as a historical investigation input. Home Dev is a
+production-owned worker host, not a live DEV application runtime; new sessions and service
+callbacks are production-owned. Do not infer runtime availability, data ownership, credential
+mode, or callback ownership from the link hostname.
 
 Run `uname -n` to confirm current machine.
 

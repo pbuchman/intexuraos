@@ -67,7 +67,7 @@ The adapter requires:
 - `MATRIX_BRIDGE_BOT_USERS` (comma-separated Matrix user IDs to ignore)
 - `WHATSAPP_SYNC_STATE_FILE`
 
-`MATRIX_OUTBOUND_AUTH_TOKEN_FILE` is an adapter-local bearer token used by trusted callers on the Matrix host for outbound readiness and send requests. `MATRIX_OUTBOUND_TARGETS_FILE` points to a JSON mapping from `sourceAccountId` and logical target name to a Matrix room id, for example:
+`MATRIX_OUTBOUND_AUTH_TOKEN_FILE` is an adapter-local bearer token used by trusted callers on the Matrix host for health, outbound readiness, and send requests. It must be distinct from the Matrix homeserver access token. The adapter fails closed before sync and rejects HTTP authorization when the two paths or their trimmed token values are equal. `MATRIX_OUTBOUND_TARGETS_FILE` points to a JSON mapping from `sourceAccountId` and logical target name to a Matrix room id, for example:
 
 ```json
 {
@@ -77,14 +77,17 @@ The adapter requires:
 }
 ```
 
-## Outbound Matrix Delivery
+## Health And Outbound Matrix Delivery
 
-The adapter now exposes two adapter-local outbound endpoints:
+The adapter exposes these protected adapter-local endpoints:
 
+- `GET /health`
 - `GET /internal/matrix/outbound/readiness/:sourceAccountId/:target`
 - `POST /internal/matrix/outbound/messages`
 
-Both endpoints require `Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>`.
+All three endpoints require the exact
+`Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>` header. Missing, empty,
+unreadable, whitespace-only, or non-matching token material fails closed with `401`.
 
 Readiness returns only configuration state:
 

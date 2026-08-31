@@ -287,17 +287,6 @@ describe('loadEnvConfig', () => {
     expect((thrown as IntexuraOSError).message).not.toContain(credentialValue);
   });
 
-  it('forwards INTEXURAOS_ENVIRONMENT and falls back to NODE_ENV when unset', () => {
-    const explicit = loadEnvConfig(makeValidEnv({ INTEXURAOS_ENVIRONMENT: 'production' }));
-    expect(explicit.environment).toBe('production');
-
-    const fallback = loadEnvConfig(makeValidEnv({ NODE_ENV: 'staging' }));
-    expect(fallback.environment).toBe('staging');
-
-    const def = loadEnvConfig(makeValidEnv());
-    expect(def.environment).toBe('development');
-  });
-
   it('surfaces INTEXURAOS_SENTRY_DSN, K_REVISION, and INTEXURAOS_RELEASE overrides', () => {
     // K_REVISION wins over INTEXURAOS_RELEASE when both are present (Cloud Run
     // injects K_REVISION on every deploy; the explicit override is for hosts

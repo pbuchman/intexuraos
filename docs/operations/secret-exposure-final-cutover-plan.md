@@ -1,16 +1,17 @@
-# Secret Exposure Final Cutover Plan
+# Secret Exposure Final Cutover Plan (Historical Archive)
 
-Status: approved destructive production implementation plan.
+Status: historical archive; do not execute.
 
-This is the only execution authority for this cutover. It supersedes every
-rollback, compatibility, soak, Phase A/B, and delayed-cleanup instruction in
-the migration report and package runbook.
+This file preserves the already-executed security migration plan for audit provenance. Its commands,
+goal template, deployment model, and statements of authority are superseded and must not be used for
+a current change. The [current DEV hibernation runbook](./dev-hibernation.md) is the operational
+authority for the Home Dev runtime lifecycle; current secret-package work follows
+[Secret Packages Operations](./secret-packages.md).
 
-## Autonomous Agent Goal
+## Historical Autonomous Agent Goal Template — Do Not Create
 
-After this plan is approved, create one goal from the template below. Replace
-`<APPROVED_PLAN_URL>` with the immutable GitHub blob URL pinned to the exact
-reviewed commit. Never use a branch, pull-request, or mutable `development` URL.
+The following block records the goal used for that past cutover. It is historical evidence, not an
+instruction to create or replace a current goal.
 
 > Execute the complete IntexuraOS production security cutover defined in
 > `<APPROVED_PLAN_URL>`. Read that plan in full before taking any action and

@@ -128,11 +128,12 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
     const matrixUserId = '@operator:matrix.test';
     const puppetUserId = '@whatsapp_1:matrix.test';
     const config: EvaluatorConfig = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       accountAlias: 'Production evaluator',
       userId: evaluatorUserId,
       matrixUserId,
       matrixAccessTokenFile: '/home/operator/.config/matrix-token',
+      matrixOutboundAuthTokenFile: '/home/operator/.config/matrix-outbound-auth-token',
       matrixTargetsFile: '/home/operator/.config/matrix-targets.json',
     };
     const env: NodeJS.ProcessEnv = {
@@ -179,6 +180,9 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
           if (path === config.matrixAccessTokenFile) {
             return { ok: true as const, contents: 'synthetic-matrix-token' };
           }
+          if (path === config.matrixOutboundAuthTokenFile) {
+            return { ok: true as const, contents: 'synthetic-outbound-token' };
+          }
           if (path === config.matrixTargetsFile) {
             return {
               ok: true as const,
@@ -191,7 +195,9 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
         }),
         validatePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
         ensurePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
+        isAtomicReplaceIdle: vi.fn(async () => true),
         createExclusive: vi.fn(async () => ({ state: 'exists' as const })),
+        replaceAtomic: vi.fn(async () => ({ state: 'conflict' as const })),
       },
       healthHttp: {
         get: vi.fn(async (url) => {
@@ -275,7 +281,9 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
     expect(intex.getMatrixCorpusCurrentAcceptance).toHaveBeenCalledWith(evaluatorUserId);
     expect(whatsapp.getMatrixCorpusReadiness).toHaveBeenCalledOnce();
     expect(setup.healthHttp.get).toHaveBeenCalledOnce();
-    expect(setup.healthHttp.get).toHaveBeenCalledWith(MATRIX_ADAPTER_HEALTH_URL);
+    expect(setup.healthHttp.get).toHaveBeenCalledWith(MATRIX_ADAPTER_HEALTH_URL, {
+      bearerToken: 'synthetic-outbound-token',
+    });
     expect(setup.whatsapp.getDeliveryStatus).not.toHaveBeenCalled();
   });
 

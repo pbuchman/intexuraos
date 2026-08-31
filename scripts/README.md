@@ -93,6 +93,55 @@ node scripts/generate-orchestrator-env.mjs \
   --user-home "${HOME}"
 ```
 
+The generator pins the Home Dev orchestrator Code Agent base and usage webhook
+to exact production endpoints. It ignores inherited localhost or DEV URLs;
+`INTEXURAOS_ENVIRONMENT=dev` and `INTEXURAOS_RUNTIME=dev` remain audited legacy
+host/observability tags, not routing inputs.
+
+Run the production-to-DEV dependency regression gate after editing any tracked
+or non-ignored repository file:
+
+```bash
+pnpm run verify:production-dev-dependencies
+```
+
+This direct command is the CI authority. The unit suite skips a second full
+repository traversal by default; to exercise that redundant wrapper explicitly,
+run `INTEXURAOS_RUN_TRACKED_PRODUCTION_DEV_GATE_TEST=1 pnpm exec vitest run
+scripts/__tests__/production-dev-dependency-gate.test.ts`.
+
+The file universe is derived by the verifier and cannot be narrowed by policy.
+Intentional historical/test/hibernation occurrences require an exact line,
+occurrence count, classification, owner, and reason in the tracked policy. The
+literal scanner canonicalizes supported JS/JSON, YAML/HCL, shell ANSI-C, CSS,
+and HTML/XML escape forms through Node's WHATWG/UTS-46 host implementation.
+It also folds bounded recursive percent encoding and common statically computable
+JavaScript/TypeScript expressions: adjacent literal concatenation, template
+interpolation from literals or one unambiguous `const`, `String(...)`, literal
+array `.join(...)`, and literal UTF-8 base64 decoding. For GitHub Actions
+workflows it also composes statically enumerable `env` references with literal
+`format(...)` expressions and shell-adjacent quote/ANSI-C projections. A
+relevant unresolved workflow value that could complete the forbidden hostname
+fails closed after all supported projections; harmless standalone unresolved
+values remain outside the hostname contract. Case/Unicode variants, duplicate
+or stale entries, duplicate JSON keys, malformed text, NUL bytes, symlinks,
+inventory changes, files whose SHA-256 changes across the whole scan, and
+bounded expansion overflow all fail closed. The one intentional non-text test
+fixture is pinned separately by SHA-256. Other dynamic environment
+substitution, mutable identifiers, runtime branches, and custom decoders still
+require an executable or data-flow-specific regression test.
+
+For a statically computed occurrence, `lineEquals` names the exact discovered
+sink line even when that isolated line does not spell the hostname. Such an
+entry is accepted only when whole-file constant analysis produces an occurrence
+at the same path and exact line; an arbitrary or stale sink line fails closed.
+
+Production Web deployment consumes the manifest only through
+`scripts/render-production-web-service-env.mjs`, which emits validated relative
+`apiPath` entries. Its regression test executes the real deployment shell with
+a DEV `serviceUrl` sentinel and verifies both the final build environment and
+sanitized dotenv output.
+
 Build the Alloy projection without direct GCP access:
 
 ```bash
@@ -123,8 +172,25 @@ fix-forward repair.
 
 ## Edge And Cutover Verification
 
-- `generate-dev-caddy.mjs`: generates exact DEV edge routes from the tracked
-  method/path/guard manifest.
+- `generate-dev-caddy.mjs`: generates one explicitly selected immutable DEV
+  edge profile (`active-pre-cutover`, `active-post-cutover`, `draining`, or
+  `hibernated`) or the separate production Matrix fragment from the tracked
+  manifests. The byte-exact outputs in `config/edge/generated/` are deployment
+  inputs and must match the generator; live hosts select these files instead of
+  regenerating or editing route semantics.
+- `validate-dev-caddy-profiles.mjs`: compares every tracked edge fixture with
+  fresh generator output, then validates all five files with a pinned Caddy
+  container in isolated, networkless runs. Missing Docker/Caddy validation is a
+  hard failure.
+
+Generate one reviewable output on stdout or validate the complete tracked set:
+
+```bash
+node scripts/generate-dev-caddy.mjs --profile active-post-cutover
+node scripts/generate-dev-caddy.mjs --matrix-fragment
+pnpm run verify:dev-edge-profiles
+```
+
 - `install-dev-static-web.sh`: verifies and publishes an exact-SHA Home Dev
   static build under `/var/www/intexuraos-dev/current` with Caddy-readable
   permissions.

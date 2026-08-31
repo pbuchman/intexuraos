@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { WorkerTypeSchema } from '../types/schemas.js';
+import { HttpWebhookUrlSchema, WorkerTypeSchema } from '../types/schemas.js';
 
 const DispatchMetadataSchema = z.object({
   taskId: z.string().min(1),
@@ -13,7 +13,7 @@ const DispatchMetadataSchema = z.object({
   linearIssueId: z.string().min(1).nullable(),
   webhookSecret: z.string().min(1).nullable(),
   prNumber: z.number().int().positive().nullable(),
-  webhookUrl: z.string().url(),
+  webhookUrl: HttpWebhookUrlSchema,
   continuationPrBranch: z.string().min(1).nullable(),
   trackingCommentId: z.string().min(1).nullable(),
 });

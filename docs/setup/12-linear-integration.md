@@ -4,7 +4,7 @@ This guide covers setting up the Linear integration for IntexuraOS, including we
 
 ## Prerequisites
 
-- [ ] IntexuraOS deployed to the dev or production PM2 environment
+- [ ] The IntexuraOS production deployment is healthy
 - [ ] Linear account with admin access to configure webhooks
 - [ ] Linear API key for the user ([generate here](https://linear.app/settings/api))
 
@@ -38,10 +38,15 @@ Webhooks enable real-time synchronization when issues are created, updated, or d
 
 ### Step 2.1: Get Your Webhook URL
 
-| Environment | Webhook URL                                      |
-| ----------- | ------------------------------------------------ |
-| Production  | `https://intexuraos.cloud/api/linear/webhooks`   |
-| Dev         | `https://dev.intexuraos.cloud/api/linear/webhooks` |
+| Environment          | Webhook URL                                             |
+| -------------------- | ------------------------------------------------------- |
+| Production           | `https://intexuraos.cloud/api/linear/webhooks`          |
+| Retained DEV recovery | `https://dev.intexuraos.cloud/api/linear/webhooks`     |
+
+The workspace webhook must normally target production. The retained DEV recovery URL exists only
+for a separately authorized recovery drill and returns `503` while DEV is hibernated. Do not
+create, enable, or repoint a Linear producer to DEV outside that reviewed resume window; restore
+the production target before re-hibernation.
 
 > **Note:** Linear requires an HTTPS public URL. For one-off tunnel testing, use a tunnel service like ngrok:
 >
