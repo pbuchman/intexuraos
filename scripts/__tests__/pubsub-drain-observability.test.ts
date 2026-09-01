@@ -7,7 +7,12 @@ import {
   canonicalTopologyHash,
   type DrainTopologyTuple,
 } from '../../tools/pubsub-ui/pubsub-drain.mjs';
-import { buildExpectedDrainTopology, TOPIC_CONFIGS } from '../../tools/pubsub-ui/topology.mjs';
+import {
+  buildExpectedDrainTopology,
+  buildPreservedLegacyDrainTopology,
+  PRESERVED_LEGACY_TOPIC_CONFIGS,
+  TOPIC_CONFIGS,
+} from '../../tools/pubsub-ui/topology.mjs';
 import { buildLocalEmulatorStartPlan } from '../lib/local-emulator-lifecycle.mjs';
 
 const repoRoot = resolve(__dirname, '..', '..');
@@ -29,6 +34,12 @@ const MONITOR_SUBSCRIPTION: DrainTopologyTuple = {
   subscriptionName: 'topic-b-ui-monitor',
   classification: 'monitor-only',
 };
+const PRESERVED_LEGACY_SUBSCRIPTION: DrainTopologyTuple = {
+  projectId: 'project-a',
+  topicName: 'legacy-topic',
+  subscriptionName: 'legacy-topic-ui-monitor',
+  classification: 'preservedLegacy',
+};
 const EXPECTED: DrainTopologyTuple[] = [FORWARDED_SUBSCRIPTION, MONITOR_SUBSCRIPTION];
 const OBSERVED_FORWARDED = {
   projectId: FORWARDED_SUBSCRIPTION.projectId,
@@ -36,15 +47,19 @@ const OBSERVED_FORWARDED = {
   subscriptionName: FORWARDED_SUBSCRIPTION.subscriptionName,
 };
 
-const OBSERVED = EXPECTED.map(({ projectId, topicName, subscriptionName }) => ({
+const OBSERVED_TARGET = EXPECTED.map(({ projectId, topicName, subscriptionName }) => ({
   projectId,
   topicName,
   subscriptionName,
 }));
+const OBSERVED = [...OBSERVED_TARGET, PRESERVED_LEGACY_SUBSCRIPTION].map(
+  ({ projectId, topicName, subscriptionName }) => ({ projectId, topicName, subscriptionName })
+);
 
 function readyTelemetry(): PubSubDrainTelemetry {
   const telemetry = new PubSubDrainTelemetry({
     expectedTopology: EXPECTED,
+    preservedLegacyTopology: [PRESERVED_LEGACY_SUBSCRIPTION],
     now: (): Date => new Date('2026-08-28T10:00:00.000Z'),
     counterEpochId: '00112233445566778899aabbccddeeff',
   });
@@ -61,12 +76,31 @@ describe('Pub/Sub drain observability', () => {
       name: 'whatsapp-audio-stored',
       endpoint: null,
     });
+    const targetTopology = buildExpectedDrainTopology({
+      PUBSUB_PROJECT_ID: 'project-a',
+      MESSAGE_DIGEST_PUBSUB_PROJECT_ID: 'project-b',
+    });
+    expect(targetTopology).toHaveLength(15);
     expect(
-      buildExpectedDrainTopology({
-        PUBSUB_PROJECT_ID: 'project-a',
-        MESSAGE_DIGEST_PUBSUB_PROJECT_ID: 'project-b',
-      }).every(
+      targetTopology.every(
         ({ classification }) => classification === 'forwarded' || classification === 'monitor-only'
+      )
+    ).toBe(true);
+    expect(PRESERVED_LEGACY_TOPIC_CONFIGS).toEqual([
+      { name: 'actions-queue', subscriptionName: 'actions-queue-ui-monitor' },
+      { name: 'approval-reply', subscriptionName: 'approval-reply-ui-monitor' },
+      { name: 'calendar-preview', subscriptionName: 'calendar-preview-ui-monitor' },
+      { name: 'commands-ingest', subscriptionName: 'commands-ingest-ui-monitor' },
+      { name: 'snapshot-refresh', subscriptionName: 'snapshot-refresh-ui-monitor' },
+      { name: 'todos-processing', subscriptionName: 'todos-processing-ui-monitor' },
+      { name: 'whatsapp-transcription', subscriptionName: 'whatsapp-transcription-ui-monitor' },
+    ]);
+    const preservedLegacy = buildPreservedLegacyDrainTopology({ PUBSUB_PROJECT_ID: 'project-a' });
+    expect(preservedLegacy).toHaveLength(7);
+    expect(
+      preservedLegacy.every(
+        ({ projectId, classification }) =>
+          projectId === 'project-a' && classification === 'preservedLegacy'
       )
     ).toBe(true);
   });
@@ -155,7 +189,8 @@ describe('Pub/Sub drain observability', () => {
     expect(serverSource).not.toContain('topic.create(');
     expect(serverSource).not.toContain('subscription.create(');
     expect(serverSource).toContain('collectPubSubDrainTopology({');
-    expect(serverSource).toContain('drainContractVersion: 1');
+    expect(serverSource).toContain('drainContractVersion: 2');
+    expect(serverSource).toContain('preservedLegacyTopology: PRESERVED_LEGACY_DRAIN_TOPOLOGY');
     expect(serverSource.indexOf('drainTelemetry.observeMessage({')).toBeLessThan(
       serverSource.indexOf('JSON.parse(message.data.toString())')
     );
@@ -200,7 +235,7 @@ describe('Pub/Sub drain observability', () => {
     expect(canonicalTopologyHash(OBSERVED)).toMatch(/^[0-9a-f]{64}$/u);
   });
 
-  it('reports complete classified topology with exactly one listener per subscription', () => {
+  it('reports target listeners and preserved legacy backlog resources as an exact safe topology', () => {
     const snapshot = readyTelemetry().snapshot({
       topics: OBSERVED.map(({ projectId, topicName }) => ({ projectId, topicName })),
       subscriptions: OBSERVED,
@@ -224,9 +259,9 @@ describe('Pub/Sub drain observability', () => {
       lastActivityAt: null,
       lastErrorAt: null,
       subscriptionCounts: {
-        expected: 2,
-        observed: 2,
-        classified: 2,
+        expected: 3,
+        observed: 3,
+        classified: 3,
         unclassified: 0,
         missing: 0,
         unexpected: 0,
@@ -234,12 +269,27 @@ describe('Pub/Sub drain observability', () => {
         listenerless: 0,
         duplicateListeners: 0,
         duplicateSubscriptions: 0,
+        targetExpected: 2,
+        targetObserved: 2,
+        preservedLegacyExpected: 1,
+        preservedLegacyObserved: 1,
+        missingTarget: 0,
+        missingPreservedLegacy: 0,
+        preservedLegacyListeners: 0,
       },
-      classificationCounts: { forwarded: 1, 'monitor-only': 1 },
+      classificationCounts: { forwarded: 1, 'monitor-only': 1, preservedLegacy: 1 },
     });
-    expect(snapshot.expectedTopologyHash).toBe(snapshot.observedTopologyHash);
-    expect(snapshot.activeListenerTopologyHash).toBe(snapshot.observedTopologyHash);
+    expect(snapshot.expectedObservedTopologyHash).toBe(snapshot.observedTopologyHash);
+    expect(snapshot.expectedTopologyHash).toBe(snapshot.activeListenerTopologyHash);
+    expect(snapshot.preservedLegacyTopologyHash).toBe(
+      canonicalTopologyHash([PRESERVED_LEGACY_SUBSCRIPTION])
+    );
     expect(snapshot.listenerMultiplicity).toEqual([
+      expect.objectContaining({
+        projectId: 'project-a',
+        classification: 'preservedLegacy',
+        listeners: 0,
+      }),
       expect.objectContaining({ projectId: 'project-a', listeners: 1 }),
       expect.objectContaining({ projectId: 'project-b', listeners: 1 }),
     ]);
@@ -262,7 +312,11 @@ describe('Pub/Sub drain observability', () => {
   });
 
   it.each([
-    ['missing subscription', OBSERVED.slice(0, 1)],
+    ['missing target subscription', OBSERVED.filter(({ topicName }) => topicName !== 'topic-a')],
+    [
+      'missing preserved legacy subscription',
+      OBSERVED.filter(({ topicName }) => topicName !== 'legacy-topic'),
+    ],
     [
       'unexpected subscription',
       [
@@ -300,6 +354,26 @@ describe('Pub/Sub drain observability', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('fails closed if a preserved legacy subscription gains any listener', () => {
+    const telemetry = readyTelemetry();
+    telemetry.recordListenerStarted(PRESERVED_LEGACY_SUBSCRIPTION);
+    const snapshot = telemetry.snapshot({
+      topics: OBSERVED.map(({ projectId, topicName }) => ({ projectId, topicName })),
+      subscriptions: OBSERVED,
+      topologyObservedAt: '2026-08-28T10:00:00.000Z',
+    });
+
+    expect(snapshot.topologyMatch).toBe(false);
+    expect(snapshot.subscriptionCounts.preservedLegacyListeners).toBe(1);
+    expect(snapshot.listenerMultiplicity).toContainEqual({
+      projectId: 'project-a',
+      topicName: 'legacy-topic',
+      subscriptionName: 'legacy-topic-ui-monitor',
+      classification: 'preservedLegacy',
+      listeners: 1,
+    });
+  });
+
   it('rejects listener-less and duplicate-listener topology even when tuple hashes match', () => {
     const telemetry = readyTelemetry();
     telemetry.recordListenerStarted(FORWARDED_SUBSCRIPTION);
@@ -309,7 +383,7 @@ describe('Pub/Sub drain observability', () => {
       topologyObservedAt: '2026-08-28T10:00:00.000Z',
     });
 
-    expect(snapshot.expectedTopologyHash).toBe(snapshot.observedTopologyHash);
+    expect(snapshot.expectedObservedTopologyHash).toBe(snapshot.observedTopologyHash);
     expect(snapshot.topologyMatch).toBe(false);
     expect(snapshot.subscriptionCounts.duplicateListeners).toBe(1);
   });
@@ -323,7 +397,7 @@ describe('Pub/Sub drain observability', () => {
 
     expect(snapshot.topologyMatch).toBe(false);
     expect(snapshot.subscriptionCounts.duplicateSubscriptions).toBe(1);
-    expect(snapshot.observedTopologyHash).not.toBe(snapshot.expectedTopologyHash);
+    expect(snapshot.observedTopologyHash).not.toBe(snapshot.expectedObservedTopologyHash);
   });
 
   it('includes an unexpected active listener in listener topology and supports teardown', () => {
@@ -341,7 +415,7 @@ describe('Pub/Sub drain observability', () => {
       topologyObservedAt: '2026-08-28T10:00:00.000Z',
     });
     expect(unsafe.topologyMatch).toBe(false);
-    expect(unsafe.activeListenerTopologyHash).not.toBe(unsafe.observedTopologyHash);
+    expect(unsafe.activeListenerTopologyHash).not.toBe(unsafe.expectedTopologyHash);
 
     telemetry.recordListenerStopped(unexpected);
     const safe = telemetry.snapshot({
@@ -365,6 +439,22 @@ describe('Pub/Sub drain observability', () => {
           expectedTopology: [{ ...FORWARDED_SUBSCRIPTION, classification: 'ignored' }],
         })
     ).toThrow(/classified/u);
+    expect(
+      () =>
+        new PubSubDrainTelemetry({
+          expectedTopology: EXPECTED,
+          preservedLegacyTopology: [
+            { ...PRESERVED_LEGACY_SUBSCRIPTION, classification: 'monitor-only' },
+          ],
+        })
+    ).toThrow(/preservedLegacy/u);
+    expect(
+      () =>
+        new PubSubDrainTelemetry({
+          expectedTopology: EXPECTED,
+          preservedLegacyTopology: [FORWARDED_SUBSCRIPTION],
+        })
+    ).toThrow(/preservedLegacy|overlap/u);
   });
 
   it('keeps a handler in flight until forwarding and ack accounting are observable', async () => {
@@ -475,6 +565,7 @@ describe('Pub/Sub drain observability', () => {
   it('exposes only the recursively allowlisted privacy-safe snapshot schema', () => {
     const telemetry = new PubSubDrainTelemetry({
       expectedTopology: EXPECTED.map((tuple) => ({ ...tuple, secret: 'not-public' })),
+      preservedLegacyTopology: [{ ...PRESERVED_LEGACY_SUBSCRIPTION, secret: 'not-public' }],
       now: (): Date => new Date('2026-08-28T10:00:00.000Z'),
       counterEpochId: '00112233445566778899aabbccddeeff',
     });
@@ -500,6 +591,8 @@ describe('Pub/Sub drain observability', () => {
         'counterEpochId',
         'processStartedAt',
         'expectedTopologyHash',
+        'expectedObservedTopologyHash',
+        'preservedLegacyTopologyHash',
         'observedTopologyHash',
         'topologyObservedAt',
         'topologyObservationSequence',
@@ -533,10 +626,17 @@ describe('Pub/Sub drain observability', () => {
         'listenerless',
         'duplicateListeners',
         'duplicateSubscriptions',
+        'targetExpected',
+        'targetObserved',
+        'preservedLegacyExpected',
+        'preservedLegacyObserved',
+        'missingTarget',
+        'missingPreservedLegacy',
+        'preservedLegacyListeners',
       ].sort()
     );
     expect(Object.keys(snapshot.classificationCounts).sort()).toEqual(
-      ['forwarded', 'monitor-only'].sort()
+      ['forwarded', 'monitor-only', 'preservedLegacy'].sort()
     );
     for (const listener of snapshot.listenerMultiplicity) {
       expect(Object.keys(listener).sort()).toEqual(

@@ -26,7 +26,21 @@ const TOPOLOGY = [
     listeners: 1,
   },
 ] as const;
+const PRESERVED_LEGACY_TOPOLOGY = [
+  {
+    projectId: 'demo-intexuraos',
+    topicName: 'legacy-task-events',
+    subscriptionName: 'legacy-task-events-ui-monitor',
+    classification: 'preservedLegacy',
+    listeners: 0,
+  },
+] as const;
 const TOPOLOGY_HASH = canonicalTopologyHash(TOPOLOGY);
+const EXPECTED_OBSERVED_TOPOLOGY_HASH = canonicalTopologyHash([
+  ...TOPOLOGY,
+  ...PRESERVED_LEGACY_TOPOLOGY,
+]);
+const PRESERVED_LEGACY_TOPOLOGY_HASH = canonicalTopologyHash(PRESERVED_LEGACY_TOPOLOGY);
 const SOURCE_REVISION = '4247a873403b952de191bf8a8001d5c950a6094b';
 const EVIDENCE_RUN_ID = '20260828T002847Z-paddc4965d21e-b265702826912';
 const OPERATION_NONCE = 'c'.repeat(64);
@@ -42,21 +56,23 @@ function pubsubHealth(topologyObservationSequence = 1): Record<string, unknown> 
     topics: ['private-top-level-topic-list-is-not-evidence'],
     clients: 0,
     privateTopLevelSentinel: 'must-not-be-signed',
-    drainContractVersion: 1,
+    drainContractVersion: 2,
     drain: {
       counterEpochId: '00112233445566778899aabbccddeeff',
       processStartedAt: '2026-08-28T09:00:00.000Z',
       expectedTopologyHash: TOPOLOGY_HASH,
-      observedTopologyHash: TOPOLOGY_HASH,
+      expectedObservedTopologyHash: EXPECTED_OBSERVED_TOPOLOGY_HASH,
+      preservedLegacyTopologyHash: PRESERVED_LEGACY_TOPOLOGY_HASH,
+      observedTopologyHash: EXPECTED_OBSERVED_TOPOLOGY_HASH,
       topologyObservedAt: '2026-08-28T10:00:00.000Z',
       topologyObservationSequence,
       topologyRefreshErrorsTotal: 0,
       topologyMatch: true,
       activeListenerTopologyHash: TOPOLOGY_HASH,
       subscriptionCounts: {
-        expected: 1,
-        observed: 1,
-        classified: 1,
+        expected: 2,
+        observed: 2,
+        classified: 2,
         unclassified: 0,
         missing: 0,
         unexpected: 0,
@@ -64,9 +80,18 @@ function pubsubHealth(topologyObservationSequence = 1): Record<string, unknown> 
         listenerless: 0,
         duplicateListeners: 0,
         duplicateSubscriptions: 0,
+        targetExpected: 1,
+        targetObserved: 1,
+        preservedLegacyExpected: 1,
+        preservedLegacyObserved: 1,
+        missingTarget: 0,
+        missingPreservedLegacy: 0,
+        preservedLegacyListeners: 0,
       },
-      classificationCounts: { forwarded: 1, 'monitor-only': 0 },
-      listenerMultiplicity: TOPOLOGY.map((entry) => ({ ...entry })),
+      classificationCounts: { forwarded: 1, 'monitor-only': 0, preservedLegacy: 1 },
+      listenerMultiplicity: [...TOPOLOGY, ...PRESERVED_LEGACY_TOPOLOGY].map((entry) => ({
+        ...entry,
+      })),
       activeListeners: 1,
       setupErrors: 0,
       inFlightHandlers: 0,
