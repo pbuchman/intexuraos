@@ -57,6 +57,41 @@ const IGNORE_EXACT_PATHS = new Set([
   'scripts/__tests__/verify-removed-agents.test.ts',
 ]);
 
+const ALLOWED_EXACT_REMOVED_REFERENCE_BLOCKS = [
+  {
+    relativePath: 'tools/pubsub-ui/topology.mjs',
+    lines: [
+      'export const PRESERVED_LEGACY_TOPIC_CONFIGS = Object.freeze(',
+      '[',
+      "'actions-queue',",
+      "'approval-reply',",
+      "'calendar-preview',",
+      "'commands-ingest',",
+      "'snapshot-refresh',",
+      "'todos-processing',",
+      "'whatsapp-transcription',",
+      '].map((name) => Object.freeze({ name, subscriptionName: `${name}-ui-monitor` }))',
+      ');',
+    ],
+    allowedLineOffsets: new Set([2, 3, 4, 5]),
+  },
+  {
+    relativePath: 'scripts/__tests__/pubsub-drain-observability.test.ts',
+    lines: [
+      'expect(PRESERVED_LEGACY_TOPIC_CONFIGS).toEqual([',
+      "{ name: 'actions-queue', subscriptionName: 'actions-queue-ui-monitor' },",
+      "{ name: 'approval-reply', subscriptionName: 'approval-reply-ui-monitor' },",
+      "{ name: 'calendar-preview', subscriptionName: 'calendar-preview-ui-monitor' },",
+      "{ name: 'commands-ingest', subscriptionName: 'commands-ingest-ui-monitor' },",
+      "{ name: 'snapshot-refresh', subscriptionName: 'snapshot-refresh-ui-monitor' },",
+      "{ name: 'todos-processing', subscriptionName: 'todos-processing-ui-monitor' },",
+      "{ name: 'whatsapp-transcription', subscriptionName: 'whatsapp-transcription-ui-monitor' },",
+      ']);',
+    ],
+    allowedLineOffsets: new Set([1, 2, 3, 4]),
+  },
+];
+
 const REMOVED_PATTERNS = [
   /commands-agent/g,
   /actions-agent/g,
@@ -193,9 +228,39 @@ function shouldScanFile(relativePath) {
   return /\.(cjs|html|json|lua|md|mjs|tf|ts|tsx|yaml|yml)$/.test(name);
 }
 
+function findAllowedExactReferenceLineNumbers(relativePath, lines) {
+  const normalizedLines = lines.map((line) => line.trim());
+  const allowedLineNumbers = new Set();
+
+  for (const block of ALLOWED_EXACT_REMOVED_REFERENCE_BLOCKS) {
+    if (block.relativePath !== relativePath) {
+      continue;
+    }
+
+    let blockStart = -1;
+    for (let index = 0; index <= normalizedLines.length - block.lines.length; index += 1) {
+      if (block.lines.every((line, offset) => normalizedLines[index + offset] === line)) {
+        blockStart = index;
+        break;
+      }
+    }
+
+    if (blockStart === -1) {
+      continue;
+    }
+
+    for (const offset of block.allowedLineOffsets) {
+      allowedLineNumbers.add(blockStart + offset + 1);
+    }
+  }
+
+  return allowedLineNumbers;
+}
+
 function findPatternMatches(relativePath, content, patterns) {
   const findings = [];
   const lines = content.split('\n');
+  const allowedLineNumbers = findAllowedExactReferenceLineNumbers(relativePath, lines);
 
   for (const pattern of patterns) {
     pattern.lastIndex = 0;
@@ -203,7 +268,9 @@ function findPatternMatches(relativePath, content, patterns) {
     while ((match = pattern.exec(content)) !== null) {
       const lineNumber = content.slice(0, match.index).split('\n').length;
       const line = lines[lineNumber - 1]?.trim() ?? '';
-      findings.push(`${relativePath}:${lineNumber}: ${line}`);
+      if (!allowedLineNumbers.has(lineNumber)) {
+        findings.push(`${relativePath}:${lineNumber}: ${line}`);
+      }
     }
   }
 
