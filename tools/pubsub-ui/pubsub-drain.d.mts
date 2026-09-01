@@ -2,7 +2,7 @@ export interface DrainTopologyTuple {
   projectId: string;
   topicName: string;
   subscriptionName: string;
-  classification: string;
+  classification: 'forwarded' | 'monitor-only' | 'preservedLegacy';
 }
 
 export interface ObservedDrainTopologyTuple {
@@ -15,6 +15,8 @@ export interface PubSubDrainSnapshot {
   counterEpochId: string;
   processStartedAt: string;
   expectedTopologyHash: string;
+  expectedObservedTopologyHash: string;
+  preservedLegacyTopologyHash: string;
   observedTopologyHash: string | null;
   topologyObservedAt: string | null;
   topologyObservationSequence: number;
@@ -32,6 +34,13 @@ export interface PubSubDrainSnapshot {
     listenerless: number;
     duplicateListeners: number;
     duplicateSubscriptions: number;
+    targetExpected: number;
+    targetObserved: number;
+    preservedLegacyExpected: number;
+    preservedLegacyObserved: number;
+    missingTarget: number;
+    missingPreservedLegacy: number;
+    preservedLegacyListeners: number;
   };
   classificationCounts: Record<string, number>;
   listenerMultiplicity: Array<
@@ -76,6 +85,7 @@ export function collectPubSubDrainTopology(options: {
 export class PubSubDrainTelemetry {
   constructor(options: {
     expectedTopology: readonly DrainTopologyTuple[];
+    preservedLegacyTopology?: readonly DrainTopologyTuple[];
     now?: () => Date;
     counterEpochId?: string;
   });

@@ -4,7 +4,12 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createPubSubPushEnvelope, resolvePubSubProjectId } from './pubsub-forwarding.mjs';
 import { collectPubSubDrainTopology, PubSubDrainTelemetry } from './pubsub-drain.mjs';
-import { buildExpectedDrainTopology, TOPICS, TOPIC_ENDPOINTS } from './topology.mjs';
+import {
+  buildExpectedDrainTopology,
+  buildPreservedLegacyDrainTopology,
+  TOPICS,
+  TOPIC_ENDPOINTS,
+} from './topology.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,9 +19,11 @@ const INTEXURAOS_INTERNAL_AUTH_TOKEN =
   process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN || 'local-dev-token';
 
 const EXPECTED_DRAIN_TOPOLOGY = buildExpectedDrainTopology(process.env);
+const PRESERVED_LEGACY_DRAIN_TOPOLOGY = buildPreservedLegacyDrainTopology(process.env);
 
 const drainTelemetry = new PubSubDrainTelemetry({
   expectedTopology: EXPECTED_DRAIN_TOPOLOGY,
+  preservedLegacyTopology: PRESERVED_LEGACY_DRAIN_TOPOLOGY,
 });
 
 const app = express();
@@ -256,7 +263,9 @@ app.get('/health', async (_req, res) => {
   try {
     drain = drainTelemetry.snapshot(
       await collectPubSubDrainTopology({
-        projectIds: EXPECTED_DRAIN_TOPOLOGY.map(({ projectId }) => projectId),
+        projectIds: [...EXPECTED_DRAIN_TOPOLOGY, ...PRESERVED_LEGACY_DRAIN_TOPOLOGY].map(
+          ({ projectId }) => projectId
+        ),
         getClient: getPubSubClient,
       })
     );
@@ -274,7 +283,7 @@ app.get('/health', async (_req, res) => {
     status: 'ok',
     topics: TOPICS,
     clients: clients.size,
-    drainContractVersion: 1,
+    drainContractVersion: 2,
     drain,
   });
 });

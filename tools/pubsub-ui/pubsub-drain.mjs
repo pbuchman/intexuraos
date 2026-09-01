@@ -82,6 +82,10 @@ function byteSafeTimestamp(now) {
 export class PubSubDrainTelemetry {
   #expectedTopology;
   #expectedByKey;
+  #preservedLegacyTopology;
+  #preservedLegacyByKey;
+  #expectedObservedTopology;
+  #allowedByKey;
   #now;
   #counterEpochId;
   #processStartedAt;
@@ -99,11 +103,20 @@ export class PubSubDrainTelemetry {
   #lastActivityAt = null;
   #lastErrorAt = null;
 
-  constructor({ expectedTopology, now = () => new Date(), counterEpochId } = {}) {
+  constructor({
+    expectedTopology,
+    preservedLegacyTopology = [],
+    now = () => new Date(),
+    counterEpochId,
+  } = {}) {
     if (!Array.isArray(expectedTopology)) {
       throw new Error('expectedTopology must be an array');
     }
+    if (!Array.isArray(preservedLegacyTopology)) {
+      throw new Error('preservedLegacyTopology must be an array');
+    }
     this.#expectedTopology = expectedTopology.map((tuple) => ({ ...tuple }));
+    this.#preservedLegacyTopology = preservedLegacyTopology.map((tuple) => ({ ...tuple }));
     const expectedKeys = new Set();
     for (const tuple of this.#expectedTopology) {
       if (
@@ -122,6 +135,35 @@ export class PubSubDrainTelemetry {
       expectedKeys.add(key);
     }
     this.#expectedByKey = new Map(this.#expectedTopology.map((tuple) => [tupleKey(tuple), tuple]));
+    const preservedLegacyKeys = new Set();
+    for (const tuple of this.#preservedLegacyTopology) {
+      if (
+        typeof tuple.projectId !== 'string' ||
+        tuple.projectId.length === 0 ||
+        typeof tuple.topicName !== 'string' ||
+        tuple.topicName.length === 0 ||
+        typeof tuple.subscriptionName !== 'string' ||
+        tuple.subscriptionName.length === 0 ||
+        tuple.classification !== 'preservedLegacy'
+      ) {
+        throw new Error('preservedLegacyTopology contains an invalid preservedLegacy tuple');
+      }
+      const key = tupleKey(tuple);
+      if (preservedLegacyKeys.has(key)) {
+        throw new Error('preservedLegacyTopology contains a duplicate tuple');
+      }
+      if (expectedKeys.has(key)) {
+        throw new Error('preservedLegacyTopology overlaps expectedTopology');
+      }
+      preservedLegacyKeys.add(key);
+    }
+    this.#preservedLegacyByKey = new Map(
+      this.#preservedLegacyTopology.map((tuple) => [tupleKey(tuple), tuple])
+    );
+    this.#expectedObservedTopology = [...this.#expectedTopology, ...this.#preservedLegacyTopology];
+    this.#allowedByKey = new Map(
+      this.#expectedObservedTopology.map((tuple) => [tupleKey(tuple), tuple])
+    );
     this.#now = now;
     this.#counterEpochId = counterEpochId ?? randomBytes(16).toString('hex');
     if (!/^[0-9a-f]{32}$/u.test(this.#counterEpochId)) {
@@ -245,21 +287,33 @@ export class PubSubDrainTelemetry {
     );
     const observedByKey = new Map(subscriptions.map((tuple) => [tupleKey(tuple), tuple]));
     const duplicateSubscriptions = subscriptions.length - observedByKey.size;
-    const expectedKeys = new Set(this.#expectedByKey.keys());
+    const targetKeys = new Set(this.#expectedByKey.keys());
+    const preservedLegacyKeys = new Set(this.#preservedLegacyByKey.keys());
+    const expectedKeys = new Set(this.#allowedByKey.keys());
     const observedKeys = new Set(observedByKey.keys());
-    const missing = [...expectedKeys].filter((key) => !observedKeys.has(key)).length;
+    const missingTarget = [...targetKeys].filter((key) => !observedKeys.has(key)).length;
+    const missingPreservedLegacy = [...preservedLegacyKeys].filter(
+      (key) => !observedKeys.has(key)
+    ).length;
+    const missing = missingTarget + missingPreservedLegacy;
     const unexpected = [...observedKeys].filter((key) => !expectedKeys.has(key)).length;
     const orphaned = subscriptions.filter(
       ({ projectId, topicName }) =>
         typeof topicName !== 'string' || !observedTopics.has(JSON.stringify([projectId, topicName]))
     ).length;
     const classified = subscriptions.filter((tuple) =>
-      this.#expectedByKey.has(tupleKey(tuple))
+      this.#allowedByKey.has(tupleKey(tuple))
     ).length;
     const unclassified = subscriptions.length - classified;
+    const targetObserved = subscriptions.filter((tuple) =>
+      this.#expectedByKey.has(tupleKey(tuple))
+    ).length;
+    const preservedLegacyObserved = subscriptions.filter((tuple) =>
+      this.#preservedLegacyByKey.has(tupleKey(tuple))
+    ).length;
 
     const union = new Map();
-    for (const tuple of this.#expectedTopology) union.set(tupleKey(tuple), tuple);
+    for (const tuple of this.#expectedObservedTopology) union.set(tupleKey(tuple), tuple);
     for (const tuple of subscriptions) {
       if (!union.has(tupleKey(tuple))) union.set(tupleKey(tuple), tuple);
     }
@@ -268,7 +322,7 @@ export class PubSubDrainTelemetry {
     }
     const listenerMultiplicity = [...union.values()]
       .map((tuple) => {
-        const expected = this.#expectedByKey.get(tupleKey(tuple));
+        const expected = this.#allowedByKey.get(tupleKey(tuple));
         return {
           ...publicTuple(tuple),
           classification: expected?.classification ?? 'unclassified',
@@ -278,8 +332,15 @@ export class PubSubDrainTelemetry {
       .sort((left, right) =>
         Buffer.compare(Buffer.from(tupleKey(left), 'utf8'), Buffer.from(tupleKey(right), 'utf8'))
       );
-    const listenerless = listenerMultiplicity.filter((entry) => entry.listeners === 0).length;
-    const duplicateListeners = listenerMultiplicity.filter((entry) => entry.listeners > 1).length;
+    const listenerless = listenerMultiplicity.filter(
+      (entry) => this.#expectedByKey.has(tupleKey(entry)) && entry.listeners === 0
+    ).length;
+    const duplicateListeners = listenerMultiplicity.filter(
+      (entry) => this.#expectedByKey.has(tupleKey(entry)) && entry.listeners > 1
+    ).length;
+    const preservedLegacyListeners = listenerMultiplicity
+      .filter((entry) => this.#preservedLegacyByKey.has(tupleKey(entry)))
+      .reduce((total, entry) => total + entry.listeners, 0);
     const activeListeners = listenerMultiplicity.reduce(
       (total, entry) => total + entry.listeners,
       0
@@ -289,40 +350,45 @@ export class PubSubDrainTelemetry {
       .filter((entry) => entry.listeners > 0)
       .map(publicTuple);
     const expectedTopologyHash = canonicalTopologyHash(this.#expectedTopology);
+    const expectedObservedTopologyHash = canonicalTopologyHash(this.#expectedObservedTopology);
+    const preservedLegacyTopologyHash = canonicalTopologyHash(this.#preservedLegacyTopology);
     const observedTopologyHash = topologyRefreshFailed
       ? null
       : canonicalTopologyHash(subscriptions);
     const activeListenerTopologyHash = canonicalTopologyHash(activeListenerTuples);
-    const classificationCounts = {};
+    const classificationCounts = { forwarded: 0, 'monitor-only': 0, preservedLegacy: 0 };
     for (const tuple of subscriptions) {
       const classification =
-        this.#expectedByKey.get(tupleKey(tuple))?.classification ?? 'unclassified';
+        this.#allowedByKey.get(tupleKey(tuple))?.classification ?? 'unclassified';
       classificationCounts[classification] = (classificationCounts[classification] ?? 0) + 1;
     }
 
     const topologyMatch =
       !topologyRefreshFailed &&
-      expectedTopologyHash === observedTopologyHash &&
-      activeListenerTopologyHash === observedTopologyHash &&
+      expectedObservedTopologyHash === observedTopologyHash &&
+      activeListenerTopologyHash === expectedTopologyHash &&
       missing === 0 &&
       unexpected === 0 &&
       orphaned === 0 &&
       unclassified === 0 &&
       listenerless === 0 &&
       duplicateListeners === 0 &&
+      preservedLegacyListeners === 0 &&
       duplicateSubscriptions === 0 &&
       this.#setupErrors === 0;
 
     return {
       ...this.counters(),
       expectedTopologyHash,
+      expectedObservedTopologyHash,
+      preservedLegacyTopologyHash,
       observedTopologyHash,
       topologyObservedAt: topologyRefreshFailed ? null : topologyObservedAt,
       topologyObservationSequence: this.#topologyObservationSequence,
       topologyMatch,
       activeListenerTopologyHash,
       subscriptionCounts: {
-        expected: this.#expectedTopology.length,
+        expected: this.#expectedObservedTopology.length,
         observed: subscriptions.length,
         classified,
         unclassified,
@@ -332,6 +398,13 @@ export class PubSubDrainTelemetry {
         listenerless,
         duplicateListeners,
         duplicateSubscriptions,
+        targetExpected: this.#expectedTopology.length,
+        targetObserved,
+        preservedLegacyExpected: this.#preservedLegacyTopology.length,
+        preservedLegacyObserved,
+        missingTarget,
+        missingPreservedLegacy,
+        preservedLegacyListeners,
       },
       classificationCounts,
       listenerMultiplicity,
