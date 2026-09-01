@@ -152,10 +152,13 @@ node server.mjs
 ## Drain health
 
 `GET /health` retains `status`, `topics`, and `clients`, and adds
-`drainContractVersion: 1` plus a privacy-safe `drain` object. Every request refreshes topology with
-non-mutating `ListTopics` and `ListSubscriptions` calls. A missing, unexpected, orphaned,
-unclassified, listener-less, duplicated, or unrefreshable subscription makes `topologyMatch`
-false. The contract exposes only resource names, classifications, counts, SHA-256 topology hashes,
+`drainContractVersion: 2` plus a privacy-safe `drain` object. Every request refreshes topology with
+non-mutating `ListTopics` and `ListSubscriptions` calls. A match requires the exact active target
+topology with one listener per target and the exact preserved-legacy topology with zero listeners.
+A missing, unexpected, orphaned, unclassified, listener-less target, duplicated, listened-to legacy,
+or unrefreshable subscription makes `topologyMatch` false. Preserved legacy subscriptions remain
+backlog/recovery resources and are never consumed by this bridge. The contract exposes only resource
+names, classifications, counts, SHA-256 topology hashes,
 process identity fields, and timestamps; it never exposes message payloads, IDs, attributes, ack
 IDs, callback data, or secrets. `topologyObservationSequence` advances only after a successful
 topology refresh; drain evidence requires it to advance with every independently collected health

@@ -179,6 +179,128 @@ locals {
     expect(result.stdout).toContain('Removed agent verification passed');
   });
 
+  it('allows only the exact preserved legacy Pub/Sub recovery inventory lines', () => {
+    writeFixture(
+      rootDir,
+      'tools/pubsub-ui/topology.mjs',
+      `
+export const PRESERVED_LEGACY_TOPIC_CONFIGS = Object.freeze(
+  [
+    'actions-queue',
+    'approval-reply',
+    'calendar-preview',
+    'commands-ingest',
+    'snapshot-refresh',
+    'todos-processing',
+    'whatsapp-transcription',
+  ].map((name) => Object.freeze({ name, subscriptionName: \`\${name}-ui-monitor\` }))
+);
+`
+    );
+    writeFixture(
+      rootDir,
+      'scripts/__tests__/pubsub-drain-observability.test.ts',
+      `
+expect(PRESERVED_LEGACY_TOPIC_CONFIGS).toEqual([
+  { name: 'actions-queue', subscriptionName: 'actions-queue-ui-monitor' },
+  { name: 'approval-reply', subscriptionName: 'approval-reply-ui-monitor' },
+  { name: 'calendar-preview', subscriptionName: 'calendar-preview-ui-monitor' },
+  { name: 'commands-ingest', subscriptionName: 'commands-ingest-ui-monitor' },
+  { name: 'snapshot-refresh', subscriptionName: 'snapshot-refresh-ui-monitor' },
+  { name: 'todos-processing', subscriptionName: 'todos-processing-ui-monitor' },
+  { name: 'whatsapp-transcription', subscriptionName: 'whatsapp-transcription-ui-monitor' },
+]);
+`
+    );
+
+    const result = runVerifier(rootDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Removed agent verification passed');
+  });
+
+  it('rejects moved, additional, modified, or out-of-scope preserved legacy references', () => {
+    writeFixture(
+      rootDir,
+      'tools/pubsub-ui/topology.mjs',
+      `
+export const ACTIVE_TOPICS = [
+  'actions-queue',
+];
+export const PRESERVED_LEGACY_TOPIC_CONFIGS = Object.freeze(
+  [
+    'actions-queue',
+    'approval-reply',
+    'calendar-preview',
+    'commands-ingest',
+    'snapshot-refresh',
+    'todos-processing',
+    'whatsapp-transcription',
+  ].map((name) => Object.freeze({ name, subscriptionName: \`\${name}-ui-monitor\` }))
+);
+  'approval-reply',
+const modified = 'commands-ingest';
+`
+    );
+    writeFixture(rootDir, 'tools/pubsub-ui/server.mjs', "const leaked = 'approval-reply';\n");
+
+    const result = runVerifier(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("tools/pubsub-ui/topology.mjs:3: 'actions-queue',");
+    expect(result.stderr).toContain("tools/pubsub-ui/topology.mjs:16: 'approval-reply',");
+    expect(result.stderr).toContain(
+      "tools/pubsub-ui/topology.mjs:17: const modified = 'commands-ingest';"
+    );
+    expect(result.stderr).toContain(
+      "tools/pubsub-ui/server.mjs:1: const leaked = 'approval-reply';"
+    );
+  });
+
+  it('rejects a duplicated exact preserved legacy inventory block', () => {
+    const block = `
+export const PRESERVED_LEGACY_TOPIC_CONFIGS = Object.freeze(
+  [
+    'actions-queue',
+    'approval-reply',
+    'calendar-preview',
+    'commands-ingest',
+    'snapshot-refresh',
+    'todos-processing',
+    'whatsapp-transcription',
+  ].map((name) => Object.freeze({ name, subscriptionName: \`\${name}-ui-monitor\` }))
+);
+`;
+    writeFixture(rootDir, 'tools/pubsub-ui/topology.mjs', `${block}${block}`);
+
+    const result = runVerifier(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("tools/pubsub-ui/topology.mjs:16: 'actions-queue',");
+    expect(result.stderr).toContain("tools/pubsub-ui/topology.mjs:19: 'commands-ingest',");
+  });
+
+  it('rejects exact legacy names when the preserved inventory wrapper drifts', () => {
+    writeFixture(
+      rootDir,
+      'tools/pubsub-ui/topology.mjs',
+      `
+export const PRESERVED_LEGACY_TOPIC_CONFIGS = [
+  'actions-queue',
+  'approval-reply',
+  'calendar-preview',
+  'commands-ingest',
+];
+`
+    );
+
+    const result = runVerifier(rootDir);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("tools/pubsub-ui/topology.mjs:3: 'actions-queue',");
+    expect(result.stderr).toContain("tools/pubsub-ui/topology.mjs:6: 'commands-ingest',");
+  });
+
   it('passes on the repository root after the removed agents cleanup is complete', () => {
     const result = runVerifier(REPO_ROOT);
 

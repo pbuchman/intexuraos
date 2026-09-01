@@ -46,7 +46,7 @@ export interface PubSubCaptureEvidence {
   capture: DrainLogicalCapture;
   surfaceIdentity: DrainSurfaceIdentity & { kind: 'container-process' };
   status: 'ok';
-  drainContractVersion: 1;
+  drainContractVersion: 2;
   drain: PubSubDrainSnapshot;
 }
 

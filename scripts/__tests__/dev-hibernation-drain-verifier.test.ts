@@ -36,6 +36,8 @@ interface PubSubDrainFixture {
   counterEpochId: string;
   processStartedAt: string;
   expectedTopologyHash: string;
+  expectedObservedTopologyHash: string;
+  preservedLegacyTopologyHash: string;
   observedTopologyHash: string;
   topologyObservedAt: string;
   topologyObservationSequence: number;
@@ -53,8 +55,15 @@ interface PubSubDrainFixture {
     listenerless: number;
     duplicateListeners: number;
     duplicateSubscriptions: number;
+    targetExpected: number;
+    targetObserved: number;
+    preservedLegacyExpected: number;
+    preservedLegacyObserved: number;
+    missingTarget: number;
+    missingPreservedLegacy: number;
+    preservedLegacyListeners: number;
   };
-  classificationCounts: { forwarded: number; 'monitor-only': number };
+  classificationCounts: { forwarded: number; 'monitor-only': number; preservedLegacy: number };
   listenerMultiplicity: ListenerMultiplicityFixture[];
   activeListeners: number;
   setupErrors: number;
@@ -159,8 +168,23 @@ const LISTENER_MULTIPLICITY: ListenerMultiplicityFixture[] = [
     classification: 'monitor-only',
     listeners: 1,
   },
+  {
+    projectId: 'c',
+    topicName: 'legacy-c',
+    subscriptionName: 'legacy-c',
+    classification: 'preservedLegacy',
+    listeners: 0,
+  },
 ];
-const EXPECTED_HASH = canonicalTopologyHash(LISTENER_MULTIPLICITY);
+const TARGET_LISTENER_MULTIPLICITY = LISTENER_MULTIPLICITY.filter(
+  ({ classification }) => classification !== 'preservedLegacy'
+);
+const PRESERVED_LEGACY_LISTENER_MULTIPLICITY = LISTENER_MULTIPLICITY.filter(
+  ({ classification }) => classification === 'preservedLegacy'
+);
+const EXPECTED_HASH = canonicalTopologyHash(TARGET_LISTENER_MULTIPLICITY);
+const EXPECTED_OBSERVED_HASH = canonicalTopologyHash(LISTENER_MULTIPLICITY);
+const PRESERVED_LEGACY_HASH = canonicalTopologyHash(PRESERVED_LEGACY_LISTENER_MULTIPLICITY);
 const EPOCH_PUBSUB = '00112233445566778899aabbccddeeff';
 const EPOCH_ORCHESTRATOR = 'ffeeddccbbaa99887766554433221100';
 const COLLECTOR_RUN_ID = '1234567890abcdef1234567890abcdef';
@@ -202,21 +226,23 @@ function pubsubSnapshot(
       sourceRevision: SOURCE_REVISION,
     },
     status: 'ok',
-    drainContractVersion: 1,
+    drainContractVersion: 2,
     drain: {
       counterEpochId: EPOCH_PUBSUB,
       processStartedAt: '2026-08-28T09:00:00.000Z',
       expectedTopologyHash: EXPECTED_HASH,
-      observedTopologyHash: EXPECTED_HASH,
+      expectedObservedTopologyHash: EXPECTED_OBSERVED_HASH,
+      preservedLegacyTopologyHash: PRESERVED_LEGACY_HASH,
+      observedTopologyHash: EXPECTED_OBSERVED_HASH,
       topologyObservedAt: capturedAt,
       topologyObservationSequence: capture.sequence,
       topologyRefreshErrorsTotal: 0,
       topologyMatch: true,
       activeListenerTopologyHash: EXPECTED_HASH,
       subscriptionCounts: {
-        expected: 2,
-        observed: 2,
-        classified: 2,
+        expected: 3,
+        observed: 3,
+        classified: 3,
         unclassified: 0,
         missing: 0,
         unexpected: 0,
@@ -224,8 +250,15 @@ function pubsubSnapshot(
         listenerless: 0,
         duplicateListeners: 0,
         duplicateSubscriptions: 0,
+        targetExpected: 2,
+        targetObserved: 2,
+        preservedLegacyExpected: 1,
+        preservedLegacyObserved: 1,
+        missingTarget: 0,
+        missingPreservedLegacy: 0,
+        preservedLegacyListeners: 0,
       },
-      classificationCounts: { forwarded: 1, 'monitor-only': 1 },
+      classificationCounts: { forwarded: 1, 'monitor-only': 1, preservedLegacy: 1 },
       listenerMultiplicity: LISTENER_MULTIPLICITY.map((entry) => ({ ...entry })),
       activeListeners: 2,
       setupErrors: 0,

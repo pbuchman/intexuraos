@@ -217,12 +217,14 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
     unknown
   );
   if (value.status !== 'ok') unknown.push(`${path}.status`);
-  if (value.drainContractVersion !== 1) unknown.push(`${path}.drainContractVersion`);
+  if (value.drainContractVersion !== 2) unknown.push(`${path}.drainContractVersion`);
   const drain = value.drain;
   const drainKeys = [
     'counterEpochId',
     'processStartedAt',
     'expectedTopologyHash',
+    'expectedObservedTopologyHash',
+    'preservedLegacyTopologyHash',
     'observedTopologyHash',
     'topologyObservedAt',
     'topologyObservationSequence',
@@ -251,6 +253,16 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
     `${path}.drain.expectedTopologyHash`,
     unknown
   );
+  const expectedObservedHash = digest(
+    drain.expectedObservedTopologyHash,
+    `${path}.drain.expectedObservedTopologyHash`,
+    unknown
+  );
+  const preservedLegacyHash = digest(
+    drain.preservedLegacyTopologyHash,
+    `${path}.drain.preservedLegacyTopologyHash`,
+    unknown
+  );
   const observedHash = digest(
     drain.observedTopologyHash,
     `${path}.drain.observedTopologyHash`,
@@ -275,7 +287,11 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
     unknown.push(`${path}.drain.topologyObservationSequence:zero`);
   }
   if (drain.topologyMatch !== true) unknown.push(`${path}.drain.topologyMatch`);
-  if (expectedHash !== null && (expectedHash !== observedHash || expectedHash !== listenerHash)) {
+  if (
+    expectedHash !== null &&
+    expectedObservedHash !== null &&
+    (expectedHash !== listenerHash || expectedObservedHash !== observedHash)
+  ) {
     unknown.push(`${path}.drain.topologyHashes`);
   }
   if (
@@ -297,6 +313,13 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
     'listenerless',
     'duplicateListeners',
     'duplicateSubscriptions',
+    'targetExpected',
+    'targetObserved',
+    'preservedLegacyExpected',
+    'preservedLegacyObserved',
+    'missingTarget',
+    'missingPreservedLegacy',
+    'preservedLegacyListeners',
   ];
   const counts = drain.subscriptionCounts;
   if (exactKeys(counts, countKeys, `${path}.drain.subscriptionCounts`, unknown)) {
@@ -311,7 +334,13 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
       counts.orphaned !== 0 ||
       counts.listenerless !== 0 ||
       counts.duplicateListeners !== 0 ||
-      counts.duplicateSubscriptions !== 0
+      counts.duplicateSubscriptions !== 0 ||
+      counts.targetExpected !== counts.targetObserved ||
+      counts.preservedLegacyExpected !== counts.preservedLegacyObserved ||
+      counts.expected !== counts.targetExpected + counts.preservedLegacyExpected ||
+      counts.missingTarget !== 0 ||
+      counts.missingPreservedLegacy !== 0 ||
+      counts.preservedLegacyListeners !== 0
     ) {
       unknown.push(`${path}.drain.subscriptionCoverage`);
     }
@@ -321,7 +350,7 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
   if (
     !exactKeys(
       drain.classificationCounts,
-      ['forwarded', 'monitor-only'],
+      ['forwarded', 'monitor-only', 'preservedLegacy'],
       `${path}.drain.classificationCounts`,
       unknown
     )
@@ -338,16 +367,22 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
       `${path}.drain.classificationCounts.monitor-only`,
       unknown
     );
+    const preservedLegacy = safeCount(
+      drain.classificationCounts.preservedLegacy,
+      `${path}.drain.classificationCounts.preservedLegacy`,
+      unknown
+    );
     if (
       forwarded !== null &&
       monitorOnly !== null &&
+      preservedLegacy !== null &&
       isRecord(counts) &&
-      forwarded + monitorOnly !== counts.observed
+      forwarded + monitorOnly + preservedLegacy !== counts.observed
     ) {
       unknown.push(`${path}.drain.classificationCounts:total`);
     }
-    if (forwarded !== null && monitorOnly !== null) {
-      parsedClassificationCounts = { forwarded, 'monitor-only': monitorOnly };
+    if (forwarded !== null && monitorOnly !== null && preservedLegacy !== null) {
+      parsedClassificationCounts = { forwarded, 'monitor-only': monitorOnly, preservedLegacy };
     }
   }
 
@@ -356,7 +391,11 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
   } else {
     const seen = new Set();
     const listenerTuples = [];
-    const listenerClassificationCounts = { forwarded: 0, 'monitor-only': 0 };
+    const listenerClassificationCounts = {
+      forwarded: 0,
+      'monitor-only': 0,
+      preservedLegacy: 0,
+    };
     let listenerTotal = 0;
     for (const [index, entry] of drain.listenerMultiplicity.entries()) {
       const entryPath = `${path}.drain.listenerMultiplicity[${String(index)}]`;
@@ -377,7 +416,9 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
         entry.topicName.length === 0 ||
         typeof entry.subscriptionName !== 'string' ||
         entry.subscriptionName.length === 0 ||
-        (entry.classification !== 'forwarded' && entry.classification !== 'monitor-only')
+        (entry.classification !== 'forwarded' &&
+          entry.classification !== 'monitor-only' &&
+          entry.classification !== 'preservedLegacy')
       ) {
         unknown.push(`${entryPath}:classification`);
       }
@@ -389,8 +430,12 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
       if (entry.classification === 'monitor-only') {
         listenerClassificationCounts['monitor-only'] += 1;
       }
+      if (entry.classification === 'preservedLegacy') {
+        listenerClassificationCounts.preservedLegacy += 1;
+      }
       const listeners = safeCount(entry.listeners, `${entryPath}.listeners`, unknown);
-      if (listeners !== 1) unknown.push(`${entryPath}.listeners:coverage`);
+      const requiredListeners = entry.classification === 'preservedLegacy' ? 0 : 1;
+      if (listeners !== requiredListeners) unknown.push(`${entryPath}.listeners:coverage`);
       if (listeners !== null) listenerTotal += listeners;
     }
     const activeListeners = safeCount(
@@ -404,13 +449,37 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
     if (isRecord(counts) && seen.size !== counts.observed) {
       unknown.push(`${path}.drain.listenerMultiplicity:total`);
     }
-    if (listenerHash !== null && canonicalTopologyHash(listenerTuples) !== listenerHash) {
+    const targetListenerTuples = listenerTuples.filter(
+      ({ classification }) => classification !== 'preservedLegacy'
+    );
+    const preservedLegacyTuples = listenerTuples.filter(
+      ({ classification }) => classification === 'preservedLegacy'
+    );
+    if (
+      expectedObservedHash !== null &&
+      canonicalTopologyHash(listenerTuples) !== expectedObservedHash
+    ) {
       unknown.push(`${path}.drain.listenerMultiplicity:hash`);
+    }
+    if (
+      listenerHash !== null &&
+      (canonicalTopologyHash(targetListenerTuples) !== listenerHash ||
+        canonicalTopologyHash(targetListenerTuples) !== expectedHash)
+    ) {
+      unknown.push(`${path}.drain.listenerMultiplicity:active-hash`);
+    }
+    if (
+      preservedLegacyHash !== null &&
+      canonicalTopologyHash(preservedLegacyTuples) !== preservedLegacyHash
+    ) {
+      unknown.push(`${path}.drain.listenerMultiplicity:preserved-legacy-hash`);
     }
     if (
       parsedClassificationCounts !== null &&
       (listenerClassificationCounts.forwarded !== parsedClassificationCounts.forwarded ||
-        listenerClassificationCounts['monitor-only'] !== parsedClassificationCounts['monitor-only'])
+        listenerClassificationCounts['monitor-only'] !==
+          parsedClassificationCounts['monitor-only'] ||
+        listenerClassificationCounts.preservedLegacy !== parsedClassificationCounts.preservedLegacy)
     ) {
       unknown.push(`${path}.drain.listenerMultiplicity:classifications`);
     }
@@ -489,6 +558,8 @@ function parsePubSubSnapshot(value, path, phase, topologyFreshnessMs, unknown, n
     epoch: drain.counterEpochId,
     processStartedAt: drain.processStartedAt,
     expectedTopologyHash: drain.expectedTopologyHash,
+    expectedObservedTopologyHash: drain.expectedObservedTopologyHash,
+    preservedLegacyTopologyHash: drain.preservedLegacyTopologyHash,
     topologyObservationSequence,
     counters: Object.fromEntries(PUBSUB_COUNTERS.map((name) => [name, drain[name]])),
     topologyObservedAt: drain.topologyObservedAt,
@@ -725,7 +796,12 @@ function compareSurfaceSequence(
     ) {
       unknown.push(`${surfaceName}:process-continuity`);
     }
-    if (surfaceName === 'pubsub' && current.expectedTopologyHash !== first.expectedTopologyHash) {
+    if (
+      surfaceName === 'pubsub' &&
+      (current.expectedTopologyHash !== first.expectedTopologyHash ||
+        current.expectedObservedTopologyHash !== first.expectedObservedTopologyHash ||
+        current.preservedLegacyTopologyHash !== first.preservedLegacyTopologyHash)
+    ) {
       unknown.push(`${surfaceName}:expected-topology-continuity`);
     }
     const previous = surfaces[index - 1];

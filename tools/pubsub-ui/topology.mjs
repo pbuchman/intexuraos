@@ -1,4 +1,4 @@
-import { resolvePubSubProjectIds } from './pubsub-forwarding.mjs';
+import { resolvePubSubProjectId, resolvePubSubProjectIds } from './pubsub-forwarding.mjs';
 
 export const TOPIC_CONFIGS = Object.freeze([
   {
@@ -58,6 +58,18 @@ export const TOPIC_ENDPOINTS = Object.freeze(
   Object.fromEntries(TOPIC_CONFIGS.map(({ name, endpoint }) => [name, endpoint]))
 );
 
+export const PRESERVED_LEGACY_TOPIC_CONFIGS = Object.freeze(
+  [
+    'actions-queue',
+    'approval-reply',
+    'calendar-preview',
+    'commands-ingest',
+    'snapshot-refresh',
+    'todos-processing',
+    'whatsapp-transcription',
+  ].map((name) => Object.freeze({ name, subscriptionName: `${name}-ui-monitor` }))
+);
+
 export function buildExpectedDrainTopology(environment = {}) {
   return TOPIC_CONFIGS.flatMap(({ name: topicName, endpoint }) =>
     resolvePubSubProjectIds(topicName, environment).map((projectId) => ({
@@ -67,4 +79,13 @@ export function buildExpectedDrainTopology(environment = {}) {
       classification: endpoint === null ? 'monitor-only' : 'forwarded',
     }))
   );
+}
+
+export function buildPreservedLegacyDrainTopology(environment = {}) {
+  return PRESERVED_LEGACY_TOPIC_CONFIGS.map(({ name: topicName, subscriptionName }) => ({
+    projectId: resolvePubSubProjectId(topicName, environment),
+    topicName,
+    subscriptionName,
+    classification: 'preservedLegacy',
+  }));
 }
