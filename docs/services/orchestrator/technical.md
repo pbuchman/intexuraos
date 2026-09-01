@@ -249,7 +249,7 @@ Added `inactivityRestartCount` to the Task model, tracking lifetime inactivity r
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
 | POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`/`410`                   |
-| GET    | `/health`              | None        | -                                   | `200 { healthContractVersion: 2, status, capacity, running, available, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain }` |
+| GET    | `/health`              | None        | -                                   | `200 { healthContractVersion: 2, admissionFrozen, pendingAdmissions, admissionActivityTotal, status, capacity, running, available, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain }` |
 | GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`                  |
@@ -265,6 +265,16 @@ Dispatch requests require three headers:
 | `X-Dispatch-Signature` | HMAC-SHA256 of `{timestamp}.{nonce}.{body}` |
 
 Verification rejects requests with timestamps older than 5 minutes and replayed nonces (10-minute TTL cache).
+
+The root-owned persistent marker `/var/lib/intexuraos-orchestrator-admission.freeze` freezes every
+task-mutating route (`POST /tasks`, `DELETE /tasks/:id`, and `POST /tasks/:id/message`) with `503`.
+Reads and health remain available. `pendingAdmissions` counts a mutation from before its marker
+check through response, error, or abort; `admissionActivityTotal` increments for every mutation
+that reaches the boundary, including one rejected while frozen, and must remain unchanged across a
+complete drain witness sequence. This lets a restart controller close admission, detect a
+still-active external producer, and wait until every request that crossed the boundary is finished.
+Marker inspection fails closed: only a provably absent marker under the trusted root-owned `/var/lib`
+parent reports `admissionFrozen: false`.
 
 `logForwarderDrain` is a privacy-safe process aggregate. It reports buffer, partial-line, queue,
 batch, chunk, active-flush, open-upload-request, and detached-retry gauges plus process-lifetime

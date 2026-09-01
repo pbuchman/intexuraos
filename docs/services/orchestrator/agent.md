@@ -74,6 +74,9 @@ interface OrchestratorTools {
   // Check service health and capacity
   getHealth(): Promise<{
     healthContractVersion: 2;
+    admissionFrozen: boolean;
+    pendingAdmissions: number;
+    admissionActivityTotal: number;
     status: 'ready' | 'initializing' | 'recovering' | 'degraded' | 'auth_degraded' | 'shutting_down';
     capacity: number;
     running: number;

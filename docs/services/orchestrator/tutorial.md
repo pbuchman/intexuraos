@@ -131,6 +131,9 @@ Expected response:
 ```json
 {
   "healthContractVersion": 2,
+  "admissionFrozen": false,
+  "pendingAdmissions": 0,
+  "admissionActivityTotal": 12,
   "status": "ready",
   "capacity": 2,
   "running": 0,
@@ -168,10 +171,12 @@ Expected response:
 ```
 
 `counterEpochId` is a new random 128-bit value for each orchestrator process. During a drain proof,
-all gauges, `workerContainers`, and `pendingTerminalCallbacks` must remain zero. The process
-identity, epoch, `terminalCallbackActivityTotal`, log-forwarder monotonic counters, and
-`lastActivityAt` must remain unchanged across the complete witness/anchor/read sequence. A `null`
-ownership gauge is UNKNOWN, never zero.
+the controller first installs the root-owned persistent admission marker and requires
+`admissionFrozen: true`. All gauges, `pendingAdmissions`, `workerContainers`, and
+`pendingTerminalCallbacks` must remain zero. The process
+identity, epoch, `admissionActivityTotal`, `terminalCallbackActivityTotal`, log-forwarder monotonic
+counters, and `lastActivityAt` must remain unchanged across the complete witness/anchor/read sequence.
+A `null` ownership gauge is UNKNOWN, never zero.
 
 `openUploadRequests` remains non-zero from request start until the response body has been explicitly
 cancelled and the HTTP exchange is released; receiving response headers alone does not close it.
