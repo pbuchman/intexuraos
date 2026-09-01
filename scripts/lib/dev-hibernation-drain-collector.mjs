@@ -41,6 +41,8 @@ const PUBSUB_DRAIN_KEYS = [
   'counterEpochId',
   'processStartedAt',
   'expectedTopologyHash',
+  'expectedObservedTopologyHash',
+  'preservedLegacyTopologyHash',
   'observedTopologyHash',
   'topologyObservedAt',
   'topologyObservationSequence',
@@ -72,6 +74,13 @@ const SUBSCRIPTION_COUNT_KEYS = [
   'listenerless',
   'duplicateListeners',
   'duplicateSubscriptions',
+  'targetExpected',
+  'targetObserved',
+  'preservedLegacyExpected',
+  'preservedLegacyObserved',
+  'missingTarget',
+  'missingPreservedLegacy',
+  'preservedLegacyListeners',
 ];
 const ORCHESTRATOR_DRAIN_KEYS = [
   'counterEpochId',
@@ -461,7 +470,7 @@ export function verifyDevDrainArtifactSignature(artifact, publicKeyInput) {
 }
 
 function projectPubSubHealth(value) {
-  if (!isRecord(value) || value.status !== 'ok' || value.drainContractVersion !== 1) {
+  if (!isRecord(value) || value.status !== 'ok' || value.drainContractVersion !== 2) {
     throw collectorError('Pub/Sub health violates the privacy-safe contract');
   }
   const drain = value.drain;
@@ -473,7 +482,7 @@ function projectPubSubHealth(value) {
   );
   const classificationCounts = scalarProjection(
     drain.classificationCounts,
-    ['forwarded', 'monitor-only'],
+    ['forwarded', 'monitor-only', 'preservedLegacy'],
     'Pub/Sub classification counts'
   );
   if (!Array.isArray(drain.listenerMultiplicity)) {
@@ -491,7 +500,11 @@ function projectPubSubHealth(value) {
     requirePrivacySafeResourceId(projected.projectId, 'Pub/Sub listener project ID');
     requirePrivacySafeResourceId(projected.topicName, 'Pub/Sub listener topic name');
     requirePrivacySafeResourceId(projected.subscriptionName, 'Pub/Sub listener subscription name');
-    if (projected.classification !== 'forwarded' && projected.classification !== 'monitor-only') {
+    if (
+      projected.classification !== 'forwarded' &&
+      projected.classification !== 'monitor-only' &&
+      projected.classification !== 'preservedLegacy'
+    ) {
       throw collectorError('Pub/Sub listener classification violates the privacy-safe contract');
     }
     requirePrivacySafeCount(projected.listeners, 'Pub/Sub listener count');
@@ -517,6 +530,16 @@ function projectPubSubHealth(value) {
   requirePrivacySafeDigest(projectedDrain.counterEpochId, 32, 'Pub/Sub counter epoch');
   requirePrivacySafeInstant(projectedDrain.processStartedAt, 'Pub/Sub process start');
   requirePrivacySafeDigest(projectedDrain.expectedTopologyHash, 64, 'Pub/Sub expected topology');
+  requirePrivacySafeDigest(
+    projectedDrain.expectedObservedTopologyHash,
+    64,
+    'Pub/Sub expected observed topology'
+  );
+  requirePrivacySafeDigest(
+    projectedDrain.preservedLegacyTopologyHash,
+    64,
+    'Pub/Sub preserved legacy topology'
+  );
   requirePrivacySafeDigest(
     projectedDrain.observedTopologyHash,
     64,
@@ -560,7 +583,7 @@ function projectPubSubHealth(value) {
   }
   return {
     status: 'ok',
-    drainContractVersion: 1,
+    drainContractVersion: 2,
     drain: {
       ...projectedDrain,
       subscriptionCounts,
