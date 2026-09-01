@@ -9,6 +9,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CreateTaskRequest, ProviderApiKeyHealth } from './types/api.js';
 import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
+import { isOrchestratorAdmissionFrozen } from './admission-freeze.js';
 
 interface TaskParams {
   id: string;
@@ -59,9 +60,102 @@ export function registerRoutes(
   getStatus?: () => OrchestratorStatus,
   workerAuthRegistry?: WorkerAuthRegistry,
   isolationProvider?: IsolationProvider,
-  providerApiKeys: Record<string, ProviderApiKeyHealth> = {}
+  providerApiKeys: Record<string, ProviderApiKeyHealth> = {},
+  readAdmissionFreeze: () => boolean = isOrchestratorAdmissionFrozen
 ): void {
   const nonceCache: NonceCache = {};
+  const activeAdmissionRequests = new WeakMap<
+    FastifyRequest,
+    { handlerSettled: boolean; transportSettled: boolean }
+  >();
+  let pendingAdmissions = 0;
+  let admissionActivityTotal = 0;
+
+  const finishTaskMutationIfSettled = (request: FastifyRequest): void => {
+    const state = activeAdmissionRequests.get(request);
+    if (state?.handlerSettled === true && state.transportSettled) {
+      activeAdmissionRequests.delete(request);
+      pendingAdmissions -= 1;
+    }
+  };
+
+  const settleTaskMutationHandler = (request: FastifyRequest): void => {
+    const state = activeAdmissionRequests.get(request);
+    /* v8 ignore start -- upstream: beginTaskMutation synchronously guarantees this state, and only this handler-settlement path can make it eligible for deletion; the missing-state arm is a defensive lifecycle no-op @preserve */
+    if (state !== undefined) {
+      state.handlerSettled = true;
+      finishTaskMutationIfSettled(request);
+    }
+    /* v8 ignore stop @preserve */
+  };
+
+  const settleTaskMutationTransport = (request: FastifyRequest): void => {
+    const state = activeAdmissionRequests.get(request);
+    if (state !== undefined) {
+      state.transportSettled = true;
+      finishTaskMutationIfSettled(request);
+    }
+  };
+
+  const readAdmissionFrozenFailClosed = (): boolean => {
+    try {
+      return readAdmissionFreeze();
+    } catch {
+      return true;
+    }
+  };
+
+  const beginTaskMutation = (request: FastifyRequest, reply: FastifyReply): boolean => {
+    activeAdmissionRequests.set(request, {
+      handlerSettled: false,
+      transportSettled:
+        Reflect.get(request.raw, 'aborted') || request.raw.destroyed || reply.raw.destroyed,
+    });
+    pendingAdmissions += 1;
+    reply.raw.once('close', () => {
+      settleTaskMutationTransport(request);
+    });
+
+    /* v8 ignore start -- upstream: the finite process lifetime guarantees this private counter cannot reach Number.MAX_SAFE_INTEGER; the guard defensively saturates before precision loss @preserve */
+    if (admissionActivityTotal < Number.MAX_SAFE_INTEGER) {
+      admissionActivityTotal += 1;
+    }
+    /* v8 ignore stop @preserve */
+
+    if (readAdmissionFrozenFailClosed()) {
+      reply.status(503).send({ error: 'Orchestrator admission is frozen' });
+      return false;
+    }
+    return true;
+  };
+
+  const runTaskMutation = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    handler: () => Promise<void>
+  ): Promise<void> => {
+    const admitted = beginTaskMutation(request, reply);
+    try {
+      if (admitted) {
+        await handler();
+      }
+    } finally {
+      settleTaskMutationHandler(request);
+    }
+  };
+
+  // Transport and handler completion are tracked independently. An aborted
+  // client cannot hide a dispatcher mutation that is still settling, and
+  // multiple lifecycle signals still produce one decrement.
+  app.addHook('onResponse', async (request) => {
+    settleTaskMutationTransport(request);
+  });
+  app.addHook('onError', async (request) => {
+    settleTaskMutationTransport(request);
+  });
+  app.addHook('onRequestAbort', async (request) => {
+    settleTaskMutationTransport(request);
+  });
 
   // Emit one concise line per completed HTTP request.
   app.addHook('onResponse', async (request, reply) => {
@@ -121,101 +215,107 @@ export function registerRoutes(
 
   // POST /tasks - Submit new task
   app.post('/tasks', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
-    // Log incoming request (redact secrets)
-    const rawBody = request.body as Record<string, unknown>;
-    logger.info(
-      {
-        method: 'POST',
-        path: '/tasks',
-        body: {
-          ...rawBody,
-          webhookSecret: rawBody['webhookSecret'] ? '[REDACTED]' : undefined,
+    await runTaskMutation(request, reply, async () => {
+      // Log incoming request (redact secrets)
+      const rawBody = request.body as Record<string, unknown>;
+      logger.info(
+        {
+          method: 'POST',
+          path: '/tasks',
+          body: {
+            ...rawBody,
+            webhookSecret: rawBody['webhookSecret'] ? '[REDACTED]' : undefined,
+          },
         },
-      },
-      'Task submission payload'
-    );
-
-    const parseResult = CreateTaskRequestSchema.safeParse(request.body);
-    if (!parseResult.success) {
-      const errorResponse = { error: parseResult.error.message };
-      logger.warn(
-        { taskId: 'unknown', validationError: parseResult.error.message, response: errorResponse },
-        'Task validation failed - returning 400'
+        'Task submission payload'
       );
-      reply.status(400).send(errorResponse);
-      return;
-    }
-    const parsed = parseResult.data;
 
-    const body: CreateTaskRequest = {
-      taskId: parsed.taskId,
-      workerType: parsed.workerType,
-      prompt: parsed.prompt,
-      webhookUrl: parsed.webhookUrl,
-      webhookSecret: parsed.webhookSecret,
-      linearIssueLabels: parsed.linearIssueLabels,
-      hasChildren: parsed.hasChildren,
-      ...(parsed.repository !== undefined && { repository: parsed.repository }),
-      ...(parsed.baseBranch !== undefined && { baseBranch: parsed.baseBranch }),
-      ...(parsed.linearIssueId !== undefined && { linearIssueId: parsed.linearIssueId }),
-      ...(parsed.linearIssueTitle !== undefined && { linearIssueTitle: parsed.linearIssueTitle }),
-      ...(parsed.slug !== undefined && { slug: parsed.slug }),
-      ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
-      ...(parsed.agentType !== undefined && { agentType: parsed.agentType }),
-      ...(parsed.sentryIssue !== undefined && { sentryIssue: parsed.sentryIssue }),
-      ...(parsed.continuationPrNumber !== undefined && {
-        continuationPrNumber: parsed.continuationPrNumber,
-      }),
-      ...(parsed.continuationPrBranch !== undefined && {
-        continuationPrBranch: parsed.continuationPrBranch,
-      }),
-      ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
-      ...(parsed.executionMemoryContext !== undefined && {
-        executionMemoryContext: parsed.executionMemoryContext,
-      }),
-      ...(parsed.trackingCommentId !== undefined && {
-        trackingCommentId: parsed.trackingCommentId,
-      }),
-      ...(parsed.reviewTypes !== undefined && { reviewTypes: parsed.reviewTypes }),
-      ...(parsed.retriedFrom !== undefined && { retriedFrom: parsed.retriedFrom }),
-      // INT-1585: forward optional per-task timeout override
-      ...(parsed.timeoutHours !== undefined && { timeoutHours: parsed.timeoutHours }),
-    };
-
-    logger.info(
-      { taskId: body.taskId, workerType: body.workerType, linearIssueId: body.linearIssueId },
-      'Processing task submission'
-    );
-
-    const result = await dispatcher.submitTask(body);
-
-    if (!result.ok) {
-      const { error } = result;
-      if (
-        error.type === 'at_capacity' ||
-        error.type === 'docker_unavailable' ||
-        error.type === 'auth_unavailable'
-      ) {
-        const errorResponse = { error: error.message };
+      const parseResult = CreateTaskRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        const errorResponse = { error: parseResult.error.message };
         logger.warn(
-          { taskId: body.taskId, errorType: error.type, status: 503, response: errorResponse },
-          'Task rejected: at capacity - returning 503'
+          {
+            taskId: 'unknown',
+            validationError: parseResult.error.message,
+            response: errorResponse,
+          },
+          'Task validation failed - returning 400'
         );
-        reply.status(503).send(errorResponse);
+        reply.status(400).send(errorResponse);
         return;
       }
-      const errorResponse = { error: error.message };
-      logger.warn(
-        { taskId: body.taskId, errorType: error.type, status: 400, response: errorResponse },
-        'Task submission failed - returning 400'
-      );
-      reply.status(400).send(errorResponse);
-      return;
-    }
+      const parsed = parseResult.data;
 
-    const response = { taskId: body.taskId, status: 'accepted' };
-    logger.info({ taskId: body.taskId, status: 202, response }, 'Task accepted - returning 202');
-    reply.status(202).send(response);
+      const body: CreateTaskRequest = {
+        taskId: parsed.taskId,
+        workerType: parsed.workerType,
+        prompt: parsed.prompt,
+        webhookUrl: parsed.webhookUrl,
+        webhookSecret: parsed.webhookSecret,
+        linearIssueLabels: parsed.linearIssueLabels,
+        hasChildren: parsed.hasChildren,
+        ...(parsed.repository !== undefined && { repository: parsed.repository }),
+        ...(parsed.baseBranch !== undefined && { baseBranch: parsed.baseBranch }),
+        ...(parsed.linearIssueId !== undefined && { linearIssueId: parsed.linearIssueId }),
+        ...(parsed.linearIssueTitle !== undefined && { linearIssueTitle: parsed.linearIssueTitle }),
+        ...(parsed.slug !== undefined && { slug: parsed.slug }),
+        ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
+        ...(parsed.agentType !== undefined && { agentType: parsed.agentType }),
+        ...(parsed.sentryIssue !== undefined && { sentryIssue: parsed.sentryIssue }),
+        ...(parsed.continuationPrNumber !== undefined && {
+          continuationPrNumber: parsed.continuationPrNumber,
+        }),
+        ...(parsed.continuationPrBranch !== undefined && {
+          continuationPrBranch: parsed.continuationPrBranch,
+        }),
+        ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
+        ...(parsed.executionMemoryContext !== undefined && {
+          executionMemoryContext: parsed.executionMemoryContext,
+        }),
+        ...(parsed.trackingCommentId !== undefined && {
+          trackingCommentId: parsed.trackingCommentId,
+        }),
+        ...(parsed.reviewTypes !== undefined && { reviewTypes: parsed.reviewTypes }),
+        ...(parsed.retriedFrom !== undefined && { retriedFrom: parsed.retriedFrom }),
+        // INT-1585: forward optional per-task timeout override
+        ...(parsed.timeoutHours !== undefined && { timeoutHours: parsed.timeoutHours }),
+      };
+
+      logger.info(
+        { taskId: body.taskId, workerType: body.workerType, linearIssueId: body.linearIssueId },
+        'Processing task submission'
+      );
+
+      const result = await dispatcher.submitTask(body);
+
+      if (!result.ok) {
+        const { error } = result;
+        if (
+          error.type === 'at_capacity' ||
+          error.type === 'docker_unavailable' ||
+          error.type === 'auth_unavailable'
+        ) {
+          const errorResponse = { error: error.message };
+          logger.warn(
+            { taskId: body.taskId, errorType: error.type, status: 503, response: errorResponse },
+            'Task rejected: at capacity - returning 503'
+          );
+          reply.status(503).send(errorResponse);
+          return;
+        }
+        const errorResponse = { error: error.message };
+        logger.warn(
+          { taskId: body.taskId, errorType: error.type, status: 400, response: errorResponse },
+          'Task submission failed - returning 400'
+        );
+        reply.status(400).send(errorResponse);
+        return;
+      }
+
+      const response = { taskId: body.taskId, status: 'accepted' };
+      logger.info({ taskId: body.taskId, status: 202, response }, 'Task accepted - returning 202');
+      reply.status(202).send(response);
+    });
   });
 
   // GET /tasks/:id - Get task status
@@ -233,44 +333,9 @@ export function registerRoutes(
 
   // DELETE /tasks/:id - Cancel task
   app.delete<{ Params: TaskParams }>('/tasks/:id', async (request: TaskParamsRequest, reply) => {
-    const { id } = request.params;
-    const result = await dispatcher.cancelTask(id);
-
-    if (!result.ok) {
-      const { error } = result;
-      if (error.type === 'not_found') {
-        reply.status(404).send({ error: error.message });
-        return;
-      }
-      if (error.type === 'already_completed') {
-        reply.status(409).send({ error: error.message });
-        return;
-      }
-      reply.status(500).send({ error: error.message });
-      return;
-    }
-
-    reply.send({ taskId: id, status: 'cancelled' });
-  });
-
-  // POST /tasks/:id/message - Send message to task
-  app.post<{ Params: TaskParams; Body: unknown }>(
-    '/tasks/:id/message',
-    { preHandler: [verifyDispatchSignature] },
-    async (request, reply) => {
+    await runTaskMutation(request, reply, async () => {
       const { id } = request.params;
-      logger.info(
-        { taskId: id, method: 'POST', path: `/tasks/${id}/message` },
-        'Task message received'
-      );
-
-      const parseResult = SendMessageRequestSchema.safeParse(request.body);
-      if (!parseResult.success) {
-        reply.status(400).send({ error: parseResult.error.message });
-        return;
-      }
-
-      const result = await dispatcher.sendMessage(id, parseResult.data.message);
+      const result = await dispatcher.cancelTask(id);
 
       if (!result.ok) {
         const { error } = result;
@@ -278,19 +343,58 @@ export function registerRoutes(
           reply.status(404).send({ error: error.message });
           return;
         }
-        if (error.type === 'invalid_status') {
+        if (error.type === 'already_completed') {
           reply.status(409).send({ error: error.message });
-          return;
-        }
-        if (error.type === 'session_expired') {
-          reply.status(410).send({ error: error.message });
           return;
         }
         reply.status(500).send({ error: error.message });
         return;
       }
 
-      reply.send(result.value);
+      reply.send({ taskId: id, status: 'cancelled' });
+    });
+  });
+
+  // POST /tasks/:id/message - Send message to task
+  app.post<{ Params: TaskParams; Body: unknown }>(
+    '/tasks/:id/message',
+    { preHandler: [verifyDispatchSignature] },
+    async (request, reply) => {
+      await runTaskMutation(request, reply, async () => {
+        const { id } = request.params;
+        logger.info(
+          { taskId: id, method: 'POST', path: `/tasks/${id}/message` },
+          'Task message received'
+        );
+
+        const parseResult = SendMessageRequestSchema.safeParse(request.body);
+        if (!parseResult.success) {
+          reply.status(400).send({ error: parseResult.error.message });
+          return;
+        }
+
+        const result = await dispatcher.sendMessage(id, parseResult.data.message);
+
+        if (!result.ok) {
+          const { error } = result;
+          if (error.type === 'not_found') {
+            reply.status(404).send({ error: error.message });
+            return;
+          }
+          if (error.type === 'invalid_status') {
+            reply.status(409).send({ error: error.message });
+            return;
+          }
+          if (error.type === 'session_expired') {
+            reply.status(410).send({ error: error.message });
+            return;
+          }
+          reply.status(500).send({ error: error.message });
+          return;
+        }
+
+        reply.send(result.value);
+      });
     }
   );
 
@@ -320,9 +424,13 @@ export function registerRoutes(
     /* v8 ignore start -- ts-type: nullish coalescing fallback for optional isolationProvider parameter @preserve */
     const healthDetails = isolationProvider?.getHealthDetails?.() ?? { docker: true, disk: true };
     /* v8 ignore stop @preserve */
+    const admissionFrozen = readAdmissionFrozenFailClosed();
 
     reply.send({
       healthContractVersion: 2,
+      admissionFrozen,
+      pendingAdmissions,
+      admissionActivityTotal,
       status: getStatus?.() ?? 'ready',
       capacity,
       running,

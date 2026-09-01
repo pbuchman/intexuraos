@@ -2226,8 +2226,8 @@ describe('Home Dev orchestrator production ownership', () => {
     expect(audit.schemaVersion).toBe(6);
     expect(audit.runtimeBundleClosure).toEqual({
       entryPoints: orchestratorRuntimeEntryPoints,
-      inputCount: 166,
-      inputsSha256: '631d9364ffa82ec41622aa273487e85a832e80d1d6d66321b5d4908b92897d41',
+      inputCount: 167,
+      inputsSha256: '58f29f6bbf260a46305bc5c96cf94ccce5d3d34ffd65ffdb8911372349392101',
     });
     expect(audit.observabilityIdentityBoundary.bootstrapConfig.forbiddenField).toBe('environment');
     expect(audit.observabilityIdentityBoundary.boundaryModule).toEqual(

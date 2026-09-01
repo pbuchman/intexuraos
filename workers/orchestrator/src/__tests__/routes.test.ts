@@ -119,7 +119,8 @@ describe('Routes', () => {
       undefined,
       workerAuthRegistry,
       isolationProvider,
-      {}
+      {},
+      () => false
     );
     await app.ready();
   });
@@ -798,6 +799,9 @@ describe('Routes', () => {
       const json = response.json();
       expect(json).toMatchObject({
         healthContractVersion: 2,
+        admissionFrozen: false,
+        pendingAdmissions: 0,
+        admissionActivityTotal: 0,
         status: 'ready',
         capacity: 5,
         running: 0,
