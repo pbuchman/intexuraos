@@ -891,6 +891,7 @@ describe('handleTaskCompletion', () => {
       const automationRecord = vi.fn().mockResolvedValue(undefined);
       const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
       const requestLog = createMockLogger();
+      const remediationError = new Error('unexpected failure');
 
       setServices({
         codeTaskRepo: {
@@ -917,7 +918,7 @@ describe('handleTaskCompletion', () => {
           markInReview: vi.fn().mockResolvedValue(undefined),
         } as never,
         logger: requestLog as never,
-        createRemediationTaskFn: vi.fn().mockRejectedValue(new Error('unexpected failure')),
+        createRemediationTaskFn: vi.fn().mockRejectedValue(remediationError),
       } as unknown as ServiceContainer);
 
       const result = await handleTaskCompletion(createMockLogger(), {
@@ -942,7 +943,7 @@ describe('handleTaskCompletion', () => {
       expect(unexpectedWarning?.[0]).toEqual(expect.objectContaining({
         taskId: 't-review-remediation-throw',
         prNumber: 42,
-        error: expect.any(Error),
+        error: remediationError,
       }));
       expect(unexpectedWarning?.[0]).not.toHaveProperty(SKIP_SENTRY_KEY);
     });
