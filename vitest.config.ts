@@ -19,7 +19,6 @@ export default mergeConfig(
         '**/dist/**',
         'e2e/**',
         '.claude/hooks/__tests__/**',
-        '.codex/hooks/__tests__/**',
         '**/e2e-container.test.ts',
         '.claude/worktrees/**',
         '.worktrees/**',
