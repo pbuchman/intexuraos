@@ -1542,7 +1542,12 @@ export async function handleTaskCompletion(
                     });
                   } else {
                     requestLog.warn(
-                      { taskId, prNumber, error: remediationResult.error },
+                      {
+                        taskId,
+                        prNumber,
+                        error: remediationResult.error,
+                        [SKIP_SENTRY_KEY]: true,
+                      },
                       'Failed to create remediation task from review task-complete (best-effort)',
                     );
                     recordRemediationDecision({
