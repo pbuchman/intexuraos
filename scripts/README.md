@@ -213,13 +213,11 @@ Checks Git/GitHub, GCP identity, repository secret hygiene, and branch state.
 pnpm run ci
 pnpm run ci:tracked
 ./scripts/ci-capture.sh
-node scripts/ci-failure-report.mjs --first-run
 ```
 
 - `ci.mjs`: full repository CI pipeline.
-- `ci-tracked.mjs`: records first-failure metadata under `.claude/ci-failures/`.
+- `ci-tracked.mjs`: compatibility alias for the full repository CI pipeline.
 - `ci-capture.sh`: captures output to a private temporary file.
-- `ci-failure-report.mjs`: summarizes historical failure patterns.
 
 ## Builds And Deployments
 

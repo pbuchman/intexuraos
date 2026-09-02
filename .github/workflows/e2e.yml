@@ -35,8 +35,8 @@ jobs:
             grep -E "(test:e2e|e2e:)" package.json
           else
             echo "✗ test:e2e script NOT found!"
-            echo "Lines around ci:report:"
-            grep -A5 "ci:report" package.json
+            echo "Available E2E scripts:"
+            grep -E "(test:e2e|e2e:)" package.json || true
             exit 1
           fi
 
@@ -217,8 +217,8 @@ jobs:
           echo "=== E2E scripts in package.json ==="
           grep -E "(test:e2e|e2e:)" package.json || echo "NO E2E SCRIPTS FOUND!"
           echo ""
-          echo "=== Lines around ci:report ==="
-          grep -A10 "ci:report" package.json | head -15
+          echo "=== Package scripts footer ==="
+          tail -25 package.json
           echo ""
           echo "=== Running test:e2e ==="
           pnpm run test:e2e
