@@ -884,6 +884,10 @@ describe('handleTaskCompletion', () => {
         }),
         'Failed to create remediation task from review task-complete (best-effort)',
       );
+      expect(requestLog.warn).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'Unexpected error during remediation task creation (best-effort)',
+      );
     });
 
     it('keeps an unexpected thrown remediation creation failure reportable to Sentry', async () => {
