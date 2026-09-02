@@ -27,6 +27,9 @@ const linearSentryWorkflowPath = fileURLToPath(
 const linearCrossLinkingPath = fileURLToPath(
   new URL('../../../../../../.claude/skills/linear/reference/cross-linking.md', import.meta.url)
 );
+const nitpickNukerSkillPath = fileURLToPath(
+  new URL('../../../../../../.claude/skills/nitpick-nuker/SKILL.md', import.meta.url)
+);
 
 describe('code-worker image Codex skill bootstrap', () => {
   it('preserves Claude and Codex runtime dispatch with the shared MCP boundary', () => {
@@ -38,6 +41,7 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(entrypoint).toContain('run_codex_attempt');
     expect(claudeMcpConfig).toContain('linear');
     expect(claudeMcpConfig).toContain('error_hub');
+    expect(existsSync(nitpickNukerSkillPath)).toBe(true);
   });
 
   it('stages Superpowers for Codex native skill discovery at build time', () => {

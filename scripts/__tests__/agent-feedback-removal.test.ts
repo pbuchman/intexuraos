@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 describe('agent feedback compatibility wrappers', () => {
+  it('does not retain ignore rules for deleted Claude feedback directories', () => {
+    const source = readFileSync('.gitignore', 'utf8');
+    const claudeRules = source
+      .split('\n')
+      .filter((line) => line.startsWith('.claude/') || line.startsWith('!.claude/'));
+
+    expect(claudeRules).toEqual([
+      '.claude/settings.local.json',
+      '.claude/settings.local.*.json',
+      '!.claude/CLAUDE.md',
+    ]);
+  });
+
   it('keeps ci:tracked as a transparent ci.mjs alias without persistent feedback state', () => {
     const source = readFileSync('scripts/ci-tracked.mjs', 'utf8');
 

@@ -19,6 +19,7 @@
 - In particular, preserve the non-Codex runtime paths for `auto`, `opus`, `sonnet`, and `openrouter-free`.
 - Keep `.mcp.json`, `docker/code-worker/**`, orchestrator runtime/auth code, and provider integrations unless a step below explicitly changes a reference without changing behavior.
 - Keep `.claude/skills/linear/**` as a Claude-worker runtime asset. It is not a general instruction source.
+- Keep `.claude/skills/nitpick-nuker/**` as the remediation-worker runtime asset required by active prompts.
 - Do not change HTTP contracts, schemas, Firestore data, migrations, Terraform, deployment topology, or environment configuration.
 - Do not use Git worktrees. Execute on a `codex/` branch unless the user explicitly selects an existing branch.
 - Preserve unrelated tracked, untracked, and ignored user files.
@@ -30,6 +31,7 @@
 AGENTS.md                              # canonical, compact general rules
 .claude/CLAUDE.md                      # compatibility pointer only
 .claude/skills/linear/**               # retained non-Codex worker runtime asset
+.claude/skills/nitpick-nuker/**        # retained remediation-worker runtime asset
 .codex/skills/**                       # Codex workflows, no .claude dependencies
 .codex/hooks.json                      # one portable infrastructure-safety hook
 .codex/hooks/pre-tool-policy.sh        # no logging or workflow enforcement
@@ -85,7 +87,7 @@ workers/orchestrator/**                # source of runtime/completion enforcemen
 - `.github/workflows/hooks-tests.yml`
 - `scripts/ci-failure-report.mjs`
 
-The deletion list deliberately excludes `.claude/skills/linear/**`, `.mcp.json`, and every production worker implementation.
+The deletion list deliberately excludes `.claude/skills/linear/**`, `.claude/skills/nitpick-nuker/**`, `.mcp.json`, and every production worker implementation.
 
 ---
 
@@ -512,6 +514,7 @@ git commit -m "refactor(codex): keep one portable safety hook"
 - Delete remaining docs/wrappers under `.claude/skills/debug-intex-session/**`
 - Keep: `.claude/CLAUDE.md`
 - Keep: `.claude/skills/linear/**`
+- Keep: `.claude/skills/nitpick-nuker/**`
 - Keep: `.mcp.json`
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/worker-image.test.ts`
 
@@ -524,6 +527,7 @@ expect(entrypoint).toContain('claude');
 expect(entrypoint).toContain('codex');
 expect(readFileSync(claudeMcpConfigPath, 'utf8')).toContain('linear');
 expect(readFileSync(claudeMcpConfigPath, 'utf8')).toContain('error_hub');
+expect(existsSync(nitpickNukerSkillPath)).toBe(true);
 ```
 
 Use stronger existing runtime markers when the file exposes them; do not introduce assertions against comments alone.
@@ -550,7 +554,7 @@ Resolve every active match by pointing it to `AGENTS.md`, a Codex skill, `script
 
 - [ ] **Step 4: Delete the verified boilerplate**
 
-Remove the files listed in this task while retaining `.claude/CLAUDE.md`, `.claude/skills/linear/**`, and `.mcp.json`.
+Remove the files listed in this task while retaining `.claude/CLAUDE.md`, `.claude/skills/linear/**`, `.claude/skills/nitpick-nuker/**`, and `.mcp.json`.
 
 - [ ] **Step 5: Assert the resulting Claude directory boundary**
 
@@ -558,7 +562,7 @@ Remove the files listed in this task while retaining `.claude/CLAUDE.md`, `.clau
 find .claude -type f -print | sort
 ```
 
-Expected: only `.claude/CLAUDE.md` and files under `.claude/skills/linear/` remain tracked.
+Expected: only `.claude/CLAUDE.md` and files under `.claude/skills/linear/` and `.claude/skills/nitpick-nuker/` remain tracked.
 
 - [ ] **Step 6: Re-run non-Codex worker tests after deletion**
 
@@ -731,7 +735,7 @@ Skip this commit when the working tree is already clean after the prior task com
 - [ ] `.claude/CLAUDE.md` is exactly the pointer defined by the verifier.
 - [ ] `CODE_TASK_WORKER_TYPES` still equals `auto`, `opus`, `sonnet`, `codex`, `codex-xhigh`, `openrouter-free` in that order.
 - [ ] Claude worker types retain Claude auth/runtime behavior; OpenRouter retains API-key/provider behavior; Codex worker types retain Codex auth/runtime behavior.
-- [ ] `.claude/skills/linear/**` and `.mcp.json` remain available to non-Codex workers.
+- [ ] `.claude/skills/linear/**`, `.claude/skills/nitpick-nuker/**`, and `.mcp.json` remain available to non-Codex workers.
 - [ ] Codex skills contain no dependency on `.claude` instruction or skill paths.
 - [ ] Shared diagnostic executables live under `scripts/agent-tools/`.
 - [ ] Only one project-local Codex hook remains, it protects infrastructure mutations, is portable, and records no commands or prompts.
@@ -739,4 +743,3 @@ Skip this commit when the working tree is already clean after the prior task com
 - [ ] Historical plan documents are left intact; active paths and operational documentation are clean.
 - [ ] Focused worker, prompt, hook, and instruction tests pass.
 - [ ] `pnpm run ci:tracked` passes without recreating deleted agent-state artifacts.
-

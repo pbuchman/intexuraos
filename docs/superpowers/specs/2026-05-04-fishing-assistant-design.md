@@ -50,7 +50,7 @@ The new service does not own mobile notification storage or digest generation. I
 
 ## Existing Repo Patterns To Reuse
 
-- New service scaffolding: `.claude/commands/create-service.md`
+- New service scaffolding: `scripts/verify-service-scaffolding.sh`
 - Service verification: `bash scripts/verify-service-scaffolding.sh fishing-assistant-service`
 - Authenticated web routes: existing Auth0 `requireAuth(...)` pattern
 - Internal service calls: `validateInternalAuth(...)` and `x-internal-auth`
@@ -914,7 +914,7 @@ Test:
 ## Rollout Order
 
 1. Add mobile notification internal retrieval routes.
-2. Create `fishing-assistant-service` through `/create-service`.
+2. Create `fishing-assistant-service` from current repository patterns and run `scripts/verify-service-scaffolding.sh`.
 3. Add Firestore collections and vector indexes.
 4. Build Knowledge Base domain, repositories, CRUD routes, chunking, and embeddings.
 5. Build mobile-notifications internal client inside the Fishing Assistant service.

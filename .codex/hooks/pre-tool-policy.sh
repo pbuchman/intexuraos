@@ -16,7 +16,7 @@ block() {
   exit 2
 }
 
-if grep -Eq '(^|[[:space:];|&])terraform[[:space:]]+(init|plan|apply|destroy|import|state|output|refresh)([[:space:]]|$)' <<<"$command"; then
+if grep -Eq '(^|[[:space:];|&])terraform[[:space:]][^;|&]*(init|plan|apply|destroy|import|state|output|refresh)([[:space:];|&]|$)' <<<"$command"; then
   if ! grep -Eq 'STORAGE_EMULATOR_HOST=[[:space:]]' <<<"$command" ||
     ! grep -Eq 'FIRESTORE_EMULATOR_HOST=[[:space:]]' <<<"$command" ||
     ! grep -Eq 'PUBSUB_EMULATOR_HOST=[[:space:]]' <<<"$command"; then
@@ -24,13 +24,13 @@ if grep -Eq '(^|[[:space:];|&])terraform[[:space:]]+(init|plan|apply|destroy|imp
   fi
 fi
 
-if grep -Eq '(^|[[:space:];|&])gsutil[[:space:]]+mb([[:space:]]|$)' <<<"$command" ||
-  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]]+pubsub[[:space:]]+(topics|subscriptions)[[:space:]]+create([[:space:]]|$)' <<<"$command" ||
-  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]]+run[[:space:]]+(deploy|services[[:space:]]+update)([[:space:]]|$)' <<<"$command" ||
-  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]]+secrets[[:space:]]+create([[:space:]]|$)' <<<"$command" ||
-  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]]+sql[[:space:]]+instances[[:space:]]+create([[:space:]]|$)' <<<"$command" ||
-  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]]+compute[[:space:]]+instances[[:space:]]+create([[:space:]]|$)' <<<"$command" ||
-  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]]+iam[[:space:]]+service-accounts[[:space:]]+create([[:space:]]|$)' <<<"$command"; then
+if grep -Eq '(^|[[:space:];|&])gsutil[[:space:]][^;|&]*mb([[:space:];|&]|$)' <<<"$command" ||
+  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]][^;|&]*pubsub[[:space:]][^;|&]*(topics|subscriptions)[[:space:]][^;|&]*create([[:space:];|&]|$)' <<<"$command" ||
+  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]][^;|&]*run[[:space:]][^;|&]*(deploy|services[[:space:]][^;|&]*update)([[:space:];|&]|$)' <<<"$command" ||
+  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]][^;|&]*secrets[[:space:]][^;|&]*create([[:space:];|&]|$)' <<<"$command" ||
+  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]][^;|&]*sql[[:space:]][^;|&]*instances[[:space:]][^;|&]*create([[:space:];|&]|$)' <<<"$command" ||
+  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]][^;|&]*compute[[:space:]][^;|&]*instances[[:space:]][^;|&]*create([[:space:];|&]|$)' <<<"$command" ||
+  grep -Eq '(^|[[:space:];|&])gcloud[[:space:]][^;|&]*iam[[:space:]][^;|&]*service-accounts[[:space:]][^;|&]*create([[:space:];|&]|$)' <<<"$command"; then
   block "Persistent infrastructure must be managed through Terraform in ${repo_root}/terraform."
 fi
 
