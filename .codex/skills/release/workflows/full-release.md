@@ -16,7 +16,7 @@ Before release operations:
 4. Keep controller-owned work in the controller session.
 5. Identify bounded subagent tasks and reasoning efforts for this release.
 
-Do not create git worktrees. This repo forbids worktrees in `.claude/CLAUDE.md`.
+Do not create git worktrees. This repo forbids worktrees in `AGENTS.md`.
 
 If subagent tools are unavailable, report:
 
@@ -336,7 +336,7 @@ Verify before staging:
 - website and README do not present migrations or refactors as new features
 - documented endpoints and version numbers are grounded in code or tags
 
-Before committing, dispatch a final `explorer` subagent with `reasoning_effort: xhigh` as Final Release Auditor. It must check the planned release artifacts against `reference/subagent-execution.md`, this workflow, and `.claude/CLAUDE.md`. Fix all critical findings before staging.
+Before committing, dispatch a final `explorer` subagent with `reasoning_effort: xhigh` as Final Release Auditor. It must check the planned release artifacts against `reference/subagent-execution.md`, this workflow, and `AGENTS.md`. Fix all critical findings before staging.
 
 ### 6.6 Commit and PR to Development
 

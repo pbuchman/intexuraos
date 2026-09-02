@@ -4,9 +4,6 @@ description: Use when the user asks to share, publish, or make HTML or markdown 
 argument-hint: '[--html | --raw-md]'
 ---
 
-<!-- Counterpart: .claude/skills/share/SKILL.md (Claude Code version of this skill) -->
-<!-- When updating this file, check whether the Claude Code version needs the same change. -->
-
 # Share
 
 ## Overview
