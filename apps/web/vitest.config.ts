@@ -37,7 +37,7 @@ process.env.INTEXURAOS_SENTRY_DSN_WEB = 'test-dsn';
 // vitest.setup.ts mocks) and adds React/jsdom-specific config.
 //
 // Coverage thresholds are intentionally cleared (web is the documented
-// UI-coverage exception per CLAUDE.md): UI tests are optional, only
+// UI-coverage exception from the root coverage policy: UI tests are optional, only
 // utils/services/hooks need coverage. mergeConfig concatenates setupFiles,
 // so the web-specific setup runs alongside the global one.
 export default mergeConfig(
@@ -72,7 +72,7 @@ export default mergeConfig(
       },
       coverage: {
         // provider/reporter inherited from sharedConfig
-        // CLAUDE.md exception: UI coverage is not enforced — clear the 95% thresholds.
+        // Root policy exception: UI coverage is not enforced — clear the 95% thresholds.
         thresholds: {},
         include: ['src/**/*.ts', 'src/**/*.tsx'],
         exclude: [

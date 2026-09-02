@@ -35,7 +35,6 @@ Every service MUST have these documentation files in `docs/services/<service>/`:
 | `technical.md`      | API endpoints, models, architecture | Yes            |
 | `tutorial.md`       | Getting started guide               | Yes            |
 | `technical-debt.md` | Known issues and future plans       | Yes            |
-| `CLAUDE.md`         | Agent memory context                | Auto-generated |
 
 ---
 
@@ -193,5 +192,3 @@ See `docs/services/_templates/` for starting points:
 | Date       | Services Audited | Avg Accuracy | Issues Found    |
 | ---------- | ---------------- | ------------ | --------------- |
 | 2026-01-13 | 17 services      | 87%          | 38 major issues |
-
-**Full audit log:** `.claude/doc-audit-log.md`

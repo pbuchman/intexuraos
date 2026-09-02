@@ -129,5 +129,4 @@ for (const { file, violations } of allViolations) {
 }
 
 console.error('RULE: Tests must use in-memory fakes. No Docker, emulators, or real network calls.');
-console.error('See: .claude/CLAUDE.md (Testing section)\n');
 process.exit(1);

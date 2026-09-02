@@ -44,7 +44,7 @@ describe('coverage sharding helpers', () => {
   it('runs tracked Codex hook tests without a legacy Claude hook exclusion', () => {
     const rootVitestConfig = readFileSync('vitest.config.ts', 'utf-8');
 
-    expect(rootVitestConfig).not.toContain("'.claude/hooks/__tests__/**'");
+    expect(rootVitestConfig).not.toContain("'.claude/");
     expect(rootVitestConfig).not.toContain("'.codex/hooks/__tests__/**'");
   });
 

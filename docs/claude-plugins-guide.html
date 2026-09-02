@@ -1817,8 +1817,8 @@ Task tool with subagent_type=<span class="syntax-string">"pr-review-toolkit:sile
             <div class="card-content">
               <div class="card-body">
                 <p class="card-description">
-                  Detect and fix code smells. Enforces architecture hygiene and updates CLAUDE.md
-                  with new patterns.
+                  Detect and fix code smells. Enforces architecture hygiene and updates the
+                  relevant project documentation with new patterns.
                 </p>
 
                 <div class="table-wrapper">
@@ -1867,8 +1867,8 @@ Task tool with subagent_type=<span class="syntax-string">"pr-review-toolkit:sile
                   </h5>
                   <p>
                     The command fixes one smell at a time, runs
-                    <code class="inline-code">npm run ci</code>, and updates CLAUDE.md if a new
-                    pattern is discovered.
+                    <code class="inline-code">npm run ci</code>, and updates the relevant guide if
+                    a new pattern is discovered.
                   </p>
                 </div>
               </div>
@@ -3542,8 +3542,8 @@ app.post(<span class="syntax-string">'/user'</span>, { schema }, handler)</pre>
                   GAMECHANGER: /commit
                 </h5>
                 <p style="margin-top: 0.5rem">
-                  Analyzes diff, extracts ticket from branch, writes message following CLAUDE.md
-                  conventions, includes Co-Authored-By. 30 seconds.
+                  Analyzes diff, extracts ticket from branch, writes a conventional message, and
+                  includes Co-Authored-By. 30 seconds.
                 </p>
               </div>
 
@@ -4380,7 +4380,7 @@ Recommendation: Make `lastActiveAt` private with getter</span></pre>
 
 ## Findings
 ✓ Tests added for all new functionality
-✓ Follows CLAUDE.md patterns
+✓ Follows repository patterns
 ⚠ Consider: line 47 could use explicit error type
 
 ## Recommendation

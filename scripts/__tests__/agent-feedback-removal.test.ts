@@ -7,7 +7,7 @@ describe('agent feedback compatibility wrappers', () => {
 
     expect(source).toContain("resolve(repoRoot, 'scripts/ci.mjs')");
     expect(source).toContain("stdio: 'inherit'");
-    expect(source).not.toContain('.claude/ci-failures');
+    expect(source).not.toContain('.claude/');
     expect(source).not.toContain('appendFileSync');
   });
 
@@ -17,7 +17,7 @@ describe('agent feedback compatibility wrappers', () => {
     expect(source).toContain("resolve(repoRoot, 'scripts/verify-workspace.sh')");
     expect(source).toContain('process.argv.slice(2)');
     expect(source).toContain("stdio: 'inherit'");
-    expect(source).not.toContain('.claude/ci-failures');
+    expect(source).not.toContain('.claude/');
     expect(source).not.toContain('appendFileSync');
   });
 });

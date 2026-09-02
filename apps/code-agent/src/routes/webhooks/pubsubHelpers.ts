@@ -1,7 +1,7 @@
 /**
  * Shared helpers for Pub/Sub push subscription routes.
  *
- * Apps can't cross-import in this monorepo (CLAUDE.md), so this is a
+ * Package boundaries prevent apps from cross-importing, so this is a
  * thin local copy of the same pattern used in bookmarks-agent. The
  * helper authenticates either Pub/Sub-pushed requests (Cloud Run
  * OIDC validates the JWT before the request reaches us; we trust the

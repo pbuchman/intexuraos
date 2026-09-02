@@ -459,7 +459,6 @@ function printReport({
 
   console.error('═══════════════════════════════════════\n');
   console.error('RULE: Each Firestore collection MUST be owned by exactly ONE service.\n');
-  console.error('See: .claude/CLAUDE.md (Firestore Collections section)');
   console.error('See: docs/architecture/firestore-ownership.md\n');
 }
 

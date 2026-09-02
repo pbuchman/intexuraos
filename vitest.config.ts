@@ -19,7 +19,6 @@ export default mergeConfig(
         '**/dist/**',
         'e2e/**',
         '**/e2e-container.test.ts',
-        '.claude/worktrees/**',
         '.worktrees/**',
       ],
       coverage: {

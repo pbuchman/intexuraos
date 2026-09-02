@@ -9,9 +9,9 @@
 
 The implementation called for by the Linear plan was already executed in open PR #2016 by a prior code-task run. PR #2016 contains exactly the three changes the plan prescribes:
 
-1. Deletes `.claude/hooks/tool-recommendations.sh` (78 lines).
-2. Deletes `.claude/hooks/__tests__/tool-recommendations.test.ts` (274 lines).
-3. Removes the `tool-recommendations.sh` registration entry from `.claude/settings.json` (4 lines), dropping the PreToolUse Bash hook count from 13 → 12.
+1. Deletes the legacy tool-recommendations hook implementation (78 lines).
+2. Deletes its legacy hook test (274 lines).
+3. Removes its Claude settings registration (4 lines), dropping the PreToolUse Bash hook count from 13 → 12.
 
 A repo-wide reference sweep on `development` confirmed there are no documentation references to the hook outside the three files PR #2016 modifies/deletes, matching the plan's "verification only" doc-sweep step.
 

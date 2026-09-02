@@ -40,8 +40,8 @@ function resolveWarningMs(overrideKillMs: number | undefined): number {
  *
  * - `scheduleTimeoutWarning`: best-effort 4h55m warning log.
  * - `scheduleTimeoutKill`: hard 5h kill that bypasses `finalizeTask`
- *   (intentional — preserves the standalone teardown semantics; see
- *   `.claude/reference` and inventory note 3).
+ *   (intentional — preserves the standalone teardown semantics documented by
+ *   the dispatcher lifecycle tests).
  * - `startCompletionMonitoring`: 30s poll on `isWorkerRunning` plus
  *   `attemptCompletionSignals`; once a completion is detected (worker
  *   exited or runtime stream said `attempt_completed`), it routes through

@@ -500,4 +500,4 @@ const response = await fetch(`${WHATSAPP_SERVICE_URL}/internal/whatsapp/messages
 - [service-to-service-communication.md](./service-to-service-communication.md) - HTTP endpoint patterns
 - [firestore-collections.json](../../firestore-collections.json) - Collection registry
 - [scripts/verify-firestore-ownership.mjs](../../scripts/verify-firestore-ownership.mjs) - Validation script
-- [.claude/CLAUDE.md](../../.claude/CLAUDE.md) - Quick reference guide
+- [AGENTS.md](../../AGENTS.md) - Project-wide agent contract
