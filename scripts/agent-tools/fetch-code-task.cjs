@@ -1,4 +1,4 @@
-// Usage: node fetch-task.cjs <taskId> [--logs] [--logs-only]
+// Usage: node scripts/agent-tools/fetch-code-task.cjs <taskId> [--logs] [--logs-only]
 // Must run from monorepo root for firebase-admin module resolution.
 
 const admin = require('firebase-admin');

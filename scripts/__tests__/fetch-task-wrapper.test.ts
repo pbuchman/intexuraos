@@ -24,11 +24,9 @@ const SESSION_WRAPPER_PATH = path.join(
 );
 const SESSION_FETCHER_PATH = path.join(
   REPO_ROOT,
-  '.claude',
-  'skills',
-  'debug-intex-session',
   'scripts',
-  'fetch-session.cjs'
+  'agent-tools',
+  'fetch-intex-session.cjs'
 );
 const require = createRequire(import.meta.url);
 

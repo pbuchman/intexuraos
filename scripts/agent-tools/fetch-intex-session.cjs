@@ -1,4 +1,4 @@
-// Usage: node fetch-session.cjs <sessionId> [--events] [--events-only]
+// Usage: node scripts/agent-tools/fetch-intex-session.cjs <sessionId> [--events] [--events-only]
 // Must run from monorepo root for firebase-admin module resolution.
 
 const crypto = require('node:crypto');
