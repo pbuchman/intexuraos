@@ -73,6 +73,7 @@
     "verify:route-resource-names": "node scripts/verify-route-resource-names.mjs",
     "verify:error-serializers": "node scripts/verify-error-serializers.mjs",
     "verify:prompt-versions": "node scripts/verify-prompt-versions.mjs",
+    "verify:agent-instructions": "node scripts/verify-agent-instructions.mjs",
     "verify:removed-agents": "node scripts/verify-removed-agents.mjs",
     "verify:mobile-digest-removal": "node scripts/verify-mobile-digest-removal.mjs",
     "verify:dead-code": "node scripts/verify-dead-code.mjs",
