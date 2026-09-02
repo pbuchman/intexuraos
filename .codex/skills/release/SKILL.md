@@ -21,10 +21,10 @@ $release --collect          # Only collect and triage release data
 - Use subagent-driven execution first whenever Codex subagent tools are available.
 - Before Phase 1, create a short release execution plan and use the `superpowers:subagent-driven-development` pattern: bounded subagent tasks, controller integration, spec/quality review loops for mutating work, and final controller verification.
 - Fall back to current-session execution only when subagent tools are unavailable; report that fallback before continuing.
-- Do not create git worktrees for this repo. `.claude/CLAUDE.md` forbids worktrees, so all release work stays in the active checkout while subagents use their normal forked workspaces.
+- Do not create git worktrees for this repo. `AGENTS.md` forbids worktrees, so all release work stays in the active checkout while subagents use their normal forked workspaces.
 - Former release-agent instructions live in `reference/agent-prompts.md`; use them as subagent task prompts by default.
 - Use the existing `$share` skill or the explicit GCS upload commands in the workflow when publishing the prioritizer page.
-- Follow project rules from `.claude/CLAUDE.md` for branch, commit, CI, and PR behavior.
+- Read and follow the repository `AGENTS.md` before taking project actions.
 
 ## Invocation Detection
 

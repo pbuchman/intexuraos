@@ -336,7 +336,7 @@ export default tseslint.config(
           selector:
             "CallExpression[callee.property.name='on'][arguments.0.value='message'][arguments.0.type='Literal']",
           message:
-            'Pull subscriptions (.on("message")) are forbidden. Cloud Run scales to zero and cannot process pull subscriptions. Use HTTP push endpoints instead. See CLAUDE.md for pattern.',
+            'Pull subscriptions (.on("message")) are forbidden. Cloud Run scales to zero and cannot process pull subscriptions. Use HTTP push endpoints instead. See docs/architecture/pubsub-standards.md.',
         },
       ],
     },

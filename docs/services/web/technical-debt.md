@@ -57,7 +57,7 @@ None identified.
 
 ## Test Coverage Gaps
 
-**Note:** The web app is exempt from the 95% coverage threshold. However, `utils/` and `services/` files are expected to have coverage per CLAUDE.md.
+**Note:** The web app is exempt from the repository-wide 95% coverage threshold. However, `utils/` and `services/` should retain focused tests.
 
 | File/Module                              | Notes                                                            |
 | ---------------------------------------- | ---------------------------------------------------------------- |

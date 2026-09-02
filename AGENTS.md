@@ -1,30 +1,27 @@
-# AGENTS.md
+# IntexuraOS
 
-## Purpose
+## Work safely
 
-This file is a routing gate, not a duplicate rulebook.
+- Never commit directly to `development` or `main`; use a `codex/` branch unless the user specifies another branch.
+- Do not use Git worktrees in this repository.
+- Preserve unrelated user changes and never discard files you did not create.
+- Do not mutate Linear issues, external services, deployments, or persistent data unless the user explicitly asks.
 
-## Authority (Mandatory)
+## Verify changes
 
-- `.claude/CLAUDE.md` is the single source of truth for project rules.
-- If this file and `.claude/CLAUDE.md` ever conflict, follow `.claude/CLAUDE.md`.
-- Do not restate or fork rule content here.
+- For a changed workspace, run `pnpm run verify:workspace:tracked <workspace>`.
+- Before a commit or pull request, run `pnpm run ci:tracked`.
+- Do not weaken tests, coverage thresholds, lint rules, or verification scripts to make a change pass.
 
-## Session Start Gate (Run Every Fresh Session)
+## Repository invariants
 
-Before any analysis, edits, tests, branch actions, or commits, the agent MUST read:
+- Manage persistent infrastructure through Terraform; do not create it directly with cloud CLIs.
+- Treat committed migrations as immutable and keep local, dev, and production Firestore data persistent.
+- Keep HTTP handlers thin and preserve package boundaries and established error/response contracts.
+- Never log secrets, credentials, authorization headers, or raw sensitive payloads.
 
-1. `.claude/CLAUDE.md`
-2. Every concrete file explicitly required by `.claude/CLAUDE.md`
+## Use local context
 
-## Execution Policy
-
-- Treat completion of the Session Start Gate as a hard prerequisite.
-- If any referenced file is missing or unreadable, report it immediately and continue with the remaining available required files.
-- Keep behavior aligned to `.claude/CLAUDE.md` and any files it explicitly requires for the entire session.
-
-## Change Control
-
-- When project rules change, update `.claude/CLAUDE.md` (and its references), not this file.
-- All new observations, conventions, and rules discovered during work must be documented in the `.claude` rule structure (typically `.claude/reference/*.md` and linked from `.claude/CLAUDE.md`), not in `AGENTS.md`.
-- Keep this file minimal and stable.
+- Read the nearest `README.md`, package manifest, tests, and implementation before changing a subsystem.
+- Follow task-specific skills when their trigger matches; skills add workflow detail but do not override this file.
+- When rules and executable behavior disagree, verify the behavior and update the stale rule in the same change.

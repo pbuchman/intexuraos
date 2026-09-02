@@ -980,7 +980,8 @@ describe('system-prompt', () => {
 
         expect(result).toContain('### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)');
         expect(result).toContain('dev.intexuraos.cloud');
-        expect(result).toContain('.claude/skills/debug-code-task/SKILL.md');
+        expect(result).toContain('scripts/agent-tools/fetch-code-task.cjs');
+        expect(result).not.toContain('skills/debug-code-task');
       }
     );
 

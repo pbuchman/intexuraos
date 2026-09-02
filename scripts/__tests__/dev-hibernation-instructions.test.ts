@@ -5,19 +5,11 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = resolve(__dirname, '..', '..');
 const read = (path: string): string => readFileSync(resolve(repoRoot, path), 'utf8');
 
-const rootRules = read('.claude/CLAUDE.md');
-const environments = read('.claude/reference/environments.md');
-const architecture = read('.claude/reference/architecture.md');
-const infrastructure = read('.claude/reference/infrastructure.md');
-const investigationDiscipline = read('.claude/reference/investigation-discipline.md');
-const codeTaskSkills = [
-  read('.claude/skills/debug-code-task/SKILL.md'),
-  read('.codex/skills/debug-code-task/SKILL.md'),
-];
-const sessionSkills = [
-  read('.claude/skills/debug-intex-session/SKILL.md'),
-  read('.codex/skills/debug-intex-session/SKILL.md'),
-];
+const devHibernation = read('docs/operations/dev-hibernation.md');
+const runtimeStartGuard = read('scripts/assert-home-dev-runtime-start.mjs');
+const callbackOwnership = read('docs/operations/orchestrator-identity-decision.md');
+const codeTaskSkills = [read('.codex/skills/debug-code-task/SKILL.md')];
+const sessionSkills = [read('.codex/skills/debug-intex-session/SKILL.md')];
 const orchestratorReadme = read('workers/orchestrator/README.md');
 const currentIntegrationDocs = {
   cloudBuild: read('docs/setup/03-cloud-build-trigger.md'),
@@ -31,7 +23,6 @@ const currentIntegrationDocs = {
   matrixSync: read('docs/setup/16-private-whatsapp-matrix-sync.md'),
   mobile: read('docs/setup/08-mobile-notifications-xiaomi.md'),
   orchestratorIdentity: read('docs/operations/orchestrator-identity-decision.md'),
-  pluginGuide: read('docs/claude-plugins-guide.html'),
   runtimeConfiguration: read('docs/operations/runtime-configuration.md'),
   secretPackages: read('docs/operations/secret-packages.md'),
   sentry: read('docs/operations/sentry-code-task-automation.md'),
@@ -42,37 +33,31 @@ const currentIntegrationDocs = {
 
 describe('DEV hibernation instruction contract', () => {
   it('defines DEV as a retained, normally hibernated configuration label', () => {
-    for (const source of [rootRules, environments, infrastructure]) {
-      expect(source).toMatch(/DEV[^\n]*(?:retained|configuration label)/iu);
-      expect(source).toMatch(/normally hibernated/iu);
-    }
-    expect(environments).toContain('MODE=hibernated');
-    expect(environments).toContain('503 Service Unavailable');
+    expect(currentIntegrationDocs.localDev).toMatch(/retained DEV[\s\S]*normally hibernated/iu);
+    expect(devHibernation).toContain('| Final state | `hibernated` | stopped and disabled');
+    expect(devHibernation).toContain('`503`, no upstream');
   });
 
   it('defines Home Dev as a production-owned worker host and forbids implicit resurrection', () => {
-    for (const source of [rootRules, environments]) {
+    for (const source of [currentIntegrationDocs.localDev, orchestratorReadme]) {
       expect(source).toMatch(/Home Dev[^\n]*production-owned worker host/iu);
     }
-    expect(environments).toContain('intexuraos-dev-mode');
-    expect(environments).not.toContain('pushing to `development` automatically updates');
-    expect(rootRules).not.toContain('act immediately (rebuild images, restart services)');
-    expect(investigationDiscipline).toContain('/var/lib/intexuraos-dev/runtime-mode.env');
-    expect(investigationDiscipline).toContain('intexuraos-dev-mode');
-    expect(investigationDiscipline).not.toContain(
+    expect(devHibernation).toContain('intexuraos-dev-mode');
+    expect(devHibernation).not.toContain('pushing to `development` automatically updates');
+    expect(runtimeStartGuard).toContain('/var/lib/intexuraos-dev/runtime-mode.env');
+    expect(runtimeStartGuard).not.toContain(
       'During active incidents on dev environments: rebuild images, restart services'
     );
   });
 
   it('makes production the owner of all new code-task callbacks', () => {
-    for (const source of [rootRules, environments, architecture]) {
-      expect(source).toContain('https://intexuraos.cloud/api/code');
-      expect(source).toMatch(/new[^\n]*callback[^\n]*production/iu);
-    }
-    expect(architecture).not.toContain('Public dev/prod callback URLs');
+    expect(callbackOwnership).toContain('production-owned code-task worker');
+    expect(callbackOwnership).toContain('https://intexuraos.cloud/api/code');
+    expect(codeTaskSkills[0]).toContain('public production callbacks use');
+    expect(codeTaskSkills[0]).toContain('https://intexuraos.cloud/api/code');
   });
 
-  it('keeps legacy DEV URLs as historical investigation inputs in both skill mirrors', () => {
+  it('keeps legacy DEV URLs as historical inputs in Codex investigation skills', () => {
     for (const skill of [...codeTaskSkills, ...sessionSkills]) {
       expect(skill).toMatch(/dev\.intexuraos\.cloud[^\n]*(?:historical|legacy)/iu);
       expect(skill).toMatch(/not a live DEV application runtime/iu);
@@ -80,7 +65,7 @@ describe('DEV hibernation instruction contract', () => {
     }
   });
 
-  it('keeps workerLocation separate from callback ownership in both code-task skills', () => {
+  it('keeps workerLocation separate from callback ownership in the code-task skill', () => {
     for (const skill of codeTaskSkills) {
       expect(skill).toMatch(/workerLocation[^\n]*(?:execution placement|machine)/u);
       expect(skill).toMatch(/never determines callback ownership/iu);
@@ -111,8 +96,6 @@ describe('DEV hibernation instruction contract', () => {
     expect(currentIntegrationDocs.cloudBuild).toMatch(/does not (?:deploy|start) Home Dev/iu);
     expect(currentIntegrationDocs.cloudRun).toMatch(/historical reference/iu);
     expect(currentIntegrationDocs.cloudRun).toMatch(/manual exact-SHA production/iu);
-    expect(currentIntegrationDocs.pluginGuide).toMatch(/historical snapshot/iu);
-    expect(currentIntegrationDocs.pluginGuide).toMatch(/not\s+operational deployment\s+guidance/iu);
     expect(currentIntegrationDocs.orchestratorIdentity).toMatch(
       /production Matrix adapter now uses the production-owned hostname/iu
     );

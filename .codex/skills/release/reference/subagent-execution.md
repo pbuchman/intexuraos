@@ -9,7 +9,7 @@ Use this reference when running `$release` with Codex subagent tools available.
 3. The controller integrates subagent results, performs irreversible operations, and verifies the release.
 4. If subagent tools are unavailable, execute the same workflow in the current session and report the fallback.
 
-Do not create git worktrees. This repo forbids worktrees in `.claude/CLAUDE.md`.
+Do not create git worktrees. This repo forbids worktrees in `AGENTS.md`.
 
 ## Controller-Owned Work
 

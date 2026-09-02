@@ -30,7 +30,7 @@
 4. **Apply Fixes Systematically**
    - Fix all instances in a single commit
    - Update tests for all affected services
-   - Document the pattern in CLAUDE.md
+   - Document the pattern in the relevant architecture or pattern guide
 
 ## Common Audit Scenarios
 
@@ -184,7 +184,7 @@ After applying a pattern across services:
 - [ ] Pattern applied to ALL affected services
 - [ ] Tests updated for ALL affected services
 - [ ] `pnpm run ci` passes
-- [ ] Pattern documented in CLAUDE.md (if novel)
+- [ ] Pattern documented in the relevant current guide (if novel)
 - [ ] Commit message references all affected services
 - [ ] Deployment verified with production logs
 
@@ -236,7 +236,7 @@ Watch for these patterns that indicate inconsistency:
 
 When you complete an audit and apply a pattern:
 
-1. **Update CLAUDE.md** with the pattern (if not already documented)
+1. **Update the relevant architecture or pattern guide** (if the pattern is not already documented)
 2. **Note the audit in commit message**
 
    ```

@@ -48,7 +48,6 @@ const IGNORE_PATH_PREFIXES = [
 const IGNORE_PATH_SEGMENTS = new Set(['node_modules', 'dist', 'coverage', '.terraform']);
 
 const IGNORE_EXACT_PATHS = new Set([
-  'docs/claude-plugins-guide.html',
   'docs/architect-review-report.md',
   'docs/documentation-runs.md',
   'docs/features-rewrite-history.md',

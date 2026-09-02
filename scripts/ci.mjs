@@ -63,6 +63,7 @@ const phases = [
       { name: 'route-resource-names', script: 'verify-route-resource-names.mjs' },
       { name: 'error-serializers', script: 'verify-error-serializers.mjs' },
       { name: 'prompt-versions', script: 'verify-prompt-versions.mjs' },
+      { name: 'agent-instructions', script: 'verify-agent-instructions.mjs' },
       { name: 'llm-architecture', run: 'npx tsx scripts/verify-llm-architecture.ts' },
       { name: 'web-env-lockstep', run: 'node scripts/ci/check-web-env-lockstep.cjs' },
     ],

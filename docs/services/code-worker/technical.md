@@ -265,9 +265,9 @@ The `run-attempt` handler:
 10. If forensics enabled: tees runtime output to `claude-stream.log` or `codex-stream.log` in the forensics directory
 11. Terminates lingering child processes (SIGTERM, wait 0.5s, SIGKILL) to prevent Docker exec file descriptor leaks
 
-### Codex Automation Parity Evidence
+### Codex Runtime Evidence
 
-Codex does not run `.claude/hooks/*.sh` inside the worker. The retained non-interactive parity is instead surfaced through stable log evidence:
+Codex runtime setup is surfaced through stable log evidence:
 
 - `[entrypoint] Bootstrap evidence: ...`
   Shows whether Codex skill discovery, GitHub token setup, GCP auth, secret sync, and `.envrc` loading all executed during worker startup.

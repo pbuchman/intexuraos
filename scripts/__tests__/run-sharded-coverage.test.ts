@@ -41,11 +41,11 @@ describe('coverage sharding helpers', () => {
     expect(coverageShardTmpDirectory(2, 3)).toBe('coverage/shard-2/.tmp-2-3');
   });
 
-  it('excludes local hook test copies from root coverage discovery', () => {
+  it('runs tracked Codex hook tests without a legacy Claude hook exclusion', () => {
     const rootVitestConfig = readFileSync('vitest.config.ts', 'utf-8');
 
-    expect(rootVitestConfig).toContain("'.claude/hooks/__tests__/**'");
-    expect(rootVitestConfig).toContain("'.codex/hooks/__tests__/**'");
+    expect(rootVitestConfig).not.toContain("'.claude/");
+    expect(rootVitestConfig).not.toContain("'.codex/hooks/__tests__/**'");
   });
 
   it('keeps aggregate coverage thresholds enabled on merge', () => {

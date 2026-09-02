@@ -9,7 +9,7 @@
  *                       transition on first delivery, formats + stores log lines
  *   - recordTurnMetrics: stores turn metrics + appends formatted log lines
  *
- * Both accept a `logger: Logger` per CLAUDE.md use case conventions.
+ * Both accept the established use-case `logger: Logger` dependency.
  */
 import { Timestamp } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';

@@ -19,15 +19,15 @@ Use this skill only in the IntexuraOS repo.
 
 Before any mutation:
 
-1. Confirm the repo root has `.claude/CLAUDE.md`, `pnpm-workspace.yaml`, and `package.json`.
+1. Confirm the repo root has `AGENTS.md`, `pnpm-workspace.yaml`, and `package.json`.
 2. Confirm `package.json` has `"name": "intexuraos"`.
 3. Confirm `git remote get-url origin` points to `pbuchman/intexuraos`.
 4. If any check fails, stop and report that `$commit-push` is repo-specific.
 
 After the scope check:
 
-1. Read `.claude/CLAUDE.md` and every concrete file it requires, as usual.
-2. Preserve the `.claude/CLAUDE.md` Git CLI rule: use `gh` for PR and GitHub operations it supports; use `git` only for local worktree, branch, staging, commit, and push operations where `gh` has no equivalent.
+1. Read and follow the repository `AGENTS.md` before taking project actions.
+2. Use `gh` for PR and GitHub operations it supports; use `git` only for local branch, staging, commit, rebase, and push operations where `gh` has no equivalent.
 
 ## Linear ID Exception
 

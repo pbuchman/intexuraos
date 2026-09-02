@@ -8,7 +8,7 @@ fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../../.." && pwd)"
-fetch_script="$repo_root/.claude/skills/debug-intex-session/scripts/fetch-session.cjs"
+fetch_script="$repo_root/scripts/agent-tools/fetch-intex-session.cjs"
 
 if [ ! -f "$fetch_script" ]; then
   echo "Could not find $fetch_script." >&2

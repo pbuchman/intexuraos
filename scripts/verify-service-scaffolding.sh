@@ -4,8 +4,8 @@
 # Usage:
 #   bash scripts/verify-service-scaffolding.sh <service-name>
 #
-# Maps 1:1 to the "App Scaffolding Verification" in .claude/commands/create-service.md.
-# Exits non-zero if any required item is missing.
+# Encodes the canonical service scaffolding checks and exits non-zero when a
+# required item is missing.
 #
 # Checks are HARD (must pass) or SOFT (warn only, e.g. api-docs-hub registration
 # is conditional on the service exposing OpenAPI).

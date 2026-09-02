@@ -27,7 +27,7 @@ The `PromptBuilder<>` interface (defined in `@intexuraos/llm-contract`) has a re
 
 ## Bump Rules
 
-Cross-references the "Prompt Versioning" rule in `.claude/CLAUDE.md`. When you edit a prompt, bump the version:
+When you edit a prompt, bump the version according to the contract enforced by `scripts/verify-prompt-versions.mjs`:
 
 | Change                                                  | Bump  | Examples                                                      |
 | ------------------------------------------------------- | ----- | ------------------------------------------------------------- |
