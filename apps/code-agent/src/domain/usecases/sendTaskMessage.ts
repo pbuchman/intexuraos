@@ -66,9 +66,9 @@ export async function sendTaskMessage(
 
   const task = taskResult.value;
 
-  // Step 1b: Reject messages to non-preservable agent types (review/remediation/planning)
-  if (task.agentType === 'review' || task.agentType === 'remediation' || task.agentType === 'planning') {
-    logger.warn({ taskId, agentType: task.agentType }, 'Cannot send messages to review/remediation/planning tasks');
+  // Step 1b: Review/remediation tasks are ephemeral and cannot be resumed.
+  if (task.agentType === 'review' || task.agentType === 'remediation') {
+    logger.warn({ taskId, agentType: task.agentType }, 'Cannot send messages to review/remediation tasks');
     return err({ code: 'invalid_agent_type', message: `Cannot send messages to ${task.agentType} tasks` });
   }
 
