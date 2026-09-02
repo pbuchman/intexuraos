@@ -29,6 +29,17 @@ const linearCrossLinkingPath = fileURLToPath(
 );
 
 describe('code-worker image Codex skill bootstrap', () => {
+  it('preserves Claude and Codex runtime dispatch with the shared MCP boundary', () => {
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+    const claudeMcpConfig = readFileSync(claudeMcpConfigPath, 'utf8');
+
+    expect(entrypoint).toContain('case "${WORKER_RUNTIME:-claude}" in');
+    expect(entrypoint).toContain('run_claude_attempt');
+    expect(entrypoint).toContain('run_codex_attempt');
+    expect(claudeMcpConfig).toContain('linear');
+    expect(claudeMcpConfig).toContain('error_hub');
+  });
+
   it('stages Superpowers for Codex native skill discovery at build time', () => {
     const dockerfile = readFileSync(dockerfilePath, 'utf8');
 

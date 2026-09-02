@@ -41,10 +41,10 @@ describe('coverage sharding helpers', () => {
     expect(coverageShardTmpDirectory(2, 3)).toBe('coverage/shard-2/.tmp-2-3');
   });
 
-  it('excludes legacy Claude hook tests but runs tracked Codex hook tests', () => {
+  it('runs tracked Codex hook tests without a legacy Claude hook exclusion', () => {
     const rootVitestConfig = readFileSync('vitest.config.ts', 'utf-8');
 
-    expect(rootVitestConfig).toContain("'.claude/hooks/__tests__/**'");
+    expect(rootVitestConfig).not.toContain("'.claude/hooks/__tests__/**'");
     expect(rootVitestConfig).not.toContain("'.codex/hooks/__tests__/**'");
   });
 
