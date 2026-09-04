@@ -2181,6 +2181,57 @@ describe('drainTaskQueue', () => {
   });
 
   describe('per-PR concurrency guard and round-robin', () => {
+    it('dispatches a queued Sentry retry before an older review for the same PR', async () => {
+      const reviewCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:00:00.000Z'));
+      const retryCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:01:14.568Z'));
+      const review = createMockTask({
+        id: 'review-old',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 2520,
+        prBranch: 'codex/int-2119-planning-task-messages',
+        linearIssueId: 'INT-2119',
+        createdAt: reviewCreatedAt,
+        queuedAt: reviewCreatedAt,
+      });
+      const sentryRetry = createMockTask({
+        id: 'sentry-retry-new',
+        agentType: 'sentry',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 2520,
+        prBranch: 'codex/int-2119-planning-task-messages',
+        linearIssueId: 'INT-2119',
+        createdAt: retryCreatedAt,
+        queuedAt: retryCreatedAt,
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([review, sentryRetry]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-2119',
+          title: 'Planning task messages',
+          url: 'https://linear.app/example/INT-2119',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'sentry-retry-new', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'sentry-retry-new' });
+      }
+    });
+
     it('skips task when dispatched/running task exists for same PR', async () => {
       const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -3385,6 +3436,180 @@ describe('drainTaskQueue', () => {
 
   // Fix B: Linear-issue concurrency guard for review tasks.
   describe('Linear-issue concurrency guard for reviews (Fix B)', () => {
+    it('dispatches queued non-review work before an older review on another PR for the same Linear issue', async () => {
+      const reviewCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:00:00.000Z'));
+      const retryCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:01:14.568Z'));
+      const review = createMockTask({
+        id: 'review-pr-100',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 100,
+        prBranch: 'codex/review-pr-100',
+        linearIssueId: 'INT-2119',
+        createdAt: reviewCreatedAt,
+        queuedAt: reviewCreatedAt,
+      });
+      const sentryRetry = createMockTask({
+        id: 'sentry-pr-101',
+        agentType: 'sentry',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 101,
+        prBranch: 'codex/retry-pr-101',
+        linearIssueId: 'INT-2119',
+        createdAt: retryCreatedAt,
+        queuedAt: retryCreatedAt,
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([review, sentryRetry]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-2119',
+          title: 'Planning task messages',
+          url: 'https://linear.app/example/INT-2119',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'sentry-pr-101', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'sentry-pr-101' });
+      }
+    });
+
+    it('does not let a future-scheduled same-issue task block unrelated eligible work', async () => {
+      const now = Date.now();
+      const review = createMockTask({
+        id: 'review-pr-100',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 100,
+        prBranch: 'codex/review-pr-100',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+      });
+      const scheduledRetry = createMockTask({
+        id: 'scheduled-sentry-pr-101',
+        agentType: 'sentry',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 101,
+        prBranch: 'codex/retry-pr-101',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 20 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 20 * 60 * 1000)),
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)),
+          source: 'retry_cooloff',
+          derivedBy: 'fallback',
+        },
+      });
+      const unrelated = createMockTask({
+        id: 'unrelated-eligible-task',
+        agentType: 'execution',
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-3000',
+        createdAt: Timestamp.fromDate(new Date(now - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 10 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([review, scheduledRetry, unrelated]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-3000',
+          title: 'Unrelated eligible work',
+          url: 'https://linear.app/example/INT-3000',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'unrelated-eligible-task', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'unrelated-eligible-task' });
+      }
+    });
+
+    it('does not treat queued reviews or merge-conflict work on another PR as Linear-issue blockers', async () => {
+      const now = Date.now();
+      const review = createMockTask({
+        id: 'review-pr-100',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 100,
+        prBranch: 'codex/review-pr-100',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+      });
+      const reviewSibling = createMockTask({
+        id: 'review-pr-102',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 102,
+        prBranch: 'codex/review-pr-102',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 20 * 60 * 1000)),
+      });
+      const conflictSibling = createMockTask({
+        id: 'conflict-pr-101',
+        agentType: 'execution',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 101,
+        prBranch: 'codex/conflict-pr-101',
+        linearIssueId: 'INT-2119',
+        followUpReason: 'merge_conflict',
+        createdAt: Timestamp.fromDate(new Date(now - 10 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(
+        ok([review, reviewSibling, conflictSibling]),
+      );
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-2119',
+          title: 'Planning task messages',
+          url: 'https://linear.app/example/INT-2119',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'review-pr-100', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-pr-100' });
+      }
+    });
+
     it('defers review when another task on the same Linear issue is dispatched/running', async () => {
       const initialQueuedAtMs = Date.now() - 10 * 60 * 1000;
       const reviewTask = createMockTask({
