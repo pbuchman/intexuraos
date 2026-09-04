@@ -823,6 +823,135 @@ describe('handleTaskCompletion', () => {
       expect(markInReview).toHaveBeenCalledWith('u1', 'INT-1');
     });
 
+    it('keeps a returned remediation creation failure out of Sentry after the callee reports it', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+            prNumber: 42,
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: {
+          incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
+          recordTaskDuration: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        automationLog: { record: automationRecord } as never,
+        linearIssueService: {
+          removeLabel: vi.fn().mockResolvedValue(undefined),
+          markInReview: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        logger: requestLog as never,
+        createRemediationTaskFn: vi.fn().mockResolvedValue(err({
+          code: 'task_creation_failed',
+          message: 'Active task exists for Linear issue',
+        })),
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), {
+        ...buildInput({
+          taskId: 't-review-remediation-failure',
+          status: 'completed',
+          result: {
+            review_id: 'rev-1',
+            review_comments_posted: '1',
+            review_types: 'code_quality',
+            needs_remediation: '1',
+          },
+        }),
+        requestLog,
+      });
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-review-remediation-failure',
+          prNumber: 42,
+          error: expect.objectContaining({ code: 'task_creation_failed' }),
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Failed to create remediation task from review task-complete (best-effort)',
+      );
+      expect(requestLog.warn).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'Unexpected error during remediation task creation (best-effort)',
+      );
+    });
+
+    it('keeps an unexpected thrown remediation creation failure reportable to Sentry', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const requestLog = createMockLogger();
+      const remediationError = new Error('unexpected failure');
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+            prNumber: 42,
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: {
+          incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
+          recordTaskDuration: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        automationLog: { record: automationRecord } as never,
+        linearIssueService: {
+          removeLabel: vi.fn().mockResolvedValue(undefined),
+          markInReview: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        logger: requestLog as never,
+        createRemediationTaskFn: vi.fn().mockRejectedValue(remediationError),
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), {
+        ...buildInput({
+          taskId: 't-review-remediation-throw',
+          status: 'completed',
+          result: {
+            review_id: 'rev-1',
+            review_comments_posted: '1',
+            review_types: 'code_quality',
+            needs_remediation: '1',
+          },
+        }),
+        requestLog,
+      });
+
+      expect(result).toEqual({ kind: 'received' });
+      const unexpectedWarning = vi.mocked(requestLog.warn).mock.calls.find(
+        (call) => call[1] === 'Unexpected error during remediation task creation (best-effort)',
+      );
+      expect(unexpectedWarning).toBeDefined();
+      expect(unexpectedWarning?.[0]).toEqual(expect.objectContaining({
+        taskId: 't-review-remediation-throw',
+        prNumber: 42,
+        error: remediationError,
+      }));
+      expect(unexpectedWarning?.[0]).not.toHaveProperty(SKIP_SENTRY_KEY);
+    });
+
     it('marks the no-Linear-issue review label skip warning as non-Sentry', async () => {
       const update = vi.fn().mockResolvedValue(ok(undefined));
       const automationRecord = vi.fn().mockResolvedValue(undefined);
