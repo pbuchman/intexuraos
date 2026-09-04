@@ -13,7 +13,11 @@ import { Timestamp } from '@google-cloud/firestore';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
-import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
+import {
+  MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+  type CodeTask,
+  type CodeTaskDispatchStatus,
+} from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { CodeTaskDispatchNotificationRepository } from '../repositories/codeTaskDispatchNotificationRepository.js';
@@ -535,10 +539,12 @@ export async function drainTaskQueue(
     const noPrCandidates = activeCandidates.filter((c) => c.prNumber === undefined);
     const prGroups = groupTasksByPR(prBoundCandidates);
 
-    // Collect the first (oldest) task from each PR group
+    // Reviews must observe the branch after all queued write-capable work for
+    // their PR. Preserve FIFO within non-review work and fall back to the
+    // oldest review when no non-review task exists.
     const prRepresentatives: CodeTask[] = [];
     for (const group of prGroups.values()) {
-      const first = group[0];
+      const first = group.find((candidate) => candidate.agentType !== 'review') ?? group[0];
       /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — Map groups are always non-empty by construction @preserve */
       if (first === undefined) continue;
       /* v8 ignore stop @preserve */
@@ -604,10 +610,40 @@ export async function drainTaskQueue(
         }
       }
 
-      // Defer reviews while a non-self sibling on the same Linear issue is
-      // dispatched/running. Excludes queued from the filter so two queued
-      // reviews on the same issue cannot both defer and deadlock.
+      // Defer reviews while related non-review work is queued, dispatched, or
+      // running. The queued set is already the complete bounded queue snapshot;
+      // review and merge-conflict siblings remain excluded to match create-time
+      // dedup semantics and avoid review-review deadlocks across PRs.
       if (candidate.agentType === 'review' && candidate.linearIssueId !== undefined) {
+        const queuedSibling = activeCandidates.find((queuedCandidate) =>
+          queuedCandidate.id !== candidate.id
+          && queuedCandidate.linearIssueId === candidate.linearIssueId
+          && queuedCandidate.agentType !== 'review'
+          && queuedCandidate.followUpReason !== 'merge_conflict'
+          && queuedCandidate.systemPromptHash !== MERGE_CONFLICT_SYSTEM_PROMPT_HASH
+        );
+        if (queuedSibling !== undefined) {
+          activeResourceBlockedCount += 1;
+          logger.info(
+            {
+              taskId: candidate.id,
+              linearIssueId: candidate.linearIssueId,
+              activeTaskId: queuedSibling.id,
+            },
+            'Deferring review — another non-review task on the same Linear issue is queued',
+          );
+          await recordActiveTaskWaitStatus(
+            { logger, codeTaskRepo },
+            candidate,
+            {
+              scope: 'linear_issue',
+              linearIssueId: candidate.linearIssueId,
+              activeTaskId: queuedSibling.id,
+            },
+          );
+          continue;
+        }
+
         const siblingResult = await codeTaskRepo.hasOtherDispatchedOrRunningForLinearIssue(
           candidate.id,
           candidate.linearIssueId,
