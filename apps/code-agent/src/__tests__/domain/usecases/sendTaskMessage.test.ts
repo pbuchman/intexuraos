@@ -202,6 +202,10 @@ describe('sendTaskMessage', () => {
         message,
         expect.objectContaining({ url: workerConfig.url })
       );
+      expect(mockLogger.warn).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId, agentType: 'planning' }),
+        expect.stringContaining('Cannot send messages')
+      );
     });
 
     it('should return task_not_found when task does not exist', async () => {
