@@ -2,7 +2,7 @@
  * Use case: Start an ask-agent task for interactive conversations.
  *
  * Follows the same pattern as POST /code/submit but without Linear integration.
- * Tasks are created with agentType: 'ask_agent' and workerType: 'opus'.
+ * Tasks are created with agentType: 'ask_agent' and workerType: 'codex'.
  */
 
 import type { Result, Logger } from '@intexuraos/common-core';
@@ -83,7 +83,7 @@ export async function startAskAgent(
     prompt,
     sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: 'ask-agent',
-    workerType: 'opus',
+    workerType: 'codex',
     workerLocation: 'pending',
     repository: 'pbuchman/intexuraos',
     baseBranch: 'development',
