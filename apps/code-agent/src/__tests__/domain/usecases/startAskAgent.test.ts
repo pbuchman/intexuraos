@@ -67,7 +67,7 @@ describe('startAskAgent', () => {
     vi.clearAllMocks();
   });
 
-  it('submits task successfully on happy path', async () => {
+  it('submits an Ask Agent task through the Codex worker', async () => {
     const result = await startAskAgent(
       { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'test-user-id', prompt: 'What is the architecture of this codebase?' },
@@ -77,6 +77,11 @@ describe('startAskAgent', () => {
     if (!result.ok) return;
     expect(result.value.status).toBe('submitted');
     expect(result.value.codeTaskId).toMatch(/^task_/);
+
+    const taskResult = await codeTaskRepo.findById(result.value.codeTaskId);
+    expect(taskResult.ok).toBe(true);
+    if (!taskResult.ok) return;
+    expect(taskResult.value.workerType).toBe('codex');
 
     // Verify enqueue was called
     expect(taskEnqueueService.enqueue).toHaveBeenCalledWith(
