@@ -1,5 +1,13 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { StatePersistence } from '../services/state-persistence.js';
@@ -205,6 +213,16 @@ describe('StatePersistence', () => {
   });
 
   describe('atomic writes', () => {
+    it('persists state with owner-only permissions when a permissive temp file exists', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      mkdirSync(tempDir, { recursive: true });
+      writeFileSync(`${stateFilePath}.tmp`, 'stale', { mode: 0o644 });
+
+      await persistence.saveAtomic(mockState);
+
+      expect(statSync(stateFilePath).mode & 0o777).toBe(0o600);
+    });
+
     it('should write to temp file then rename', async () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
 

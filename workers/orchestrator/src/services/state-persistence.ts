@@ -1,4 +1,4 @@
-import { readFile, rename, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { exec } from 'node:child_process';
@@ -90,7 +90,13 @@ export class StatePersistence {
 
     // Write to temp file
     const tempPath = `${this.filePath}.tmp`;
-    await writeFile(tempPath, JSON.stringify(state, null, 2), 'utf-8');
+    const tempFile = await open(tempPath, 'w', 0o600);
+    try {
+      await tempFile.chmod(0o600);
+      await tempFile.writeFile(JSON.stringify(state, null, 2), 'utf-8');
+    } finally {
+      await tempFile.close();
+    }
 
     // Atomic rename (POSIX guarantees atomicity)
     await rename(tempPath, this.filePath);
