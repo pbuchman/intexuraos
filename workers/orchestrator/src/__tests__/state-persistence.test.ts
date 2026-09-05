@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -217,6 +218,8 @@ describe('StatePersistence', () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
       mkdirSync(tempDir, { recursive: true });
       writeFileSync(`${stateFilePath}.tmp`, 'stale', { mode: 0o644 });
+      chmodSync(`${stateFilePath}.tmp`, 0o644);
+      expect(statSync(`${stateFilePath}.tmp`).mode & 0o777).toBe(0o644);
 
       await persistence.saveAtomic(mockState);
 
