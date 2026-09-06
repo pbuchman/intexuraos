@@ -7,6 +7,98 @@
     "sha256": "df5130dc3247c3fb86a72a3c2520f376c79b6cf17de054d8798770b757d23f46",
     "rowCount": 121
   },
+  "requiredPlanStepBindings": [
+    {
+      "stepId": "M1.2",
+      "result": "PASS",
+      "artifactRelativePath": "m1-pbuchman-preservation/m1-2-gate-summary.json",
+      "artifactSha256": "497a5ec519d4d9ea0d4c8bcf70c78d6a828920047271114f6d8fa6c364ac483f"
+    },
+    {
+      "stepId": "M1.3",
+      "result": "PASS",
+      "artifactRelativePath": "m1-pbuchman-preservation/m1-3-gate-summary.json",
+      "artifactSha256": "035e5c7e4321e40f304c9fcf88b10fe3a4f4999342101349496fa805b665b5f1"
+    },
+    {
+      "stepId": "M2.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M2.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M2.3",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M3.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M3.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M4.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M4.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M5.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M5.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M5.3",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M6.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M8.1",
+      "result": "PASS",
+      "artifactRelativePath": "m8/d2e61f0e4cc71bda224cc5872b34145e706c1f477bf8b81decb94ac8b185d98f/final-signed-zero-work-gate.json",
+      "artifactSha256": "ab39524fa0d100e41ba1c402ebdcc28ef143c593335a20c596b6be7825581da2"
+    },
+    {
+      "stepId": "M8.2",
+      "result": "PASS",
+      "artifactRelativePath": "m8-hibernate/publish-last-good.json",
+      "artifactSha256": "c3570d3db47ad3a5cfcaef0ba11bb4293a84bc838e4bb5d296ce51696aebc9b7"
+    }
+  ],
   "entries": [
     {
       "sequence": 1,
