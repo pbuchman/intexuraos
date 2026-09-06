@@ -92,12 +92,12 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'failed',
-    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.GPT54,
     llmResults: [
       {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini20Flash,
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPT54,
         status: 'completed',
         result: 'Google Result',
       },
@@ -191,8 +191,8 @@ describe('retryFromFailed', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result',
           },
@@ -276,14 +276,14 @@ describe('retryFromFailed', () => {
     it('handles multiple failed providers', async () => {
       const research = createTestResearch({
         selectedModels: [
-          LlmModels.Gemini25Pro,
+          LlmModels.GPT54,
           LlmModels.O4MiniDeepResearch,
           LlmModels.ClaudeOpus46,
         ],
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result',
           },
@@ -316,13 +316,36 @@ describe('retryFromFailed', () => {
   });
 
   describe('retry synthesis', () => {
+    it('returns an error when synthesis dependencies are missing', async () => {
+      const research = createTestResearch({
+        status: 'failed',
+        llmResults: [
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
+            status: 'completed',
+            result: 'Result 1',
+          },
+        ],
+        synthesisError: 'Previous error',
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await retryFromFailed('research-1', {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+      });
+
+      expect(result).toEqual({ ok: false, error: 'Synthesis dependencies are required' });
+    });
+
     it('re-runs synthesis when synthesis failed but LLMs succeeded', async () => {
       const research = createTestResearch({
         status: 'failed',
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result 1',
           },
@@ -348,8 +371,8 @@ describe('retryFromFailed', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result 1',
           },
@@ -374,8 +397,8 @@ describe('retryFromFailed', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result 1',
           },
@@ -402,8 +425,8 @@ describe('retryFromFailed', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result',
           },

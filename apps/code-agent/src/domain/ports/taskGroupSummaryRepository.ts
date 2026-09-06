@@ -29,6 +29,9 @@ export interface TaskGroupSummaryRepository {
   /** Full recompute of a group from its tasks (for backfill/repair). */
   recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<Result<void, GroupSummaryError>>;
 
+  /** Recompute from the authoritative task store for write-path repair. */
+  recomputeGroupFromSource(userId: string, groupKey: string): Promise<Result<void, GroupSummaryError>>;
+
   /**
    * Recompute aggregateStatus and persist label flags for the group identified by
    * (userId, linearIssueId), using the provided Linear labels.
@@ -50,6 +53,48 @@ export interface TaskGroupSummaryRepository {
     groupKey: string,
     important: boolean,
   ): Promise<Result<void, GroupSummaryError>>;
+}
+
+export type AskOnlyOrphanRemovalOutcome =
+  | 'removed'
+  | 'summary_missing'
+  | 'source_unknown'
+  | 'source_not_ask_only'
+  | 'source_invalid'
+  | 'source_changed'
+  | 'summary_invalid'
+  | 'counts_invalid';
+
+export interface LifecycleBackfillGroupCountVector {
+  active: number;
+  needsAction: number;
+  done: number;
+  failed: number;
+  archived: number;
+  totalGroups: number;
+}
+
+export type LifecycleBackfillTargetSummaryProof =
+  | { exists: false }
+  | { exists: true; fingerprint: string; aggregateStatus: GroupStatus };
+
+export interface LifecycleBackfillSummaryMutationProof {
+  expectedSourceFingerprint: string;
+  expectedCounts: LifecycleBackfillGroupCountVector;
+  expectedTarget: LifecycleBackfillTargetSummaryProof;
+}
+
+/** Narrow maintenance extension used only by the lifecycle reconciliation command. */
+export interface LifecycleBackfillTaskGroupSummaryRepository extends TaskGroupSummaryRepository {
+  /**
+   * Delete a stale summary only after an exact transactional source read proves
+   * that at least one source task exists and every source task is ask_agent.
+   */
+  removeAskOnlyOrphan(
+    userId: string,
+    groupKey: string,
+    proof: LifecycleBackfillSummaryMutationProof,
+  ): Promise<Result<AskOnlyOrphanRemovalOutcome, GroupSummaryError>>;
 }
 
 export interface ListGroupSummariesInput {

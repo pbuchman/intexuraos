@@ -3,6 +3,7 @@
  * Used by code-agent to create and update Linear issues during code task execution.
  */
 
+import { createHash } from 'node:crypto';
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import type { Logger } from '@intexuraos/common-core';
@@ -23,6 +24,7 @@ interface CreateIssueBody {
   title: string;
   description: string;
   labels?: string[];
+  idempotencyKey?: string;
 }
 
 interface UpdateStateBody {
@@ -51,6 +53,20 @@ interface IssueResponse {
   url: string;
 }
 
+function idempotentLinearIssueId(userId: string, idempotencyKey: string): string {
+  const hash = createHash('sha256').update(`${userId}\0${idempotencyKey}`).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+function toIssueResponse(issue: { id: string; identifier: string; title: string; url: string }): IssueResponse {
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    url: issue.url,
+  };
+}
+
 export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /internal/issues - Create a Linear issue
   fastify.post<{ Body: CreateIssueBody }>(
@@ -68,6 +84,12 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
             title: { type: 'string', description: 'Issue title' },
             description: { type: 'string', description: 'Issue description' },
             labels: { type: 'array', items: { type: 'string' }, description: 'Optional labels' },
+            idempotencyKey: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 1024,
+              description: 'Stable caller key for idempotent issue creation',
+            },
           },
         },
         response: {
@@ -134,7 +156,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
         return await reply.fail('UNAUTHORIZED', 'Missing X-User-Id header');
       }
 
-      const { title, description } = request.body;
+      const { title, description, idempotencyKey } = request.body;
       // labels accepted for future use when LinearApiClient supports them
       void request.body.labels;
       const logger = request.log as Logger;
@@ -172,8 +194,22 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       }
       /* v8 ignore stop @preserve */
 
+      const stableIssueId = idempotencyKey === undefined
+        ? undefined
+        : idempotentLinearIssueId(userId, idempotencyKey);
+      if (stableIssueId !== undefined) {
+        const existingResult = await services.linearApiClient.getIssue(apiKey, stableIssueId); // @allow-result-access -- apiKey guarded by if (!apiKeyResult.ok) above
+        if (!existingResult.ok) {
+          return await handleLinearError(existingResult.error, reply);
+        }
+        if (existingResult.value !== null) {
+          return await reply.ok(toIssueResponse(existingResult.value));
+        }
+      }
+
       // Create the issue
       const createResult = await services.linearApiClient.createIssue(apiKey, { // @allow-result-access -- apiKey guarded by if (!apiKeyResult.ok) above
+        ...(stableIssueId !== undefined && { id: stableIssueId }),
         teamId: connection.teamId, // @allow-result-access -- connection guarded by if (!connectionResult.ok) above
         title,
         description,
@@ -181,6 +217,16 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       });
 
       if (!createResult.ok) {
+        if (stableIssueId !== undefined) {
+          const racedIssueResult = await services.linearApiClient.getIssue(apiKey, stableIssueId);
+          if (racedIssueResult.ok && racedIssueResult.value !== null) {
+            logger.info(
+              { userId, issueId: racedIssueResult.value.id },
+              'internal/createIssue: recovered idempotent issue after creation race'
+            );
+            return await reply.ok(toIssueResponse(racedIssueResult.value));
+          }
+        }
         return await handleLinearError(createResult.error, reply);
       }
 
@@ -192,12 +238,7 @@ export const internalIssuesRoutes: FastifyPluginCallback = (fastify, _opts, done
       );
 
       // Return response format matching code-agent expectations
-      const responseData: IssueResponse = {
-        id: issue.id,
-        identifier: issue.identifier,
-        title: issue.title,
-        url: issue.url,
-      };
+      const responseData = toIssueResponse(issue);
 
       return await reply.ok(responseData);
     }

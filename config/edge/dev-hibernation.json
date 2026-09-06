@@ -1,0 +1,26 @@
+{
+  "draining": {
+    "retainedMachinePaths": [
+      "/api/code/internal/webhooks/task-complete",
+      "/api/code/internal/logs",
+      "/api/code/internal/turn-metrics",
+      "/api/code/internal/webhooks/task-event",
+      "/api/code/internal/webhooks/compliance-report",
+      "/api/code/internal/code-tasks/status"
+    ],
+    "statusCode": 503
+  },
+  "hibernated": {
+    "retryAfterSeconds": 300,
+    "statusCode": 503
+  },
+  "matrix": {
+    "accessLog": "/var/log/caddy/intexuraos-matrix-outbound-access.json",
+    "host": "matrix-outbound.intexuraos.cloud"
+  },
+  "postCutover": {
+    "matrixStatusCode": 410
+  },
+  "profiles": ["active-pre-cutover", "active-post-cutover", "draining", "hibernated"],
+  "schemaVersion": 1
+}

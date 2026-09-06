@@ -179,9 +179,9 @@ interface SummarizePageResponse {
 
 - `X-Internal-Auth` header with valid internal token
 - HTTP/HTTPS URLs only (no ftp://, file://, etc.)
-- For summaries: `userId` is required; LLM resolution order is user's own key, then platform Gemini 2.5 Flash
+- For summaries: `userId` is required; unresolved and direct-Google choices use the platform OpenRouter default
 
-**Note on `API_ERROR` for summaries:** This error only surfaces if the user has no API key AND `INTEXURAOS_GEMINI_APP_API_KEY` is not configured on the platform.
+**Note on `API_ERROR` for summaries:** Verify the platform OpenRouter key and endpoint when LLM resolution fails.
 
 ## Usage Patterns
 
@@ -201,7 +201,7 @@ interface SummarizePageResponse {
 2. Call POST /internal/page-summaries with url, userId, and optional title/description hints
 3. If success, include summary in research response
 4. Summary will be in source language (Polish stays Polish)
-5. API_ERROR only if platform fallback keys are also unset
+5. API_ERROR if user-service cannot resolve a client or the platform OpenRouter route is unavailable
 ```
 
 ### Pattern 3: Batch Link Preview
@@ -232,7 +232,7 @@ interface SummarizePageResponse {
 | TIMEOUT       | Request exceeded time limit  | Retry or increase timeout                   |
 | TOO_LARGE     | Response over 2 MB           | Cannot process large pages                  |
 | NO_CONTENT    | No text extracted from page  | Page may be JS-only or empty                |
-| API_ERROR     | LLM or user-service error    | Check platform fallback keys are configured |
+| API_ERROR     | LLM or user-service error    | Check the platform OpenRouter route          |
 | RATE_LIMITED  | Cloudflare returned HTTP 429 | Wait and retry with backoff                 |
 
 ## Rate Limits
@@ -246,13 +246,12 @@ interface SummarizePageResponse {
 
 ## Dependencies
 
-| Service                      | Why Needed                            | Failure Behavior    |
-| ---------------------------- | ------------------------------------- | ------------------- |
-| user-service                 | Get user's LLM client (with fallback) | Return API_ERROR    |
-| app-settings-service         | LLM pricing context at startup        | Service fails start |
-| Cloudflare Browser Rendering | Fetch page content as Markdown        | Return FETCH_FAILED |
-| User's LLM                   | Generate summary (primary)            | Fall back to Gemini |
-| Platform Gemini              | Summary fallback (no user key)        | Return API_ERROR    |
+| Service                      | Why Needed                                  | Failure Behavior    |
+| ---------------------------- | ------------------------------------------- | ------------------- |
+| user-service                 | Resolve user LLM or platform fallback       | Return API_ERROR    |
+| llm-usage-service            | Track summary usage                         | Tracking is non-fatal |
+| Cloudflare Browser Rendering | Fetch page content as Markdown              | Return FETCH_FAILED |
+| Resolved LLM                 | Generate summary; platform route is OpenRouter | Return API_ERROR |
 
 ---
 

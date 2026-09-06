@@ -81,6 +81,9 @@ describe('pickCompletionAgentType', () => {
   it('maps ask_agent agentType to "ask_agent"', () => {
     expect(pickCompletionAgentType(makeTask({ agentType: 'ask_agent' }))).toBe('ask_agent');
   });
+  it('maps sentry agentType to "sentry"', () => {
+    expect(pickCompletionAgentType(makeTask({ agentType: 'sentry' }))).toBe('sentry');
+  });
   it('falls back to "execution" when the task has the code-task label', () => {
     const task = makeTask({ linearIssueLabels: ['code-task'] });
     delete task.agentType;
@@ -117,6 +120,9 @@ describe('pickAgentLabel', () => {
   it('returns "Ask Agent" for ask_agent tasks', () => {
     expect(pickAgentLabel(makeTask({ agentType: 'ask_agent' }))).toBe('Ask Agent');
   });
+  it('returns "SentryBox Agent" for sentry tasks', () => {
+    expect(pickAgentLabel(makeTask({ agentType: 'sentry' }))).toBe('SentryBox Agent');
+  });
   it('returns "Execution Agent" for code-task-labeled tasks without agentType', () => {
     const task = makeTask({ linearIssueLabels: ['code-task'] });
     delete task.agentType;
@@ -135,6 +141,7 @@ describe('describeAgent', () => {
     ['Review Agent', 'read-only'],
     ['Remediation Agent', 'review findings'],
     ['Ask Agent', 'interactive'],
+    ['SentryBox Agent', 'SentryBox issue'],
     ['Execution Agent', 'implement autonomously'],
     ['Planning Agent', 'planning artifacts'],
   ])('returns the %s tagline containing %j', (label, expectedSubstring) => {
@@ -173,6 +180,9 @@ describe('pickAgentStatusLabel', () => {
   });
   it('returns "planned" for planning', () => {
     expect(pickAgentStatusLabel('planning')).toBe('planned');
+  });
+  it('returns "implemented" for sentry', () => {
+    expect(pickAgentStatusLabel('sentry')).toBe('implemented');
   });
   it('returns undefined for unmapped or missing agent types', () => {
     expect(pickAgentStatusLabel('ask_agent')).toBeUndefined();

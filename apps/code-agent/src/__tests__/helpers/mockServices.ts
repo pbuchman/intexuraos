@@ -286,7 +286,7 @@ export function setupTestServices(): void {
       dispatchService,
       eventDecisionRepo,
       evaluateEvent: undefined,
-      createReviewTask: async () => ({ ok: true as const, value: { status: 'created' as const, taskId: 'mock-task', workerType: 'qwen' } }),
+      createReviewTask: async () => ({ ok: true as const, value: { status: 'created' as const, taskId: 'mock-task', workerType: 'openrouter-free' } }),
       allowedBots: ALLOWED_BOTS,
       automationLog,
     }),

@@ -42,6 +42,18 @@ const EXCLUDED_FIELDS = new Set([
   'responseTime', // handled specially — inlined as Xms
 ]);
 
+/** Correlation fields required to locate warning/error/fatal events in PM2 logs. */
+const CORRELATION_FIELDS = new Set([
+  'requestId',
+  'request_id',
+  'reqId',
+  'req_id',
+  'taskId',
+  'task_id',
+  'traceId',
+  'trace_id',
+]);
+
 /** Threshold for truncating long string values */
 const TRUNCATE_LEN = 32;
 
@@ -64,8 +76,10 @@ function truncateValue(str: string): string {
 }
 
 /** Format a single extra value as a human-readable string */
-function formatValue(value: unknown): string {
-  if (typeof value === 'string') return truncateValue(value);
+function formatValue(key: string, value: unknown, preserveCorrelations: boolean): string {
+  if (typeof value === 'string') {
+    return preserveCorrelations && CORRELATION_FIELDS.has(key) ? value : truncateValue(value);
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (value === null || value === undefined) return 'null';
   if (Array.isArray(value)) {
@@ -79,8 +93,9 @@ function formatValue(value: unknown): string {
 }
 
 /** Format extras as key=val pairs with special handling for Fastify req/res */
-function formatExtras(parsed: Record<string, unknown>): string {
+function formatExtras(parsed: Record<string, unknown>, level: number): string {
   const parts: string[] = [];
+  const preserveCorrelations = level >= 40;
 
   // Special: res.statusCode as bare number
   const res = parsed['res'];
@@ -105,8 +120,8 @@ function formatExtras(parsed: Record<string, unknown>): string {
 
   // Everything else as key=val
   for (const key of Object.keys(parsed)) {
-    if (EXCLUDED_FIELDS.has(key)) continue;
-    parts.push(`${key}=${formatValue(parsed[key])}`);
+    if (EXCLUDED_FIELDS.has(key) && !(key === 'reqId' && preserveCorrelations)) continue;
+    parts.push(`${key}=${formatValue(key, parsed[key], preserveCorrelations)}`);
   }
 
   return parts.join(' ');
@@ -125,7 +140,7 @@ function formatLogLine(data: string): string {
   const nameStr = name ?? '???';
   const msgStr = msg ?? '';
 
-  const extrasStr = formatExtras(parsed);
+  const extrasStr = formatExtras(parsed, level ?? 30);
 
   const parts = [
     `${GREY}${timeStr}${RESET}`,

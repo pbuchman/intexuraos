@@ -7,11 +7,12 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import OpenAI from 'openai';
-import type { CreateEmbeddingResponse } from 'openai/resources';
 import { OpenRouterToolCallingModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
-import { EmbeddingClient } from '@intexuraos/infra-gpt';
+import {
+  createOpenRouterEmbeddingsClient,
+  type OpenRouterEmbeddingsClient,
+} from '@intexuraos/infra-openrouter';
 import type { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { GitHubAgentError } from '../../domain/usecases/githubAgent.js';
@@ -26,10 +27,10 @@ export interface LlmFactoryDeps {
 
 export interface LlmServices {
   resolveToolCallingClient: (userId: string) => Promise<Result<ToolCallingClient, GitHubAgentError>>;
-  executionMemoryEmbeddingClient?: EmbeddingClient;
+  executionMemoryEmbeddingClient?: OpenRouterEmbeddingsClient;
 }
 
-const TOOL_CALLING_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
+const TOOL_CALLING_MODEL = OpenRouterToolCallingModels.Gemini36Flash;
 
 /**
  * Create LLM-backed services.
@@ -37,7 +38,8 @@ const TOOL_CALLING_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
  * `resolveToolCallingClient` first tries a per-user OpenRouter key from
  * user-service, then falls back to the platform OpenRouter key, then errors.
  *
- * `executionMemoryEmbeddingClient` is returned only when `openaiAppApiKey` is set.
+ * `executionMemoryEmbeddingClient` is returned only when the platform
+ * OpenRouter key is set.
  */
 export function createLlmServices(deps: LlmFactoryDeps): LlmServices {
   const { config, logger, userServiceClient, buildUsageSink } = deps;
@@ -73,13 +75,13 @@ export function createLlmServices(deps: LlmFactoryDeps): LlmServices {
     return err({ code: 'LLM_FAILED' as const, message: 'No OpenRouter API key available for tool calling' });
   };
 
-  const executionMemoryOpenAI = config.openaiAppApiKey !== ''
-    ? new OpenAI({ apiKey: config.openaiAppApiKey })
-    : undefined;
-  const executionMemoryEmbeddingClient = executionMemoryOpenAI !== undefined
-    ? new EmbeddingClient({
-        embedFn: (text: string, model: string): Promise<CreateEmbeddingResponse> =>
-          executionMemoryOpenAI.embeddings.create({ model, input: text }),
+  const executionMemoryEmbeddingClient = config.openRouterAppApiKey !== ''
+    ? createOpenRouterEmbeddingsClient({
+        apiKey: config.openRouterAppApiKey,
+        userId: 'system',
+        ownerType: 'system',
+        logger,
+        usageSink: buildUsageSink('execution-memory-embedding'),
       })
     : undefined;
 

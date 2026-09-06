@@ -112,8 +112,8 @@ INFO: Repository path exists, validating...
 INFO: Repository validation passed
 INFO: Code worker auth active { expiresInMinutes: 210, subscriptionType: 'max' }
 INFO: Codex worker auth active { authMode: 'chatgpt', expiresInMinutes: 190 }
-INFO: Completion verification configuration (deterministic parser + resume-summary LLM) { completionMaxAttempts: 3, validationModels: [ 'or:google/gemma-4-31b-it', 'gemini-2.5-flash' ] }
-INFO: Agent compliance validator configuration { validationModels: [ 'or:google/gemma-4-31b-it', 'gemini-2.5-flash' ], hasOpenRouterApiKey: true }
+INFO: Completion verification configuration (deterministic parser + resume-summary LLM) { completionMaxAttempts: 3, validationModels: [ 'or:google/gemma-4-31b-it', 'or:deepseek/deepseek-v4-flash' ] }
+INFO: Agent compliance validator configuration { validationModels: [ 'or:google/gemma-4-31b-it', 'or:deepseek/deepseek-v4-flash' ], hasOpenRouterApiKey: true }
 INFO: Orchestrator HTTP server started { port: 8199 }
 INFO: No interrupted tasks to recover
 INFO: Starting heartbeat manager { intervalMs: 600000 }
@@ -130,11 +130,17 @@ Expected response:
 
 ```json
 {
-  "healthContractVersion": 1,
+  "healthContractVersion": 2,
+  "admissionFrozen": false,
+  "pendingAdmissions": 0,
+  "admissionActivityTotal": 12,
   "status": "ready",
   "capacity": 2,
   "running": 0,
   "available": 2,
+  "workerContainers": 0,
+  "pendingTerminalCallbacks": 0,
+  "terminalCallbackActivityTotal": 24,
   "githubTokenExpiresAt": "2026-04-22T15:30:00.000Z",
   "workerAuths": {
     "claude": { "status": "active", "authMode": "oauth", "refreshSupported": true, "expiresInMinutes": 210, "subscriptionType": "max" },
@@ -143,14 +149,37 @@ Expected response:
   "dockerHealthy": true,
   "diskHealthy": true,
   "providerApiKeys": {
-    "MINIMAX_API_KEY": { "configured": true },
-    "MIMO_API_KEY": { "configured": true },
-    "DASHSCOPE_API_KEY": { "configured": true },
-    "KIMI_API_KEY": { "configured": true },
-    "OPENROUTER_API_KEY": { "configured": false }
+    "OPENROUTER_API_KEY": { "configured": true }
+  },
+  "logForwarderDrain": {
+    "counterEpochId": "00112233445566778899aabbccddeeff",
+    "processStartedAt": "2026-08-28T09:00:00.000Z",
+    "activeForwarders": 0,
+    "bufferedBytes": 0,
+    "partialLineBytes": 0,
+    "queuedChunks": 0,
+    "inFlightBatches": 0,
+    "inFlightChunks": 0,
+    "activeFlushOperations": 0,
+    "openUploadRequests": 0,
+    "detachedUploadRetryPromises": 0,
+    "droppedChunksTotal": 0,
+    "forwarderActivityTotal": 0,
+    "lastActivityAt": null
   }
 }
 ```
+
+`counterEpochId` is a new random 128-bit value for each orchestrator process. During a drain proof,
+the controller first installs the root-owned persistent admission marker and requires
+`admissionFrozen: true`. All gauges, `pendingAdmissions`, `workerContainers`, and
+`pendingTerminalCallbacks` must remain zero. The process
+identity, epoch, `admissionActivityTotal`, `terminalCallbackActivityTotal`, log-forwarder monotonic
+counters, and `lastActivityAt` must remain unchanged across the complete witness/anchor/read sequence.
+A `null` ownership gauge is UNKNOWN, never zero.
+
+`openUploadRequests` remains non-zero from request start until the response body has been explicitly
+cancelled and the HTTP exchange is released; receiving response headers alone does not close it.
 
 ## Part 2: Submit a Task
 
@@ -177,7 +206,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo Pro 2.5), `glm`, `qwen` (Alibaba Cloud DashScope), `kimi` (Kimi Code), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
+The `workerType` field controls which runtime handles the task. Valid values are `auto`, `opus`, `sonnet`, `codex`, `codex-xhigh`, and `openrouter-free`. OpenRouter is the only provider-key route; Claude and Codex use subscription authentication.
 
 ```bash
 BODY='{
@@ -314,25 +343,7 @@ BODY='{"message": "How does cache invalidation work when a user updates their pr
 curl -X POST http://localhost:8199/tasks/task_00000000-0000-4000-8000-000000000006/message ...
 ```
 
-### Step 8: Submit a task with mimo-pro
-
-For cost-effective execution via Xiaomi MiMo Pro 2.5:
-
-```bash
-BODY='{
-  "taskId": "task_00000000-0000-4000-8000-000000000007",
-  "workerType": "mimo-pro",
-  "prompt": "Implement the feature described in INT-600",
-  "agentType": "execution",
-  "linearIssueId": "INT-600",
-  "linearIssueLabels": ["code-task"],
-  "hasChildren": false,
-  "webhookUrl": "http://localhost:3001/webhook",
-  "webhookSecret": "test-secret-123"
-}'
-```
-
-### Step 9: Monitor the task
+### Step 8: Monitor the task
 
 Check task status:
 
@@ -491,8 +502,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | Tests skipped (E2E)                               | Docker network or test image missing  | See Part 3 prerequisites                                                                                                                          |
 | `Cannot find module '@intexuraos'`                | Packages not built                    | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |
-| `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var              | Add to `.envrc.local` and run `direnv allow`                                                                                                      |
-| `INTEXURAOS_KIMI_APP_API_KEY not set`             | Missing required Kimi Code key        | Populate the Secret Manager version, run `./scripts/sync-secrets.sh --add-new`, then `direnv allow`                                               |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY not set`       | Missing required env var              | Populate the Secret Manager version and rerun secret sync                                                                                         |
 | `TASK_RUNTIME_HARD_ERROR`                         | Worker/runtime failure or verifier hard error | Inspect the terminal logs and retry only after the runtime error is understood                                                              |
 | `503 docker_unavailable`                          | Docker daemon not responding          | Check Docker Desktop is running                                                                                                                   |
 | `503 auth_unavailable`                            | Worker auth not ready                 | Check `workerAuths` in health endpoint; run `claude login` or `codex-login.sh`                                                                    |

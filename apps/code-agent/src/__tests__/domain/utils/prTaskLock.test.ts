@@ -7,7 +7,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { buildLockCleanups, buildLockDocPath, deletePRTaskLock } from '../../../domain/utils/prTaskLock.js';
+import {
+  buildLockCleanups,
+  buildLockDocPath,
+  deletePRTaskLock,
+  deletePRTaskLockIfOwned,
+} from '../../../domain/utils/prTaskLock.js';
 import type { Logger } from '@intexuraos/common-core';
 
 describe('buildLockDocPath', () => {
@@ -94,6 +99,132 @@ describe('deletePRTaskLock', () => {
 
     expect(mockFirestore.doc).toHaveBeenCalledWith('pr_task_locks/pbuchman_intexuraos_997');
     expect(mockDeleteFn).toHaveBeenCalled();
+  });
+});
+
+describe('deletePRTaskLockIfOwned', () => {
+  function createFirestore(lockTaskId: string | undefined): {
+    firestore: Parameters<typeof deletePRTaskLockIfOwned>[0];
+    deleteFn: ReturnType<typeof vi.fn>;
+  } {
+    const ref = { path: 'pr_task_locks/org_repo_42' };
+    const deleteFn = vi.fn();
+    const transaction = {
+      get: vi.fn().mockResolvedValue({
+        exists: lockTaskId !== undefined,
+        data: () => lockTaskId === undefined ? undefined : { taskId: lockTaskId },
+      }),
+      delete: deleteFn,
+    };
+    return {
+      firestore: {
+        doc: vi.fn().mockReturnValue(ref),
+        runTransaction: vi.fn(async (operation) => await operation(transaction as never)),
+      },
+      deleteFn,
+    };
+  }
+
+  it('deletes a PR lock only when it still belongs to the terminal task', async () => {
+    const { firestore, deleteFn } = createFirestore('task-owner');
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+    } as unknown as Logger;
+
+    await deletePRTaskLockIfOwned(
+      firestore,
+      'org/repo',
+      42,
+      'task-owner',
+      logger,
+    );
+
+    expect(deleteFn).toHaveBeenCalledOnce();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedTaskId: 'task-owner' }),
+      'Deleted owned PR task lock',
+    );
+  });
+
+  it('preserves a lock that has already moved to a successor task', async () => {
+    const { firestore, deleteFn } = createFirestore('task-successor');
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+    } as unknown as Logger;
+
+    await deletePRTaskLockIfOwned(
+      firestore,
+      'org/repo',
+      42,
+      'task-old',
+      logger,
+    );
+
+    expect(deleteFn).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedTaskId: 'task-old', currentTaskId: 'task-successor' }),
+      'Skipped PR task lock deletion because ownership changed',
+    );
+  });
+
+  it('treats an already missing lock as an idempotent no-op', async () => {
+    const { firestore, deleteFn } = createFirestore(undefined);
+    const logger = { info: vi.fn(), warn: vi.fn() } as unknown as Logger;
+
+    await deletePRTaskLockIfOwned(firestore, 'org/repo', 42, 'task-old', logger);
+
+    expect(deleteFn).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedTaskId: 'task-old' }),
+      'Skipped PR task lock deletion because ownership changed',
+    );
+  });
+
+  it('does not expose a malformed non-string lock owner in logs', async () => {
+    const deleteFn = vi.fn();
+    const transaction = {
+      get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ taskId: 123 }) }),
+      delete: deleteFn,
+    };
+    const firestore = {
+      doc: vi.fn().mockReturnValue({ path: 'pr_task_locks/org_repo_42' }),
+      runTransaction: vi.fn(async (operation) => await operation(transaction as never)),
+    } as unknown as Parameters<typeof deletePRTaskLockIfOwned>[0];
+    const logger = { info: vi.fn(), warn: vi.fn() } as unknown as Logger;
+
+    await deletePRTaskLockIfOwned(firestore, 'org/repo', 42, 'task-old', logger);
+
+    expect(deleteFn).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedTaskId: 'task-old' }),
+      'Skipped PR task lock deletion because ownership changed',
+    );
+  });
+
+  it('logs a transaction failure without surfacing it to cancellation callers', async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+    } as unknown as Logger;
+    const firestore = {
+      doc: vi.fn().mockReturnValue({ path: 'pr_task_locks/org_repo_42' }),
+      runTransaction: vi.fn().mockRejectedValue(new Error('transaction failed')),
+    } as unknown as Parameters<typeof deletePRTaskLockIfOwned>[0];
+
+    await expect(deletePRTaskLockIfOwned(
+      firestore,
+      'org/repo',
+      42,
+      'task-owner',
+      logger,
+    )).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedTaskId: 'task-owner' }),
+      'Failed to conditionally delete PR task lock (best-effort)',
+    );
   });
 });
 

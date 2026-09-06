@@ -1,6 +1,7 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
+  MediaUrlResponse,
   PrivateWhatsAppAccount,
   PrivateWhatsAppChatsResponse,
   PrivateWhatsAppMessagesResponse,
@@ -168,6 +169,25 @@ export interface UpsertPrivateWhatsAppAccountRequest {
   phoneNumber: string;
 }
 
+export interface UpdatePrivateWhatsAppChatTranscriptionRequest {
+  enabled: boolean;
+}
+
+function normalizePrivateMediaAccessUrl(url: string): string {
+  if (!url.startsWith('/private/')) {
+    return url;
+  }
+
+  return `${config.whatsappServiceUrl.replace(/\/$/, '')}${url}`;
+}
+
+function normalizePrivateMediaUrlResponse(response: MediaUrlResponse): MediaUrlResponse {
+  return {
+    ...response,
+    url: normalizePrivateMediaAccessUrl(response.url),
+  };
+}
+
 function appendOptionalNumber(params: URLSearchParams, key: string, value: number | undefined): void {
   if (value !== undefined) {
     params.set(key, String(value));
@@ -307,6 +327,23 @@ export async function disablePrivateWhatsAppAccount(
   );
 }
 
+export async function updatePrivateWhatsAppChatTranscription(
+  accessToken: string,
+  chatId: string,
+  request: UpdatePrivateWhatsAppChatTranscriptionRequest
+): Promise<PrivateWhatsAppChatsResponse['chats'][number]> {
+  const encodedChatId = encodeURIComponent(chatId);
+  return await apiRequest<PrivateWhatsAppChatsResponse['chats'][number]>(
+    config.whatsappServiceUrl,
+    `/private/chats/${encodedChatId}/transcription`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: request,
+    }
+  );
+}
+
 export async function deleteWhatsAppMessage(accessToken: string, messageId: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.whatsappServiceUrl,
@@ -314,14 +351,6 @@ export async function deleteWhatsAppMessage(accessToken: string, messageId: stri
     accessToken,
     { method: 'DELETE' }
   );
-}
-
-/**
- * Media URL response from whatsapp-service
- */
-export interface MediaUrlResponse {
-  url: string;
-  expiresAt: string;
 }
 
 /**
@@ -350,4 +379,30 @@ export async function getMessageThumbnailUrl(
     `/messages/${messageId}/thumbnail`,
     accessToken
   );
+}
+
+export async function getPrivateWhatsAppMessageMediaUrl(
+  accessToken: string,
+  messageId: string
+): Promise<MediaUrlResponse> {
+  const encodedMessageId = encodeURIComponent(messageId);
+  const response = await apiRequest<MediaUrlResponse>(
+    config.whatsappServiceUrl,
+    `/private/messages/${encodedMessageId}/media`,
+    accessToken
+  );
+  return normalizePrivateMediaUrlResponse(response);
+}
+
+export async function getPrivateWhatsAppMessageThumbnailUrl(
+  accessToken: string,
+  messageId: string
+): Promise<MediaUrlResponse> {
+  const encodedMessageId = encodeURIComponent(messageId);
+  const response = await apiRequest<MediaUrlResponse>(
+    config.whatsappServiceUrl,
+    `/private/messages/${encodedMessageId}/thumbnail`,
+    accessToken
+  );
+  return normalizePrivateMediaUrlResponse(response);
 }

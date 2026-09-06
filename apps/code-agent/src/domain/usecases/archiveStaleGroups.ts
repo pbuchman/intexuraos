@@ -4,6 +4,7 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 import type { Logger } from 'pino';
 import { ACTIVE_STATUSES } from '../issueGrouping/constants.js';
+import { resolveTaskLifecycleTime } from '../models/taskLifecycleTime.js';
 
 const DEFAULT_STALE_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -41,7 +42,7 @@ export function createArchiveStaleGroupsUseCase(
   return async (input?: ArchiveStaleGroupsInput): Promise<Result<ArchiveStaleGroupsResult>> => {
     const startTime = Date.now();
     const staleDays = input?.staleDays ?? DEFAULT_STALE_DAYS;
-    const cutoffDate = new Date(Date.now() - staleDays * MS_PER_DAY);
+    const cutoffDate = new Date(startTime - staleDays * MS_PER_DAY);
 
     logger.info({ staleDays, cutoffDate }, 'Starting stale issue group archival');
 
@@ -66,12 +67,19 @@ export function createArchiveStaleGroupsUseCase(
       )
     );
 
-    const groups = new Map<string, typeof allTasks>();
+    const groups = new Map<
+      string,
+      { userId: string; groupKey: string; tasks: typeof allTasks }
+    >();
     for (const task of allTasks) {
       const groupKey = task.linearIssueId ?? task.id;
-      const existing = groups.get(groupKey) ?? [];
-      existing.push(task);
-      groups.set(groupKey, existing);
+      const identity = JSON.stringify([task.userId, groupKey]);
+      const existing = groups.get(identity);
+      if (existing === undefined) {
+        groups.set(identity, { userId: task.userId, groupKey, tasks: [task] });
+      } else {
+        existing.tasks.push(task);
+      }
     }
 
     const totalGroupsEvaluated = groups.size;
@@ -83,7 +91,7 @@ export function createArchiveStaleGroupsUseCase(
 
     const cutoffMs = cutoffDate.getTime();
 
-    for (const [groupKey, tasks] of groups) {
+    for (const { userId, groupKey, tasks } of groups.values()) {
       const linearIssueId = tasks[0]?.linearIssueId;
       const taskCount = tasks.length;
 
@@ -91,7 +99,7 @@ export function createArchiveStaleGroupsUseCase(
       const hasActive = tasks.some((t) => ACTIVE_STATUSES.has(t.status));
       if (hasActive) {
         logger.info(
-          { groupKey, taskCount, reason: 'has_active_task' },
+          { userId, groupKey, taskCount, reason: 'has_active_task' },
           'Retaining issue group'
         );
         groupsSkippedActive++;
@@ -104,29 +112,33 @@ export function createArchiveStaleGroupsUseCase(
       );
       if (hasOpenPR) {
         logger.info(
-          { groupKey, taskCount, reason: 'has_open_pr' },
+          { userId, groupKey, taskCount, reason: 'has_open_pr' },
           'Retaining issue group'
         );
         groupsRetained++;
         continue;
       }
 
-      // Compute max updatedAt across the group
-      let maxUpdatedAtMs = 0;
-      for (const task of tasks) {
-        const ms = task.updatedAt.toMillis();
-        if (ms > maxUpdatedAtMs) {
-          maxUpdatedAtMs = ms;
+      const resolvedTasks = tasks.map((task) => ({
+        task,
+        lifecycle: resolveTaskLifecycleTime(task),
+      }));
+      let maxLifecycleAtMs = 0;
+      for (const resolvedTask of resolvedTasks) {
+        const ms = resolvedTask.lifecycle.at.toMillis();
+        if (ms > maxLifecycleAtMs) {
+          maxLifecycleAtMs = ms;
         }
       }
 
-      if (maxUpdatedAtMs >= cutoffMs) {
-        const maxUpdatedAt = new Date(maxUpdatedAtMs);
+      const maxLifecycleAt = new Date(maxLifecycleAtMs);
+      if (maxLifecycleAtMs >= cutoffMs) {
         logger.info(
           {
+            userId,
             groupKey,
             taskCount,
-            maxUpdatedAt: maxUpdatedAt.toISOString(),
+            maxLifecycleAt: maxLifecycleAt.toISOString(),
             reason: 'not_stale',
           },
           'Retaining issue group'
@@ -136,15 +148,29 @@ export function createArchiveStaleGroupsUseCase(
       }
 
       // Group is stale — archive all tasks
-      const daysSinceUpdate = Math.floor((Date.now() - maxUpdatedAtMs) / MS_PER_DAY);
+      const daysSinceLifecycleActivity = Math.floor(
+        (startTime - maxLifecycleAtMs) / MS_PER_DAY,
+      );
       logger.info(
-        { groupKey, linearIssueId, taskCount, daysSinceUpdate },
+        {
+          userId,
+          groupKey,
+          linearIssueId,
+          taskCount,
+          maxLifecycleAt: maxLifecycleAt.toISOString(),
+          daysSinceLifecycleActivity,
+        },
         'Archiving stale issue group'
       );
 
-      for (const task of tasks) {
+      for (const { task, lifecycle } of resolvedTasks) {
         try {
-          const updateResult = await codeTaskRepository.update(task.id, { status: 'archived' });
+          const updateResult = await codeTaskRepository.update(task.id, {
+            status: 'archived',
+            ...(task.completedAt === undefined && {
+              completedAt: lifecycle.at.toDate(),
+            }),
+          });
           if (!updateResult.ok) {
             logger.error(
               { taskId: task.id, groupKey, error: updateResult.error.message },

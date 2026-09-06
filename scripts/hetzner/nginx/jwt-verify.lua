@@ -4,6 +4,7 @@ local openidc = require("resty.openidc")
 local EXPECTED_ISS = "https://accounts.google.com"
 local EXPECTED_AUD = "https://intexuraos.cloud"
 local INTERNAL_AUTH_TOKEN_FILE = "/etc/intexuraos/internal-auth-token"
+local EVALUATOR_ROUTE_PREFIX = "/internal/evals/"
 local GLOBAL_ALLOWED_SERVICE_ACCOUNTS = {
   ["intexuraos-scheduler-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-whatsapp-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
@@ -17,6 +18,78 @@ local GLOBAL_ALLOWED_SERVICE_ACCOUNTS = {
 local ROUTE_ALLOWED_SERVICE_ACCOUNTS = {
   ["/internal/whatsapp/private/events"] = {
     ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
+  ["/internal/whatsapp/private/media"] = {
+    ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
+  ["/internal/whatsapp/private/media/backfill"] = {
+    ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
+  ["/internal/whatsapp/pubsub/process-webhook"] = {
+    ["intexuraos-whatsapp-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
+}
+
+local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
+  {
+    pattern = [[^/internal/intex-agent/messages$]],
+    caller_role = "intex_message_ingest_pubsub",
+    allowed_methods = { POST = true },
+    allowed_service_accounts = {
+      ["intexuraos-intex-agent-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
+    pattern = [[^/internal/message-digests/pubsub/run$]],
+    caller_role = "message_digest_run_pubsub",
+    allowed_methods = { POST = true },
+    allowed_service_accounts = {
+      ["intexuraos-message-digest-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
+    pattern = [[^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)]],
+    caller_role = "matrix_corpus_runner",
+    allowed_service_accounts = {
+      ["claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
+    pattern = [[^/internal/evals/whatsapp/whatsapp/private/outbound-matrix-messages$]],
+    caller_role = "matrix_corpus_runner",
+    allowed_methods = { POST = true },
+    allowed_service_accounts = {
+      ["claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
+    pattern = [[^/internal/evals/intex-agent/test-runs/[^/]+/(?:projection|artifact-delivery)$]],
+    caller_role = "matrix_corpus_runner",
+    allowed_methods = { PUT = true },
+    allowed_service_accounts = {
+      ["claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
+    pattern = [[^/internal/whatsapp/private/accounts/[^/]+/erasure(?:/[^/]+)?$]],
+    caller_role = "whatsapp_private_sync",
+    allowed_service_accounts = {
+      ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
+    pattern = [[^/internal/whatsapp/private/messages/[^/]+/media$]],
+    caller_role = "whatsapp_private_sync",
+    allowed_methods = { GET = true },
+    allowed_service_accounts = {
+      ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+}
+
+local ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS = {
+  ["/internal/users/"] = {
+    ["ixos-transcription-fn-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   },
 }
 
@@ -65,10 +138,31 @@ end
 local function is_service_account_allowed(email)
   local route_allowed_service_accounts = ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]
   if route_allowed_service_accounts ~= nil then
-    return route_allowed_service_accounts[email] == true
+    return route_allowed_service_accounts[email] == true, nil
   end
 
-  return GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email] == true
+  for _, route_pattern in ipairs(ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS) do
+    if ngx.re.match(ngx.var.uri, route_pattern.pattern, "jo") ~= nil then
+      local request_method = ngx.req.get_method()
+      local method_allowed = route_pattern.allowed_methods == nil
+        or route_pattern.allowed_methods[request_method] == true
+      local allowed = method_allowed and route_pattern.allowed_service_accounts[email] == true
+      return allowed, allowed and route_pattern.caller_role or nil
+    end
+  end
+
+  if string.sub(ngx.var.uri, 1, string.len(EVALUATOR_ROUTE_PREFIX)) ==
+      EVALUATOR_ROUTE_PREFIX then
+    return false, nil
+  end
+
+  for prefix, route_prefix_allowed_service_accounts in pairs(ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS) do
+    if string.sub(ngx.var.uri, 1, string.len(prefix)) == prefix then
+      return route_prefix_allowed_service_accounts[email] == true, nil
+    end
+  end
+
+  return GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email] == true, nil
 end
 
 local auth_header = ngx.var.http_authorization
@@ -109,7 +203,13 @@ if not aud_ok then
   return deny(ngx.HTTP_UNAUTHORIZED, "invalid_audience")
 end
 
-if type(claims.email) ~= "string" or not is_service_account_allowed(claims.email) then
+local service_account_allowed = false
+local caller_role = nil
+if type(claims.email) == "string" then
+  service_account_allowed, caller_role = is_service_account_allowed(claims.email)
+end
+
+if not service_account_allowed then
   ngx.log(ngx.WARN, "Google OIDC service account is not allowed")
   return deny(ngx.HTTP_FORBIDDEN, "forbidden_service_account")
 end
@@ -121,6 +221,9 @@ end
 
 ngx.req.clear_header("Authorization")
 ngx.req.clear_header("X-Internal-Auth")
+ngx.req.clear_header("X-Internal-Caller-Role")
 ngx.req.clear_header("Cookie")
 ngx.req.clear_header("From")
 ngx.var.edge_internal_auth_token = internal_auth_token
+ngx.var.edge_internal_caller_role = caller_role or ""
+ngx.var.edge_pubsub_from = caller_role == "intex_message_ingest_pubsub" and "noreply@google.com" or ""

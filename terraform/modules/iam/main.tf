@@ -113,151 +113,6 @@ resource "google_service_account" "intex_agent" {
   description  = "Service account for intex-agent Cloud Run deployment"
 }
 
-# User service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.user_service.email}"
-}
-
-# Notion service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "notion_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.notion_service.email}"
-}
-
-# WhatsApp service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "whatsapp_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.whatsapp_service.email}"
-}
-
-# Mobile Notifications service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "mobile_notifications_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.mobile_notifications_service.email}"
-}
-
-# Fishing Assistant Service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "fishing_assistant_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.fishing_assistant_service.email}"
-}
-
-# Research Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "research_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.research_agent.email}"
-}
-
-# Image Service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "image_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.image_service.email}"
-}
-
-# Notes Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "notes_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.notes_agent.email}"
-}
-
-# App Settings Service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "app_settings_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.app_settings_service.email}"
-}
-
-# Bookmarks Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "bookmarks_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.bookmarks_agent.email}"
-}
-
-# Calendar Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "calendar_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.calendar_agent.email}"
-}
-
-# Web Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "web_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.web_agent.email}"
-}
-
-# Linear Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "linear_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.linear_agent.email}"
-}
-
-# Intex Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "intex_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.intex_agent.email}"
-}
-
-# Code Agent: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "code_agent_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.code_agent.email}"
-}
-
-# API Docs Hub: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.api_docs_hub.email}"
-}
-
-
 # Notion service: Firestore access
 resource "google_project_iam_member" "notion_service_firestore" {
   project = var.project_id
@@ -489,18 +344,25 @@ resource "google_project_iam_member" "code_agent_logging" {
   member  = "serviceAccount:${google_service_account.code_agent.email}"
 }
 
+# Code Agent: Cloud Monitoring custom metrics
+resource "google_project_iam_member" "code_agent_monitoring_metric_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.code_agent.email}"
+}
+
+# WhatsApp Service: Conversation Assistant operational metrics
+resource "google_project_iam_member" "whatsapp_service_monitoring_metric_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.whatsapp_service.email}"
+}
+
 # Hellscript Agent
 resource "google_service_account" "hellscript_agent" {
   account_id   = "intexuraos-hellscript-${var.environment}"
   display_name = "IntexuraOS Hellscript Agent (${var.environment})"
   description  = "Service account for hellscript-agent Cloud Run deployment"
-}
-
-resource "google_secret_manager_secret_iam_member" "hellscript_agent_secrets" {
-  for_each  = var.secret_ids
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hellscript_agent.email}"
 }
 
 resource "google_project_iam_member" "hellscript_agent_firestore" {
@@ -520,13 +382,6 @@ resource "google_service_account" "llm_usage_service" {
   account_id   = "intexuraos-llm-usage-${var.environment}"
   display_name = "IntexuraOS LLM Usage Service (${var.environment})"
   description  = "Service account for llm-usage-service Cloud Run deployment"
-}
-
-resource "google_secret_manager_secret_iam_member" "llm_usage_service_secrets" {
-  for_each  = var.secret_ids
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.llm_usage_service.email}"
 }
 
 resource "google_project_iam_member" "llm_usage_service_firestore" {

@@ -2,8 +2,10 @@
  * Tests for createRemediationTask use case (INT-1087).
  */
 
+import { Timestamp } from '@google-cloud/firestore';
 import { describe, it, expect, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
+import type { CodeTask } from '../../domain/models/codeTask.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../../domain/ports/userLookupService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
@@ -75,6 +77,31 @@ function createDefaultRequest(overrides: Partial<CreateRemediationTaskRequest> =
     senderLogin: 'alice',
     workerType: 'opus',
     eventId: 'event-123',
+    ...overrides,
+  };
+}
+
+function createExistingRemediationTask(overrides: Partial<CodeTask> = {}): CodeTask {
+  const timestamp = Timestamp.fromDate(new Date('2026-09-02T17:00:00.000Z'));
+  return {
+    id: 'task-existing-remediation',
+    traceId: 'existing-remediation-event',
+    userId: 'user-1',
+    workerType: 'sonnet',
+    workerLocation: 'queued',
+    status: 'running',
+    prompt: 'Fix review findings',
+    sanitizedPrompt: 'fix review findings',
+    systemPromptHash: 'remediation-auto',
+    repository: 'pbuchman/intexuraos',
+    baseBranch: 'development',
+    linearIssueId: 'INT-999',
+    prNumber: 42,
+    agentType: 'remediation',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    callbackReceived: false,
+    dedupKey: 'existing-remediation-dedup-key',
     ...overrides,
   };
 }
@@ -207,6 +234,177 @@ describe('createRemediationTask', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('task_creation_failed');
+  });
+
+  it('reuses existing remediation task when repo.create returns DUPLICATE_PROMPT', async () => {
+    const existingTask = createExistingRemediationTask();
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(err({
+          code: 'DUPLICATE_PROMPT',
+          message: 'Duplicate prompt within 5 minutes',
+          existingTaskId: existingTask.id,
+        })),
+        findById: vi.fn().mockResolvedValue(ok(existingTask)),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createRemediationTask(
+      deps,
+      createDefaultRequest({ linearIssueId: 'INT-999', workerType: 'auto' }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual({
+      status: 'queued',
+      taskId: existingTask.id,
+      workerType: 'sonnet',
+    });
+    expect(deps.codeTaskRepo.findById).toHaveBeenCalledWith(existingTask.id);
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(deps.automationLog.record).not.toHaveBeenCalled();
+    expect(deps.logger.error).not.toHaveBeenCalled();
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingTaskId: existingTask.id,
+        error: expect.objectContaining({ code: 'DUPLICATE_PROMPT' }),
+      }),
+      'Reusing existing remediation task after repository dedup',
+    );
+  });
+
+  it('does not reuse an unrelated task when prompt dedup reports its id', async () => {
+    const existingTask = createExistingRemediationTask({ agentType: 'execution' });
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(err({
+          code: 'DUPLICATE_PROMPT',
+          message: 'Duplicate prompt within 5 minutes',
+          existingTaskId: existingTask.id,
+        })),
+        findById: vi.fn().mockResolvedValue(ok(existingTask)),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createRemediationTask(
+      deps,
+      createDefaultRequest({ linearIssueId: 'INT-999' }),
+    );
+
+    expect(result).toEqual(err({
+      code: 'task_creation_failed',
+      message: 'Duplicate prompt within 5 minutes',
+    }));
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(deps.automationLog.record).not.toHaveBeenCalled();
+  });
+
+  it('reuses the matching active remediation task when Linear issue dedup wins', async () => {
+    const existingTask = createExistingRemediationTask();
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(err({
+          code: 'ACTIVE_TASK_EXISTS',
+          message: 'Active task exists for Linear issue',
+          existingTaskId: existingTask.id,
+        })),
+        findById: vi.fn().mockResolvedValue(ok(existingTask)),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createRemediationTask(
+      deps,
+      createDefaultRequest({ linearIssueId: 'INT-999', workerType: 'auto' }),
+    );
+
+    expect(result).toEqual(ok({
+      status: 'queued',
+      taskId: existingTask.id,
+      workerType: 'sonnet',
+    }));
+    expect(deps.codeTaskRepo.findById).toHaveBeenCalledWith(existingTask.id);
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(deps.automationLog.record).not.toHaveBeenCalled();
+    expect(deps.logger.error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an execution task', { agentType: 'execution' as const }],
+    ['another user\'s remediation task', { userId: 'user-2' }],
+    ['a remediation task for another repository', { repository: 'pbuchman/other-repo' }],
+    ['a remediation task for another pull request', { prNumber: 43 }],
+    ['a remediation task for another Linear issue', { linearIssueId: 'INT-998' }],
+    ['a terminal remediation task', { status: 'failed' as const }],
+  ])('does not reuse %s after Linear issue dedup', async (_description, taskOverrides) => {
+    const existingTask = createExistingRemediationTask(taskOverrides);
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(err({
+          code: 'ACTIVE_TASK_EXISTS',
+          message: 'Active task exists for Linear issue',
+          existingTaskId: existingTask.id,
+        })),
+        findById: vi.fn().mockResolvedValue(ok(existingTask)),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createRemediationTask(
+      deps,
+      createDefaultRequest({ linearIssueId: 'INT-999' }),
+    );
+
+    expect(result).toEqual(err({
+      code: 'task_creation_failed',
+      message: 'Active task exists for Linear issue',
+    }));
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(deps.automationLog.record).not.toHaveBeenCalled();
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: expect.objectContaining({ code: 'ACTIVE_TASK_EXISTS' }) }),
+      'Failed to create remediation task',
+    );
+  });
+
+  it('preserves the exact lookup failure context when active-task recovery fails', async () => {
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn().mockResolvedValue(err({
+          code: 'ACTIVE_TASK_EXISTS',
+          message: 'Active task exists for Linear issue',
+          existingTaskId: 'task-missing-remediation',
+        })),
+        findById: vi.fn().mockResolvedValue(err({
+          code: 'FIRESTORE_ERROR',
+          message: 'Firestore error: lookup failed',
+        })),
+        findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createRemediationTask(
+      deps,
+      createDefaultRequest({ linearIssueId: 'INT-999' }),
+    );
+
+    expect(result).toEqual(err({
+      code: 'task_creation_failed',
+      message: 'Active task exists for Linear issue',
+    }));
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.objectContaining({ code: 'ACTIVE_TASK_EXISTS' }),
+        recoveryError: {
+          code: 'FIRESTORE_ERROR',
+          message: 'Firestore error: lookup failed',
+        },
+      }),
+      'Failed to create remediation task',
+    );
   });
 
   it('returns queue_full when enqueue service is full', async () => {

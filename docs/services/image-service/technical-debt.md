@@ -55,8 +55,8 @@ None detected.
 Comprehensive test coverage achieved. All adapters, routes, use cases, and infrastructure layers are tested:
 
 - Application use cases: `generateImage`, `generatePrompt`, `deleteImage` — all with dedicated test files
-- Image generators: OpenAI and Google adapters fully tested including error paths
-- Prompt generation: GPT and Gemini adapters tested including `mapError` function
+- Image generation: OpenRouter adapter fully tested, including error paths and stable alias mapping
+- Prompt generation: OpenRouter adapter tested, including `mapError`
 - GCS storage: Upload, delete, and path building tested
 - Routes: Internal endpoints with auth validation, error handling, and success paths tested
 - Models: Validation functions and configuration objects tested
@@ -98,8 +98,7 @@ All files are within reasonable size limits. The v3.4.0 refactoring improved the
 
 | Pattern                | Locations                                                            | Suggestion                                                                                                                                         |
 | ---------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mapError` function    | `GptPromptAdapter.ts` (exported), `GeminiPromptAdapter.ts` (private) | Extract to shared `mapError.ts` utility. Both implement identical switch logic over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT`, `PARSE_ERROR` codes. |
-| `mapLlmError` function | `OpenAIImageGenerator.ts`, `GoogleImageGenerator.ts`                 | Extract to shared utility. Both implement identical switch over `INVALID_KEY`, `RATE_LIMITED`, `TIMEOUT` codes.                                    |
+| `mapError` function | `GptPromptAdapter.ts` | Compatibility filename for the OpenRouter prompt adapter; extract only if another active adapter needs the same mapping. |
 
 ---
 
@@ -167,8 +166,17 @@ No deprecated APIs or dependencies in use.
 
 **Resolution:**
 - ZAI pricing fetch removed from `services.ts` (`REQUIRED_MODELS` reduced from 5 to 4 entries)
-- Platform fallback is now exclusively Gemini via `INTEXURAOS_GEMINI_APP_API_KEY`
+- At that time, platform fallback moved from ZAI to Gemini; it was later retired in favor of OpenRouter
 - No functional change to image generation flows — ZAI was never an image generation provider
+
+### 2026-08-12: Direct Gemini Removal
+
+**Issue:** A shared direct Gemini API key bypassed centralized OpenRouter visibility.
+
+**Resolution:**
+- Prompt and image generation were restricted to OpenAI
+- Direct Gemini image models were removed from image-service
+- The shared Gemini environment variable and Secret Manager container were retired
 
 ### 2026-02-27: INT-605 Thumbnail Output Contract Alignment
 
@@ -195,7 +203,7 @@ No deprecated APIs or dependencies in use.
 
 **Resolution:**
 - `platformGeminiApiKey` added to `createUserServiceClient()` in `internal-clients`
-- `INTEXURAOS_GEMINI_APP_API_KEY` is the platform fallback (ZAI removed in v3.3.0)
+- At that time, the platform fallback moved to Gemini; it was later retired in favor of OpenRouter
 - Gemini 2.5 Flash is now the default platform model for faster responses
 
 ### 2026-02-15: API Key Naming Standardization

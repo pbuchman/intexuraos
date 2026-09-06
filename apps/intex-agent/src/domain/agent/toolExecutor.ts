@@ -8,6 +8,8 @@ import type {
   CreateNoteRequest,
   CreateResearchDraftRequest,
   CreatedCalendarEvent,
+  ListCalendarEventsRequest,
+  UpdateCalendarEventRequest,
   SubmitTaskError,
   SubmitTaskResponse,
 } from '@intexuraos/internal-clients';
@@ -15,8 +17,18 @@ import type {
   CreateCalendarEventToolArgs,
   CreateCodeTaskToolArgs,
   CreateLinkToolArgs,
+  AddUserPreferenceToolArgs,
+  DeleteUserPreferenceToolArgs,
+  SaveExternalToolArgs,
+  UpdateCalendarEventToolArgs,
+  UpdateUserPreferenceToolArgs,
   IntexAgentToolExecutor,
 } from './toolDefinitions.js';
+import type { PromptPreferencesRepository } from '../ports/promptPreferencesRepository.js';
+import {
+  PromptPreferencesError,
+  type IntexAgentPromptPreferences,
+} from '../preferences/promptPreferences.js';
 
 export interface NotesToolClient {
   createNote(input: CreateNoteRequest): Promise<Result<ServiceFeedback>>;
@@ -24,6 +36,28 @@ export interface NotesToolClient {
 
 export interface CalendarToolClient {
   createEvent(input: CreateCalendarEventRequest): Promise<Result<CreatedCalendarEvent>>;
+  listEvents(input: ListCalendarEventsRequest): Promise<
+    Result<{ events: CalendarQueryEvent[]; truncated: boolean }>
+  >;
+  updateEvent(input: UpdateCalendarEventRequest): Promise<Result<CreatedCalendarEvent>>;
+}
+
+interface CalendarQueryEvent {
+  id: string;
+  etag?: string | undefined;
+  summary: string;
+  start: {
+    dateTime?: string | undefined;
+    date?: string | undefined;
+    timeZone?: string | undefined;
+  };
+  end: {
+    dateTime?: string | undefined;
+    date?: string | undefined;
+    timeZone?: string | undefined;
+  };
+  location?: string | undefined;
+  htmlLink?: string | undefined;
 }
 
 export interface ResearchToolClient {
@@ -42,14 +76,36 @@ export interface CodeTaskToolClient {
   ): Promise<Result<SubmitTaskResponse, SubmitTaskError>>;
 }
 
+export interface ExternalSaveToolInput {
+  message: string;
+  sourceUrl?: string;
+}
+
+export interface ExternalSaveToolResult {
+  status: 'completed';
+  message: string;
+}
+
+export interface ExternalSaveToolError {
+  code: string;
+  message: string;
+}
+
+export interface ExternalSaveToolClient {
+  save(input: ExternalSaveToolInput): Promise<Result<ExternalSaveToolResult, ExternalSaveToolError>>;
+}
+
 export interface CreateIntexAgentToolExecutorDeps {
   userId: string;
+  sessionId: string;
   messageId: string;
   notesClient: NotesToolClient;
   calendarClient: CalendarToolClient;
   researchClient: ResearchToolClient;
   bookmarksClient: BookmarksToolClient;
   codeClient: CodeTaskToolClient;
+  externalSaveClient: ExternalSaveToolClient | null;
+  promptPreferencesRepository: PromptPreferencesRepository;
 }
 
 export function createIntexAgentToolExecutor(
@@ -99,6 +155,82 @@ export function createIntexAgentToolExecutor(
       });
     },
 
+    async updateCalendarEvent(args): Promise<string> {
+      const snapshot = requireCalendarUpdateSnapshot(args);
+      const changes = args.changes ??
+        (args.attendeesToAdd === undefined ? undefined : { attendeesToAdd: args.attendeesToAdd });
+      if (changes === undefined) {
+        throw new Error('Calendar event changes are missing');
+      }
+      const { attendeesToAdd, attendeesToRemove, ...ordinaryChanges } = changes;
+      const result = await deps.calendarClient.updateEvent({
+        userId: deps.userId,
+        eventId: args.eventId,
+        ...snapshot,
+        changes: {
+          ...ordinaryChanges,
+          ...(attendeesToAdd !== undefined
+            ? { attendeesToAdd: attendeesToAdd.map((email) => ({ email })) }
+            : {}),
+          ...(attendeesToRemove !== undefined
+            ? { attendeesToRemove: attendeesToRemove.map((email) => ({ email })) }
+            : {}),
+        },
+      });
+
+      if (!result.ok) {
+        throw new Error(`Failed to update calendar event: ${getErrorMessage(result.error)}`);
+      }
+
+      return JSON.stringify({
+        status: 'completed',
+        eventId: result.value.id, // @allow-result-access -- guarded by !result.ok check above
+        summary: result.value.summary, // @allow-result-access -- guarded by !result.ok check above
+        ...(attendeesToAdd !== undefined
+          ? { attendeesAdded: attendeesToAdd }
+          : {}),
+        ...(result.value.htmlLink !== undefined ? { htmlLink: result.value.htmlLink } : {}), // @allow-result-access -- guarded by !result.ok check above
+      });
+    },
+
+    async queryCalendarEvents(args): Promise<string> {
+      const maxResults = args.maxResults ?? (args.mode === 'count' ? 2500 : 20);
+      const result = await deps.calendarClient.listEvents({
+        userId: deps.userId,
+        ...(args.calendarId !== undefined ? { calendarId: args.calendarId } : {}),
+        timeMin: args.timeMin,
+        timeMax: args.timeMax,
+        maxResults,
+        ...(args.query !== undefined ? { q: args.query } : {}),
+      });
+
+      if (!result.ok) {
+        throw new Error(`Failed to query calendar events: ${getErrorMessage(result.error)}`);
+      }
+
+      const events = result.value.events;
+      const paginationVerdict: unknown = result.value.truncated;
+      if (typeof paginationVerdict !== 'boolean') {
+        throw new Error('Calendar query response has no pagination verdict');
+      }
+      return JSON.stringify({
+        status: 'completed',
+        mode: args.mode,
+        count: events.length,
+        truncated: paginationVerdict,
+        timeMin: args.timeMin,
+        timeMax: args.timeMax,
+        ...(args.query !== undefined ? { query: args.query } : {}),
+        ...(args.mode === 'list'
+          ? {
+              events: events.map((event) =>
+                toCalendarQueryEvent(event, args.calendarId ?? 'primary')
+              ),
+            }
+          : {}),
+      });
+    },
+
     async createResearch(args): Promise<string> {
       const result = await deps.researchClient.createDraft({
         userId: deps.userId,
@@ -134,6 +266,7 @@ export function createIntexAgentToolExecutor(
       return JSON.stringify({
         status: 'completed',
         bookmarkId: bookmark.id,
+        resourceUrl: `/#/bookmarks/${bookmark.id}`,
         url: bookmark.url,
         ...(bookmark.title !== null ? { title: bookmark.title } : {}),
       });
@@ -153,6 +286,110 @@ export function createIntexAgentToolExecutor(
         resourceUrl: task.resourceUrl,
       });
     },
+
+    async saveExternal(args: SaveExternalToolArgs): Promise<string> {
+      if (deps.externalSaveClient === null) {
+        throw new Error('External save is not configured');
+      }
+
+      const result = await deps.externalSaveClient.save({
+        message: args.message,
+        ...(args.sourceUrl !== undefined ? { sourceUrl: args.sourceUrl } : {}),
+      });
+
+      if (!result.ok) {
+        throw new Error(`Failed to save externally: ${result.error.message}`);
+      }
+
+      return JSON.stringify({
+        status: result.value.status, // @allow-result-access -- guarded by !result.ok check above
+        message: result.value.message, // @allow-result-access -- guarded by !result.ok check above
+      });
+    },
+
+    async getUserPreferences(): Promise<string> {
+      const preferences = await deps.promptPreferencesRepository.getCurrent(deps.userId);
+      return JSON.stringify(toPromptPreferenceToolResult(preferences));
+    },
+
+    async addUserPreference(args: AddUserPreferenceToolArgs): Promise<string> {
+      let preferences: IntexAgentPromptPreferences;
+      try {
+        preferences = await deps.promptPreferencesRepository.addItem({
+          userId: deps.userId,
+          text: args.text,
+          expectedVersion: args.expectedVersion,
+          updatedBy: preferenceToolActor(deps),
+        });
+      } catch (error: unknown) {
+        if (!isPromptPreferenceVersionConflict(error)) {
+          throw error;
+        }
+        const current = await deps.promptPreferencesRepository.getCurrent(deps.userId);
+        preferences = await deps.promptPreferencesRepository.addItem({
+          userId: deps.userId,
+          text: args.text,
+          expectedVersion: current.currentVersion,
+          updatedBy: preferenceToolActor(deps),
+        });
+      }
+      return JSON.stringify(
+        toPromptPreferenceToolResult(preferences, preferences.items.at(-1)?.id)
+      );
+    },
+
+    async updateUserPreference(args: UpdateUserPreferenceToolArgs): Promise<string> {
+      const preferences = await deps.promptPreferencesRepository.updateItem({
+        userId: deps.userId,
+        itemId: args.itemId,
+        text: args.text,
+        expectedVersion: args.expectedVersion,
+        updatedBy: preferenceToolActor(deps),
+      });
+      return JSON.stringify(toPromptPreferenceToolResult(preferences, args.itemId));
+    },
+
+    async deleteUserPreference(args: DeleteUserPreferenceToolArgs): Promise<string> {
+      const preferences = await deps.promptPreferencesRepository.deleteItem({
+        userId: deps.userId,
+        itemId: args.itemId,
+        expectedVersion: args.expectedVersion,
+        updatedBy: preferenceToolActor(deps),
+      });
+      return JSON.stringify(toPromptPreferenceToolResult(preferences, args.itemId));
+    },
+  };
+}
+
+function preferenceToolActor(
+  deps: Pick<CreateIntexAgentToolExecutorDeps, 'userId' | 'sessionId' | 'messageId'>
+): { actor: 'agent_tool'; userId: string; sessionId: string; messageId: string } {
+  return {
+    actor: 'agent_tool',
+    userId: deps.userId,
+    sessionId: deps.sessionId,
+    messageId: deps.messageId,
+  };
+}
+
+function isPromptPreferenceVersionConflict(error: unknown): error is PromptPreferencesError {
+  return error instanceof PromptPreferencesError && error.code === 'VERSION_CONFLICT';
+}
+
+function toPromptPreferenceToolResult(
+  preferences: IntexAgentPromptPreferences,
+  changedItemId?: string
+): {
+  status: 'completed';
+  currentVersion: number;
+  promptBlock: string;
+  changedItemId?: string;
+} {
+  return {
+    status: 'completed',
+    currentVersion: preferences.currentVersion,
+    promptBlock: preferences.renderedPromptBlock,
+    ...(changedItemId !== undefined ? { changedItemId } : {}),
   };
 }
 
@@ -177,7 +414,7 @@ function toCodeTaskInput(args: CreateCodeTaskToolArgs, userId: string): CreateCo
     prompt: args.prompt,
     ...(args.workerType !== undefined ? { workerType: args.workerType } : {}),
     ...(args.linearIssueId !== undefined ? { linearIssueId: args.linearIssueId } : {}),
-    taskMode: args.taskMode ?? 'planning',
+    taskMode: args.taskMode,
   };
 }
 
@@ -193,6 +430,48 @@ function toCalendarEventInput(
     ...(args.attendees !== undefined
       ? { attendees: args.attendees.map((email) => ({ email })) }
       : {}),
+  };
+}
+
+function toCalendarQueryEvent(event: CalendarQueryEvent, calendarId: string): {
+  id: string;
+  etag?: string;
+  summary: string;
+  calendarId: string;
+  start: CalendarQueryEvent['start'];
+  end: CalendarQueryEvent['end'];
+  location?: string;
+  htmlLink?: string;
+} {
+  return {
+    id: event.id,
+    ...(event.etag !== undefined ? { etag: event.etag } : {}),
+    summary: event.summary,
+    calendarId,
+    start: event.start,
+    end: event.end,
+    ...(event.location !== undefined ? { location: event.location } : {}),
+    ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
+  };
+}
+
+function requireCalendarUpdateSnapshot(args: UpdateCalendarEventToolArgs): {
+  calendarId: string;
+  expectedEtag: string;
+} {
+  if (
+    args.calendarId === undefined ||
+    args.calendarId.trim() === '' ||
+    args.expectedEtag === undefined ||
+    args.expectedEtag.trim() === '' ||
+    args.eventStart === undefined ||
+    args.eventEnd === undefined
+  ) {
+    throw new Error('Calendar event snapshot is missing or incomplete');
+  }
+  return {
+    calendarId: args.calendarId,
+    expectedEtag: args.expectedEtag,
   };
 }
 

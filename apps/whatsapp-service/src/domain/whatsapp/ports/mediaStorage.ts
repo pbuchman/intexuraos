@@ -15,6 +15,17 @@ export interface UploadResult {
   gcsPath: string;
 }
 
+export interface PrivateMediaDeletionBatchInput {
+  userId: string;
+  cursor?: string;
+  limit: number;
+}
+
+export type PrivateMediaDeletionBatchResult =
+  | { status: 'advanced'; deletedCount: number; nextCursor: string }
+  | { status: 'retry'; deletedCount: number }
+  | { status: 'empty'; deletedCount: 0 };
+
 /**
  * Port for media storage operations (upload, delete, signed URL).
  */
@@ -59,12 +70,38 @@ export interface MediaStoragePort {
     contentType: string
   ): Promise<Result<UploadResult, WhatsAppError>>;
 
+  uploadPrivateMedia(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>>;
+
+  uploadPrivateThumbnail(
+    userId: string,
+    messageId: string,
+    mediaId: string,
+    extension: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<Result<UploadResult, WhatsAppError>>;
+
   /**
    * Delete a file from storage.
    *
    * @param gcsPath - GCS path of the file to delete
    */
   delete(gcsPath: string): Promise<Result<void, WhatsAppError>>;
+
+  /**
+   * Delete at most one lexicographically ordered batch under a user's private-media prefix.
+   * A retry result never advances the caller's durable cursor.
+   */
+  deletePrivateMediaBatch(
+    input: PrivateMediaDeletionBatchInput
+  ): Promise<Result<PrivateMediaDeletionBatchResult, WhatsAppError>>;
 
   /**
    * Generate a signed URL for file access.

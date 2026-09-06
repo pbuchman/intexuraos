@@ -1,18 +1,39 @@
 import { useState } from 'react';
 import { CheckCircle, Copy } from 'lucide-react';
 import { Card, MarkdownContent } from '@/components';
-import type { LlmResult, Research } from '@/services/researchAgentApi.types';
+import type {
+  LlmResult,
+  OpenRouterModelInfo,
+  Research,
+} from '@/services/researchAgentApi.types';
 import { getModelDisplayName, formatTokenCount, formatCost, formatNumber } from './shared.js';
 import { StatusDot, CollapsibleInputContext } from './ProcessingStatus.js';
+import { resolveStoredResearchModel } from '@/utils/openRouterModelNames.js';
 
 interface LlmResultCardProps {
   result: LlmResult;
   onCopy: (text: string) => void;
   copied: boolean;
+  availableModelIds: string[];
+  availableModels: OpenRouterModelInfo[];
+  availabilityKnown: boolean;
 }
 
-function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JSX.Element {
+function LlmResultCard({
+  result,
+  onCopy,
+  copied,
+  availableModelIds,
+  availableModels,
+  availabilityKnown,
+}: LlmResultCardProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
+  const model = resolveStoredResearchModel({
+    modelId: result.model,
+    storedProvider: result.provider,
+    availableModelIds,
+    availableModels,
+  });
 
   const hasTokenInfo = result.inputTokens !== undefined && result.outputTokens !== undefined;
   const hasCost = result.costUsd !== undefined;
@@ -25,9 +46,22 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
         }}
         className="flex w-full cursor-pointer items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50"
       >
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <StatusDot status={result.status} />
-          <span className="font-medium dark:text-slate-100">{getModelDisplayName(result.model)}</span>
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2 font-medium dark:text-slate-100">
+              {model.name}
+              {availabilityKnown && !model.available ? (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                  Unavailable
+                </span>
+              ) : null}
+            </span>
+            <span className="block truncate text-xs text-slate-400">
+              {model.provider}
+              {model.author !== null ? ` · ${model.author}` : ''} · {model.id}
+            </span>
+          </span>
           {hasTokenInfo ? (
             <span className="text-sm text-slate-400">
               in: {formatTokenCount(result.inputTokens ?? 0)} / out:{' '}
@@ -119,19 +153,44 @@ interface ResearchResultsProps {
   research: Research;
   copiedSection: string | null;
   onCopy: (text: string, section: string) => void;
+  availableModelIds?: string[];
+  availableModels?: OpenRouterModelInfo[];
+  availabilityKnown?: boolean;
 }
 
-export function ResearchResults({ research, copiedSection, onCopy }: ResearchResultsProps): React.JSX.Element | null {
+export function ResearchResults({
+  research,
+  copiedSection,
+  onCopy,
+  availableModelIds = [],
+  availableModels = [],
+  availabilityKnown = false,
+}: ResearchResultsProps): React.JSX.Element | null {
   const completedResults = research.llmResults.filter((r) => r.status === 'completed');
   const hasInputContexts =
     research.inputContexts !== undefined && research.inputContexts.length > 0;
-  const isSingleModelResearch = completedResults.length === 1 && !hasInputContexts;
+  const isSingleModelResearch =
+    research.llmResults.length === 1 && completedResults.length === 1 && !hasInputContexts;
   const singleResult = isSingleModelResearch ? completedResults[0] : undefined;
   const hasResults = research.llmResults.some(
     (r) =>
       (r.result !== undefined && r.result !== '') || (r.error !== undefined && r.error !== '')
   );
   const showIndividualResults = !isSingleModelResearch && hasResults;
+  const synthesisModel = resolveStoredResearchModel({
+    modelId: research.synthesisModel,
+    availableModelIds,
+    availableModels,
+  });
+  const singleResultModel =
+    singleResult === undefined
+      ? null
+      : resolveStoredResearchModel({
+          modelId: singleResult.model,
+          storedProvider: singleResult.provider,
+          availableModelIds,
+          availableModels,
+        });
 
   return (
     <>
@@ -188,7 +247,8 @@ export function ResearchResults({ research, copiedSection, onCopy }: ResearchRes
             <div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Synthesis Report</h3>
               <span className="text-sm text-slate-500 dark:text-slate-400">
-                Synthesized by {getModelDisplayName(research.synthesisModel)}
+                Synthesized by {synthesisModel.name} · {synthesisModel.id}
+                {availabilityKnown && !synthesisModel.available ? ' · Unavailable' : ''}
               </span>
             </div>
             <button
@@ -223,7 +283,11 @@ export function ResearchResults({ research, copiedSection, onCopy }: ResearchRes
               <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Research Report</h3>
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                 <span>
-                  Generated by {getModelDisplayName(singleResult.model)}
+                  Generated by {singleResultModel?.name ?? getModelDisplayName(singleResult.model)}
+                  {singleResultModel !== null ? ` · ${singleResultModel.provider} · ${singleResultModel.id}` : ''}
+                  {availabilityKnown && singleResultModel?.available === false
+                    ? ' · Unavailable'
+                    : ''}
                 </span>
                 {singleResult.inputTokens !== undefined && singleResult.outputTokens !== undefined ? (
                   <span className="text-slate-400">
@@ -304,12 +368,15 @@ export function ResearchResults({ research, copiedSection, onCopy }: ResearchRes
               )
               .map((result) => (
                 <LlmResultCard
-                  key={result.provider}
+                  key={result.model}
                   result={result}
                   onCopy={(text): void => {
-                    onCopy(text, result.provider);
+                    onCopy(text, result.model);
                   }}
-                  copied={copiedSection === result.provider}
+                  copied={copiedSection === result.model}
+                  availableModelIds={availableModelIds}
+                  availableModels={availableModels}
+                  availabilityKnown={availabilityKnown}
                 />
               ))}
           </div>

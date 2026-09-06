@@ -1,9 +1,8 @@
 /**
  * Dispatch phase for the Execution Agent workflow.
  *
- * Takes a prepared submission from prepareSubmission and either:
- *   - fans out child tasks for complex parents, or
- *   - creates and enqueues a single execution task.
+ * Takes a prepared submission from prepareSubmission and creates/enqueues a
+ * single execution task for the original Linear issue.
  *
  * Best-effort side effects (Linear issue state, Linear comments) happen here —
  * they are isolated behind `.catch(() => undefined)` so they cannot break the
@@ -14,13 +13,11 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { randomUUID } from 'node:crypto';
 import type { CodeTaskRepository } from '../../repositories/codeTaskRepository.js';
-import type { LinearAgentClient, IssueTreeNode } from '../../ports/linearAgentClient.js';
+import type { LinearAgentClient } from '../../ports/linearAgentClient.js';
 import type { TaskEnqueueService } from '../../services/taskEnqueueService.js';
 import type { CodeTask } from '../../models/codeTask.js';
 import type { WorkerLocation } from '../../models/worker.js';
-import { hasCodeTaskLabel } from '../../utils/labelUtils.js';
 import { generateWebhookSecret } from '../../utils/secrets.js';
-import { fanOutChildTasks } from '../fanOutChildTasks.js';
 import {
   EXECUTION_AGENT_PROMPT,
   type SubmitToExecutionAgentError,
@@ -38,107 +35,11 @@ export interface DispatchSubmissionDeps {
   orchestratorSecret: string;
 }
 
-/**
- * Dispatch a prepared submission: either fan out to children for a complex
- * parent, or create + enqueue a single execution task.
- */
 export async function dispatchSubmission(
   deps: DispatchSubmissionDeps,
   prepared: PreparedSubmission,
 ): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
-  if (prepared.complex !== undefined) {
-    return await dispatchComplex(deps, prepared, prepared.complex.validatedIssueUuid, prepared.complex.directChildren);
-  }
   return await dispatchSingle(deps, prepared);
-}
-
-async function dispatchComplex(
-  deps: DispatchSubmissionDeps,
-  prepared: PreparedSubmission,
-  validatedIssueUuid: string,
-  directChildren: IssueTreeNode[],
-): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
-  const { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, orchestratorSecret } = deps;
-  const { planningTask, userId, linearIssueId, effectiveWorkerType } = prepared;
-
-  logger.info(
-    { linearIssueId, issueId: validatedIssueUuid, childIdentifiers: directChildren.map((child) => child.identifier) },
-    'Complex task detected, triggering live child fan-out',
-  );
-
-  const fanOutResult = await fanOutChildTasks(
-    { logger, codeTaskRepo, taskEnqueueService, orchestratorSecret },
-    { planningTask, userId, childIssues: directChildren, workerType: effectiveWorkerType },
-  );
-
-  if (!fanOutResult.ok) {
-    if (fanOutResult.error.code === 'no_qualifying_children') {
-      return err({ code: 'complex_task_no_qualifying_children', message: fanOutResult.error.message });
-    }
-    if (fanOutResult.error.code === 'queue_full') {
-      return err({ code: 'queue_full', message: fanOutResult.error.message });
-    }
-    logger.error({ linearIssueId, error: fanOutResult.error }, 'Complex task fan-out failed');
-    return err({ code: 'internal_error', message: `Fan-out failed: ${fanOutResult.error.message}` });
-  }
-
-  const qualifyingChildren = directChildren
-    .filter((child) => hasCodeTaskLabel(child.labels))
-    .sort((a, b) => a.identifier.localeCompare(b.identifier));
-
-  const childTaskLines = qualifyingChildren
-    .map((child, index) => {
-      const taskId = fanOutResult.value.childTaskIds[index];
-      return taskId !== undefined
-        ? `- ${child.identifier}: [${taskId}](${buildCodeTaskUrl(taskId)})`
-        : `- ${child.identifier}`;
-    })
-    .join('\n');
-
-  await announceInLinear(
-    { logger, linearAgentClient },
-    {
-      userId,
-      issueId: linearIssueId,
-      stateFailureMessage: 'Failed to update parent Linear issue to In Progress for complex execution',
-      commentFailureMessage: 'Failed to add complex Execution Agent start comment to parent Linear issue',
-      body: `🚀 **Execution Agent implementation started for child tasks**
-
-**Design task:** [${planningTask.id}](${buildCodeTaskUrl(planningTask.id)})
-**Child implementation tasks:**
-${childTaskLines}`,
-    },
-  );
-
-  await Promise.all(
-    qualifyingChildren.map(async (child, index) => {
-      await linearAgentClient
-        .updateIssueState({ userId, issueId: child.identifier, state: 'in_progress' })
-        .catch(() => undefined);
-      const childTaskId = fanOutResult.value.childTaskIds[index];
-      if (childTaskId === undefined) {
-        return;
-      }
-      await linearAgentClient
-        .addComment({
-          userId,
-          issueId: child.identifier,
-          body: `🚀 **Execution Agent implementation started**
-
-**Design task:** [${planningTask.id}](${buildCodeTaskUrl(planningTask.id)})
-**Implementation task:** [${childTaskId}](${buildCodeTaskUrl(childTaskId)})`,
-        })
-        .catch(() => undefined);
-    }),
-  );
-
-  return ok({
-    codeTaskId: fanOutResult.value.primaryChildTaskId,
-    resourceUrl: `/#/code-tasks/${fanOutResult.value.primaryChildTaskId}`,
-    workerLocation: 'queued' as WorkerLocation,
-    implementationOf: planningTask.id,
-    childTaskIds: fanOutResult.value.childTaskIds,
-  });
 }
 
 async function dispatchSingle(
@@ -229,7 +130,7 @@ async function dispatchSingle(
 
   return ok({
     codeTaskId: executionTaskId,
-    resourceUrl: `/#/code-tasks/${executionTaskId}`,
+    resourceUrl: buildCodeTaskUrl(executionTaskId),
     workerLocation: 'queued' as WorkerLocation,
     implementationOf: planningTask.id,
   });

@@ -11,11 +11,6 @@ const WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   auto: 'auto',
   opus: 'opus',
   sonnet: 'sonnet',
-  minimax: 'minimax',
-  'mimo-pro': 'mimo-pro',
-  glm: 'glm',
-  qwen: 'qwen',
-  kimi: 'kimi',
   codex: 'codex',
   'codex-xhigh': 'codex-xhigh',
   'openrouter-free': 'openrouter-free',
@@ -28,7 +23,7 @@ const WORKER_PATTERN = new RegExp(
 );
 
 /**
- * Extracts worker type from comment like "Fix this @worker minimax".
+ * Extracts worker type from comment like "Fix this @worker codex".
  * Returns undefined if no @worker directive found.
  */
 export function extractDispatchWorkerType(commentBody: string): WorkerType | undefined {

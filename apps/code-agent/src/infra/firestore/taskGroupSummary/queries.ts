@@ -63,7 +63,8 @@ export function buildListQuery(
     query = query.where('aggregateStatus', 'in', input.statusFilter);
   }
 
-  // Order by sort field
+  // `latestTaskUpdatedAt` is the retained physical/index field name for group
+  // lifecycle activity. Keeping it avoids an index and cursor migration.
   switch (input.sortBy) {
     case 'linear-id':
       query = query.orderBy('linearIssueSortKey', 'desc').orderBy('latestTaskUpdatedAt', 'desc');

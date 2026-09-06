@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Logger } from 'pino';
 import {
+  buildTaskDispatcherWorkerSecrets,
   CREDENTIAL_REFRESH_BUFFER_MS,
   runCredentialRefreshTick,
   resolveSettingsLocalTemplatePath,
 } from '../../bootstrap/service-wiring.js';
+import { loadEnvConfig, type BootstrapEnvConfig } from '../../bootstrap/env-config.js';
 import type { WorkerAuthRegistry } from '../../services/worker-auth/index.js';
 
 type LogEntry = [level: 'info' | 'warn' | 'error' | 'debug', ...args: unknown[]];
@@ -29,6 +31,30 @@ function makeRegistry(overrides: {
     isExpiringSoon: overrides.isExpiringSoon ?? ((): boolean => false),
     refresh: overrides.refresh ?? ((): Promise<void> => Promise.resolve()),
   } as unknown as WorkerAuthRegistry;
+}
+
+function makeParsedEnv(errorHubHost = 'home-dev.example.ts.net:8443'): BootstrapEnvConfig {
+  return loadEnvConfig({
+    INTEXURAOS_REPOSITORY_URL: 'https://github.com/example/repo.git',
+    INTEXURAOS_CODE_AGENT_URL: 'https://code-agent.test',
+    INTEXURAOS_INTERNAL_AUTH_TOKEN: 'internal-token',
+    INTEXURAOS_ORCHESTRATOR_SECRET: 'orchestrator-secret',
+    INTEXURAOS_USAGE_WEBHOOK_URL: 'https://usage.test',
+    INTEXURAOS_GITHUB_APP_ID: '12345',
+    INTEXURAOS_GITHUB_INSTALLATION_ID: '67890',
+    INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH:
+      '/run/intexuraos/dev/current/github-app-private-key.pem',
+    INTEXURAOS_PROJECT_ID: 'project-id',
+    GOOGLE_APPLICATION_CREDENTIALS: '/path/to/sa.json',
+    INTEXURAOS_LINEAR_API_KEY: 'linear-key',
+    INTEXURAOS_SENTRY_AUTH_TOKEN: 'sentry-token',
+    INTEXURAOS_ERROR_HUB_HOST: errorHubHost,
+    INTEXURAOS_MINIMAX_APP_API_KEY: 'minimax-key',
+    INTEXURAOS_MIMO_APP_API_KEY: 'mimo-key',
+    INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-key',
+    INTEXURAOS_KIMI_APP_API_KEY: 'kimi-key',
+    INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-key',
+  });
 }
 
 describe('runCredentialRefreshTick', () => {
@@ -142,5 +168,21 @@ describe('resolveSettingsLocalTemplatePath', () => {
     expect(resolveSettingsLocalTemplatePath('/repo')).toBe(
       '/repo/docker/code-worker/config-defaults/settings.local.json'
     );
+  });
+});
+
+describe('buildTaskDispatcherWorkerSecrets', () => {
+  it('forwards the parsed Error Hub host to task dispatcher worker secrets', () => {
+    const env = makeParsedEnv('home-dev.example.ts.net:8443');
+
+    const secrets = buildTaskDispatcherWorkerSecrets(env, 'anthropic-token');
+
+    expect(secrets).not.toHaveProperty('SENTRY_AUTH_TOKEN');
+    expect(secrets).toEqual({
+      ANTHROPIC_API_KEY: 'anthropic-token',
+      LINEAR_API_KEY: 'linear-key',
+      ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
+      OPENROUTER_API_KEY: 'openrouter-key',
+    });
   });
 });

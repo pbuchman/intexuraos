@@ -11,21 +11,21 @@
 export interface MetricsClient {
   /**
    * Record a task submission event.
-   * @param workerType - The worker type (opus, auto, glm)
+   * @param workerType - The worker type (for example opus, auto, or openrouter-free)
    * @param source - The submission source (whatsapp, web)
    */
   incrementTasksSubmitted(workerType: string, source: string): Promise<void>;
 
   /**
    * Record a task completion event.
-   * @param workerType - The worker type (opus, auto, glm)
+   * @param workerType - The worker type (for example opus, auto, or openrouter-free)
    * @param status - The completion status (completed, failed, cancelled, timeout)
    */
   incrementTasksCompleted(workerType: string, status: string): Promise<void>;
 
   /**
    * Record the duration of a task execution.
-   * @param workerType - The worker type (opus, auto, glm)
+   * @param workerType - The worker type (for example opus, auto, or openrouter-free)
    * @param durationSeconds - The duration in seconds
    */
   recordTaskDuration(workerType: string, durationSeconds: number): Promise<void>;
@@ -39,7 +39,7 @@ export interface MetricsClient {
 
   /**
    * Record the estimated cost of a task.
-   * @param workerType - The worker type (opus, auto, glm)
+   * @param workerType - The worker type (for example opus, auto, or openrouter-free)
    * @param userId - The user ID for cost attribution
    * @param dollars - The cost in dollars
    */

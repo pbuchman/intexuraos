@@ -2,9 +2,17 @@
 
 ## Purpose
 
-These scenarios define the dev-environment behavioral checks for `intex-agent` once it is deployed to `https://dev.intexuraos.cloud`.
+These scenarios define behavioral checks for `intex-agent` in local/dev. They can run through the internal mocked-tool endpoint for conversation behavior or through the full dev flow for downstream resource persistence.
 
-The testing agent must drive the system through APIs and verify the user-facing behavior, session lifecycle, timeline events, and created resources. The validation must not be a raw JSON snapshot comparison. JSON from APIs is evidence, but the contract is what happens when the user types, what the assistant replies, what session state is produced, and whether the expected note or calendar event exists.
+The testing agent must drive the system through APIs and verify the user-facing behavior, session lifecycle, timeline events, and resource intent. The validation must not be a raw JSON snapshot comparison. JSON from APIs is evidence, but the contract is what happens when the user types, what the assistant replies, what session state is produced, and whether the expected tool/resource effect is represented.
+
+## Execution Modes
+
+`internal_mock_tools`: use `POST /internal/intex-agent/test/conversation` on local or dev host-local `intex-agent` with `X-Internal-Auth`. Set `mode: "live_llm_mock_tools"`, use a unique lowercase `runId`, and set `userId` to `test-intex-agent-<runId>`. This mode preserves session lifecycle, prompt preferences, classifier, runner, confirmations, fallback handling, and `handleIncomingMessage()`, but all tools are mocked. It verifies intended tool execution and assistant behavior, not downstream provider persistence.
+
+`full_dev_flow`: use the deployed dev WhatsApp ingress path and connected test account. This mode verifies provider resources such as created notes or calendar events.
+
+Current Intex Agent sessions remain `waiting_for_user` after completed, clarification, no-action, and unsupported outcomes. Treat completed/unsupported timeline events and user-facing replies as the outcome evidence; do not require session close events unless the scenario explicitly supersedes or expires a session.
 
 ## Test Harness Expectations
 
@@ -17,14 +25,23 @@ Use a dedicated dev test user with:
 
 Every user message should include a unique marker such as `INTEX-E2E-<timestamp>-<scenario>` so the testing agent can find related sessions, notes, and calendar events without relying on global ordering.
 
-The testing agent should use API calls against the deployed dev environment to:
+The testing agent should use API calls against the selected execution mode to:
 
-- Submit inbound WhatsApp Assistant messages to the deployed dev flow.
-- Read assistant replies through the dev-visible outbound message/session APIs.
-- Read `intex-agent` sessions.
-- Read session timeline events.
-- Verify created notes through notes APIs or the web-visible note read path.
-- Verify created calendar events through calendar APIs or Google Calendar-visible event read paths.
+- In `internal_mock_tools`, submit the complete conversation to
+  `POST /internal/intex-agent/test/conversation`.
+- In `internal_mock_tools`, read assistant replies from
+  `data.turns[].assistantReplies`, not from WhatsApp-facing outbound resources.
+- In `internal_mock_tools`, inspect `data.sessions`, `data.sessionTransitions`,
+  sanitized `data.eventsBySessionId`, `data.toolCalls`, and
+  `data.behavioralTranscript` from the response.
+- In `full_dev_flow`, submit inbound WhatsApp Assistant messages to the deployed
+  dev flow.
+- In `full_dev_flow`, read assistant replies through the dev-visible outbound
+  message/session APIs.
+- In `full_dev_flow`, read `intex-agent` sessions and session timeline events.
+- In `internal_mock_tools`, verify `toolCalls`, `behavioralTranscript`, and sanitized `eventsBySessionId`.
+- In `full_dev_flow`, verify created notes through notes APIs or the web-visible note read path.
+- In `full_dev_flow`, verify created calendar events through calendar APIs or Google Calendar-visible event read paths.
 
 Exact assistant wording may vary, but the reply must contain the required meaning. Session boundary phrases are required: the user must be told when a new session starts and when the previous session was closed, finished, expired, or superseded.
 
@@ -35,13 +52,25 @@ Each scenario is a conversation contract, not a response-body contract. The test
 For each scenario:
 
 1. Generate a marker in the form `INTEX-E2E-<runId>-<scenarioNumber>`.
-2. Send each "User types" message through the dev WhatsApp Assistant ingress. If the deployed system exposes the internal route directly to the test harness, use the `intex-agent` inbound message endpoint. If the test harness exercises the full WhatsApp adapter, submit the message through the WhatsApp webhook simulation path.
-3. Use the same dev user, WhatsApp sender, and channel identity for every turn in the same scenario.
-4. Poll assistant replies until a WhatsApp-facing assistant message is available for the turn. Do not treat an internal API success response as the assistant reply.
-5. Locate the session by user, marker, and recent timeline content. If the session list endpoint does not support marker filtering, list recent sessions for the user and inspect timeline events until the marker is found.
-6. Verify the session state and timeline events described by the scenario.
-7. Verify the resulting note or calendar event through the relevant dev API or connected provider read path.
-8. For negative scenarios, verify that no note or calendar event containing the marker was created after the user message.
+2. In `internal_mock_tools`, send one request containing the scenario `turns`,
+   `runId`, `userId: test-intex-agent-<runId>`, `currentDateTime`, and bounded
+   `toolMocks`. Treat the captured assistant replies in the response as the
+   user-visible replies for this mode.
+3. In `full_dev_flow`, send each "User types" message through the dev WhatsApp
+   Assistant ingress. If the harness exercises the full WhatsApp adapter, submit
+   the message through the WhatsApp webhook simulation path.
+4. In `full_dev_flow`, use the same dev user, WhatsApp sender, and channel
+   identity for every turn in the same scenario.
+5. In `full_dev_flow`, poll assistant replies until a WhatsApp-facing assistant
+   message is available for the turn.
+6. Locate the session by user, marker, and recent timeline content. In
+   `internal_mock_tools`, use the response's `sessions` and `eventsBySessionId`;
+   in `full_dev_flow`, list recent sessions for the user and inspect timeline
+   events until the marker is found.
+7. Verify the session state and timeline events described by the scenario.
+8. In `internal_mock_tools`, verify the expected mocked tool call and result summary.
+9. In `full_dev_flow`, verify the resulting note or calendar event through the relevant dev API or connected provider read path.
+10. For negative scenarios, verify that no mocked tool call happened in `internal_mock_tools` and that no note or calendar event containing the marker was created in `full_dev_flow`.
 
 The testing agent should report results as a behavioral transcript:
 
@@ -73,9 +102,9 @@ Expected session state:
 
 - One new session exists for the test user.
 - Session starts with `startReason: no_active_session` unless a prior session exists, in which case the assistant must acknowledge the prior session before starting this one.
-- Session final status is `completed`.
+- Session status remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
 - Active or completed tool is `create_note`.
-- Timeline includes session start, user message, note tool call start, note tool call completion, assistant confirmation, and session close.
+- Timeline includes session start, user message, note tool completion, and assistant confirmation.
 
 Expected resource result:
 
@@ -100,9 +129,9 @@ Expected assistant behavior:
 
 Expected session state:
 
-- Session final status is `completed`.
+- Session status remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
 - Active or completed tool is `create_calendar_event`.
-- Timeline includes session start, user message, calendar tool call start, calendar tool call completion, assistant confirmation, and session close.
+- Timeline includes session start, user message, calendar tool completion, and assistant confirmation.
 
 Expected resource result:
 
@@ -146,8 +175,8 @@ Expected assistant behavior after second message:
 
 Expected session state after second message:
 
-- The same session final status is `completed`.
-- Timeline includes the second user message, calendar tool call start, calendar tool call completion, assistant confirmation, and session close.
+- The same session remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
+- Timeline includes the second user message, calendar tool completion, and assistant confirmation.
 
 Expected resource result:
 
@@ -191,7 +220,7 @@ Expected session state:
 - The original calendar clarification session final status is `superseded` or `cancelled`.
 - The original session end reason is user-driven superseding or cancellation.
 - A new session exists for the note request.
-- The new session final status is `completed`.
+- The new session remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
 - The new session tool is `create_note`.
 
 Expected resource result:
@@ -199,7 +228,7 @@ Expected resource result:
 - No calendar event is created for `INTEX-E2E-004 dentist`.
 - A note exists with marker `INTEX-E2E-004` and code `9988`.
 
-## Scenario 5: Unsupported Request Closes As Unsupported
+## Scenario 5: Unsupported Request Returns An Unsupported Outcome
 
 User types:
 
@@ -212,25 +241,24 @@ Expected assistant behavior:
 - Replies in WhatsApp.
 - Says that a new session started.
 - Clearly says the request is not supported yet.
-- States that the currently supported capabilities are notes and calendar events.
+- Names supported Intex Agent capabilities instead of inventing an Uber booking flow.
 - Does not call a note or calendar tool.
 
 Expected session state:
 
-- Session final status is `unsupported`.
-- Session end reason is `unsupported_request`.
-- Timeline includes session start, user message, unsupported request event, assistant unsupported reply, and session close.
+- Session status remains `waiting_for_user` after the unsupported reply; the unsupported outcome is proven by the `unsupported_request` event.
+- Timeline includes session start, user message, unsupported request event, and assistant unsupported reply.
 
 Expected resource result:
 
 - No note is created for `INTEX-E2E-005`.
 - No calendar event is created for `INTEX-E2E-005`.
 
-## Scenario 6: New Message After Completed Session Starts A New Session
+## Scenario 6: New Message After Completed Outcome Continues The Open Session
 
 Precondition:
 
-- Scenario 1 or any other one-message successful session has completed.
+- Scenario 1 or any other one-message successful session has produced a completed tool outcome and is waiting for the user.
 
 User types:
 
@@ -241,16 +269,15 @@ Remember INTEX-E2E-006 parking is on level P3.
 Expected assistant behavior:
 
 - Replies in WhatsApp.
-- Says that the previous session finished.
-- Says that a new session started.
+- Continues the same open session.
+- Does not say that a new session started.
 - Confirms the note was saved.
 
 Expected session state:
 
-- A new session is created rather than reopening the completed session.
-- New session final status is `completed`.
-- Previous session remains `completed`.
-- Timeline for the new session starts with a session-started event whose reason reflects a previous completed session.
+- The existing `waiting_for_user` session is reused.
+- The session remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
+- Timeline includes the new user message, the completed note tool outcome, and assistant confirmation.
 
 Expected resource result:
 
@@ -273,7 +300,7 @@ Expected assistant behavior:
 
 Expected session state:
 
-- Session final status is `completed`.
+- Session status remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
 - Tool is `create_note`.
 - Timeline includes note tool execution and assistant confirmation.
 
@@ -315,7 +342,7 @@ Expected assistant behavior after second message:
 
 Expected session state after second message:
 
-- Same session final status is `completed`.
+- The same session remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
 - Tool is `create_calendar_event`.
 
 Expected resource result:
@@ -336,12 +363,12 @@ Expected assistant behavior:
 
 - Closes any active or waiting session if one exists.
 - Says that a new session started.
-- Says the assistant can create notes and calendar events.
+- Says what supported Intex Agent jobs it can help with next.
 - Does not call any tool.
 
 Expected session state:
 
-- A new session exists with status `active` or another idle/open status chosen by the implementation.
+- A new session exists with status `waiting_for_user`.
 - Timeline includes session start and assistant message.
 - No tool call events exist for this session.
 
@@ -367,7 +394,7 @@ Expected assistant behavior:
 
 Expected session state:
 
-- Session final status is `completed`.
+- Session status remains `waiting_for_user` after the assistant reply; completion is proven by the completed tool event and reply.
 - Tool is `create_note`.
 - Timeline records that the source was voice or transcription, while still showing the transcript text as the user message content.
 
@@ -383,9 +410,9 @@ The implementation passes this scenario suite when all executed scenarios demons
 Failures include:
 
 - Starting a new product session silently.
-- Continuing a completed session without telling the user a new session started.
+- Continuing a superseded or expired session without telling the user a new session started.
 - Treating explicit `new session` as clarification text.
 - Creating a calendar event when required details are missing.
 - Creating notes or calendar events for unsupported requests.
-- Returning only machine-readable output without a WhatsApp-facing assistant message.
+- Returning only machine-readable output without a WhatsApp-facing assistant message or, in `internal_mock_tools`, a captured assistant reply.
 - Validating only raw response JSON without checking session timeline and created resources.

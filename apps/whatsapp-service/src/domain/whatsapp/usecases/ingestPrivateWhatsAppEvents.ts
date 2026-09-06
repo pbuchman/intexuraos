@@ -5,12 +5,16 @@ import type {
   PrivateWhatsAppDeliveryMode,
   PrivateWhatsAppIngestEventResult,
   PrivateWhatsAppIngestResult,
+  PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessageDirection,
   PrivateWhatsAppMessageType,
+  PrivateWhatsAppRelationTargetUnavailableReason,
   StorePrivateWhatsAppMessageInput,
 } from '../models/PrivateWhatsApp.js';
+import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { PrivateWhatsAppRepository } from '../ports/privateWhatsAppRepository.js';
 import type { Logger } from '../utils/logger.js';
+import { publishPrivateStoredMediaTranscriptionRequest } from './privateStoredMediaTranscription.js';
 
 export interface IngestPrivateWhatsAppEventsInput {
   sourceAccountId: string;
@@ -43,7 +47,27 @@ export interface IngestPrivateWhatsAppEventInput {
       mimeType?: string;
       fileName?: string;
       sizeBytes?: number;
+      width?: number;
+      height?: number;
+      durationMs?: number;
       sha256?: string;
+      storageStatus?: 'stored';
+      gcsPath?: string;
+      thumbnailGcsPath?: string;
+      storedMimeType?: string;
+      storedSizeBytes?: number;
+      storedAt?: string;
+    };
+    reaction?: {
+      emoji: string;
+      targetMatrixEventId: string;
+      targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
+    };
+    relation?: {
+      kind: 'replacement' | 'redaction';
+      targetMatrixEventId: string;
+      applicationStatus: 'pending';
+      targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
     };
   };
   rawMatrixEvent: unknown;
@@ -51,6 +75,7 @@ export interface IngestPrivateWhatsAppEventInput {
 
 export interface IngestPrivateWhatsAppEventsDeps {
   privateWhatsAppRepository: PrivateWhatsAppRepository;
+  eventPublisher: EventPublisherPort;
 }
 
 type ParseEventResult =
@@ -61,6 +86,12 @@ type ParseMessageResult =
   | RejectedEvent;
 type ParseMediaResult =
   | { ok: true; media?: IngestPrivateWhatsAppEventInput['message']['media'] }
+  | RejectedEvent;
+type ParseRelationResult =
+  | { ok: true; relation?: IngestPrivateWhatsAppEventInput['message']['relation'] }
+  | RejectedEvent;
+type ParseReactionResult =
+  | { ok: true; reaction?: IngestPrivateWhatsAppEventInput['message']['reaction'] }
   | RejectedEvent;
 
 interface RejectedEvent {
@@ -84,6 +115,10 @@ const MESSAGE_TYPES = new Set<PrivateWhatsAppMessageType>([
 const CHAT_TYPES = new Set<PrivateWhatsAppChatType>(['direct', 'group', 'unknown']);
 const MESSAGE_DIRECTIONS = new Set<PrivateWhatsAppMessageDirection>(['incoming', 'outgoing']);
 const PRIVATE_WHATSAPP_EVENT_TIME_ZONE = 'Europe/Warsaw';
+const RELATION_TARGET_UNAVAILABLE_REASONS = new Set<PrivateWhatsAppRelationTargetUnavailableReason>([
+  'matrix_notice',
+  'redacted_reaction_tombstone',
+]);
 
 export class IngestPrivateWhatsAppEventsUseCase {
   constructor(private readonly deps: IngestPrivateWhatsAppEventsDeps) {}
@@ -95,7 +130,7 @@ export class IngestPrivateWhatsAppEventsUseCase {
     const messages: PrivateWhatsAppIngestEventResult[] = [];
 
     for (const rawEvent of input.events) {
-      const parsedEvent = parseEvent(rawEvent);
+      const parsedEvent = parseEvent(rawEvent, input.deliveryMode);
       if (!parsedEvent.ok) {
         messages.push({
           matrixEventId: parsedEvent.matrixEventId,
@@ -111,8 +146,6 @@ export class IngestPrivateWhatsAppEventsUseCase {
       if (!storeResult.ok) {
         logger.error(
           {
-            matrixEventId: event.matrixEventId,
-            sourceAccountId: input.sourceAccountId,
             error: storeResult.error,
           },
           'Failed to store private WhatsApp event'
@@ -128,12 +161,22 @@ export class IngestPrivateWhatsAppEventsUseCase {
         messageId: outcome.messageId,
       };
       messages.push(result);
+
+      const publishResult = await publishPrivateTranscriptionRequestIfNeeded({
+        event,
+        outcome,
+        storeInput,
+        eventPublisher: this.deps.eventPublisher,
+        logger,
+      });
+      if (!publishResult.ok) {
+        return err(publishResult.error);
+      }
     }
 
     const summary = summarize(messages);
     logger.info(
       {
-        sourceAccountId: input.sourceAccountId,
         deliveryMode: input.deliveryMode,
         accepted: summary.accepted,
         duplicates: summary.duplicates,
@@ -145,7 +188,43 @@ export class IngestPrivateWhatsAppEventsUseCase {
   }
 }
 
-function parseEvent(rawEvent: unknown): ParseEventResult {
+interface PublishPrivateTranscriptionRequestInput {
+  event: IngestPrivateWhatsAppEventInput;
+  outcome: PrivateWhatsAppIngestOutcome;
+  storeInput: StorePrivateWhatsAppMessageInput;
+  eventPublisher: EventPublisherPort;
+  logger: Logger;
+}
+
+async function publishPrivateTranscriptionRequestIfNeeded(
+  input: PublishPrivateTranscriptionRequestInput
+): Promise<Result<void, WhatsAppError>> {
+  const { event, outcome, storeInput, eventPublisher, logger } = input;
+  if (outcome.outcome !== 'created' || outcome.chatTranscriptionEnabled !== true) {
+    return ok(undefined);
+  }
+  if (storeInput.message.type !== 'audio' && storeInput.message.type !== 'video') {
+    return ok(undefined);
+  }
+
+  const publishResult = await publishPrivateStoredMediaTranscriptionRequest({
+    sourceAccountId: storeInput.sourceAccountId,
+    userId: storeInput.userId,
+    messageId: outcome.messageId,
+    matrixEventId: event.matrixEventId,
+    messageType: storeInput.message.type,
+    media: storeInput.message.media,
+    chatTranscriptionEnabled: true,
+    eventPublisher,
+    logger,
+  });
+  if (!publishResult.ok) {
+    return err(publishResult.error);
+  }
+  return ok(undefined);
+}
+
+function parseEvent(rawEvent: unknown, deliveryMode: PrivateWhatsAppDeliveryMode): ParseEventResult {
   if (!isRecord(rawEvent)) {
     return rejectEvent('<unknown>', 'invalid_event');
   }
@@ -172,6 +251,12 @@ function parseEvent(rawEvent: unknown): ParseEventResult {
 
   const message = parseMessage(rawEvent, matrixEventId);
   if (!message.ok) return message;
+  const targetUnavailableReason =
+    message.message.relation?.targetUnavailableReason ??
+    message.message.reaction?.targetUnavailableReason;
+  if (targetUnavailableReason !== undefined && deliveryMode !== 'backfill') {
+    return rejectEvent(matrixEventId, 'reviewed_relation_target_requires_backfill');
+  }
 
   const chat = parseChat(rawEvent);
   const event: IngestPrivateWhatsAppEventInput = {
@@ -252,7 +337,6 @@ function parseMessage(
   ) {
     return rejectEvent(matrixEventId, 'unsupported_direction');
   }
-
   const message: IngestPrivateWhatsAppEventInput['message'] = {
     direction,
     type: readOptionalString(rawMessage, 'type') ?? 'unknown',
@@ -262,10 +346,22 @@ function parseMessage(
     message.text = text;
   }
 
+  const relation = parseRelation(rawEvent, rawMessage, matrixEventId);
+  if (!relation.ok) return relation;
+  if (relation.relation !== undefined) {
+    message.relation = relation.relation;
+  }
+
   const media = parseMedia(rawMessage, matrixEventId);
   if (!media.ok) return media;
   if (media.media !== undefined) {
     message.media = media.media;
+  }
+
+  const reaction = parseReaction(rawEvent, rawMessage, matrixEventId);
+  if (!reaction.ok) return reaction;
+  if (reaction.reaction !== undefined) {
+    message.reaction = reaction.reaction;
   }
 
   return { ok: true, message };
@@ -301,11 +397,202 @@ function parseMedia(
   if (typeof sizeBytes === 'number' && Number.isFinite(sizeBytes)) {
     media.sizeBytes = sizeBytes;
   }
+  const width = rawMedia['width'];
+  if (typeof width === 'number' && Number.isFinite(width)) {
+    media.width = width;
+  }
+  const height = rawMedia['height'];
+  if (typeof height === 'number' && Number.isFinite(height)) {
+    media.height = height;
+  }
+  const durationMs = rawMedia['durationMs'];
+  if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+    media.durationMs = durationMs;
+  }
   const sha256 = readOptionalString(rawMedia, 'sha256');
   if (typeof sha256 === 'string') {
     media.sha256 = sha256;
   }
+  const storageStatus = readOptionalString(rawMedia, 'storageStatus');
+  if (storageStatus === 'stored') {
+    media.storageStatus = storageStatus;
+  }
+  const gcsPath = readOptionalString(rawMedia, 'gcsPath');
+  if (typeof gcsPath === 'string') {
+    media.gcsPath = gcsPath;
+  }
+  const thumbnailGcsPath = readOptionalString(rawMedia, 'thumbnailGcsPath');
+  if (typeof thumbnailGcsPath === 'string') {
+    media.thumbnailGcsPath = thumbnailGcsPath;
+  }
+  const storedMimeType = readOptionalString(rawMedia, 'storedMimeType');
+  if (typeof storedMimeType === 'string') {
+    media.storedMimeType = storedMimeType;
+  }
+  const storedSizeBytes = rawMedia['storedSizeBytes'];
+  if (typeof storedSizeBytes === 'number' && Number.isFinite(storedSizeBytes)) {
+    media.storedSizeBytes = storedSizeBytes;
+  }
+  const storedAt = readOptionalString(rawMedia, 'storedAt');
+  if (typeof storedAt === 'string') {
+    media.storedAt = storedAt;
+  }
   return { ok: true, media };
+}
+
+function parseReaction(
+  rawEvent: Record<string, unknown>,
+  rawMessage: Record<string, unknown>,
+  matrixEventId: string
+): ParseReactionResult {
+  const explicitReaction = rawMessage['reaction'];
+  if (isRecord(explicitReaction)) {
+    const emoji = readOptionalString(explicitReaction, 'emoji');
+    const targetMatrixEventId = readOptionalString(explicitReaction, 'targetMatrixEventId');
+    if (
+      typeof emoji === 'string' &&
+      emoji.trim() !== '' &&
+      typeof targetMatrixEventId === 'string' &&
+      targetMatrixEventId.trim() !== ''
+    ) {
+      const targetUnavailableReason = readOptionalString(
+        explicitReaction,
+        'targetUnavailableReason'
+      );
+      if (
+        targetUnavailableReason === null ||
+        (targetUnavailableReason !== undefined &&
+          !RELATION_TARGET_UNAVAILABLE_REASONS.has(
+            targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason
+          ))
+      ) {
+        return rejectEvent(matrixEventId, 'invalid_relation_target_unavailable_reason');
+      }
+      return {
+        ok: true,
+        reaction: {
+          emoji,
+          targetMatrixEventId,
+          ...(targetUnavailableReason === undefined
+            ? {}
+            : {
+                targetUnavailableReason:
+                  targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason,
+              }),
+        },
+      };
+    }
+  }
+
+  const rawMatrixEvent = rawEvent['rawMatrixEvent'] ?? rawEvent;
+  if (!isRecord(rawMatrixEvent)) {
+    return { ok: true };
+  }
+  const content = rawMatrixEvent['content'];
+  if (!isRecord(content)) {
+    return { ok: true };
+  }
+  const relatesTo = content['m.relates_to'];
+  if (!isRecord(relatesTo)) {
+    return { ok: true };
+  }
+  const relType = readOptionalString(relatesTo, 'rel_type');
+  const targetMatrixEventId = readOptionalString(relatesTo, 'event_id');
+  const key = readOptionalString(relatesTo, 'key');
+  if (
+    relType !== 'm.annotation' ||
+    typeof targetMatrixEventId !== 'string' ||
+    targetMatrixEventId.trim() === '' ||
+    typeof key !== 'string' ||
+    key.trim() === ''
+  ) {
+    return { ok: true };
+  }
+  return { ok: true, reaction: { emoji: key, targetMatrixEventId } };
+}
+
+function parseRelation(
+  rawEvent: Record<string, unknown>,
+  rawMessage: Record<string, unknown>,
+  matrixEventId: string
+): ParseRelationResult {
+  const explicitRelation = rawMessage['relation'];
+  if (explicitRelation !== undefined) {
+    if (!isRecord(explicitRelation)) {
+      return rejectEvent(matrixEventId, 'invalid_context_relation');
+    }
+    const kind = readOptionalString(explicitRelation, 'kind');
+    const targetMatrixEventId = readOptionalString(explicitRelation, 'targetMatrixEventId');
+    if (!isContextRelationKind(kind) || !isValidRelationTarget(targetMatrixEventId, matrixEventId)) {
+      return rejectEvent(matrixEventId, 'invalid_context_relation');
+    }
+    const targetUnavailableReason = readOptionalString(
+      explicitRelation,
+      'targetUnavailableReason'
+    );
+    if (
+      targetUnavailableReason === null ||
+      (targetUnavailableReason !== undefined &&
+        !RELATION_TARGET_UNAVAILABLE_REASONS.has(
+          targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason
+        ))
+    ) {
+      return rejectEvent(matrixEventId, 'invalid_relation_target_unavailable_reason');
+    }
+    return {
+      ok: true,
+      relation: {
+        kind,
+        targetMatrixEventId,
+        applicationStatus: 'pending',
+        ...(targetUnavailableReason === undefined
+          ? {}
+          : {
+              targetUnavailableReason:
+                targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason,
+            }),
+      },
+    };
+  }
+
+  const rawMatrixEvent = rawEvent['rawMatrixEvent'] ?? rawEvent;
+  if (!isRecord(rawMatrixEvent)) {
+    return { ok: true };
+  }
+  const eventType = readOptionalString(rawMatrixEvent, 'type');
+  const content = isRecord(rawMatrixEvent['content']) ? rawMatrixEvent['content'] : {};
+  if (eventType === 'm.room.redaction') {
+    const targetMatrixEventId =
+      readOptionalString(rawMatrixEvent, 'redacts') ?? readOptionalString(content, 'redacts');
+    if (!isValidRelationTarget(targetMatrixEventId, matrixEventId)) {
+      return rejectEvent(matrixEventId, 'invalid_context_relation');
+    }
+    return {
+      ok: true,
+      relation: { kind: 'redaction', targetMatrixEventId, applicationStatus: 'pending' },
+    };
+  }
+
+  const relatesTo = isRecord(content['m.relates_to']) ? content['m.relates_to'] : undefined;
+  if (relatesTo === undefined || readOptionalString(relatesTo, 'rel_type') !== 'm.replace') {
+    return { ok: true };
+  }
+  const targetMatrixEventId = readOptionalString(relatesTo, 'event_id');
+  if (!isValidRelationTarget(targetMatrixEventId, matrixEventId)) {
+    return rejectEvent(matrixEventId, 'invalid_context_relation');
+  }
+  return {
+    ok: true,
+    relation: { kind: 'replacement', targetMatrixEventId, applicationStatus: 'pending' },
+  };
+}
+
+function isContextRelationKind(value: unknown): value is 'replacement' | 'redaction' {
+  return value === 'replacement' || value === 'redaction';
+}
+
+function isValidRelationTarget(value: unknown, matrixEventId: string): value is string {
+  return typeof value === 'string' && value.trim() !== '' && value !== matrixEventId;
 }
 
 function rejectEvent(matrixEventId: string, reason: string): RejectedEvent {
@@ -390,6 +677,12 @@ function toStoreInput(
   }
   if (event.message.media !== undefined) {
     storeInput.message.media = event.message.media;
+  }
+  if (event.message.reaction !== undefined) {
+    storeInput.message.reaction = event.message.reaction;
+  }
+  if (event.message.relation !== undefined) {
+    storeInput.message.relation = event.message.relation;
   }
 
   return storeInput;

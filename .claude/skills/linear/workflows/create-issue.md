@@ -147,7 +147,7 @@ Or if execution keywords present:
 | ------------- | ----------------------------------- | --------------------------------------------------- |
 | Bug           | `[bug] <short-error-message>`       | `[bug] Cannot read property 'id' of undefined`      |
 | Feature       | `[feature] <action-object-context>` | `[feature] Add OAuth token refresh for calendar`    |
-| Sentry        | `[sentry] <error-name>`             | `[sentry] TypeError: null is not an object`         |
+| SentryBox     | `[sentry] <error-name>`             | `[sentry] TypeError: null is not an object`         |
 | Coverage      | `[coverage][<app>] <description>`   | `[coverage][user-service] Add tests for validation` |
 | Refactoring   | `[refactor] <component-name>`       | `[refactor] Extract shared HTTP client utilities`   |
 | Documentation | `[docs] <topic>`                    | `[docs] API authentication flow`                    |

@@ -66,8 +66,7 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
   const env = [
     `TASK_ID=${taskId}`,
     `LINEAR_API_KEY=${config.secrets.LINEAR_API_KEY}`,
-    `SENTRY_AUTH_TOKEN=${config.secrets.SENTRY_AUTH_TOKEN}`,
-    `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
+    `ERROR_HUB_HOST=${config.secrets.ERROR_HUB_HOST}`,
     `WORKER_RUNTIME=${runtime}`,
     'CODE_WORKER_MODE=1',
     `WORKER_MANAGED_MODE=${providerConfig.managedAttemptsMode ? '1' : '0'}`,

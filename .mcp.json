@@ -8,9 +8,12 @@
       },
       "timeoutMs": 60000
     },
-    "sentry": {
-      "command": "npx",
-      "args": ["@sentry/mcp-server@latest", "--access-token", "${SENTRY_AUTH_TOKEN}"]
+    "error_hub": {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "exec sentry-mcp --access-token tailnet-only --host \"$ERROR_HUB_HOST\" --disable-skills=seer"
+      ]
     }
   }
 }

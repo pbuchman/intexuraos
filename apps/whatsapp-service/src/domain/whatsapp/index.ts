@@ -53,13 +53,28 @@ export type {
   PrivateWhatsAppIngestEventResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppIngestResult,
+  PrivateWhatsAppConversationContextMessageResult,
+  PrivateConversationContextMessage,
+  PrivateConversationContextOmittedCounts,
+  PrivateConversationContextOmittedMessage,
+  PrivateConversationContextOmissionReason,
+  PrivateConversationContextResponse,
   PrivateWhatsAppMediaInfo,
+  PrivateWhatsAppMediaStorageStatus,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageDirection,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
   PrivateWhatsAppMessageInput,
   PrivateWhatsAppMessageType,
+  PrivateWhatsAppReactionInfo,
+  PrivateWhatsAppReactionInput,
+  PrivateWhatsAppReactionQueryInput,
+  PrivateWhatsAppReactionQueryResult,
+  PrivateWhatsAppReactionSummary,
+  PrivateWhatsAppTranscriptionError,
+  PrivateWhatsAppTranscriptionState,
+  PrivateWhatsAppTranscriptionStatus,
   PrivateWhatsAppSender,
   PrivateWhatsAppSenderQueryInput,
   PrivateWhatsAppSenderQueryResult,
@@ -68,8 +83,46 @@ export type {
   PrivateWhatsAppSenderDayQueryResult,
   PrivateWhatsAppSummaryStatus,
   StorePrivateWhatsAppMessageInput,
+  UpdatePrivateWhatsAppChatTranscriptionInput,
+  UpdatePrivateWhatsAppMessageStoredMediaInput,
+  UpdatePrivateWhatsAppMessageStoredMediaResult,
+  UpdatePrivateWhatsAppMessageTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionResult,
   UpsertPrivateWhatsAppAccountInput,
 } from './models/PrivateWhatsApp.js';
+
+export type {
+  PrivateWhatsAppContextChange,
+  PrivateWhatsAppContextChangeType,
+  PrivateWhatsAppContextJournalQueryInput,
+  PrivateWhatsAppContextJournalQueryResult,
+  PrivateWhatsAppContextMessagesByIdsInput,
+  PrivateWhatsAppContextProjection,
+  PrivateWhatsAppOwnedChatInput,
+} from './models/PrivateWhatsAppContextJournal.js';
+
+export type {
+  PrivateDigestChatType,
+  PrivateDigestSourceError,
+  PrivateDigestMessage,
+  PrivateDigestMessageReferenceFactory,
+  PrivateDigestMessageReferenceInput,
+  PrivateDigestSourcePosition,
+  PrivateDigestSourceRevisionClaims,
+  QueryPrivateDigestMessagesInput,
+  QueryPrivateDigestMessagesResult,
+  ValidatePrivateDigestSourceInput,
+  ValidatedPrivateDigestSource,
+} from './models/PrivateWhatsAppDigestSource.js';
+
+export {
+  emptyPrivateWhatsAppErasureCounts,
+  type PrivateWhatsAppErasureCounts,
+  type PrivateWhatsAppErasureRequest,
+  type PrivateWhatsAppErasureStage,
+  type PrivateWhatsAppErasureStatus,
+  type PrivateWhatsAppErasureWorkItem,
+} from './models/PrivateWhatsAppErasure.js';
 
 // Ports
 export type {
@@ -84,7 +137,12 @@ export type {
   PhoneVerificationRepository,
 } from './ports/repositories.js';
 
-export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';
+export type {
+  MediaStoragePort,
+  PrivateMediaDeletionBatchInput,
+  PrivateMediaDeletionBatchResult,
+  UploadResult,
+} from './ports/mediaStorage.js';
 
 export type {
   WhatsAppCloudApiPort,
@@ -94,29 +152,96 @@ export type {
 
 export type { ThumbnailGeneratorPort, ThumbnailResult } from './ports/thumbnailGenerator.js';
 
-export type { EventPublisherPort } from './ports/eventPublisher.js';
+export type {
+  EventPublisherPort,
+  MatrixCorpusPublishReceipt,
+} from './ports/eventPublisher.js';
 
-export type { WhatsAppMessageSender } from './ports/messageSender.js';
+export type {
+  WhatsAppMessageDigestTemplate,
+  WhatsAppMessageDigestV1Template,
+  WhatsAppMessageDigestV2Template,
+  WhatsAppMessageSender,
+} from './ports/messageSender.js';
 
 export type { TextMessageSendResult } from './ports/messageSender.js';
+export { WHATSAPP_MESSAGE_SEND_TIMEOUT_MS } from './ports/messageSender.js';
 
 export type { LinkPreviewFetcherPort } from './ports/linkPreviewFetcher.js';
 
 export type {
   OutboundMessage,
+  OutboundDeliveryState,
   OutboundMessageRepository,
 } from './ports/outboundMessageRepository.js';
+
+export type {
+  WhatsAppDeliveryReadiness,
+  WhatsAppDeliveryReadinessPort,
+} from './ports/whatsappDeliveryReadiness.js';
+
+export type {
+  MessageDigestDeliveryAuthorizationClient,
+  MessageDigestDeliveryAuthorizationIdentity,
+} from './ports/messageDigestDeliveryAuthorization.js';
 
 export type { NotificationPreferencesRepository } from './ports/notificationPreferencesRepository.js';
 
 export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepository.js';
 
+export type {
+  PrivateDigestSourceCursorClaims,
+  PrivateDigestSourceHighWatermarkClaims,
+  PrivateDigestSourceMessageReferenceClaims,
+  PrivateDigestSourceRawPage,
+  PrivateDigestSourceRouteBinding,
+  PrivateDigestSourceTokenCodec,
+  PrivateWhatsAppDigestSourceRepository,
+} from './ports/privateWhatsAppDigestSourceRepository.js';
+
+export type {
+  AdvancePrivateWhatsAppErasureResult,
+  PrivateWhatsAppErasurePublisher,
+  PrivateWhatsAppErasureRepository,
+  StartPrivateWhatsAppErasureResult,
+} from './ports/privateWhatsAppErasure.js';
+
+export {
+  createPrivateWhatsAppChatId,
+  createPrivateWhatsAppMessageId,
+  createPrivateWhatsAppSenderDayId,
+  createPrivateWhatsAppSenderId,
+} from './utils/privateWhatsAppIds.js';
+
+export {
+  projectPrivateDigestMessages,
+  validatePrivateDigestSource,
+  type PrivateWhatsAppDigestSourceDeps,
+} from './usecases/privateWhatsAppDigestSource.js';
+
+export {
+  readPrivateWhatsAppDigestSource,
+  type ReadPrivateWhatsAppDigestSourceDeps,
+} from './usecases/readPrivateWhatsAppDigestSource.js';
+
+export {
+  createWhatsAppDeliveryReadiness,
+  type WhatsAppDeliveryReadinessDeps,
+} from './usecases/whatsappDeliveryReadiness.js';
+
 // Events
 export type {
+  AudioStoredEvent,
+  ConversationAssistantContextAttachmentPreparationRequestedEvent,
+  ConversationAssistantPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
+  IntexMessageSourceType,
+  MatrixCorpusSignedIngestEvent,
   MediaCleanupEvent,
+  MediaTranscriptionRequestedEvent,
   SendMessageEvent,
+  TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
   WhatsAppInteractiveButton,
@@ -140,6 +265,15 @@ export {
   type ProcessAudioMessageLogger,
   type AudioMediaInfo,
 } from './usecases/processAudioMessage.js';
+
+export {
+  ProcessVideoMessageUseCase,
+  type ProcessVideoMessageInput,
+  type ProcessVideoMessageResult,
+  type ProcessVideoMessageDeps,
+  type ProcessVideoMessageLogger,
+  type VideoMediaInfo,
+} from './usecases/processVideoMessage.js';
 
 export {
   ExtractLinkPreviewsUseCase,
@@ -168,9 +302,23 @@ export {
 } from './usecases/ingestPrivateWhatsAppEvents.js';
 
 export {
+  BackfillPrivateWhatsAppStoredMediaUseCase,
+  type BackfillPrivateWhatsAppStoredMediaDeps,
+  type BackfillPrivateWhatsAppStoredMediaInput,
+  type BackfillPrivateWhatsAppStoredMediaResult,
+} from './usecases/backfillPrivateWhatsAppStoredMedia.js';
+
+export {
   shouldDeliverMessage,
   type ShouldDeliverMessageInput,
 } from './usecases/shouldDeliverMessage.js';
+
+export {
+  processPrivateWhatsAppErasureBatch,
+  requestPrivateWhatsAppErasure,
+  type PrivateWhatsAppErasureDeps,
+  type RequestPrivateWhatsAppErasureResult,
+} from './usecases/privateWhatsAppErasure.js';
 
 // Utilities
 export { normalizePhoneNumber } from './utils/index.js';

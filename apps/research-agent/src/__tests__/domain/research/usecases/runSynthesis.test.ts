@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { SynthesisContext } from '@intexuraos/llm-prompts';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
@@ -158,12 +159,12 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'processing',
-    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.GPT54,
     llmResults: [
       {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini20Flash,
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPT54,
         status: 'completed',
         result: 'Google Result',
       },
@@ -255,8 +256,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'failed',
           error: 'Error',
         },
@@ -284,8 +285,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -310,7 +311,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        { model: LlmModels.GPT54, content: 'Google Result' },
         { model: 'claude-3', content: 'Claude Result' },
       ],
       undefined,
@@ -322,8 +323,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -343,7 +344,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        { model: LlmModels.GPT54, content: 'Google Result' },
         {
           model: LlmModels.O4MiniDeepResearch,
           content: `${LOW_QUALITY_WARNING_PREFIX}\n\nShort OpenAI Result`,
@@ -358,8 +359,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -378,7 +379,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        { model: LlmModels.GPT54, content: 'Google Result' },
         {
           model: LlmModels.O4MiniDeepResearch,
           content: `${LOW_QUALITY_WARNING_PREFIX}\n\n`,
@@ -393,8 +394,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -414,7 +415,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        { model: LlmModels.GPT54, content: 'Google Result' },
         {
           model: LlmModels.O4MiniDeepResearch,
           content: `${LOW_QUALITY_WARNING_PREFIX}\n\n`,
@@ -429,8 +430,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -449,7 +450,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+        { model: LlmModels.GPT54, content: 'Google Result' },
         { model: LlmModels.O4MiniDeepResearch, content: 'OpenAI Result' },
       ],
       undefined,
@@ -521,8 +522,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
           inputTokens: 1000,
@@ -572,8 +573,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
           inputTokens: 1000,
@@ -613,8 +614,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
           inputTokens: 1000,
@@ -651,8 +652,8 @@ describe('runSynthesis', () => {
       totalCostUsd: 0.044,
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
           costUsd: 0,
@@ -690,8 +691,8 @@ describe('runSynthesis', () => {
       totalCostUsd: 0.044,
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
           costUsd: 0,
@@ -761,8 +762,8 @@ describe('runSynthesis', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
           costUsd: 0,
@@ -843,7 +844,7 @@ describe('runSynthesis', () => {
   it('handles empty result string from LLM', async () => {
     const research = createTestResearch({
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'completed' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'completed' },
         {
           provider: LlmProviders.OpenAI,
           model: 'gpt-4',
@@ -859,7 +860,7 @@ describe('runSynthesis', () => {
     expect(deps.mockSynthesizer.synthesize).toHaveBeenCalledWith(
       'Test research prompt',
       [
-        { model: LlmModels.Gemini20Flash, content: '' },
+        { model: LlmModels.GPT54, content: '' },
         { model: 'gpt-4', content: 'OpenAI Result' },
       ],
       undefined,
@@ -870,11 +871,11 @@ describe('runSynthesis', () => {
   describe('skip synthesis logic', () => {
     it('skips synthesis when only 1 successful LLM and no input contexts', async () => {
       const research = createTestResearch({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [LlmModels.GPT54],
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Single result',
           },
@@ -905,8 +906,8 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Only success',
           },
@@ -934,11 +935,11 @@ describe('runSynthesis', () => {
 
     it('runs synthesis when 1 LLM succeeds with input contexts', async () => {
       const research = createTestResearch({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [LlmModels.GPT54],
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Google result',
           },
@@ -960,8 +961,8 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Google result',
           },
@@ -985,8 +986,8 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'failed',
             error: 'Failed',
           },
@@ -1006,11 +1007,11 @@ describe('runSynthesis', () => {
 
     it('sends notification with app URL when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [LlmModels.GPT54],
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Single result',
           },
@@ -1030,11 +1031,11 @@ describe('runSynthesis', () => {
 
     it('does not report LLM success when synthesis skipped', async () => {
       const research = createTestResearch({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [LlmModels.GPT54],
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Single result',
           },
@@ -1101,7 +1102,7 @@ describe('runSynthesis', () => {
       expect(mockContextInferrer.inferSynthesisContext).toHaveBeenCalledWith({
         originalPrompt: 'Test research prompt',
         reports: [
-          { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+          { model: LlmModels.GPT54, content: 'Google Result' },
           { model: LlmModels.O4MiniDeepResearch, content: 'OpenAI Result' },
         ],
         additionalSources: undefined,
@@ -1170,7 +1171,7 @@ describe('runSynthesis', () => {
       expect(mockContextInferrer.inferSynthesisContext).toHaveBeenCalledWith({
         originalPrompt: 'Test research prompt',
         reports: [
-          { model: LlmModels.Gemini20Flash, content: 'Google Result' },
+          { model: LlmModels.GPT54, content: 'Google Result' },
           { model: LlmModels.O4MiniDeepResearch, content: 'OpenAI Result' },
         ],
         languageOverride: 'es',
@@ -1379,7 +1380,7 @@ describe('runSynthesis', () => {
       const mockShareStorage: ShareStoragePort = {
         upload: vi
           .fn()
-          .mockResolvedValue(err({ code: 'STORAGE_ERROR' as const, message: 'Upload failed' })),
+          .mockResolvedValue(err({ code: 'UPLOAD_FAILED', message: 'Upload failed' })),
         delete: vi.fn().mockResolvedValue(ok(undefined)),
       };
 
@@ -1390,6 +1391,10 @@ describe('runSynthesis', () => {
       });
 
       expect(result).toEqual({ ok: true });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { errorCode: 'UPLOAD_FAILED', errorMessage: 'Upload failed' },
+        '[4.5.3] HTML upload failed'
+      );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
         synthesizedResult: expect.stringContaining('Synthesized result'),
@@ -1402,7 +1407,7 @@ describe('runSynthesis', () => {
       });
     });
 
-    it('includes cover image in shareInfo when image generation succeeds with Google key', async () => {
+    it('delegates cover generation to image-service without provider keys', async () => {
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -1430,19 +1435,13 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { google: 'test-google-key' },
       });
 
       expect(result).toEqual({ ok: true });
-      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledWith(
-        expect.stringContaining('Synthesized result'),
-        LlmModels.Gemini25Pro,
-        'user-1',
-        expectedImagePromptOptions()
-      );
+      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalled();
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
-        LlmModels.Gemini25FlashImage,
+        LlmModels.GPTImage1,
         'user-1',
         expectedImageGenerationOptions('Test Cover Title')
       );
@@ -1455,10 +1454,7 @@ describe('runSynthesis', () => {
         totalInputTokens: 500,
         totalOutputTokens: 200,
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
-        shareInfo: expect.objectContaining({
-          coverImageId: 'img-123',
-          coverImageUrl: 'https://storage.example.com/full.png',
-        }),
+        shareInfo: expect.objectContaining({ coverImageId: 'img-123' }),
       });
     });
 
@@ -1490,7 +1486,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { openai: 'test-openai-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1502,7 +1497,7 @@ describe('runSynthesis', () => {
       );
     });
 
-    it('skips image generation when no API keys provided', async () => {
+    it('attempts image-service generation without receiving provider keys', async () => {
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -1525,7 +1520,7 @@ describe('runSynthesis', () => {
       });
 
       expect(result).toEqual({ ok: true });
-      expect(mockImageServiceClient.generatePrompt).not.toHaveBeenCalled();
+      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledTimes(1);
       expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
     });
 
@@ -1551,7 +1546,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { google: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1593,7 +1587,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { google: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1632,7 +1625,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { google: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1682,7 +1674,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { google: 'test-google-key', openai: 'test-openai-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1694,8 +1685,7 @@ describe('runSynthesis', () => {
       );
     });
 
-    it('falls back to Google for image generation when synthesis model is OpenAI-based but no OpenAI key', async () => {
-      // Covers getAvailableProviderPipelines: preferOpenAi=true but only Google key → Google pipeline
+    it('delegates image generation regardless of the synthesis model', async () => {
       const research = createTestResearch({
         synthesisModel: LlmModels.GPT54, // GPT model (starts with 'gpt-')
       });
@@ -1725,16 +1715,11 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { google: 'test-google-key' }, // Only Google key available
       });
 
       expect(result).toEqual({ ok: true });
-      expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
-        'generated prompt',
-        LlmModels.Gemini25FlashImage, // Should fall back to Google when OpenAI key not available
-        'user-1',
-        expectedImageGenerationOptions('Test Cover Title')
-      );
+      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(mockImageServiceClient.generateImage).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1752,8 +1737,8 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result 1',
             inputTokens: 1000,
@@ -1796,8 +1781,8 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Success',
             costUsd: 0.01,
@@ -1847,8 +1832,8 @@ describe('runSynthesis', () => {
         llmResults: [
           // Copied from source (should be excluded from llmTotals)
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Source Result 1',
             inputTokens: 1000,
@@ -1905,8 +1890,8 @@ describe('runSynthesis', () => {
         sourceLlmCostUsd: 0.06,
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Source Result',
             costUsd: 0.03,
@@ -1967,8 +1952,8 @@ describe('runSynthesis', () => {
       const research = createTestResearch({
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result',
             costUsd: 0.01,
@@ -2008,8 +1993,8 @@ describe('runSynthesis', () => {
         sourceLlmCostUsd: 0.05,
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Source Result',
             costUsd: 0.03,
@@ -2059,8 +2044,8 @@ describe('runSynthesis', () => {
         sourceLlmCostUsd: sourceLlmCost, // Already includes source's auxiliary costs
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Source Result 1',
             costUsd: 0.05,
@@ -2210,7 +2195,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
     });
   });
 
-  describe('provider failover (via generateCoverImage)', () => {
+  describe('OpenRouter cover generation delegated to image-service', () => {
     function createFakeImageServiceClient(): ImageServiceClient {
       return {
         generatePrompt: vi.fn().mockResolvedValue(
@@ -2223,8 +2208,8 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       };
     }
 
-    it('uses single available provider and succeeds on first try', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.Gemini25Pro });
+    it('does not require provider keys from research-agent', async () => {
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();
@@ -2232,33 +2217,21 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { google: 'google-key-123' },
       });
 
       expect(result).toEqual({ ok: true });
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
-      expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
-        expect.any(String),
-        LlmModels.Gemini25Pro,
-        'user-1',
-        expectedImagePromptOptions()
-      );
-      expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
-        'test prompt',
-        LlmModels.Gemini25FlashImage,
-        'user-1',
-        expectedImageGenerationOptions('Test Image')
-      );
+      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to alternate provider when preferred prompt generation fails', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.Gemini25Pro });
+    it('uses only OpenAI when both legacy Google and OpenAI keys exist', async () => {
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();
       (fakeImageClient.generatePrompt as ReturnType<typeof vi.fn>).mockImplementation(
         (_text: string, model: string) => {
-          if (model === LlmModels.Gemini25Pro) {
+          if (model === LlmModels.GPT54) {
             return Promise.resolve(err({ code: 'API_ERROR', message: 'Gemini 503' }));
           }
           return Promise.resolve(ok({ prompt: 'openai prompt', title: 'OpenAI Image' }));
@@ -2268,11 +2241,10 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { google: 'google-key-123', openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(2);
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'openai prompt',
         LlmModels.GPTImage1,
@@ -2281,14 +2253,14 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       );
     });
 
-    it('falls back to alternate provider when preferred image generation fails', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.Gemini25Pro });
+    it('does not attempt a second provider after OpenAI image generation', async () => {
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();
       (fakeImageClient.generateImage as ReturnType<typeof vi.fn>).mockImplementation(
         (_prompt: string, model: string) => {
-          if (model === LlmModels.Gemini25FlashImage) {
+          if (model === LlmModels.GPTImage1) {
             return Promise.resolve(err({ code: 'API_ERROR', message: 'Gemini image 503' }));
           }
           return Promise.resolve(
@@ -2300,12 +2272,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { google: 'google-key-123', openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(2);
-      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(2);
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(1);
       expect(fakeImageClient.generateImage).toHaveBeenLastCalledWith(
         expect.any(String),
         LlmModels.GPTImage1,
@@ -2318,8 +2289,8 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       );
     });
 
-    it('returns null when both providers fail and logs errors', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.Gemini25Pro });
+    it('keeps provider exhaustion in logs without reporting the handled fallback to Sentry', async () => {
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();
@@ -2330,24 +2301,27 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { google: 'google-key-123', openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(2);
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
       expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
+          [SKIP_SENTRY_KEY]: true,
           errors: expect.arrayContaining([
-            expect.objectContaining({ provider: 'Google' }),
-            expect.objectContaining({ provider: 'OpenAI' }),
+            expect.objectContaining({ provider: 'OpenRouter' }),
           ]),
         }),
-        expect.stringContaining('all 2 provider(s) exhausted')
+        expect.stringContaining('all 1 provider(s) exhausted')
+      );
+      expect(mockLogger.error).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.stringContaining('all 1 provider(s) exhausted')
       );
     });
 
-    it('returns null when no API keys are available', async () => {
+    it('delegates when no provider keys are supplied', async () => {
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -2356,12 +2330,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: {},
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).not.toHaveBeenCalled();
-      expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(1);
     });
 
     it('prefers OpenAI pipeline when synthesis model is gpt-based', async () => {
@@ -2373,7 +2346,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { google: 'google-key-123', openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -2392,7 +2364,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       );
     });
 
-    it('falls back to Google when OpenAI preferred but only Google key available', async () => {
+    it('always uses the stable image-service aliases', async () => {
       const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -2401,22 +2373,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { google: 'google-key-123' },
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
-        expect.any(String),
-        LlmModels.Gemini25Pro,
-        'user-1',
-        expectedImagePromptOptions()
-      );
-      expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
-        'test prompt',
-        LlmModels.Gemini25FlashImage,
-        'user-1',
-        expectedImageGenerationOptions('Test Image')
-      );
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(1);
     });
 
     it('uses only OpenAI pipeline when gpt-based model and only OpenAI key available', async () => {
@@ -2428,7 +2389,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -2447,8 +2407,8 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       );
     });
 
-    it('handles unexpected error and falls back to alternate provider', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.Gemini25Pro });
+    it('handles an unexpected OpenAI error without attempting direct Google', async () => {
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();
@@ -2464,17 +2424,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { google: 'google-key-123', openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(2);
-      expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
-        'fallback prompt',
-        LlmModels.GPTImage1,
-        'user-1',
-        expectedImageGenerationOptions('Fallback Image')
-      );
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
     });
   });
 });

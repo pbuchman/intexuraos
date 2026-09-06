@@ -5,8 +5,8 @@ This guide walks through setting up Cloudflare Browser Rendering for IntexuraOS 
 ## Prerequisites
 
 - A valid email address for Cloudflare account registration
-- Access to the IntexuraOS `.envrc` file (for storing secrets)
-- Access to GCP Secret Manager (for production secret storage)
+- Repository access for the versioned Cloudflare account ID
+- Access to GCP Secret Manager for the API token
 
 ## Step 1: Create a Cloudflare Account
 
@@ -49,28 +49,29 @@ Browser Rendering is part of Cloudflare Workers. The free tier includes 10 minut
 
 ## Step 5: Configure IntexuraOS
 
-### Development Environment (.envrc)
+### Development Environment
 
-Add to your `.envrc` file:
+Set `INTEXURAOS_CLOUDFLARE_ACCOUNT_ID` in
+`config/environments/common.json`. Store only the API token in Secret Manager:
 
 ```bash
-export INTEXURAOS_CLOUDFLARE_ACCOUNT_ID="your-account-id-here"
-export INTEXURAOS_CLOUDFLARE_API_TOKEN="your-api-token-here"
+echo -n "your-api-token" | gcloud secrets versions add INTEXURAOS_CLOUDFLARE_API_TOKEN \
+  --project=intexuraos-dev-pbuchman --data-file=-
+./scripts/sync-secrets.sh
+direnv allow
 ```
 
-Then reload: `direnv allow`
+### Production Environment
 
-### Production Environment (GCP Secret Manager)
-
-The secrets are managed via Terraform. After running `terraform apply`, populate the secrets:
+The account ID is deployed from the same versioned configuration. Secret
+Manager continues to provide only the API token:
 
 ```bash
-echo -n "your-account-id" | gcloud secrets versions add INTEXURAOS_CLOUDFLARE_ACCOUNT_ID \
-  --project=intexuraos-dev-pbuchman --data-file=-
-
 echo -n "your-api-token" | gcloud secrets versions add INTEXURAOS_CLOUDFLARE_API_TOKEN \
   --project=intexuraos-dev-pbuchman --data-file=-
 ```
+
+Do not add a Secret Manager version for `INTEXURAOS_CLOUDFLARE_ACCOUNT_ID`.
 
 ### Remove Old Crawl4AI Secret
 

@@ -20,6 +20,7 @@ describe('services', () => {
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         llmUsageServiceUrl: 'http://localhost:8132',
+        openRouterAppApiKey: 'openrouter-key',
       });
 
       const services = getServices();
@@ -51,6 +52,7 @@ describe('services', () => {
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         llmUsageServiceUrl: 'http://localhost:8132',
+        openRouterAppApiKey: 'openrouter-key',
       });
 
       expect(() => getServices()).not.toThrow();
@@ -88,6 +90,7 @@ describe('services', () => {
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         llmUsageServiceUrl: 'http://localhost:8132',
+        openRouterAppApiKey: 'openrouter-key',
       });
       resetServices();
 

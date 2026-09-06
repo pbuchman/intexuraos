@@ -1,12 +1,18 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import type { TaskGroupSummaryRepository } from '../ports/taskGroupSummaryRepository.js';
+import type { WhatsAppNotifier } from './whatsappNotifier.js';
+import { notifyTaskReadyForMergeIfEligible } from './readyToMergeNotification.js';
 
 export interface OnReviewSkippedDeps {
   codeTaskRepo: CodeTaskRepository;
   linearAgentClient: LinearAgentClient;
+  gitHubPRClient: Pick<GitHubPRClient, 'getPullRequestDetails'>;
+  whatsappNotifier: Pick<WhatsAppNotifier, 'notifyTaskReadyForMerge'>;
+  resolveGitHubToken: (userId: string) => Promise<string | null>;
   automationLog: AutomationLog;
   groupSummaryRepo: TaskGroupSummaryRepository;
   logger: Logger;
@@ -23,7 +29,16 @@ export interface OnReviewSkippedDeps {
  * All operations are best-effort: failures are logged but never propagate.
  */
 export function createOnReviewSkippedCallback(deps: OnReviewSkippedDeps): (args: { repository: string; prNumber: number }) => Promise<void> {
-  const { codeTaskRepo, linearAgentClient, automationLog, groupSummaryRepo, logger } = deps;
+  const {
+    codeTaskRepo,
+    linearAgentClient,
+    gitHubPRClient,
+    whatsappNotifier,
+    resolveGitHubToken,
+    automationLog,
+    groupSummaryRepo,
+    logger,
+  } = deps;
 
   return async function onReviewSkipped(args: { repository: string; prNumber: number }): Promise<void> {
     const { repository, prNumber } = args;
@@ -45,6 +60,14 @@ export function createOnReviewSkippedCallback(deps: OnReviewSkippedDeps): (args:
           'Skipped review for planning-origin task — not setting ready-to-merge');
         return;
       }
+
+      await codeTaskRepo.update(origin.id, {
+        result: {
+          ...(origin.result ?? {}),
+          merge_ready: '1',
+          merge_ready_reason: 'review_skipped',
+        },
+      });
 
       // Validate issue exists and get current labels
       const issueValidation = await linearAgentClient.validateIssue({
@@ -76,6 +99,32 @@ export function createOnReviewSkippedCallback(deps: OnReviewSkippedDeps): (args:
 
       logger.info({ repository, prNumber, linearIssueId: origin.linearIssueId },
         'Set ready-to-merge label for skipped review');
+
+      if (!issueValidation.value.labels.includes('ready-to-merge')) {
+        try {
+          await notifyTaskReadyForMergeIfEligible(
+            {
+              gitHubPRClient,
+              whatsappNotifier,
+              resolveGitHubToken,
+              logger,
+            },
+            {
+              task: origin,
+              userId: origin.userId,
+              linearIssueId: origin.linearIssueId,
+              repository,
+              prNumber,
+              ...(origin.result?.prUrl !== undefined && { prUrl: origin.result.prUrl }),
+            },
+          );
+        } catch (notificationError: unknown) {
+          logger.warn(
+            { error: notificationError, repository, prNumber, linearIssueId: origin.linearIssueId },
+            'Skipped-review ready-to-merge notification failed (best-effort)',
+          );
+        }
+      }
 
       // Record in the PR automation comment for visibility
       void automationLog.record(

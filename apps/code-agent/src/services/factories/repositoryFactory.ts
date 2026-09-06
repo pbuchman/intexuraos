@@ -25,6 +25,7 @@ import { createFirestoreEventDecisionRepository } from '../../infra/firestore/ev
 import { createTaskGroupSummaryFirestoreRepository } from '../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import { createFirestorePRAutomationCommentRepository } from '../../infra/firestore/prAutomationCommentRepository.js';
 import { createFirestoreCodeTaskDispatchNotificationRepository } from '../../infra/firestore/firestoreCodeTaskDispatchNotificationRepository.js';
+import { createFirestoreSentryIssueEventRepository } from '../../infra/firestore/sentryIssueEventRepository.js';
 import { withGroupUpdates } from '../../infra/firestore/codeTaskRepositoryWithGroupUpdates.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
@@ -44,6 +45,7 @@ import type { ExecutionMemoryApplicationRepository } from '../../domain/reposito
 import type { TaskGroupSummaryRepository } from '../../domain/ports/taskGroupSummaryRepository.js';
 import type { PRAutomationCommentRepository } from '../../domain/ports/prAutomationCommentRepository.js';
 import type { CodeTaskDispatchNotificationRepository } from '../../domain/repositories/codeTaskDispatchNotificationRepository.js';
+import type { SentryIssueEventRepository } from '../../domain/repositories/sentryIssueEventRepository.js';
 
 export interface RepositoryFactoryDeps {
   firestore: Firestore;
@@ -68,6 +70,7 @@ export interface RepositoryServices {
   executionMemoryRepo: ExecutionMemoryRepository;
   executionMemoryApplicationRepo: ExecutionMemoryApplicationRepository;
   codeTaskDispatchNotificationRepo: CodeTaskDispatchNotificationRepository;
+  sentryIssueEventRepo: SentryIssueEventRepository;
   /**
    * Consumed only by `automationLog` composition in `services.ts`; intentionally
    * not placed on `ServiceContainer` because no other module depends on it.
@@ -85,7 +88,11 @@ export function createRepositoryServices(deps: RepositoryFactoryDeps): Repositor
   const { firestore, logger } = deps;
 
   const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
-  const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
+  const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({
+    firestore,
+    logger,
+    authoritativeTaskReads: true,
+  });
   const codeTaskRepo = withGroupUpdates(rawCodeTaskRepo, groupSummaryRepo, logger);
 
   return {
@@ -106,6 +113,7 @@ export function createRepositoryServices(deps: RepositoryFactoryDeps): Repositor
     executionMemoryRepo: createFirestoreExecutionMemoryRepository({ firestore, logger }),
     executionMemoryApplicationRepo: createFirestoreExecutionMemoryApplicationRepository({ firestore, logger }),
     codeTaskDispatchNotificationRepo: createFirestoreCodeTaskDispatchNotificationRepository({ firestore, logger }),
+    sentryIssueEventRepo: createFirestoreSentryIssueEventRepository({ firestore, logger }),
     prAutomationCommentRepo: createFirestorePRAutomationCommentRepository({ logger }),
   };
 }

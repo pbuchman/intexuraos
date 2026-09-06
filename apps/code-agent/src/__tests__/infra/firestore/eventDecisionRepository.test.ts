@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from 'pino';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import type { CreateEventDecisionInput } from '../../../domain/models/eventDecision.js';
 
 // Mock getFirestore BEFORE importing the repository
@@ -99,7 +99,7 @@ describe('createFirestoreEventDecisionRepository', () => {
         decidedBy: 'github_agent',
         decision: 'request_review',
         reason: 'PR needs code review',
-        llmModel: LlmModels.Gemini25Flash,
+        llmModel: LegacyGoogleModels.Gemini25Flash,
         llmCostUsd: 0.0012,
         llmToolCalls: [
           { tool: 'request_review', args: { review_type: 'code_quality' } },
@@ -109,7 +109,7 @@ describe('createFirestoreEventDecisionRepository', () => {
         dispatchAction: 'create_review_task',
         dispatchParams: {
           reviewTypes: ['code_quality', 'security'],
-          workerType: 'qwen',
+          workerType: 'openrouter-free',
         },
       });
 
@@ -119,13 +119,13 @@ describe('createFirestoreEventDecisionRepository', () => {
       if (result.ok) {
         expect(result.value.decidedBy).toBe('github_agent');
         expect(result.value.decision).toBe('request_review');
-        expect(result.value.llmModel).toBe(LlmModels.Gemini25Flash);
+        expect(result.value.llmModel).toBe(LegacyGoogleModels.Gemini25Flash);
         expect(result.value.llmCostUsd).toBe(0.0012);
         expect(result.value.llmToolCalls).toHaveLength(2);
         expect(result.value.llmReasoning).toBe('This PR modifies auth logic across multiple services.');
         expect(result.value.dispatchAction).toBe('create_review_task');
         expect(result.value.dispatchParams?.reviewTypes).toEqual(['code_quality', 'security']);
-        expect(result.value.dispatchParams?.workerType).toBe('qwen');
+        expect(result.value.dispatchParams?.workerType).toBe('openrouter-free');
       }
     });
 
@@ -153,9 +153,42 @@ describe('createFirestoreEventDecisionRepository', () => {
       expect(mockDocRef.set).toHaveBeenCalledTimes(2);
     });
 
-    it('should return FIRESTORE_ERROR on failure', async () => {
+    it.each([
+      ['numeric DEADLINE_EXCEEDED', 4],
+      ['numeric UNAVAILABLE', 14],
+      ['named DEADLINE_EXCEEDED', 'DEADLINE_EXCEEDED'],
+      ['named UNAVAILABLE', 'UNAVAILABLE'],
+    ])('should retry a transient %s write once before returning success', async (_label, code) => {
+      const transientError = Object.assign(new Error('Temporary Firestore failure'), { code });
       const mockDocRef = {
-        set: vi.fn().mockRejectedValue(new Error('Firestore unavailable')),
+        set: vi.fn()
+          .mockRejectedValueOnce(transientError)
+          .mockResolvedValueOnce(undefined),
+      };
+
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreEventDecisionRepository({ logger: mockLogger });
+      const result = await repo.save(createDecisionInput());
+
+      expect(result.ok).toBe(true);
+      expect(mockDocRef.set).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['a permanent Firestore error', Object.assign(new Error('Permission denied'), { code: 7 })],
+      ['an error without a Firestore code', new Error('Invalid event decision')],
+      ['a primitive rejection', 'Invalid event decision'],
+      ['a null rejection', null],
+    ])('should not retry %s', async (_label, writeError) => {
+      const mockDocRef = {
+        set: vi.fn().mockRejectedValue(writeError),
       };
 
       const mockCollection = {
@@ -170,9 +203,36 @@ describe('createFirestoreEventDecisionRepository', () => {
       const result = await repo.save(createDecisionInput());
 
       expect(result.ok).toBe(false);
+      expect(mockDocRef.set).toHaveBeenCalledTimes(1);
       if (!result.ok) {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
-        expect(result.error.message).toContain('Firestore unavailable');
+      }
+    });
+
+    it('should return FIRESTORE_ERROR after exhausting one transient retry', async () => {
+      const transientError = Object.assign(new Error('Firestore unavailable'), { code: 14 });
+      const mockDocRef = {
+        set: vi.fn().mockRejectedValue(transientError),
+      };
+
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreEventDecisionRepository({ logger: mockLogger });
+      const result = await repo.save(createDecisionInput());
+
+      expect(result.ok).toBe(false);
+      expect(mockDocRef.set).toHaveBeenCalledTimes(2);
+      if (!result.ok) {
+        expect(result.error).toEqual({
+          code: 'FIRESTORE_ERROR',
+          message: 'Firestore unavailable',
+        });
       }
     });
 

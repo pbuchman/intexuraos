@@ -2,8 +2,13 @@
  * Tests for the main transcription orchestration.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { transcribeAudio, type TranscriptionDeps } from '../main.js';
-import type { AudioStoredEvent, TranscriptionCompletedEvent } from '../types.js';
+import type {
+  AudioStoredEvent,
+  TranscriptionCompletedEvent,
+  TranscriptionRequestEvent,
+} from '../types.js';
 import type { SpeechTranscriptionPort } from '../providers/transcription-provider.js';
 import { ok, err } from '@intexuraos/common-core';
 
@@ -29,6 +34,15 @@ const sampleEvent: AudioStoredEvent = {
   gcsPath: 'whatsapp/user-123/msg-456/media-789.ogg',
   mimeType: 'audio/ogg',
   timestamp: '2024-01-01T00:00:00.000Z',
+};
+
+const sampleVideoEvent: TranscriptionRequestEvent = {
+  ...sampleEvent,
+  type: 'whatsapp.media.transcription.requested',
+  messageSource: 'public_whatsapp',
+  mediaKind: 'video',
+  mimeType: 'video/mp4',
+  gcsPath: 'whatsapp/user-123/msg-456/media-789.mp4',
 };
 
 const noopSleep = (): Promise<void> => Promise.resolve();
@@ -103,6 +117,26 @@ describe('transcribeAudio', () => {
       expect(event?.transcript).toBe('Hello world');
     });
 
+    it('preserves private WhatsApp source on completed events', async () => {
+      await transcribeAudio(
+        { ...sampleEvent, messageSource: 'private_whatsapp' },
+        deps,
+        mockLogger
+      );
+
+      expect(publishedEvents[0]?.messageSource).toBe('private_whatsapp');
+    });
+
+    it('preserves video media kind on completed events', async () => {
+      await transcribeAudio(sampleVideoEvent, deps, mockLogger);
+
+      expect(publishedEvents[0]).toMatchObject({
+        messageSource: 'public_whatsapp',
+        mediaKind: 'video',
+        status: 'completed',
+      });
+    });
+
     it('includes summary in completed event when provider returns one', async () => {
       const provider = makeProvider(
         ok({ jobId: 'job-123', apiCall: { timestamp: '', operation: 'submit', success: true } }),
@@ -167,6 +201,31 @@ describe('transcribeAudio', () => {
       expect(publishedEvents[0]?.error).toContain('GCS access denied');
     });
 
+    it('preserves private WhatsApp source on failed events', async () => {
+      deps.generateSignedUrl = vi.fn().mockResolvedValue(err({ message: 'GCS access denied' }));
+
+      await transcribeAudio(
+        { ...sampleEvent, messageSource: 'private_whatsapp' },
+        deps,
+        mockLogger
+      );
+
+      expect(publishedEvents[0]?.messageSource).toBe('private_whatsapp');
+    });
+
+    it('preserves video media kind on failed events', async () => {
+      deps.generateSignedUrl = vi.fn().mockResolvedValue(err({ message: 'GCS access denied' }));
+
+      await transcribeAudio(sampleVideoEvent, deps, mockLogger);
+
+      expect(publishedEvents[0]).toMatchObject({
+        messageSource: 'public_whatsapp',
+        mediaKind: 'video',
+        status: 'failed',
+        error: expect.stringContaining('GCS access denied'),
+      });
+    });
+
     it('publishes failed event when job submission fails', async () => {
       const provider = makeProvider(
         err({ code: 'SPEECHMATICS_SUBMIT_ERROR', message: 'API key invalid' }),
@@ -219,6 +278,41 @@ describe('transcribeAudio', () => {
 
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.status).toBe('failed');
+    });
+
+    it('logs handled provider rejections as Sentry-suppressed warnings', async () => {
+      const provider = makeProvider(
+        ok({ jobId: 'job-123', apiCall: { timestamp: '', operation: 'submit', success: true } }),
+        [
+          ok({
+            status: 'rejected',
+            error: {
+              code: 'JOB_REJECTED',
+              message: 'No speech found for language identification',
+            },
+            apiCall: { timestamp: '', operation: 'poll', success: true },
+          }),
+        ],
+        ok({ text: '', apiCall: { timestamp: '', operation: 'fetch_result', success: true } })
+      );
+      deps.createProvider = vi.fn().mockReturnValue(provider);
+
+      await transcribeAudio(sampleEvent, deps, mockLogger);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'job_rejected',
+          userId: 'user-123',
+          messageId: 'msg-456',
+          jobId: 'job-123',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Transcription job was rejected'
+      );
+      expect(mockLogger.error).not.toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'job_rejected' }),
+        'Transcription job was rejected'
+      );
     });
 
     it('publishes failed event when job is rejected without error details', async () => {

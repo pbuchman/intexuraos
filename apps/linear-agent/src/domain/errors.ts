@@ -7,6 +7,7 @@ export type LinearErrorCode =
   | 'INVALID_API_KEY'
   | 'TEAM_NOT_FOUND'
   | 'RATE_LIMIT'
+  | 'UPSTREAM_UNAVAILABLE'
   | 'API_ERROR'
   | 'EXTRACTION_FAILED'
   | 'INTERNAL_ERROR';

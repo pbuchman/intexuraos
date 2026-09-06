@@ -56,12 +56,56 @@ variable "environment" {
 variable "github_owner" {
   description = "GitHub repository owner"
   type        = string
+  default     = "pbuchman"
+
+  validation {
+    condition     = var.github_owner == "pbuchman"
+    error_message = "github_owner must remain pinned to pbuchman."
+  }
 }
 
 variable "github_repo" {
   description = "GitHub repository name"
   type        = string
   default     = "intexuraos"
+
+  validation {
+    condition     = var.github_repo == "intexuraos"
+    error_message = "github_repo must remain pinned to intexuraos."
+  }
+}
+
+variable "github_repository_owner_id" {
+  description = "Immutable numeric GitHub repository owner ID accepted by Workload Identity Federation"
+  type        = string
+  default     = "368465"
+
+  validation {
+    condition     = var.github_repository_owner_id == "368465"
+    error_message = "github_repository_owner_id must remain pinned to 368465."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Immutable numeric GitHub repository ID accepted by Workload Identity Federation"
+  type        = string
+  default     = "1118959310"
+
+  validation {
+    condition     = var.github_repository_id == "1118959310"
+    error_message = "github_repository_id must remain pinned to 1118959310."
+  }
+}
+
+variable "github_ref" {
+  description = "Exact Git ref accepted by Workload Identity Federation"
+  type        = string
+  default     = "refs/heads/development"
+
+  validation {
+    condition     = var.github_ref == "refs/heads/development"
+    error_message = "github_ref must remain pinned to refs/heads/development."
+  }
 }
 
 variable "github_branch" {
@@ -91,6 +135,19 @@ variable "alert_email" {
   description = "Email address for monitoring alerts. Set to null to disable alerts."
   type        = string
   default     = null
+}
+
+variable "whatsapp_private_recovery_operator_email" {
+  description = "Reviewed human operator allowed to impersonate the private WhatsApp recovery reader"
+  type        = string
+
+  validation {
+    condition = (
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+$", var.whatsapp_private_recovery_operator_email)) &&
+      !can(regex("\\.gserviceaccount\\.com$", var.whatsapp_private_recovery_operator_email))
+    )
+    error_message = "whatsapp_private_recovery_operator_email must identify one human user, not a service account."
+  }
 }
 
 variable "slack_auth_token" {
@@ -126,6 +183,11 @@ data "google_project" "current" {
 
 locals {
   project_number = data.google_project.current.number
+
+  versioned_runtime_config = {
+    common = jsondecode(file("${path.module}/../../../config/environments/common.json"))
+    dev    = jsondecode(file("${path.module}/../../../config/environments/dev.json"))
+  }
 
   services = {
     user_service = {
@@ -267,55 +329,22 @@ locals {
   retired_cloud_run_push_audience = local.retired_cloud_run_push_endpoint
 
   hetzner_runtime_env_vars = {
-    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = "${local.public_origin}/api/code"
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL        = "${local.public_origin}/api/code"
+    INTEXURAOS_CONVERSATION_ASSISTANT_MODEL       = "or:minimax/minimax-m3"
+    INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID = "disabled"
+    INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED = "false"
+    INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH       = "development"
+    INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY        = "pbuchman/intexuraos"
+    INTEXURAOS_WEB_APP_URL                        = local.public_origin
   }
 
-  hetzner_runtime_secret_names = toset([
-    "INTEXURAOS_AUTH0_CLIENT_ID",
-    "INTEXURAOS_AUTH0_DOMAIN",
-    "INTEXURAOS_AUTH0_SPA_CLIENT_ID",
-    "INTEXURAOS_AUTH_AUDIENCE",
-    "INTEXURAOS_AUTH_ISSUER",
-    "INTEXURAOS_AUTH_JWKS_URL",
-    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID",
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
-    "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_FIREBASE_API_KEY",
-    "INTEXURAOS_FIREBASE_AUTH_DOMAIN",
-    "INTEXURAOS_FIREBASE_PROJECT_ID",
-    "INTEXURAOS_GEMINI_APP_API_KEY",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
-    "INTEXURAOS_INTERNAL_AUTH_TOKEN",
-    "INTEXURAOS_OPENAI_APP_API_KEY",
-    "INTEXURAOS_OPENROUTER_APP_API_KEY",
-    "INTEXURAOS_ORCHESTRATOR_SECRET",
-    "INTEXURAOS_SENTRY_DSN",
-    "INTEXURAOS_SENTRY_DSN_WEB",
-    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
-    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
-    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
-    "INTEXURAOS_WHATSAPP_APP_SECRET",
-    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
-    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
-    "INTEXURAOS_WHATSAPP_WABA_ID",
-  ])
+  target_secret_containers = {
+    "INTEXURAOS_SECRET_PACKAGE_DEV"       = "Atomic application secret package for local and dev runtimes"
+    "INTEXURAOS_SECRET_PACKAGE_PROD"      = "Atomic application secret package for the production runtime"
+    "INTEXURAOS_INTERNAL_AUTH_TOKEN"      = "Native internal auth token injected into the transcription Cloud Function"
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for transcription Cloud Function"
+  }
 
-  cloud_run_secret_manager_excluded_names = toset([
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
-    "INTEXURAOS_KIMI_APP_API_KEY",
-  ])
 }
 
 # -----------------------------------------------------------------------------
@@ -338,11 +367,63 @@ resource "google_project_service" "apis" {
     "calendar-json.googleapis.com",
     "cloudfunctions.googleapis.com",
     "eventarc.googleapis.com",
+    "apikeys.googleapis.com",
+    "firebaseappcheck.googleapis.com",
   ])
 
   project            = var.project_id
   service            = each.value
   disable_on_destroy = false
+}
+
+resource "google_project_iam_audit_config" "secret_manager_data_read" {
+  project = var.project_id
+  service = "secretmanager.googleapis.com"
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Restricted browser API key used by the versioned public web configuration.
+resource "google_apikeys_key" "firebase_browser_replacement" {
+  name         = "intexuraos-firebase-browser-2026"
+  project      = var.project_id
+  display_name = "IntexuraOS Firebase browser key (rotated 2026)"
+
+  restrictions {
+    browser_key_restrictions {
+      allowed_referrers = [
+        "https://intexuraos.cloud/*",
+        "https://dev.intexuraos.cloud/*",
+        "http://localhost:3000/*",
+      ]
+    }
+
+    api_targets {
+      service = "firestore.googleapis.com"
+    }
+
+    api_targets {
+      service = "identitytoolkit.googleapis.com"
+    }
+
+    api_targets {
+      service = "securetoken.googleapis.com"
+    }
+
+    api_targets {
+      service = "firebaseinstallations.googleapis.com"
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_project_service.apis]
 }
 
 # -----------------------------------------------------------------------------
@@ -454,8 +535,8 @@ module "firestore" {
 # Secret Manager
 # -----------------------------------------------------------------------------
 
-# NOTE: Only app-level secrets are stored here.
-# Per-user Notion integration tokens are stored in Firestore, not Secret Manager.
+# Terraform owns containers and IAM only. Package/native values and versions are
+# published outside Terraform so secret material never enters Terraform state.
 module "secret_manager" {
   source = "../../modules/secret-manager"
 
@@ -463,86 +544,7 @@ module "secret_manager" {
   environment = var.environment
   labels      = local.common_labels
 
-  secrets = {
-    # Auth0 secrets
-    "INTEXURAOS_AUTH0_DOMAIN"        = "Auth0 tenant domain for Device Authorization Flow"
-    "INTEXURAOS_AUTH0_CLIENT_ID"     = "Auth0 Native app client ID for Device Authorization Flow"
-    "INTEXURAOS_AUTH0_SPA_CLIENT_ID" = "Auth0 SPA app client ID for web application"
-    "INTEXURAOS_AUTH_JWKS_URL"       = "Auth0 JWKS URL for JWT verification"
-    "INTEXURAOS_AUTH_ISSUER"         = "Auth0 issuer URL"
-    "INTEXURAOS_AUTH_AUDIENCE"       = "Auth0 audience identifier"
-    # Token encryption key
-    "INTEXURAOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
-    # LLM API keys encryption
-    "INTEXURAOS_ENCRYPTION_KEY" = "AES-256 encryption key for LLM API keys (base64-encoded 32-byte key)"
-    # WhatsApp Business Cloud API secrets
-    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN"    = "WhatsApp webhook verify token"
-    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN"    = "WhatsApp Business API access token"
-    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID" = "WhatsApp Business phone number ID"
-    "INTEXURAOS_WHATSAPP_WABA_ID"         = "WhatsApp Business Account ID"
-    "INTEXURAOS_WHATSAPP_APP_SECRET"      = "WhatsApp app secret for webhook signature validation"
-    # Speechmatics API secrets (used by transcription Cloud Function)
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for transcription Cloud Function"
-    # Internal service-to-service auth token
-    "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
-    # Firebase configuration for web app
-    "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
-    "INTEXURAOS_FIREBASE_API_KEY"     = "Firebase API key (public, but managed as secret)"
-    "INTEXURAOS_FIREBASE_AUTH_DOMAIN" = "Firebase Auth domain"
-    # SSL certificate
-    "INTEXURAOS_SSL_PRIVATE_KEY" = "SSL certificate private key for intexuraos.cloud"
-    # Google OAuth secrets for calendar integration
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"     = "Google OAuth client ID for calendar integration"
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET" = "Google OAuth client secret for calendar integration"
-    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"  = "Google OAuth redirect URI (full callback URL)"
-    # GitHub OAuth secrets for GitHub integration
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"     = "GitHub OAuth App Client ID"
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET" = "GitHub OAuth App Client Secret"
-    # Sentry error monitoring
-    "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
-    "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
-    # Cloudflare Browser Rendering API
-    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID" = "Cloudflare account ID for Browser Rendering API"
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"
-    # LLM API keys
-    "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for services using OpenAI APIs"
-    "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
-    "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro 2.5 API key for orchestrator worker containers"
-    "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
-    "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
-    "INTEXURAOS_KIMI_APP_API_KEY"       = "Kimi Code API key for orchestrator kimi worker containers"
-    "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
-    # External service API keys for worker containers
-    "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to code worker containers"
-    "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to code worker containers"
-    # Code worker secrets (INT-156)
-    "INTEXURAOS_ORCHESTRATOR_SECRET"   = "HMAC signing secret for orchestrator communication"
-    "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
-    # GitHub App for code worker PRs (INT-156)
-    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"
-    "INTEXURAOS_GITHUB_APP_ID"          = "GitHub App ID for code worker"
-    "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
-    # Orchestrator repository management (INT-515)
-    "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
-    # Grafana Cloud observability
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN" = "Grafana Cloud service account token for dashboard provisioning"
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL"   = "Grafana Cloud stack URL for hosted dashboards"
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN"    = "Grafana Cloud Logs write token for Alloy collectors"
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL"      = "Grafana Cloud Loki push endpoint for Alloy collectors"
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME" = "Grafana Cloud Logs instance ID used as Loki basic auth username"
-  }
-
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_secret_manager_secret" "cloudflare_dns_api_token" {
-  secret_id = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
-  labels    = local.common_labels
-
-  replication {
-    auto {}
-  }
+  secrets = local.target_secret_containers
 
   depends_on = [google_project_service.apis]
 }
@@ -559,38 +561,159 @@ resource "google_service_account" "hetzner_runtime" {
   description  = "Union runtime service account for PM2 services on the Hetzner VM"
 }
 
+resource "google_service_account" "home_dev_secret_renderer" {
+  account_id   = "ixos-home-secret-renderer-${var.environment}"
+  display_name = "IntexuraOS home-dev Secret Renderer (${var.environment})"
+  description  = "Bootstrap identity that can read only the dev secret package"
+}
+
+resource "google_service_account" "home_dev_runtime" {
+  account_id   = "ixos-home-runtime-${var.environment}"
+  display_name = "IntexuraOS home-dev Runtime (${var.environment})"
+  description  = "Least-privilege data-plane identity for local and home-dev PM2 services"
+}
+
+resource "google_service_account" "home_dev_orchestrator" {
+  account_id   = "ixos-home-orchestrator-${var.environment}"
+  display_name = "IntexuraOS home-dev Orchestrator (${var.environment})"
+  description  = "Least-privilege host identity used only to pull code-worker images"
+}
+
+resource "google_service_account" "secret_package_dev_publisher" {
+  account_id   = "ixos-secret-publisher-dev"
+  display_name = "IntexuraOS DEV Secret Package Publisher"
+  description  = "Migration identity that reads the exact DEV source inventory and adds DEV package versions"
+}
+
+resource "google_service_account" "secret_package_prod_publisher" {
+  account_id   = "ixos-secret-publisher-prod"
+  display_name = "IntexuraOS PROD Secret Package Publisher"
+  description  = "Migration identity that reads the exact PROD source inventory and adds PROD package versions"
+}
+
 resource "google_service_account" "whatsapp_private_sync" {
   account_id   = "intexuraos-wa-private-sync-${var.environment}"
   display_name = "IntexuraOS Private WhatsApp Sync (${var.environment})"
   description  = "External bridge caller identity for private WhatsApp sync ingestion"
 }
 
-resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {
-  for_each = local.hetzner_runtime_secret_names
+resource "google_service_account" "whatsapp_private_recovery_reader" {
+  account_id   = "wa-private-recovery-reader-${var.environment}"
+  display_name = "Private WhatsApp Recovery Reader (${var.environment})"
+  description  = "Keyless, read-only verification identity for private WhatsApp recovery"
+}
 
-  secret_id = module.secret_manager.secret_ids[each.value]
+resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_prod_package" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_PROD"]
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_cloudflare_dns" {
-  secret_id = google_secret_manager_secret.cloudflare_dns_api_token.secret_id
+resource "google_secret_manager_secret_iam_member" "home_dev_secret_renderer_dev_package" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_DEV"]
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+  member    = "serviceAccount:${google_service_account.home_dev_secret_renderer.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_ssl_private_key" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+resource "google_secret_manager_secret_iam_member" "secret_package_dev_publisher_version_adder" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_DEV"]
+  role      = "roles/secretmanager.secretVersionAdder"
+  member    = "serviceAccount:${google_service_account.secret_package_dev_publisher.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "hetzner_runtime_secrets" {
-  for_each = local.hetzner_runtime_secret_names
+resource "google_secret_manager_secret_iam_member" "secret_package_prod_publisher_version_adder" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_PROD"]
+  role      = "roles/secretmanager.secretVersionAdder"
+  member    = "serviceAccount:${google_service_account.secret_package_prod_publisher.email}"
+}
 
-  secret_id = module.secret_manager.secret_ids[each.value]
+resource "google_secret_manager_secret_iam_member" "secret_package_dev_publisher_target_accessor" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_DEV"]
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+  member    = "serviceAccount:${google_service_account.secret_package_dev_publisher.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_package_prod_publisher_target_accessor" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_PROD"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.secret_package_prod_publisher.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_package_dev_publisher_target_metadata_viewer" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_DEV"]
+  role      = "roles/secretmanager.viewer"
+  member    = "serviceAccount:${google_service_account.secret_package_dev_publisher.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_package_prod_publisher_target_metadata_viewer" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_PROD"]
+  role      = "roles/secretmanager.viewer"
+  member    = "serviceAccount:${google_service_account.secret_package_prod_publisher.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "home_dev_orchestrator_reader" {
+  project    = var.project_id
+  location   = var.region
+  repository = module.artifact_registry.repository_id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.home_dev_orchestrator.email}"
+}
+
+resource "google_project_iam_member" "home_dev_runtime_project_roles" {
+  for_each = toset([
+    "roles/datastore.user",
+    "roles/firebaseauth.admin",
+    "roles/logging.logWriter",
+    "roles/pubsub.publisher",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.home_dev_runtime.email}"
+}
+
+resource "google_storage_bucket_iam_member" "home_dev_runtime_bucket_object_admin" {
+  for_each = {
+    generated_images = module.generated_images_bucket.bucket_name
+    shared_content   = module.shared_content.bucket_name
+    whatsapp_media   = module.whatsapp_media_bucket.bucket_name
+  }
+
+  bucket = each.value
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.home_dev_runtime.email}"
+}
+
+resource "google_storage_bucket_iam_member" "hetzner_provisioner_terraform_state" {
+  bucket = "${var.project_id}-terraform-state"
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_project_iam_member" "hetzner_provisioner_deployment_roles" {
+  for_each = toset([
+    "roles/cloudscheduler.admin",
+    "roles/iam.serviceAccountViewer",
+    "roles/pubsub.admin",
+    "roles/serviceusage.serviceUsageConsumer",
+    "roles/serviceusage.serviceUsageViewer",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_service_account_iam_member" "hetzner_provisioner_message_digest_user" {
+  service_account_id = google_service_account.message_digest_service.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_service_account_iam_member" "hetzner_provisioner_scheduler_user" {
+  service_account_id = google_service_account.cloud_scheduler.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
 }
 
 resource "google_project_iam_member" "hetzner_runtime_project_roles" {
@@ -612,10 +735,39 @@ resource "google_service_account_iam_member" "hetzner_runtime_token_creator" {
   member             = "serviceAccount:${google_service_account.hetzner_runtime.email}"
 }
 
-resource "google_service_account_iam_member" "whatsapp_private_sync_token_creator" {
+moved {
+  from = google_service_account_iam_member.whatsapp_private_sync_token_creator
+  to   = google_service_account_iam_member.whatsapp_private_sync_openid_token_creator
+}
+
+resource "google_service_account_iam_member" "whatsapp_private_sync_openid_token_creator" {
   service_account_id = google_service_account.whatsapp_private_sync.name
-  role               = "roles/iam.serviceAccountTokenCreator"
+  role               = "roles/iam.serviceAccountOpenIdTokenCreator"
   member             = "serviceAccount:${google_service_account.whatsapp_private_sync.email}"
+}
+
+resource "google_project_iam_member" "whatsapp_private_recovery_reader_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.viewer"
+  member  = "serviceAccount:${google_service_account.whatsapp_private_recovery_reader.email}"
+}
+
+resource "google_storage_bucket_iam_member" "whatsapp_private_recovery_reader_storage" {
+  bucket = module.whatsapp_media_bucket.bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.whatsapp_private_recovery_reader.email}"
+
+  condition {
+    title       = "private_whatsapp_prefix_only"
+    description = "Limit recovery verification reads to private WhatsApp objects"
+    expression  = "resource.name.startsWith(\"projects/_/buckets/${module.whatsapp_media_bucket.bucket_name}/objects/whatsapp/private/\")"
+  }
+}
+
+resource "google_service_account_iam_member" "whatsapp_private_recovery_operator_token_creator" {
+  service_account_id = google_service_account.whatsapp_private_recovery_reader.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${var.whatsapp_private_recovery_operator_email}"
 }
 
 resource "google_storage_bucket_iam_member" "hetzner_runtime_bucket_object_admin" {
@@ -641,11 +793,6 @@ module "iam" {
   environment = var.environment
   services    = local.services
 
-  secret_ids = {
-    for name, secret_id in module.secret_manager.secret_ids : name => secret_id
-    if !contains(local.cloud_run_secret_manager_excluded_names, name)
-  }
-
   depends_on = [
     google_project_service.apis,
     module.secret_manager,
@@ -664,10 +811,97 @@ module "claude_code_dev" {
   depends_on = [google_project_service.apis]
 }
 
+resource "google_project_iam_member" "claude_code_dev_secret_metadata_viewer" {
+  project = var.project_id
+  role    = "roles/secretmanager.viewer"
+  member  = "serviceAccount:${module.claude_code_dev.service_account_email}"
+
+  condition {
+    title       = "intexuraos-secret-metadata-only"
+    description = "Allow Terraform refresh of IntexuraOS secret metadata without payload access"
+    expression  = "resource.type == \"secretmanager.googleapis.com/Secret\" && resource.name.startsWith(\"projects/${data.google_project.current.number}/secrets/INTEXURAOS_\")"
+  }
+}
+
+# The current migration operator can create/list replacement keys only for the
+# identities that must be rotated/bootstrap-rendered. This is intentionally
+# resource-level; do not grant serviceAccountKeyAdmin at project scope.
+resource "google_service_account_iam_member" "secret_migration_runtime_key_admin" {
+  service_account_id = google_service_account.hetzner_runtime.name
+  role               = "roles/iam.serviceAccountKeyAdmin"
+  member             = "serviceAccount:${module.claude_code_dev.service_account_email}"
+}
+
+resource "google_service_account_iam_member" "secret_migration_renderer_key_admin" {
+  service_account_id = google_service_account.home_dev_secret_renderer.name
+  role               = "roles/iam.serviceAccountKeyAdmin"
+  member             = "serviceAccount:${module.claude_code_dev.service_account_email}"
+}
+
+resource "google_service_account_iam_member" "secret_migration_home_runtime_key_admin" {
+  service_account_id = google_service_account.home_dev_runtime.name
+  role               = "roles/iam.serviceAccountKeyAdmin"
+  member             = "serviceAccount:${module.claude_code_dev.service_account_email}"
+}
+
+resource "google_service_account_iam_member" "secret_migration_home_orchestrator_key_admin" {
+  service_account_id = google_service_account.home_dev_orchestrator.name
+  role               = "roles/iam.serviceAccountKeyAdmin"
+  member             = "serviceAccount:${module.claude_code_dev.service_account_email}"
+}
+
+resource "google_service_account_iam_member" "secret_migration_dev_publisher_token_creator" {
+  service_account_id = google_service_account.secret_package_dev_publisher.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${module.claude_code_dev.service_account_email}"
+}
+
+resource "google_service_account_iam_member" "secret_migration_prod_publisher_token_creator" {
+  service_account_id = google_service_account.secret_package_prod_publisher.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${module.claude_code_dev.service_account_email}"
+}
+
 # -----------------------------------------------------------------------------
 # Pub/Sub Topics
 # -----------------------------------------------------------------------------
 
+# Dedicated OIDC and publishing identity for message-digest-service. It is kept
+# at the root so the one-shot cutover and its inverse plan have a closed graph.
+resource "google_service_account" "message_digest_service" {
+  account_id   = "intexuraos-message-digest-${var.environment}"
+  display_name = "IntexuraOS Message Digest Service (${var.environment})"
+  description  = "Service account for Message Digest Pub/Sub delivery and publishing"
+}
+
+# Message Digest run requests are retained in the dev-owned GCP control plane.
+# The Hetzner root owns the push consumer and its dead-letter resources.
+resource "google_pubsub_topic" "message_digest_runs" {
+  name    = "intexuraos-message-digest-runs-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_pubsub_topic_iam_member" "message_digest_publishes_runs" {
+  project = var.project_id
+  topic   = google_pubsub_topic.message_digest_runs.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.message_digest_service.email}"
+}
+
+# Deliberately has no subscription: one redacted message proves that a staged
+# runtime credential can publish without invoking a production consumer.
+module "pubsub_runtime_credential_canary" {
+  source = "../../modules/pubsub-topic"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-runtime-credential-canary-${var.environment}"
+  labels     = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
 
 # Topic for media cleanup events (whatsapp message deletion)
 module "pubsub_media_cleanup" {
@@ -773,7 +1007,7 @@ resource "google_pubsub_topic_iam_member" "transcription_publishes_dlq" {
   member  = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# DLQ inspection subscription — pull subscription with 7-day retention for
+# DLQ inspection subscription — pull subscription with 31-day retention for
 # manual / tooling-driven incident review. Per parent plan §5, this is the
 # anchor for a future BigQuery log sink.
 resource "google_pubsub_subscription" "transcription_dlq_inspect" {
@@ -783,7 +1017,7 @@ resource "google_pubsub_subscription" "transcription_dlq_inspect" {
   labels  = local.common_labels
 
   ack_deadline_seconds       = 600
-  message_retention_duration = "604800s" # 7 days
+  message_retention_duration = "2678400s" # 31 days
 
   expiration_policy {
     ttl = ""
@@ -919,6 +1153,16 @@ module "pubsub_whatsapp_send" {
   ]
 }
 
+# The WhatsApp topic is retained and already exists before this one-shot cutover.
+# Keep this binding free of module references so the previous immutable root can
+# produce an exact inverse plan without traversing unrelated module-wide IAM.
+resource "google_pubsub_topic_iam_member" "message_digest_publishes_whatsapp" {
+  project = var.project_id
+  topic   = "intexuraos-whatsapp-send-${var.environment}"
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.message_digest_service.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Additional Retained Pub/Sub Topics
 # -----------------------------------------------------------------------------
@@ -985,13 +1229,16 @@ module "pubsub_bookmark_summarize" {
 module "cloud_build" {
   source = "../../modules/cloud-build"
 
-  project_id             = var.project_id
-  region                 = var.region
-  environment            = var.environment
-  github_owner           = var.github_owner
-  github_repo            = var.github_repo
-  github_branch          = var.github_branch
-  github_connection_name = var.github_connection_name
+  project_id                 = var.project_id
+  region                     = var.region
+  environment                = var.environment
+  github_owner               = var.github_owner
+  github_repo                = var.github_repo
+  github_repository_owner_id = var.github_repository_owner_id
+  github_repository_id       = var.github_repository_id
+  github_ref                 = var.github_ref
+  github_branch              = var.github_branch
+  github_connection_name     = var.github_connection_name
 
   artifact_registry_url   = module.artifact_registry.repository_url
   functions_source_bucket = google_storage_bucket.cloud_functions_source.name
@@ -1004,6 +1251,14 @@ module "cloud_build" {
   ]
 }
 
+# The Cloud Build service agent needs access only to the Google-managed GitHub
+# connection OAuth token. Project-wide Secret Manager roles are forbidden.
+resource "google_secret_manager_secret_iam_member" "cloud_build_connection_oauth_accessor" {
+  secret_id = "projects/${var.project_id}/secrets/pbuchman-github-github-oauthtoken-8b04fa"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:service-${local.project_number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+}
+
 # -----------------------------------------------------------------------------
 # GitHub Workload Identity Federation (for GitHub Actions -> Cloud Build)
 # -----------------------------------------------------------------------------
@@ -1014,6 +1269,9 @@ module "github_wif" {
   project_id                       = var.project_id
   github_owner                     = var.github_owner
   github_repo                      = var.github_repo
+  github_repository_owner_id       = var.github_repository_owner_id
+  github_repository_id             = var.github_repository_id
+  github_ref                       = var.github_ref
   cloud_build_service_account_name = module.cloud_build.cloud_build_service_account_name
 
   depends_on = [
@@ -1073,6 +1331,7 @@ resource "google_firebase_web_app" "web" {
   provider     = google-beta
   project      = var.project_id
   display_name = "IntexuraOS Web (${var.environment})"
+  api_key_id   = google_apikeys_key.firebase_browser_replacement.uid
 
   depends_on = [google_identity_platform_config.default]
 }
@@ -1081,22 +1340,6 @@ data "google_firebase_web_app_config" "web" {
   provider   = google-beta
   project    = var.project_id
   web_app_id = google_firebase_web_app.web.app_id
-}
-
-# Auto-populate Firebase secrets from Terraform
-resource "google_secret_manager_secret_version" "firebase_api_key" {
-  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_API_KEY"]
-  secret_data = data.google_firebase_web_app_config.web.api_key
-}
-
-resource "google_secret_manager_secret_version" "firebase_auth_domain" {
-  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_AUTH_DOMAIN"]
-  secret_data = data.google_firebase_web_app_config.web.auth_domain
-}
-
-resource "google_secret_manager_secret_version" "firebase_project_id" {
-  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_PROJECT_ID"]
-  secret_data = var.project_id
 }
 
 # -----------------------------------------------------------------------------
@@ -1124,190 +1367,6 @@ resource "google_storage_bucket_object" "function_placeholder" {
 }
 
 # -----------------------------------------------------------------------------
-# Cloud Functions - Service Account
-# -----------------------------------------------------------------------------
-
-resource "google_service_account" "cloud_functions" {
-  account_id   = "intexuraos-functions-${var.environment}"
-  display_name = "Cloud Functions Service Account"
-  description  = "Service account for Cloud Functions (vm-lifecycle)"
-
-  depends_on = [google_project_service.apis]
-}
-
-# Grant Cloud Functions SA permission to read Firestore
-resource "google_project_iam_member" "functions_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# Grant Cloud Functions SA permission to manage Compute Engine VMs
-resource "google_project_iam_member" "functions_compute" {
-  project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
-  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# Grant Cloud Functions SA permission to receive Eventarc events
-resource "google_project_iam_member" "functions_eventarc" {
-  project = var.project_id
-  role    = "roles/eventarc.eventReceiver"
-  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# Grant Cloud Functions SA permission to access secrets (for INTEXURAOS_INTERNAL_AUTH_TOKEN)
-resource "google_secret_manager_secret_iam_member" "functions_internal_auth_token" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Functions - VM Lifecycle (Start/Stop)
-# -----------------------------------------------------------------------------
-
-module "function_vm_start" {
-  source = "../../modules/cloud-function"
-
-  project_id    = var.project_id
-  region        = var.region
-  environment   = var.environment
-  function_name = "intexuraos-vm-start-${var.environment}"
-  description   = "Start a GCE VM instance"
-  entry_point   = "startVm"
-  runtime       = "nodejs22"
-
-  source_bucket   = google_storage_bucket.cloud_functions_source.name
-  source_object   = "vm-lifecycle/function.zip"
-  service_account = google_service_account.cloud_functions.email
-
-  trigger_type     = "http"
-  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
-  timeout_seconds  = 120
-  available_memory = "256M"
-
-  env_vars = {
-    INTEXURAOS_ENVIRONMENT    = var.environment
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
-  }
-
-  secrets = {
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  }
-
-  labels = local.common_labels
-
-  depends_on = [
-    google_project_service.apis,
-    google_storage_bucket_object.function_placeholder,
-    google_service_account.cloud_functions,
-  ]
-}
-
-module "function_vm_stop" {
-  source = "../../modules/cloud-function"
-
-  project_id    = var.project_id
-  region        = var.region
-  environment   = var.environment
-  function_name = "intexuraos-vm-stop-${var.environment}"
-  description   = "Stop a GCE VM instance"
-  entry_point   = "stopVm"
-  runtime       = "nodejs22"
-
-  source_bucket   = google_storage_bucket.cloud_functions_source.name
-  source_object   = "vm-lifecycle/function.zip"
-  service_account = google_service_account.cloud_functions.email
-
-  trigger_type     = "http"
-  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
-  timeout_seconds  = 120
-  available_memory = "256M"
-
-  env_vars = {
-    INTEXURAOS_ENVIRONMENT    = var.environment
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
-  }
-
-  secrets = {
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  }
-
-  labels = local.common_labels
-
-  depends_on = [
-    google_project_service.apis,
-    google_storage_bucket_object.function_placeholder,
-    google_service_account.cloud_functions,
-  ]
-}
-
-# Cloud Scheduler - Start VM at 7 AM Poland time (Mon-Fri)
-resource "google_cloud_scheduler_job" "vm_start" {
-  name        = "intexuraos-vm-start-${var.environment}"
-  description = "Start VM instances at 7 AM Poland time on weekdays"
-  schedule    = "0 7 * * 1-5"
-  time_zone   = "Europe/Warsaw"
-  region      = var.region
-
-  http_target {
-    uri         = module.function_vm_start.function_uri
-    http_method = "POST"
-    body        = base64encode(jsonencode({ trigger = "scheduled" }))
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.function_vm_start.function_uri
-    }
-  }
-
-  retry_config {
-    retry_count          = 3
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.function_vm_start,
-  ]
-}
-
-# Cloud Scheduler - Stop VM at 11 PM Poland time (daily)
-resource "google_cloud_scheduler_job" "vm_stop" {
-  name        = "intexuraos-vm-stop-${var.environment}"
-  description = "Stop VM instances at 11 PM Poland time daily"
-  schedule    = "0 23 * * *"
-  time_zone   = "Europe/Warsaw"
-  region      = var.region
-
-  http_target {
-    uri         = module.function_vm_stop.function_uri
-    http_method = "POST"
-    body        = base64encode(jsonencode({ trigger = "scheduled" }))
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.function_vm_stop.function_uri
-    }
-  }
-
-  retry_config {
-    retry_count          = 3
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.function_vm_stop,
-  ]
-}
-
-# -----------------------------------------------------------------------------
 # Cloud Functions - Transcription Worker
 # -----------------------------------------------------------------------------
 # (Log-cleanup function and its Pub/Sub topic, DLQ, push subscription, and
@@ -1330,16 +1389,30 @@ resource "google_storage_bucket_iam_member" "transcription_media_reader" {
   member = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# Grant transcription SA permission to access Speechmatics secret
+locals {
+  transcription_native_secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = {
+      secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+      version   = 3
+    }
+    INTEXURAOS_SPEECHMATICS_APP_API_KEY = {
+      secret_id = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
+      version   = 2
+    }
+  }
+}
+
+# The retained transcription function is the only runtime with native
+# Secret Manager injection. These address-stable bindings grant exactly the two
+# native exceptions used by the function.
 resource "google_secret_manager_secret_iam_member" "transcription_speechmatics" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
+  secret_id = local.transcription_native_secrets.INTEXURAOS_SPEECHMATICS_APP_API_KEY.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# Grant transcription SA permission to access internal auth token secret
 resource "google_secret_manager_secret_iam_member" "transcription_internal_auth" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  secret_id = local.transcription_native_secrets.INTEXURAOS_INTERNAL_AUTH_TOKEN.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.transcription_function.email}"
 }
@@ -1358,13 +1431,6 @@ resource "google_project_iam_member" "transcription_eventarc" {
   member  = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# Grant transcription SA permission to access Sentry DSN secret
-resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
 # Topic for transcription completed events retained for the transcription worker.
 resource "google_pubsub_topic" "transcription_completed" {
   name    = "intexuraos-transcription-completed-${var.environment}"
@@ -1372,6 +1438,35 @@ resource "google_pubsub_topic" "transcription_completed" {
   labels  = local.common_labels
 
   depends_on = [google_project_service.apis]
+}
+
+resource "google_pubsub_topic" "transcription_completed_dlq" {
+  name    = "intexuraos-transcription-completed-${var.environment}-dlq"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_pubsub_topic_iam_member" "pubsub_publishes_transcription_completed_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.transcription_completed_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+resource "google_pubsub_subscription" "transcription_completed_dlq" {
+  name    = "intexuraos-transcription-completed-${var.environment}-dlq-sub"
+  topic   = google_pubsub_topic.transcription_completed_dlq.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600
+  message_retention_duration = "2678400s"
+
+  expiration_policy {
+    ttl = ""
+  }
 }
 
 resource "google_pubsub_topic_iam_member" "transcription_publishes_completed" {
@@ -1415,15 +1510,12 @@ module "function_transcription" {
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = google_pubsub_topic.transcription_completed.name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC       = google_pubsub_topic.transcription_dlq.name
+    INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.dev["INTEXURAOS_SENTRY_DSN_DEV"]
     INTEXURAOS_USER_SERVICE_URL                     = "${local.public_origin}/api/user"
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
   }
 
-  secrets = {
-    INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
-    INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-  }
+  secrets = local.transcription_native_secrets
 
   labels = local.common_labels
 
@@ -1436,7 +1528,6 @@ module "function_transcription" {
     google_pubsub_topic.transcription_completed,
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
-    google_secret_manager_secret_iam_member.transcription_sentry_dsn,
     google_storage_bucket_iam_member.transcription_media_reader,
     google_project_iam_member.transcription_eventarc,
   ]
@@ -1488,6 +1579,15 @@ resource "google_pubsub_subscription" "audio_stored_push" {
   ]
 }
 
+# Pub/Sub must be able to ACK the source message after forwarding it to the
+# transcription DLQ.
+resource "google_pubsub_subscription_iam_member" "pubsub_subscribes_audio_stored_push" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.audio_stored_push.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
 # -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
@@ -1518,9 +1618,39 @@ output "service_accounts" {
   value       = module.iam.service_accounts
 }
 
+output "home_dev_secret_renderer_service_account_email" {
+  description = "Expected client_email for the least-privilege home-dev package renderer bootstrap identity"
+  value       = google_service_account.home_dev_secret_renderer.email
+}
+
+output "home_dev_runtime_service_account_email" {
+  description = "Expected client_email for the least-privilege local and home-dev PM2 runtime identity"
+  value       = google_service_account.home_dev_runtime.email
+}
+
+output "home_dev_orchestrator_service_account_email" {
+  description = "Expected client_email for the least-privilege home-dev orchestrator Artifact Registry reader"
+  value       = google_service_account.home_dev_orchestrator.email
+}
+
+output "secret_package_dev_publisher_service_account_email" {
+  description = "DEV package publisher service account impersonated by the migration operator"
+  value       = google_service_account.secret_package_dev_publisher.email
+}
+
+output "secret_package_prod_publisher_service_account_email" {
+  description = "PROD package publisher service account impersonated by the migration operator"
+  value       = google_service_account.secret_package_prod_publisher.email
+}
+
 output "whatsapp_private_sync_service_account" {
   description = "Service account email allowed to call production private WhatsApp sync ingest"
   value       = google_service_account.whatsapp_private_sync.email
+}
+
+output "whatsapp_private_recovery_reader_service_account" {
+  description = "Keyless read-only identity used to verify private WhatsApp recovery"
+  value       = google_service_account.whatsapp_private_recovery_reader.email
 }
 
 output "static_assets_bucket_name" {
@@ -1579,16 +1709,6 @@ output "cloud_functions_source_bucket" {
   value       = google_storage_bucket.cloud_functions_source.name
 }
 
-output "function_vm_start_uri" {
-  description = "VM Start Cloud Function HTTP endpoint"
-  value       = module.function_vm_start.function_uri
-}
-
-output "function_vm_stop_uri" {
-  description = "VM Stop Cloud Function HTTP endpoint"
-  value       = module.function_vm_stop.function_uri
-}
-
 output "function_transcription_name" {
   description = "Transcription Cloud Function name"
   value       = module.function_transcription.function_name
@@ -1602,4 +1722,9 @@ output "pubsub_audio_stored_topic" {
 output "pubsub_transcription_completed_topic" {
   description = "Pub/Sub topic for transcription completed events"
   value       = google_pubsub_topic.transcription_completed.name
+}
+
+output "pubsub_message_digest_runs_topic" {
+  description = "Pub/Sub topic for Message Digest run requests"
+  value       = google_pubsub_topic.message_digest_runs.name
 }

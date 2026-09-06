@@ -1,11 +1,8 @@
 export {
+  OpenRouterImageGenerator,
+  createOpenRouterImageGenerator,
+  type OpenRouterImageGeneratorConfig,
   OpenAIImageGenerator,
   createOpenAIImageGenerator,
   type OpenAIImageGeneratorConfig,
 } from './OpenAIImageGenerator.js';
-
-export {
-  GoogleImageGenerator,
-  createGoogleImageGenerator,
-  type GoogleImageGeneratorConfig,
-} from './GoogleImageGenerator.js';

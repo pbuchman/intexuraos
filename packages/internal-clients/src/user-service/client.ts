@@ -4,14 +4,16 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import { err, ERROR_HTTP_STATUS, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
-  getProviderForModel,
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
   isDefaultEligibleModel,
-  LlmModels,
+  isIntexAgentModel,
   LlmProviders,
-  type LlmProvider,
-  type LLMModel,
+  normalizeLlmModelPreferenceForRead,
+  type ExecutableLlmProvider,
+  type DefaultEligibleModel,
 } from '@intexuraos/llm-contract';
 import {
   createLlmClient,
@@ -19,6 +21,7 @@ import {
   type LlmGenerateClient,
   type GenerateOptions,
 } from '@intexuraos/llm-factory';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 
 import type {
   UserServiceConfig,
@@ -27,6 +30,10 @@ import type {
   UserServiceClient,
   OAuthTokenResult,
   OAuthProvider,
+  UserTimezoneLookupOptions,
+  IntexAgentRuntimeSettingsClient,
+  IntexAgentRuntimeSettingsClientError,
+  IntexAgentRuntimeSettingsV1,
 } from './types.js';
 
 export type { LlmProvider } from '@intexuraos/llm-contract';
@@ -37,27 +44,298 @@ export type {
   UserServiceClient,
   OAuthTokenResult,
   OAuthProvider,
+  UserTimezoneLookupOptions,
+  IntexAgentRuntimeSettingsClient,
+  IntexAgentRuntimeSettingsClientError,
+  IntexAgentRuntimeSettingsV1,
 } from './types.js';
 
-const PROVIDER_KEYS: Record<LlmProvider, string> = {
-  google: 'google',
-  openai: 'openai',
-  anthropic: 'anthropic',
-  perplexity: 'perplexity',
-  openrouter: 'openrouter',
+const runtimeSettingsTransportLogger = {
+  warn: (): void => undefined,
 };
 
-export function providerToKeyField(provider: LlmProvider): string {
-  return PROVIDER_KEYS[provider];
+function hasOnlyOwnKeys(value: object, expectedKeys: readonly string[]): boolean {
+  const ownKeys = Object.keys(value);
+  return (
+    ownKeys.length === expectedKeys.length &&
+    expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
+}
+
+function ownValue(value: object, key: string): unknown {
+  return Object.getOwnPropertyDescriptor(value, key)?.value;
+}
+
+function isRuntimeSettingsObject(value: unknown): value is object {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Reflect.getPrototypeOf(value);
+  return prototype === Object.prototype;
+}
+
+const runtimeSettingsDiagnosticsKeys: readonly string[] = [
+  'requestId',
+  'durationMs',
+  'downstreamStatus',
+  'downstreamRequestId',
+  'endpointCalled',
+];
+
+function hasOwnKey(value: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isRuntimeSettingsDiagnostics(value: unknown): boolean {
+  if (!isRuntimeSettingsObject(value)) {
+    return false;
+  }
+
+  const ownKeys = Object.keys(value);
+  if (
+    !hasOwnKey(value, 'requestId') ||
+    ownKeys.some((key) => !runtimeSettingsDiagnosticsKeys.includes(key))
+  ) {
+    return false;
+  }
+
+  const requestId = ownValue(value, 'requestId');
+  const durationMs = ownValue(value, 'durationMs');
+  const downstreamStatus = ownValue(value, 'downstreamStatus');
+  const downstreamRequestId = ownValue(value, 'downstreamRequestId');
+  const endpointCalled = ownValue(value, 'endpointCalled');
+
+  return (
+    typeof requestId === 'string' &&
+    (!hasOwnKey(value, 'durationMs') ||
+      (typeof durationMs === 'number' && Number.isFinite(durationMs))) &&
+    (!hasOwnKey(value, 'downstreamStatus') || Number.isInteger(downstreamStatus)) &&
+    (!hasOwnKey(value, 'downstreamRequestId') || typeof downstreamRequestId === 'string') &&
+    (!hasOwnKey(value, 'endpointCalled') || typeof endpointCalled === 'string')
+  );
+}
+
+function hasValidOptionalDiagnostics(value: object, requiredKeys: readonly string[]): boolean {
+  if (!hasOwnKey(value, 'diagnostics')) {
+    return hasOnlyOwnKeys(value, requiredKeys);
+  }
+
+  return (
+    hasOnlyOwnKeys(value, [...requiredKeys, 'diagnostics']) &&
+    isRuntimeSettingsDiagnostics(ownValue(value, 'diagnostics'))
+  );
+}
+
+type RuntimeSettingsEnvelopeResult =
+  | { status: 'data'; data: unknown }
+  | { status: 'api_error' }
+  | { status: 'malformed' };
+
+function decodeRuntimeSettingsEnvelope(value: unknown): RuntimeSettingsEnvelopeResult {
+  if (!isRuntimeSettingsObject(value)) {
+    return { status: 'malformed' };
+  }
+
+  const success = ownValue(value, 'success');
+  if (success === true) {
+    if (!hasValidOptionalDiagnostics(value, ['success', 'data'])) {
+      return { status: 'malformed' };
+    }
+    return { status: 'data', data: ownValue(value, 'data') };
+  }
+
+  if (success === false) {
+    if (!hasValidOptionalDiagnostics(value, ['success', 'error'])) {
+      return { status: 'malformed' };
+    }
+
+    const error = ownValue(value, 'error');
+    if (
+      !isRuntimeSettingsObject(error) ||
+      (!hasOnlyOwnKeys(error, ['code', 'message']) &&
+        !hasOnlyOwnKeys(error, ['code', 'message', 'details']))
+    ) {
+      return { status: 'malformed' };
+    }
+
+    const errorCode = ownValue(error, 'code');
+    if (
+      typeof errorCode !== 'string' ||
+      !Object.hasOwn(ERROR_HTTP_STATUS, errorCode) ||
+      typeof ownValue(error, 'message') !== 'string'
+    ) {
+      return { status: 'malformed' };
+    }
+
+    return { status: 'api_error' };
+  }
+
+  return { status: 'malformed' };
+}
+
+function decodeIntexAgentRuntimeSettings(value: unknown): IntexAgentRuntimeSettingsV1 | undefined {
+  if (!isRuntimeSettingsObject(value)) {
+    return undefined;
+  }
+
+  const status = ownValue(value, 'status');
+  if (status === 'available') {
+    if (
+      !hasOnlyOwnKeys(value, [
+        'status',
+        'effectiveModel',
+        'explicitModel',
+        'source',
+        'revision',
+        'timeZone',
+      ])
+    ) {
+      return undefined;
+    }
+
+    const effectiveModel = ownValue(value, 'effectiveModel');
+    const explicitModel = ownValue(value, 'explicitModel');
+    const source = ownValue(value, 'source');
+    const revision = ownValue(value, 'revision');
+    const timeZone = ownValue(value, 'timeZone');
+    if (
+      !isIntexAgentModel(effectiveModel) ||
+      (explicitModel !== null && !isIntexAgentModel(explicitModel)) ||
+      (source !== 'explicit' && source !== 'default_absent') ||
+      typeof revision !== 'number' ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0 ||
+      typeof timeZone !== 'string'
+    ) {
+      return undefined;
+    }
+
+    if (
+      (source === 'explicit' && (explicitModel === null || effectiveModel !== explicitModel)) ||
+      (source === 'default_absent' &&
+        (explicitModel !== null || effectiveModel !== IntexAgentModels.DeepSeekV4Flash))
+    ) {
+      return undefined;
+    }
+
+    return { status, effectiveModel, explicitModel, source, revision, timeZone };
+  }
+
+  if (status === 'unavailable') {
+    if (!hasOnlyOwnKeys(value, ['status', 'effectiveModel', 'source', 'timeZone'])) {
+      return undefined;
+    }
+
+    const effectiveModel = ownValue(value, 'effectiveModel');
+    const source = ownValue(value, 'source');
+    const timeZone = ownValue(value, 'timeZone');
+    if (
+      effectiveModel !== IntexAgentModels.DeepSeekV4Flash ||
+      source !== 'platform_default' ||
+      typeof timeZone !== 'string'
+    ) {
+      return undefined;
+    }
+
+    return {
+      status,
+      effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+      source,
+      timeZone,
+    };
+  }
+
+  return undefined;
+}
+
+function runtimeSettingsError(
+  code: IntexAgentRuntimeSettingsClientError['code']
+): IntexAgentRuntimeSettingsClientError {
+  switch (code) {
+    case 'TIMEOUT':
+      return { code, message: 'User Service runtime settings request timed out' };
+    case 'MALFORMED_RESPONSE':
+      return { code, message: 'User Service runtime settings response was malformed' };
+    case 'NETWORK_ERROR':
+    case 'API_ERROR':
+      return { code, message: 'User Service runtime settings request failed' };
+  }
+}
+
+export function providerToKeyField(provider: ExecutableLlmProvider): string {
+  return provider;
+}
+
+function normalizeLegacyModelPreference(model: string): DefaultEligibleModel {
+  return normalizeLlmModelPreferenceForRead(model);
+}
+
+function resolveOpenRouterApiKey(
+  userApiKey: unknown,
+  platformApiKey: string | undefined
+): string | undefined {
+  const normalize = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  };
+
+  return normalize(userApiKey) ?? normalize(platformApiKey);
 }
 
 /**
  * Create a user service client with the given configuration.
  */
-export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
+export function createUserServiceClient(
+  config: UserServiceConfig
+): UserServiceClient & IntexAgentRuntimeSettingsClient {
   const { logger } = config;
+  const runtimeSettingsHttp = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: runtimeSettingsTransportLogger,
+    defaultTimeoutMs: 30_000,
+  });
 
   return {
+    async resolveIntexAgentRuntimeSettings(
+      userId: string
+    ): Promise<Result<IntexAgentRuntimeSettingsV1, IntexAgentRuntimeSettingsClientError>> {
+      const response = await runtimeSettingsHttp.request<unknown>({
+        method: 'GET',
+        path: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        timeoutMs: 30_000,
+        responseMode: 'raw',
+      });
+
+      if (!response.ok) {
+        if (response.error.code === 'TIMEOUT') {
+          return err(runtimeSettingsError('TIMEOUT'));
+        }
+        return err(
+          runtimeSettingsError(
+            response.error.code === 'NETWORK_ERROR' ? 'NETWORK_ERROR' : 'API_ERROR'
+          )
+        );
+      }
+
+      const envelope = decodeRuntimeSettingsEnvelope(response.value);
+      if (envelope.status === 'malformed') {
+        return err(runtimeSettingsError('MALFORMED_RESPONSE'));
+      }
+      if (envelope.status === 'api_error') {
+        return err(runtimeSettingsError('API_ERROR'));
+      }
+
+      const settings = decodeIntexAgentRuntimeSettings(envelope.data);
+      if (settings === undefined) {
+        return err(runtimeSettingsError('MALFORMED_RESPONSE'));
+      }
+
+      return ok(settings);
+    },
+
     async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
       try {
         const response = await fetch(
@@ -79,32 +357,17 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const body = (await response.json()) as {
           success: boolean;
           data: {
-            google?: string | null;
-            openai?: string | null;
-            anthropic?: string | null;
-            perplexity?: string | null;
             openrouter?: string | null;
           };
         };
 
-        const data = body.data;
-
-        // Convert null values to undefined (null is used by JSON to distinguish from missing)
+        const openRouterApiKey = resolveOpenRouterApiKey(
+          body.data.openrouter,
+          config.platformOpenRouterApiKey
+        );
         const result: DecryptedApiKeys = {};
-        if (data.google !== null && data.google !== undefined) {
-          result.google = data.google;
-        }
-        if (data.openai !== null && data.openai !== undefined) {
-          result.openai = data.openai;
-        }
-        if (data.anthropic !== null && data.anthropic !== undefined) {
-          result.anthropic = data.anthropic;
-        }
-        if (data.perplexity !== null && data.perplexity !== undefined) {
-          result.perplexity = data.perplexity;
-        }
-        if (data.openrouter !== null && data.openrouter !== undefined) {
-          result.openrouter = data.openrouter;
+        if (openRouterApiKey !== undefined) {
+          result.openrouter = openRouterApiKey;
         }
 
         return ok(result);
@@ -153,23 +416,17 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         };
 
         // Step 2: Determine model (use user's preference or default)
-        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
+        const rawModel =
+          settingsBody.data.llmPreferences?.defaultModel ?? DEFAULT_PLATFORM_LLM_MODEL;
         const fallbackModelRaw = settingsBody.data.llmPreferences?.fallbackModel;
 
-        // Validate that the model is supported (including OpenRouter models)
-        if (!isDefaultEligibleModel(rawModel)) {
-          logger.warn({ userId, invalidModel: rawModel }, 'User has invalid model preference');
-          return err({
-            code: 'INVALID_MODEL',
-            message: `Invalid model: ${rawModel}. Please select a valid model.`,
-          });
-        }
+        const defaultModel = normalizeLegacyModelPreference(rawModel);
+        const fallbackModel =
+          fallbackModelRaw === undefined
+            ? undefined
+            : normalizeLegacyModelPreference(fallbackModelRaw);
 
-        const defaultModel = rawModel;
-
-        // Step 3: Get API key for that model
-        const provider = getProviderForModel(defaultModel);
-        const keyField = providerToKeyField(provider);
+        const provider = LlmProviders.OpenRouter;
 
         const keysResponse = await fetch(
           `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys`,
@@ -193,52 +450,25 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           data: Record<string, string | null | undefined>;
         };
 
-        const apiKey = keysBody.data[keyField];
+        const apiKey = resolveOpenRouterApiKey(
+          keysBody.data['openrouter'],
+          config.platformOpenRouterApiKey
+        );
 
-        if (apiKey === null || apiKey === undefined) {
-          if (config.platformGeminiApiKey !== undefined) {
-            logger.warn(
-              { userId, provider, requestedModel: defaultModel },
-              'No API key for provider, falling back to platform Gemini25Flash'
-            );
-            const fallbackModel = LlmModels.Gemini25Flash;
-            const fallbackClient = createLlmClient({
-              apiKey: config.platformGeminiApiKey,
-              model: fallbackModel,
-              userId,
-              logger: config.logger,
-              usageSink: config.usageSink,
-              ownerType: 'user',
-            });
-
-            logger.info(
-              { userId, model: fallbackModel, provider: LlmProviders.Google },
-              'LLM client created successfully'
-            );
-
-            return ok(fallbackClient);
-          }
-
+        if (apiKey === undefined) {
           logger.info({ userId, provider }, 'No API key configured for provider');
           return err({
             code: 'NO_API_KEY',
-            message: `No API key configured for ${provider}. Please add your ${provider} API key in settings.`,
+            message: 'No OpenRouter access is available for this user.',
           });
         }
+        const resolvedApiKey = apiKey;
 
-        // Helper: build a client for a given model using the fetched API keys
-        function buildClientForModel(
-          model: string,
-          apiKeys: Record<string, string | null | undefined>
-        ): LlmGenerateClient | null {
-          const modelProvider = getProviderForModel(model);
-          const modelKeyField = providerToKeyField(modelProvider);
-          const modelApiKey = apiKeys[modelKeyField];
-          if (modelApiKey === null || modelApiKey === undefined) return null;
-
+        // The fallback uses the same resolved OpenRouter access as the primary client.
+        function buildClientForModel(model: DefaultEligibleModel): LlmGenerateClient {
           return createLlmClient({
-            apiKey: modelApiKey,
-            model: model as LLMModel,
+            apiKey: resolvedApiKey,
+            model,
             userId,
             logger: config.logger,
             usageSink: config.usageSink,
@@ -248,8 +478,8 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         // Step 4: Create and return the LLM client
         const clientConfig: LlmClientConfig = {
-          apiKey,
-          model: defaultModel as LLMModel,
+          apiKey: resolvedApiKey,
+          model: defaultModel,
           userId,
           logger: config.logger,
           usageSink: config.usageSink,
@@ -261,7 +491,11 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         logger.info({ userId, model: defaultModel, provider }, 'LLM client created successfully');
 
         // Step 6: Wrap with fallback retry if fallback model is configured
-        if (fallbackModelRaw !== undefined && isDefaultEligibleModel(fallbackModelRaw)) {
+        if (
+          fallbackModel !== undefined &&
+          fallbackModel !== defaultModel &&
+          isDefaultEligibleModel(fallbackModel)
+        ) {
           const primaryClient = client;
           const wrappedClient: LlmGenerateClient = {
             async generate(prompt: string, options: GenerateOptions) {
@@ -272,26 +506,18 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
                 {
                   userId,
                   primaryModel: defaultModel,
-                  fallbackModel: fallbackModelRaw,
+                  fallbackModel,
                   error: primaryResult.error,
                   _skipSentry: true,
                 },
                 'Primary model failed, attempting fallback'
               );
 
-              const fallbackClient = buildClientForModel(fallbackModelRaw, keysBody.data);
-              if (fallbackClient === null) {
-                logger.warn(
-                  { userId, fallbackModel: fallbackModelRaw },
-                  'No API key for fallback model'
-                );
-                return primaryResult;
-              }
-
+              const fallbackClient = buildClientForModel(fallbackModel);
               const fallbackResult = await fallbackClient.generate(prompt, options);
               if (fallbackResult.ok) {
                 logger.info(
-                  { userId, primaryModel: defaultModel, fallbackModel: fallbackModelRaw },
+                  { userId, primaryModel: defaultModel, fallbackModel },
                   'Fallback model succeeded after primary failure'
                 );
               }
@@ -315,7 +541,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       }
     },
 
-    async reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void> {
+    async reportLlmSuccess(userId: string, provider: ExecutableLlmProvider): Promise<void> {
       try {
         await fetch(
           `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`,
@@ -350,16 +576,23 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       }
     },
 
-    async getUserTimezone(userId: string): Promise<string | undefined> {
+    async getUserTimezone(
+      userId: string,
+      options?: UserTimezoneLookupOptions
+    ): Promise<string | undefined> {
       try {
         const response = await fetch(
           `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
           {
             headers: { 'X-Internal-Auth': config.internalAuthToken },
+            ...(options?.signal !== undefined ? { signal: options.signal } : {}),
           }
         );
 
         if (!response.ok) {
+          if (options?.throwOnError === true) {
+            throw new Error(`HTTP ${String(response.status)}`);
+          }
           logger.warn({ userId, status: response.status }, 'Failed to fetch user timezone');
           return undefined;
         }
@@ -373,6 +606,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         return body.data.timezone;
       } catch (error) {
+        if (options?.throwOnError === true) {
+          throw error;
+        }
         logger.warn({ userId, error: getErrorMessage(error) }, 'Failed to fetch user timezone');
         return undefined;
       }

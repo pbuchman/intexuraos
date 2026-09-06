@@ -5,6 +5,7 @@
  * These schemas describe the public wire contract — they MUST stay in sync
  * with the webhook request/response types consumed by the orchestrator.
  */
+import { rebaseResultSchema } from './code/schemas.js';
 
 export const taskCompleteWebhookSchema = {
   operationId: 'taskCompleteWebhook',
@@ -25,8 +26,7 @@ export const taskCompleteWebhookSchema = {
           // --- Fields used in handler logic (strictly validated) ---
           comment_replied: { type: 'boolean' },
           planning_outcome_label: { type: 'string', enum: ['planned', 'unclear'] },
-          planning_is_complex: { type: 'string', enum: ['0', '1'] },
-          planning_subtask_urls: { type: 'string' },
+          planning_has_plan_doc: { type: 'string', enum: ['0', '1'] },
           planning_pr_url: { type: 'string' },
           planning_unclear_clarification: { type: 'string' },
           execution_linear_issue_url: { type: 'string' },
@@ -34,7 +34,13 @@ export const taskCompleteWebhookSchema = {
           summary: { type: 'string' },
           ciFailed: { type: 'boolean' },
           partialWork: { type: 'boolean' },
-          rebaseResult: { type: 'string' },
+          rebaseResult: rebaseResultSchema,
+          pull_request_outcome_label: { type: 'string', enum: ['commits_pushed', 'no_changes_needed'] },
+          merge_ready: { type: 'string', enum: ['1'] },
+          merge_ready_reason: {
+            type: 'string',
+            enum: ['review_no_remediation', 'pull_request_no_changes_rebase_clean', 'remediation_already_completed', 'review_skipped'],
+          },
           planning_superpowers_writing_plans_used: { type: 'string' },
           planning_linear_url: { type: 'string' },
           execution_outcome_label: { type: 'string' },
@@ -50,6 +56,10 @@ export const taskCompleteWebhookSchema = {
           gh_actions_status: { type: 'string' },
           needs_remediation: { type: 'string' },
           requires_re_review: { type: 'string' },
+          sentry_issue_url: { type: 'string' },
+          sentry_linear_issue: { type: 'string' },
+          sentry_outcome: { type: 'string', enum: ['fixed', 'suppressed'] },
+          sentry_verification: { type: 'string' },
         },
         required: [],
       },

@@ -1,12 +1,17 @@
 /**
- * Tests for LlmValidatorImpl.
- * Uses vi.mock to mock the infra packages.
+ * Tests for the OpenRouter-only LlmValidator implementation.
  */
-import { LlmModels } from '@intexuraos/llm-contract';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok, type Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmValidatorImpl } from '../../infra/llm/LlmValidatorImpl.js';
+
+vi.mock('@intexuraos/infra-openrouter', () => ({
+  createOpenRouterClient: vi.fn(),
+  OPENROUTER_VALIDATION_MODEL: 'qwen/qwen3.5-flash-02-23',
+}));
+
+const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -15,501 +20,116 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-// Mock the infra packages
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(),
-}));
-
-vi.mock('@intexuraos/infra-gpt', () => ({
-  createGptClient: vi.fn(),
-}));
-
-vi.mock('@intexuraos/infra-claude', () => ({
-  createClaudeClient: vi.fn(),
-}));
-
-vi.mock('@intexuraos/infra-perplexity', () => ({
-  createPerplexityClient: vi.fn(),
-}));
-
-vi.mock('@intexuraos/infra-openrouter', () => ({
-  createOpenRouterClient: vi.fn(),
-  OPENROUTER_VALIDATION_MODEL: 'qwen/qwen3.5-flash-02-23',
-}));
-
-// Import mocked modules after vi.mock
-const { createGeminiClient } = await import('@intexuraos/infra-gemini');
-const { createGptClient } = await import('@intexuraos/infra-gpt');
-const { createClaudeClient } = await import('@intexuraos/infra-claude');
-const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
-const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
-
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
-  let fakeUsageSink: FakeUsageSink;
-  const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
-  const testUserId = 'test-user-123';
+  let usageSink: FakeUsageSink;
+  const userId = 'test-user-123';
 
   beforeEach(() => {
     vi.clearAllMocks();
-    fakeUsageSink = new FakeUsageSink();
-    validator = new LlmValidatorImpl(mockLogger, fakeUsageSink);
+    usageSink = new FakeUsageSink();
+    validator = new LlmValidatorImpl(mockLogger, usageSink);
   });
 
   describe('validateKey', () => {
-    describe('google provider', () => {
-      it('returns ok when validation succeeds', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
+    it('validates the key with the OpenRouter validation model', async () => {
+      const validateKey = vi.fn().mockResolvedValue(
+        ok({
+          token: 'key-123',
+          usage: 100,
+          limit: null,
+          expiresAt: null,
+        })
+      );
+      vi.mocked(createOpenRouterClient).mockReturnValue({ validateKey } as never);
 
-        const result = await validator.validateKey('google', 'test-api-key', testUserId);
+      const result = await validator.validateKey('openrouter', 'or-test-key', userId);
 
-        expect(result.ok).toBe(true);
-        expect(createGeminiClient).toHaveBeenCalledWith({
-          apiKey: 'test-api-key',
-          model: LlmModels.Gemini20Flash,
-          userId: testUserId,
-          logger: mockLogger,
-          usageSink: fakeUsageSink,
-        });
-        expect(mockClient.generate).toHaveBeenCalled();
+      expect(result).toEqual(ok(undefined));
+      expect(createOpenRouterClient).toHaveBeenCalledWith({
+        apiKey: 'or-test-key',
+        model: 'qwen/qwen3.5-flash-02-23',
+        evidenceModelId: 'or:qwen/qwen3.5-flash-02-23',
+        userId,
+        logger: mockLogger,
+        usageSink,
       });
-
-      it('returns INVALID_KEY error when key is invalid', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('google', 'bad-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('INVALID_KEY');
-          expect(result.error.message).toBe('Invalid Google API key');
-        }
-      });
-
-      it('returns API_ERROR when other errors occur', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(err({ code: 'NETWORK_ERROR', message: 'Connection failed' })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('google', 'test-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toContain('Google API error');
-        }
-      });
+      expect(validateKey).toHaveBeenCalledWith('or-test-key');
     });
 
-    describe('openai provider', () => {
-      it('returns ok when validation succeeds', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
-        };
-        vi.mocked(createGptClient).mockReturnValue(mockClient as never);
+    it('maps an invalid OpenRouter key to INVALID_KEY', async () => {
+      vi.mocked(createOpenRouterClient).mockReturnValue({
+        validateKey: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid credentials' })),
+      } as never);
 
-        const result = await validator.validateKey('openai', 'sk-test-key', testUserId);
+      const result = await validator.validateKey('openrouter', 'bad-key', userId);
 
-        expect(result.ok).toBe(true);
-        expect(createGptClient).toHaveBeenCalledWith({
-          apiKey: 'sk-test-key',
-          model: LlmModels.GPT4oMini,
-          userId: testUserId,
-          logger: mockLogger,
-          usageSink: fakeUsageSink,
-        });
-      });
-
-      it('returns INVALID_KEY error when key is invalid', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
-        };
-        vi.mocked(createGptClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('openai', 'bad-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('INVALID_KEY');
-          expect(result.error.message).toBe('Invalid OpenAI API key');
-        }
-      });
-
-      it('returns API_ERROR when other errors occur', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
-        };
-        vi.mocked(createGptClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('openai', 'test-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toContain('OpenAI API error');
-        }
-      });
+      expect(result).toEqual(
+        err({ code: 'INVALID_KEY', message: 'Invalid OpenRouter API key' })
+      );
     });
 
-    describe('anthropic provider', () => {
-      it('returns ok when validation succeeds', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
-        };
-        vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
+    it('maps other OpenRouter failures to API_ERROR', async () => {
+      vi.mocked(createOpenRouterClient).mockReturnValue({
+        validateKey: vi
+          .fn()
+          .mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Too fast' })),
+      } as never);
 
-        const result = await validator.validateKey('anthropic', 'sk-ant-key', testUserId);
+      const result = await validator.validateKey('openrouter', 'or-test-key', userId);
 
-        expect(result.ok).toBe(true);
-        expect(createClaudeClient).toHaveBeenCalledWith({
-          apiKey: 'sk-ant-key',
-          model: LlmModels.ClaudeHaiku35,
-          userId: testUserId,
-          logger: mockLogger,
-          usageSink: fakeUsageSink,
-        });
-      });
-
-      it('returns INVALID_KEY error when key is invalid', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
-        };
-        vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('anthropic', 'bad-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('INVALID_KEY');
-          expect(result.error.message).toBe('Invalid Anthropic API key');
-        }
-      });
-
-      it('returns API_ERROR when other errors occur', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(err({ code: 'SERVICE_ERROR', message: 'Unavailable' })),
-        };
-        vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('anthropic', 'test-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toContain('Anthropic API error');
-        }
-      });
-    });
-
-    describe('perplexity provider', () => {
-      it('returns ok when validation succeeds', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
-        };
-        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('perplexity', 'pplx-test-key', testUserId);
-
-        expect(result.ok).toBe(true);
-        expect(createPerplexityClient).toHaveBeenCalledWith({
-          apiKey: 'pplx-test-key',
-          model: LlmModels.Sonar,
-          userId: testUserId,
-          logger: mockLogger,
-          usageSink: fakeUsageSink,
-        });
-      });
-
-      it('returns INVALID_KEY error when key is invalid', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
-        };
-        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('perplexity', 'bad-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('INVALID_KEY');
-          expect(result.error.message).toBe('Invalid Perplexity API key');
-        }
-      });
-
-      it('returns API_ERROR when other errors occur', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMIT', message: 'Too fast' })),
-        };
-        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('perplexity', 'test-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toContain('Perplexity API error');
-        }
-      });
-    });
-
-    describe('openrouter provider', () => {
-      it('returns ok when validation succeeds', async () => {
-        const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(ok({ token: 'key-123', usage: 100, limit: null, expiresAt: null })),
-        };
-        vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('openrouter', 'or-test-key', testUserId);
-
-        expect(result.ok).toBe(true);
-        expect(createOpenRouterClient).toHaveBeenCalledWith({
-          apiKey: 'or-test-key',
-          model: 'qwen/qwen3.5-flash-02-23',
-          userId: testUserId,
-          logger: mockLogger,
-          usageSink: fakeUsageSink,
-        });
-        expect(mockClient.validateKey).toHaveBeenCalledWith('or-test-key');
-      });
-
-      it('returns INVALID_KEY error when key is invalid', async () => {
-        const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
-        };
-        vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('openrouter', 'bad-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('INVALID_KEY');
-          expect(result.error.message).toBe('Invalid OpenRouter API key');
-        }
-      });
-
-      it('returns API_ERROR when other errors occur', async () => {
-        const mockClient = {
-          validateKey: vi.fn().mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Too fast' })),
-        };
-        vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('openrouter', 'test-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toContain('OpenRouter API error');
-        }
-      });
+      expect(result).toEqual(
+        err({ code: 'API_ERROR', message: 'OpenRouter API error: Too fast' })
+      );
     });
   });
 
   describe('testRequest', () => {
-    const testPrompt = 'Say hello';
+    it('returns generated OpenRouter content', async () => {
+      const generate = vi.fn().mockResolvedValue(
+        ok({
+          content: 'Hello from OpenRouter!',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        })
+      );
+      vi.mocked(createOpenRouterClient).mockReturnValue({ generate } as never);
 
-    describe('google provider', () => {
-      it('returns content when test succeeds', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(ok({ content: 'Hello from Gemini!', usage: mockUsage })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
+      const result = await validator.testRequest(
+        'openrouter',
+        'or-test-key',
+        'Say hello',
+        userId
+      );
 
-        const result = await validator.testRequest('google', 'test-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value.content).toBe('Hello from Gemini!');
-        }
-        expect(mockClient.generate).toHaveBeenCalledWith(
-          testPrompt,
-          expect.objectContaining({ promptType: 'user-service-validation' })
-        );
+      expect(result).toEqual(ok({ content: 'Hello from OpenRouter!' }));
+      expect(generate).toHaveBeenCalledWith('Say hello', {
+        promptType: 'user-service-validation',
       });
-
-      it('returns API_ERROR when test fails', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('google', 'test-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toBe('Failed to respond');
-        }
+      expect(createOpenRouterClient).toHaveBeenCalledWith({
+        apiKey: 'or-test-key',
+        model: 'qwen/qwen3.5-flash-02-23',
+        evidenceModelId: 'or:qwen/qwen3.5-flash-02-23',
+        userId,
+        logger: mockLogger,
+        usageSink,
       });
     });
 
-    describe('openai provider', () => {
-      it('returns content when test succeeds', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'Hello from GPT!', usage: mockUsage })),
-        };
-        vi.mocked(createGptClient).mockReturnValue(mockClient as never);
+    it('returns API_ERROR when the OpenRouter test request fails', async () => {
+      vi.mocked(createOpenRouterClient).mockReturnValue({
+        generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Service error' })),
+      } as never);
 
-        const result = await validator.testRequest('openai', 'sk-key', testPrompt, testUserId);
+      const result = await validator.testRequest(
+        'openrouter',
+        'or-test-key',
+        'Say hello',
+        userId
+      );
 
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value.content).toBe('Hello from GPT!');
-        }
-      });
-
-      it('returns API_ERROR when test fails', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Rate limited' })),
-        };
-        vi.mocked(createGptClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('openai', 'sk-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toBe('Rate limited');
-        }
-      });
-    });
-
-    describe('anthropic provider', () => {
-      it('returns content when test succeeds', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(ok({ content: 'Hello from Claude!', usage: mockUsage })),
-        };
-        vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest(
-          'anthropic',
-          'sk-ant-key',
-          testPrompt,
-          testUserId
-        );
-
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value.content).toBe('Hello from Claude!');
-        }
-      });
-
-      it('returns API_ERROR when test fails', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Service down' })),
-        };
-        vi.mocked(createClaudeClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest(
-          'anthropic',
-          'sk-ant-key',
-          testPrompt,
-          testUserId
-        );
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toBe('Service down');
-        }
-      });
-    });
-
-    describe('perplexity provider', () => {
-      it('returns content when test succeeds', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(ok({ content: 'Hello from Perplexity!', usage: mockUsage })),
-        };
-        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest(
-          'perplexity',
-          'pplx-key',
-          testPrompt,
-          testUserId
-        );
-
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value.content).toBe('Hello from Perplexity!');
-        }
-        expect(mockClient.generate).toHaveBeenCalledWith(
-          testPrompt,
-          expect.objectContaining({ promptType: 'user-service-validation' })
-        );
-      });
-
-      it('returns API_ERROR when test fails', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Search failed' })),
-        };
-        vi.mocked(createPerplexityClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest(
-          'perplexity',
-          'pplx-key',
-          testPrompt,
-          testUserId
-        );
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toBe('Search failed');
-        }
-      });
-    });
-
-    describe('openrouter provider', () => {
-      it('returns content when test succeeds', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(ok({ content: 'Hello from OpenRouter!', usage: mockUsage })),
-        };
-        vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('openrouter', 'or-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value.content).toBe('Hello from OpenRouter!');
-        }
-        expect(mockClient.generate).toHaveBeenCalledWith(
-          testPrompt,
-          expect.objectContaining({ promptType: 'user-service-validation' })
-        );
-      });
-
-      it('returns API_ERROR when test fails', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Service error' })),
-        };
-        vi.mocked(createOpenRouterClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('openrouter', 'or-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toBe('Service error');
-        }
-      });
+      expect(result).toEqual(err({ code: 'API_ERROR', message: 'Service error' }));
     });
   });
 });

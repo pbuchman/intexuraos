@@ -1,27 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, XCircle } from 'lucide-react';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { getOpenRouterRawId, isOpenRouterModel } from '@intexuraos/llm-contract';
 import {
   Button,
   ErrorBanner,
+  MAX_TOTAL_MODELS,
   ModelSelector,
   getSelectedModelsList,
 } from '@/components';
 import {
-  getProviderForModel,
-  getProviderForStoredModel,
-  type LlmProvider,
+  type OpenRouterModelInfo,
   type Research,
   type SupportedModel,
 } from '@/services/researchAgentApi.types';
 import { getModelDisplayName } from './shared.js';
-
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
+import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames.js';
+import {
+  isStoredResearchSynthesisModelExecutable,
+  RESEARCH_SYNTHESIS_MODELS,
+} from '@/utils/researchModelAvailability.js';
 
 interface EnhanceModalProps {
   research: Research;
-  configuredProviders: LlmProvider[];
-  failedProviders: Map<LlmProvider, string>;
+  openRouterModels: OpenRouterModelInfo[];
+  openRouterLoading: boolean;
+  openRouterError: string | null;
+  hasOpenRouterAccess: boolean;
+  onRetryModelCatalog: () => void;
   onEnhance: (params: {
     additionalModels?: SupportedModel[];
     additionalContexts?: { content: string }[];
@@ -31,16 +36,43 @@ interface EnhanceModalProps {
   onClose: () => void;
 }
 
+interface EnhanceModelCapacity {
+  completedModelCount: number;
+  completedOpenRouterRawIds: Set<string>;
+  remainingSlots: number;
+}
+
+export function getEnhanceModelCapacity(
+  results: readonly Pick<Research['llmResults'][number], 'model' | 'status'>[],
+): EnhanceModelCapacity {
+  const completedModelIds = new Set(
+    results
+      .filter((result) => result.status === 'completed')
+      .map((result) => result.model),
+  );
+  const completedOpenRouterRawIds = new Set(
+    [...completedModelIds]
+      .filter((model) => isOpenRouterModel(model))
+      .map((model) => getOpenRouterRawId(model)),
+  );
+  return {
+    completedModelCount: completedModelIds.size,
+    completedOpenRouterRawIds,
+    remainingSlots: Math.max(0, MAX_TOTAL_MODELS - completedModelIds.size),
+  };
+}
+
 export function EnhanceModal({
   research,
-  configuredProviders,
-  failedProviders,
+  openRouterModels,
+  openRouterLoading,
+  openRouterError,
+  hasOpenRouterAccess,
+  onRetryModelCatalog,
   onEnhance,
   onClose,
 }: EnhanceModalProps): React.JSX.Element {
-  const [enhanceModelSelections, setEnhanceModelSelections] = useState<
-    Map<LlmProvider, SupportedModel | null>
-  >(() => new Map());
+  const [selectedAdditionalModels, setSelectedAdditionalModels] = useState<string[]>([]);
   const [enhanceContexts, setEnhanceContexts] = useState<string[]>([]);
   const [removeContextIds, setRemoveContextIds] = useState<Set<string>>(() => new Set());
   const [enhanceSynthesisModel, setEnhanceSynthesisModel] = useState<SupportedModel | null>(null);
@@ -59,23 +91,18 @@ export function EnhanceModal({
     };
   }, [onClose]);
 
-  const existingProviders = useMemo(
-    () =>
-      new Set(
-        research.selectedModels
-          .map((model) => getProviderForStoredModel(model))
-          .filter((provider): provider is LlmProvider => provider !== null)
-      ),
-    [research.selectedModels],
+  const modelCapacity = useMemo(
+    () => getEnhanceModelCapacity(research.llmResults),
+    [research.llmResults],
   );
-
-  const handleEnhanceModelChange = (provider: LlmProvider, model: SupportedModel | null): void => {
-    setEnhanceModelSelections((prev) => {
-      const next = new Map(prev);
-      next.set(provider, model);
-      return next;
-    });
-  };
+  const additionalCatalog = useMemo(
+    () =>
+      openRouterModels.filter(
+        (model) => !modelCapacity.completedOpenRouterRawIds.has(model.id),
+      ),
+    [modelCapacity, openRouterModels],
+  );
+  const remainingModelSlots = modelCapacity.remainingSlots;
 
   const toggleRemoveContext = (contextId: string): void => {
     setRemoveContextIds((prev) => {
@@ -89,12 +116,30 @@ export function EnhanceModal({
     });
   };
 
-  const additionalModels = getSelectedModelsList(enhanceModelSelections);
+  const additionalModels = getSelectedModelsList(selectedAdditionalModels);
   const validContexts = enhanceContexts.filter((c) => c.trim().length > 0);
+  const availableModelIds = openRouterModels.map((model) => model.id);
+  const modelCatalogReady =
+    hasOpenRouterAccess && !openRouterLoading && openRouterError === null;
+  const inheritedSynthesisExecutable = isStoredResearchSynthesisModelExecutable(
+    research.synthesisModel,
+    availableModelIds,
+  );
+  const selectedSynthesisExecutable =
+    enhanceSynthesisModel !== null &&
+    isStoredResearchSynthesisModelExecutable(enhanceSynthesisModel, availableModelIds);
   const hasSynthesisChange =
     enhanceSynthesisModel !== null && enhanceSynthesisModel !== research.synthesisModel;
+  const hasExecutableSynthesis =
+    enhanceSynthesisModel === null
+      ? inheritedSynthesisExecutable
+      : selectedSynthesisExecutable;
   const isDisabled =
     enhancing ||
+    !hasOpenRouterAccess ||
+    openRouterLoading ||
+    openRouterError !== null ||
+    !hasExecutableSynthesis ||
     (additionalModels.length === 0 &&
       validContexts.length === 0 &&
       removeContextIds.size === 0 &&
@@ -132,21 +177,47 @@ export function EnhanceModal({
           Add more AI models, change synthesis model, or modify context.
         </p>
 
+        {!hasOpenRouterAccess ? null : openRouterLoading ? (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-700/50 dark:text-slate-300">
+            Loading the OpenRouter model catalog before enhancement is available.
+          </div>
+        ) : openRouterError !== null ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+            <span>The OpenRouter model catalog could not be loaded.</span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onRetryModelCatalog}
+            >
+              Retry model catalog
+            </Button>
+          </div>
+        ) : !inheritedSynthesisExecutable && !selectedSynthesisExecutable ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+            The inherited synthesis model is unavailable. Select an active synthesis model before
+            enhancing this research.
+          </div>
+        ) : null}
+
         {/* Additional Models */}
         <div className="mb-6">
           <p className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-3">
-            Add models from new providers:
+            Add OpenRouter models:
           </p>
           <ModelSelector
-            selectedModels={enhanceModelSelections}
-            onChange={handleEnhanceModelChange}
-            configuredProviders={configuredProviders}
-            disabledProviders={existingProviders}
-            failedProviders={failedProviders}
+            availableModels={additionalCatalog}
+            selectedModelIds={selectedAdditionalModels}
+            onChange={setSelectedAdditionalModels}
+            loading={openRouterLoading}
             disabled={enhancing}
+            error={openRouterError}
+            hasOpenRouterAccess={hasOpenRouterAccess}
+            maxModels={remainingModelSlots}
           />
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            Providers already in research are disabled. Select models from other providers.
+            Models already used by this research are excluded. You can add{' '}
+            {String(remainingModelSlots)} more.
           </p>
         </div>
 
@@ -161,13 +232,15 @@ export function EnhanceModal({
             </span>
           </p>
           <div className="flex flex-wrap gap-2">
-            {SYNTHESIS_CAPABLE_MODELS.map((model) => {
+            {RESEARCH_SYNTHESIS_MODELS.map((model) => {
               const isSelected = enhanceSynthesisModel === model;
               const isCurrent = research.synthesisModel === model;
-              const modelDisplayName = getModelDisplayName(model);
-              const provider = getProviderForModel(model);
-              const hasKey = configuredProviders.includes(provider);
-              const isModelDisabled = !hasKey || enhancing;
+              const rawId = getOpenRouterRawId(model);
+              const modelDisplayName = resolveOpenRouterModelName(rawId);
+              const isAvailable =
+                modelCatalogReady &&
+                openRouterModels.some((candidate) => candidate.id === rawId);
+              const isModelDisabled = !hasOpenRouterAccess || !isAvailable || enhancing;
 
               return (
                 <button
@@ -179,19 +252,23 @@ export function EnhanceModal({
                   disabled={isModelDisabled}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                     isSelected
-                      ? 'bg-green-600 text-white'
-                      : isCurrent
-                        ? 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-300'
-                        : hasKey
+                    ? 'bg-green-600 text-white'
+                    : isCurrent
+                      ? 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-300'
+                        : isAvailable
                           ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
                           : 'bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-slate-700/50 dark:text-slate-500'
                   }`}
                   title={
-                    !hasKey ? 'API key not configured' : isCurrent ? 'Current model' : undefined
+                    modelCatalogReady && !isAvailable
+                      ? 'Model is unavailable'
+                      : isCurrent
+                        ? 'Current model'
+                        : undefined
                   }
                 >
                   {modelDisplayName}
-                  {!hasKey ? ' (no key)' : ''}
+                  {modelCatalogReady && !isAvailable ? ' (unavailable)' : ''}
                   {isCurrent && !isSelected ? ' ✓' : ''}
                 </button>
               );

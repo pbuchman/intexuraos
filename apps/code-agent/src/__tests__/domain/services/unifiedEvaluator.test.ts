@@ -12,7 +12,7 @@ import { createUnifiedEvaluator, type UnifiedEvaluatorDeps } from '../../../doma
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 
 function createFakeLogger(): Logger {
   return {
@@ -543,12 +543,12 @@ describe('UnifiedEvaluator', () => {
           triage: {
             action: 'request_review',
             reviewTypes: ['architecture'],
-            workerType: 'qwen',
+            workerType: 'openrouter-free',
           },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'The comment explicitly requested architecture review with qwen.',
         })),
-        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1', workerType: 'qwen' })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1', workerType: 'openrouter-free' })),
       });
       const evaluator = createUnifiedEvaluator(deps);
       const event = createFakeEvent({
@@ -563,7 +563,7 @@ describe('UnifiedEvaluator', () => {
         logger,
         expect.objectContaining({
           reviewTypes: ['architecture'],
-          workerType: 'qwen',
+          workerType: 'openrouter-free',
           reviewComment: '@review architecture',
         })
       );
@@ -573,7 +573,7 @@ describe('UnifiedEvaluator', () => {
           dispatchParams: expect.objectContaining({
             taskId: 'task-review-comment-1',
             reviewTypes: ['architecture'],
-            workerType: 'qwen',
+            workerType: 'openrouter-free',
           }),
         })
       );
@@ -967,7 +967,7 @@ describe('UnifiedEvaluator', () => {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
         } as unknown as WebhookRulesService,
         evaluateEvent: vi.fn().mockResolvedValue(ok({
-          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen' },
+          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'openrouter-free' },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'Architecture review requested.',
         })),
@@ -1821,7 +1821,7 @@ describe('LLM retry for pull_request events', () => {
         } as unknown as WebhookRulesService,
         evaluateEvent: vi.fn().mockResolvedValue(ok({
           triage: { action: 'request_review', reviewTypes: ['code_quality'] },
-          usage: { costUsd: 0.001, toolCalls: [], model: LlmModels.Gemini25Flash },
+          usage: { costUsd: 0.001, toolCalls: [], model: LegacyGoogleModels.Gemini25Flash },
           reasoning: 'PR was updated.',
         })),
         codeTaskRepo: codeTaskRepo as CodeTaskRepository,
@@ -1836,7 +1836,7 @@ describe('LLM retry for pull_request events', () => {
         expect.objectContaining({
           decision: 'skip',
           reason: expect.stringContaining('remediation_no_rereview'),
-          llmModel: LlmModels.Gemini25Flash,
+          llmModel: LegacyGoogleModels.Gemini25Flash,
         }),
       );
     });

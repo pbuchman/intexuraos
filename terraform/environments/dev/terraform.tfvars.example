@@ -11,11 +11,19 @@ region = "europe-central2"
 # Environment name
 environment = "dev"
 
-# GitHub owner (your username or organization)
-github_owner = "your-github-username"
+# Phase A removes legacy readers while retaining every legacy container.
+# Phase B may set both false only after the seven-day reversible soak passes.
+
+# Exact GitHub repository identity accepted by Workload Identity Federation
+github_owner               = "pbuchman"
+github_repository_owner_id = "368465"
 
 # GitHub repository name
-github_repo = "intexuraos"
+github_repo          = "intexuraos"
+github_repository_id = "1118959310"
+
+# Exact Git ref accepted by Workload Identity Federation
+github_ref = "refs/heads/development"
 
 # GitHub branch to trigger builds
 github_branch = "development"
@@ -32,6 +40,9 @@ audit_llms = true
 
 # Email address for monitoring alerts (set to null/omit to disable email alerts)
 # alert_email = "ops@example.com"
+
+# One reviewed human operator allowed to impersonate the keyless recovery reader.
+whatsapp_private_recovery_operator_email = "operator@example.com"
 
 # Slack notification channel (optional)
 #   slack_auth_token   — Slack bot OAuth token (xoxb-...) with chat:write scope.

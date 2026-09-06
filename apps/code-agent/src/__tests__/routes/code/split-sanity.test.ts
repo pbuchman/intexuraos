@@ -41,8 +41,8 @@ describe('routes/code split (INT-1430) sanity', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    // Per CLAUDE.md: reset service container after each test so container state
-    // doesn't leak into subsequent test files sharing the same Vitest worker.
+    // Reset the service container after each test so container state doesn't
+    // leak into subsequent test files sharing the same Vitest worker.
     resetServices();
   });
 

@@ -1,10 +1,11 @@
 import { createHmac } from 'node:crypto';
 import type { Logger } from 'pino';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { buildTaskCallbackUrl } from './callback-url.js';
 
 /**
  * Orchestrator-side HTTP client that commits a terminal task status to code-agent
- * via `PATCH /internal/code-tasks/:id/status`.
+ * via `PATCH /internal/code-tasks/status`.
  *
  * Signing scheme is `HMAC-SHA256(secret, timestamp + "." + rawBody)`, with
  * `X-Request-Timestamp`, `X-Request-Signature`, and `X-Internal-Auth` headers.
@@ -87,12 +88,7 @@ export class StatusUpdateClient {
     const maxAttempts = this.retryDelaysMs.length + 1;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const outcome = await this.deliver(
-        payload.taskId,
-        rawBody,
-        payload.webhookUrl,
-        payload.webhookSecret
-      );
+      const outcome = await this.deliver(rawBody, payload.webhookUrl, payload.webhookSecret);
 
       if (outcome.ok) {
         if (attempt > 0) {
@@ -112,6 +108,7 @@ export class StatusUpdateClient {
           attempt: attempt + 1,
           errorType: outcome.error.type,
           errorMessage: outcome.error.message,
+          [SKIP_SENTRY_KEY]: true,
         },
         'Status update attempt failed'
       );
@@ -144,10 +141,9 @@ export class StatusUpdateClient {
   }
 
   private async deliver(
-    taskId: string,
     rawBody: string,
-    webhookUrl: string | undefined,
-    webhookSecret: string | undefined
+    webhookUrl: string | undefined, // @allow-undefined-type -- function parameter, not optional property
+    webhookSecret: string | undefined // @allow-undefined-type -- function parameter, not optional property
   ): Promise<{ ok: true } | { ok: false; error: StatusUpdateError }> {
     const timestamp = Math.floor(Date.now() / 1000);
     const signatureSecret = webhookSecret ?? this.orchestratorSecret;
@@ -155,11 +151,7 @@ export class StatusUpdateClient {
       .update(`${String(timestamp)}.${rawBody}`)
       .digest('hex');
 
-    const url = buildTaskCallbackUrl(
-      webhookUrl,
-      this.codeAgentUrl,
-      `/internal/code-tasks/${encodeURIComponent(taskId)}/status`
-    );
+    const url = buildTaskCallbackUrl(webhookUrl, this.codeAgentUrl, '/internal/code-tasks/status');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {

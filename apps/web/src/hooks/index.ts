@@ -15,12 +15,22 @@ export { useGitHubEventLog, type GitHubEventLogListRow, type UseGitHubEventLogRe
 export { useGitHubPRSummaries } from './useGitHubPRSummaries.js';
 export { useLinearIssueOptions } from './useLinearIssueOptions.js';
 export { useLlmKeys } from './useLlmKeys.js';
+export {
+  useIntexAgentModel,
+  type IntexAgentModelMutationOutcome,
+  type IntexAgentModelSelectorAvailable,
+  type UseIntexAgentModelResult,
+} from './useIntexAgentModel.js';
 export { useNotes } from './useNotes.js';
 export { useOpenRouterModels } from './useOpenRouterModels.js';
 export {
   usePrivateWhatsAppLog,
   type UsePrivateWhatsAppLogResult,
 } from './usePrivateWhatsAppLog.js';
+export {
+  useWhatsAppConversationAssistant,
+  type UseWhatsAppConversationAssistantResult,
+} from './useWhatsAppConversationAssistant.js';
 export { useResearch, useResearches } from './useResearch.js';
 export { useResearchDetailActions, type ResearchDetailActions } from './useResearchDetailActions.js';
 export { useTaskView, type MessageStatus, type TaskViewState } from './useTaskView.js';
@@ -42,14 +52,5 @@ export { useLlmUsageQuery, type UseLlmUsageQueryOptions, type UseLlmUsageQueryRe
 export { useLlmUsageEvent, type UseLlmUsageEventResult } from './useLlmUsageEvent.js';
 export { usePageLifecycle } from './usePageLifecycle.js';
 export { usePruneCandidateStatus, type PruneCandidateStatus } from './usePruneCandidateStatus.js';
-export {
-  useDigestList,
-  type UseDigestListOptions,
-  type UseDigestListResult,
-  type DigestStatusFilter,
-  type DigestSortOption,
-} from './useDigestList.js';
-export { useDigestView, type UseDigestViewResult } from './useDigestView.js';
-export { useBackfillRun, type UseBackfillRunResult } from './useBackfillRun.js';
 export { useFishingKnowledge, type UseFishingKnowledgeResult } from './useFishingKnowledge.js';
 export { useFishingChat, type UseFishingChatResult } from './useFishingChat.js';

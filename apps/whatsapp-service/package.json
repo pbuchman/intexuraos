@@ -22,17 +22,28 @@
     "@google-cloud/storage": "^7.14.0",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
+    "@intexuraos/common-metrics": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-pdf-export": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/infra-whatsapp": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/llm-factory": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*",
+    "@intexuraos/llm-prompts": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
     "fastify": "catalog:",
+    "jose": "^5.9.6",
     "libphonenumber-js": "^1.12.33",
     "pino": "catalog:",
     "sharp": "^0.33.5",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@intexuraos/whatsapp-pubsub-client": "workspace:*"
   }
 }

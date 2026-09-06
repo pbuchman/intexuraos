@@ -26,11 +26,14 @@ import {
   mapIssueStateType,
   mapTeam,
   mapLinearError,
+  isTransientUpstreamError,
   filterIssuesByCompletionDate,
   mapIssuesWithBatchedStates,
   DEFAULT_COMPLETED_SINCE_DAYS,
   mapSingleIssue,
   mapSingleIssueWithTeam,
+  isTransientLinearError,
+  retryOnTransient,
 } from './linearMappers.js';
 import {
   getOrCreateClient,
@@ -48,12 +51,15 @@ export {
   mapIssueStateType,
   mapTeam,
   mapLinearError,
+  isTransientUpstreamError,
   createDedupKey,
   filterIssuesByCompletionDate,
   DEFAULT_COMPLETED_SINCE_DAYS,
   clearClientCache,
   getClientCacheSize,
   getDedupCacheSize,
+  isTransientLinearError,
+  retryOnTransient,
 };
 
 /* istanbul ignore next -- @preserve API client methods require real Linear API key to test */
@@ -92,6 +98,7 @@ export function createLinearApiClient(): LinearApiClient {
         const client = getOrCreateClient(apiKey);
 
         const payload = await client.createIssue({
+          ...(input.id !== undefined && { id: input.id }),
           teamId: input.teamId,
           title: input.title,
           ...(input.description !== null ? { description: input.description } : {}),
@@ -140,23 +147,55 @@ export function createLinearApiClient(): LinearApiClient {
 
           const client = getOrCreateClient(apiKey);
 
+          // Retry transient upstream failures (5xx, network errors) before
+          // surfacing them to Sentry. INT-1801 reduced 114 transient
+          // Cloudflare 502 alerts from scheduled `sync-all` runs.
+          const fetchPage = async (afterCursor: string | undefined): Promise<{
+            nodes: Issue[];
+            endCursor?: string;
+            hasNextPage: boolean;
+          }> => {
+            return await retryOnTransient(
+              async () => {
+                const issuesConnection = await client.issues({
+                  filter: {
+                    team: { id: { eq: teamId } },
+                  },
+                  first: 100,
+                  ...(afterCursor !== undefined ? { after: afterCursor } : {}),
+                });
+                return {
+                  nodes: issuesConnection.nodes,
+                  ...(issuesConnection.pageInfo.endCursor !== undefined
+                    ? { endCursor: issuesConnection.pageInfo.endCursor }
+                    : {}),
+                  hasNextPage: issuesConnection.pageInfo.hasNextPage,
+                };
+              },
+              'listIssues',
+              Date.now(),
+              {
+                maxRetries: 2,
+                onRetry: ({ operationName, attempt, delayMs, error }) => {
+                  logger.warn(
+                    { teamId, operationName, attempt, delayMs, error: getErrorMessage(error) },
+                    'Linear listIssues transient failure, retrying'
+                  );
+                },
+              }
+            );
+          };
+
           // Paginate through all issues
           const allIssues: Issue[] = [];
           let hasMore = true;
           let after: string | undefined;
 
           while (hasMore) {
-            const issuesConnection = await client.issues({
-              filter: {
-                team: { id: { eq: teamId } },
-              },
-              first: 100,
-              ...(after !== undefined ? { after } : {}),
-            });
-
-            allIssues.push(...issuesConnection.nodes);
-            hasMore = issuesConnection.pageInfo.hasNextPage;
-            after = issuesConnection.pageInfo.endCursor;
+            const page = await fetchPage(after);
+            allIssues.push(...page.nodes);
+            hasMore = page.hasNextPage;
+            after = page.endCursor;
           }
 
           logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
@@ -169,6 +208,16 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
+        // Transient upstream failures (5xx from Cloudflare/Linear) are noise in
+        // logs and Sentry — they self-recover on the next sync tick. Log at
+        // warn level so they remain visible without generating exceptions.
+        if (isTransientLinearError(error)) {
+          logger.warn(
+            { teamId, _skipSentry: true },
+            'Linear API transiently unavailable while listing issues'
+          );
+          return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' });
+        }
         logger.error({ error, teamId }, 'Failed to list Linear issues');
         return err(mapLinearError(error));
       }
@@ -186,7 +235,16 @@ export function createLinearApiClient(): LinearApiClient {
 
           const client = getOrCreateClient(apiKey);
 
-          const issue = await client.issue(issueId);
+          let issue: Issue;
+          try {
+            issue = await client.issue(issueId);
+          } catch (error) {
+            if (/entity not found:\s*issue\b/iu.test(getErrorMessage(error, ''))) {
+              logger.info({ issueId }, 'Issue not found by ID');
+              return null;
+            }
+            throw error;
+          }
           return await mapSingleIssue(issue);
         });
 

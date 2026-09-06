@@ -18,10 +18,20 @@ export interface TaskGroupSummary {
 
   // Aggregate fields
   taskCount: number;
+  /** Current displayable task ids used to make maintenance retries idempotent. */
+  taskIds?: string[];
+  taskStatusById?: Record<string, string>;
+  taskLifecycleAtById?: Record<string, Timestamp>;
   /** Tasks with status in {queued, dispatched, running} */
   activeTaskCount: number;
+  /** Newest attempt identity, ordered by createdAt then task id. Absent on legacy documents. */
+  latestTaskId?: string;
+  latestTaskCreatedAt?: Timestamp;
   latestTaskStatus: string;
+  /** Indexed compatibility field containing latest lifecycle activity, not technical modification time. */
   latestTaskUpdatedAt: Timestamp;
+  /** Tie-break owner for latestTaskUpdatedAt. Absent on legacy documents. */
+  latestLifecycleTaskId?: string;
   agentTypesPresent: string[];
   hasCompletedPlanning: boolean;
   hasCompletedExecution: boolean;
@@ -30,7 +40,19 @@ export interface TaskGroupSummary {
   hasImplementationTaskId: boolean;
   hasPrUrl: boolean;
   prNumber: number | null;
+  latestMergeReadyEvidence?: boolean;
+  latestMergeReadyReason?: string | null;
+  latestMergeReadyUpdatedAt?: Timestamp | null;
+  /** Latest merge-ready evidence or invalidation decision time. */
+  latestMergeReadyDecisionAt?: Timestamp | null;
+  latestMergeReadyDecisionTaskId?: string | null;
+  prMergedAt?: Timestamp | null;
+  prClosedAt?: Timestamp | null;
   latestReviewNeedsRemediation: boolean | null;
+  latestReviewUpdatedAt?: Timestamp | null;
+  latestReviewTaskId?: string | null;
+  representativePrUpdatedAt?: Timestamp | null;
+  representativePrTaskId?: string | null;
 
   // Sort key fields
   oldestTaskCreatedAt: Timestamp;

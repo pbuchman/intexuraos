@@ -78,14 +78,6 @@ resource "google_project_iam_member" "cloud_build_logs_writer" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
-# Cloud Build needs retained secret access for function deploy and migrations.
-resource "google_project_iam_member" "cloud_build_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.cloud_build.email}"
-}
-
-
 # Cloud Build needs to trigger builds via API (for GitHub Actions integration)
 resource "google_project_iam_member" "cloud_build_builds_editor" {
   project = var.project_id
@@ -109,7 +101,6 @@ resource "google_project_iam_member" "cloud_build_functions_developer" {
 
 locals {
   cloud_function_workers = [
-    "vm-lifecycle",
     "transcription",
   ]
 }
@@ -141,7 +132,7 @@ resource "google_cloudbuild_trigger" "firestore" {
 # -----------------------------------------------------------------------------
 # Cloud Function Worker Triggers
 # -----------------------------------------------------------------------------
-# Individual triggers for Cloud Function workers (vm-lifecycle, transcription).
+# Individual triggers for retained Cloud Function workers (transcription).
 # These deploy function source to GCS without triggering on git push.
 
 resource "google_cloudbuild_trigger" "worker" {
@@ -287,13 +278,15 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   display_name                       = "GitHub Provider"
 
   attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.actor"      = "assertion.actor"
-    "attribute.repository" = "assertion.repository"
-    "attribute.ref"        = "assertion.ref"
+    "google.subject"                = "assertion.sub"
+    "attribute.actor"               = "assertion.actor"
+    "attribute.repository"          = "assertion.repository"
+    "attribute.repository_owner_id" = "assertion.repository_owner_id"
+    "attribute.repository_id"       = "assertion.repository_id"
+    "attribute.ref"                 = "assertion.ref"
   }
 
-  attribute_condition = "assertion.repository == '${var.github_owner}/${var.github_repo}'"
+  attribute_condition = "assertion.repository_owner_id == '${var.github_repository_owner_id}' && assertion.repository_id == '${var.github_repository_id}' && assertion.repository == '${var.github_owner}/${var.github_repo}' && assertion.ref == '${var.github_ref}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -304,5 +297,5 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 resource "google_service_account_iam_member" "github_actions_wif" {
   service_account_id = google_service_account.cloud_build.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_id/${var.github_repository_id}"
 }

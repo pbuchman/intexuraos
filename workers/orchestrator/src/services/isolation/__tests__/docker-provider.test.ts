@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
 import * as fs from 'node:fs';
@@ -183,11 +184,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
   secrets: {
     ANTHROPIC_API_KEY: 'test-anthropic-key',
     LINEAR_API_KEY: 'test-linear-key',
-    SENTRY_AUTH_TOKEN: 'test-sentry-token',
-    MINIMAX_API_KEY: 'test-minimax-key',
-    MIMO_API_KEY: 'test-mimo-key',
-    DASHSCOPE_API_KEY: 'test-dashscope-key',
-    KIMI_API_KEY: 'test-kimi-key',
+    ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     OPENROUTER_API_KEY: 'test-openrouter-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
@@ -1040,10 +1037,18 @@ describe('DockerProvider', () => {
         const ctx = call[0] as { event?: string } | undefined;
         return ctx?.event === 'lockfile-drift';
       });
-      expect(driftWarnCall).toBeDefined();
+      expect(driftWarnCall?.[0]).toEqual(
+        expect.objectContaining({
+          event: 'lockfile-drift',
+          taskId: 'resume-drift-task',
+          before: expect.any(String),
+          after: expect.any(String),
+          [SKIP_SENTRY_KEY]: true,
+        })
+      );
     });
 
-    it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
+    it('recreates prompt files without copying host credentials when restoring a worker', async () => {
       const fs = await import('node:fs');
       const config = createTestConfig({ taskId: 'preserved-task-2' });
       await provider.createWorker(config);
@@ -1081,8 +1086,8 @@ describe('DockerProvider', () => {
         'utf-8'
       );
 
-      // Should copy GCP credentials
-      expect(fs.promises.copyFile).toHaveBeenCalled();
+      // Host credentials and the full secret package stay outside code workers.
+      expect(fs.promises.copyFile).not.toHaveBeenCalled();
     });
   });
 
@@ -1449,16 +1454,6 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('sets ANTHROPIC_API_KEY env var for glm worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'glm' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
-      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-dashscope-key');
-    });
-
     it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
@@ -1469,47 +1464,6 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('sets ANTHROPIC_API_KEY env var for minimax worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
-      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-minimax-key');
-    });
-
-    it('sets ANTHROPIC_BASE_URL for minimax worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
-      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic');
-    });
-
-    it('sets native Kimi Code env vars for kimi worker', async () => {
-      const config = createTestConfig({ workerType: 'kimi' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-
-      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='))).toBe(
-        'ANTHROPIC_API_KEY=test-kimi-key'
-      );
-      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='))).toBe(
-        'ANTHROPIC_BASE_URL=https://api.kimi.com/coding'
-      );
-      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='))).toBe(
-        'ANTHROPIC_MODEL=kimi-for-coding'
-      );
-      expect(envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='))).toBe(
-        'CLAUDE_CODE_EFFORT_LEVEL=high'
-      );
-    });
-
     it('sets ANTHROPIC_MODEL for sonnet worker', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
@@ -1518,26 +1472,6 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
       expect(modelEntry).toBe('ANTHROPIC_MODEL=sonnet');
-    });
-
-    it('sets ANTHROPIC_MODEL for minimax worker', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M2.7');
-    });
-
-    it('sets ANTHROPIC_MODEL for mimo-pro worker', async () => {
-      const config = createTestConfig({ workerType: 'mimo-pro' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=mimo-v2.5-pro');
     });
 
     it('sets OpenRouter env vars for openrouter-free worker', async () => {
@@ -1605,17 +1539,6 @@ describe('DockerProvider', () => {
       expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
     });
 
-    it('mounts per-task session for minimax workers even with sharedCredsPath', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual(
-        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
-      );
-    });
-
     it('does not set ANTHROPIC_BASE_URL env var when sharedCredsPath is configured for auto worker', async () => {
       const config = createTestConfig({ workerType: 'auto' });
       await sharedCredsProvider.createWorker(config);
@@ -1624,18 +1547,6 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
       expect(baseUrlEntry).toBeUndefined();
-    });
-
-    it('sets ANTHROPIC_BASE_URL env var for glm worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'glm' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
-      expect(baseUrlEntry).toBe(
-        'ANTHROPIC_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/apps/anthropic'
-      );
     });
 
     it('sets ANTHROPIC_API_KEY env var when sharedCredsPath is NOT configured', async () => {
@@ -1661,17 +1572,6 @@ describe('DockerProvider', () => {
         '/shared/claude-creds/.credentials.json:/home/claude/.claude/.credentials.json:rw'
       );
       expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
-    });
-
-    it('mounts per-task session for glm workers even with sharedCredsPath', async () => {
-      const config = createTestConfig({ workerType: 'glm' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual(
-        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
-      );
     });
   });
 
@@ -2210,6 +2110,21 @@ describe('DockerProvider', () => {
 
       expect(result).toEqual([]);
       expect(mockLogger.warn).toHaveBeenCalled();
+    });
+
+    it('counts every discovered worker container through the strict drain path', async () => {
+      mocks.mockDocker.listContainers.mockResolvedValueOnce([
+        { Id: 'container-running', Names: ['/code-worker-task-a'], State: 'running' },
+        { Id: 'container-exited', Names: ['/code-worker-task-b'], State: 'exited' },
+      ]);
+
+      await expect(provider.getDrainWorkerContainerCount()).resolves.toBe(2);
+    });
+
+    it('propagates Docker discovery failures through the strict drain path', async () => {
+      mocks.mockDocker.listContainers.mockRejectedValueOnce(new Error('docker unavailable'));
+
+      await expect(provider.getDrainWorkerContainerCount()).rejects.toThrow('docker unavailable');
     });
 
     it('handles container names with complex taskIds', async () => {
@@ -2785,8 +2700,8 @@ describe('DockerProvider', () => {
     });
   });
 
-  describe('GCP credentials copy', () => {
-    it('copies GCP SA key when gcpSaKeyPath exists during preserved resume', async () => {
+  describe('GCP credential isolation', () => {
+    it('does not copy the host GCP SA key during preserved resume', async () => {
       const fsModule = await import('node:fs');
       const config = createTestConfig({ taskId: 'gcp-preserved' });
       await provider.createWorker(config);
@@ -2803,10 +2718,7 @@ describe('DockerProvider', () => {
         })
       );
 
-      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
-        '/test/gcp-sa.json',
-        expect.stringContaining('gcp-sa.json')
-      );
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
     it('skips GCP copy when gcpSaKeyPath is empty during preserved resume', async () => {
@@ -2829,7 +2741,7 @@ describe('DockerProvider', () => {
       expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
-    it('copies GCP SA key when gcpSaKeyPath exists during orphan resume', async () => {
+    it('does not copy the host GCP SA key during orphan resume', async () => {
       const fsModule = await import('node:fs');
       mocks.mockContainer.inspect.mockResolvedValueOnce({
         State: { Running: true },
@@ -2845,13 +2757,10 @@ describe('DockerProvider', () => {
         })
       );
 
-      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
-        '/test/gcp-sa.json',
-        expect.stringContaining('gcp-sa.json')
-      );
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
-    it('copies GCP SA key during normal creation when gcpSaKeyPath exists', async () => {
+    it('does not copy the host GCP SA key during normal creation', async () => {
       const fsModule = await import('node:fs');
       (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
 
@@ -2861,10 +2770,7 @@ describe('DockerProvider', () => {
         })
       );
 
-      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
-        '/test/gcp-sa.json',
-        expect.stringContaining('gcp-sa.json')
-      );
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
     it('skips GCP copy during normal creation when gcpSaKeyPath is empty', async () => {
@@ -2993,11 +2899,7 @@ describe('DockerProvider', () => {
             secrets: {
               ANTHROPIC_API_KEY: '',
               LINEAR_API_KEY: 'test',
-              SENTRY_AUTH_TOKEN: 'test',
-              MINIMAX_API_KEY: 'test',
-              MIMO_API_KEY: 'test',
-              DASHSCOPE_API_KEY: 'test',
-              KIMI_API_KEY: 'test',
+              ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
               OPENROUTER_API_KEY: 'test',
             },
           })
@@ -3028,13 +2930,30 @@ describe('DockerProvider', () => {
       expect(envArr).toContainEqual('WORKER_MANAGED_MODE=0');
     });
 
-    it('sets LINEAR_API_KEY and SENTRY_AUTH_TOKEN in env', async () => {
-      await provider.createWorker(createTestConfig());
+    it('sets Linear and Error Hub access without injecting the removed Legacy Sentry token', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(
+        createTestConfig({
+          secrets: {
+            ...config.secrets,
+            ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
+          },
+        })
+      );
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       expect(envArr).toContainEqual('LINEAR_API_KEY=test-linear-key');
-      expect(envArr).toContainEqual('SENTRY_AUTH_TOKEN=test-sentry-token');
+      expect(envArr.some((entry) => entry.startsWith('SENTRY_AUTH_TOKEN='))).toBe(false);
+      expect(envArr).toContainEqual('ERROR_HUB_HOST=home-dev.example.ts.net:8443');
+    });
+
+    it('always injects the configured Error Hub host', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContainEqual('ERROR_HUB_HOST=home-dev.example.ts.net:8443');
     });
   });
 
@@ -3073,11 +2992,7 @@ describe('DockerProvider', () => {
           secrets: {
             ANTHROPIC_API_KEY: 'key',
             LINEAR_API_KEY: 'test',
-            SENTRY_AUTH_TOKEN: 'test',
-            MINIMAX_API_KEY: 'test',
-            MIMO_API_KEY: 'test',
-            DASHSCOPE_API_KEY: 'test',
-            KIMI_API_KEY: 'test',
+            ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
             OPENROUTER_API_KEY: 'test',
           },
         })
@@ -3827,7 +3742,15 @@ describe('DockerProvider', () => {
         const ctx = call[0] as { event?: string } | undefined;
         return ctx?.event === 'lockfile-drift';
       });
-      expect(driftWarnCall).toBeDefined();
+      expect(driftWarnCall?.[0]).toEqual(
+        expect.objectContaining({
+          event: 'lockfile-drift',
+          taskId: 'test-task-123',
+          before: expect.any(String),
+          after: expect.any(String),
+          [SKIP_SENTRY_KEY]: true,
+        })
+      );
 
       const writeFileCalls = (fsModule.promises.writeFile as Mock).mock.calls;
       const driftWrite = writeFileCalls.find(
@@ -3900,7 +3823,15 @@ describe('DockerProvider', () => {
         const ctx = call[0] as { event?: string } | undefined;
         return ctx?.event === 'lockfile-drift';
       });
-      expect(driftWarnCall).toBeDefined();
+      expect(driftWarnCall?.[0]).toEqual(
+        expect.objectContaining({
+          event: 'lockfile-drift',
+          taskId: 'test-task-123',
+          before: expect.any(String),
+          after: expect.any(String),
+          [SKIP_SENTRY_KEY]: true,
+        })
+      );
 
       const writeFileCalls = (fsModule.promises.writeFile as Mock).mock.calls;
       const driftWrite = writeFileCalls.find(
@@ -4686,7 +4617,7 @@ describe('DockerProvider', () => {
       expect(gcpSaCopyCalls).toHaveLength(0);
     });
 
-    it('copies gcp-sa.json when gcpSaKeyPath exists', async () => {
+    it('does not copy gcp-sa.json even when the host credential exists', async () => {
       const fsModule = await import('node:fs');
 
       (fsModule.existsSync as Mock).mockImplementation(() => true);
@@ -4708,8 +4639,7 @@ describe('DockerProvider', () => {
       const gcpSaCopyCalls = copyFileCalls.filter(
         (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
       );
-      expect(gcpSaCopyCalls).toHaveLength(1);
-      expect(gcpSaCopyCalls?.[0]?.[0]).toBe('/test/gcp-sa.json');
+      expect(gcpSaCopyCalls).toHaveLength(0);
     });
   });
 

@@ -1,4 +1,5 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import { logIncomingRequest, requireAuth, type AuthUser } from '@intexuraos/common-http';
 import type {
   PrivateWhatsAppAccount,
@@ -6,10 +7,12 @@ import type {
   PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
+  PrivateWhatsAppReactionSummary,
   PrivateWhatsAppSender,
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderQueryInput,
+  WhatsAppError,
 } from '../domain/whatsapp/index.js';
 import { getServices } from '../services.js';
 import { validatePhoneNumber } from './shared.js';
@@ -43,6 +46,14 @@ interface PrivateChatMessagesParams {
   chatId: string;
 }
 
+interface PrivateChatTranscriptionParams {
+  chatId: string;
+}
+
+interface PrivateChatTranscriptionBody {
+  enabled: boolean;
+}
+
 interface PrivateSenderDaysQuerystring {
   senderKey: string;
   fromDay?: string;
@@ -61,14 +72,59 @@ type PublicPrivateWhatsAppChat = Omit<
   'userId' | 'sourceAccountId' | 'matrixRoomId' | 'participantKeys'
 >;
 type PublicPrivateWhatsAppSender = Omit<PrivateWhatsAppSender, 'userId' | 'sourceAccountId'>;
+interface PublicPrivateWhatsAppMedia {
+  mxcUri: string;
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  storageStatus?: 'stored';
+  hasMedia?: boolean;
+  hasThumbnail?: boolean;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+}
+interface PublicPrivateWhatsAppReaction {
+  id: string;
+  emoji: string;
+  senderKey?: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  direction: PrivateWhatsAppMessage['direction'];
+  eventTimestamp: string;
+}
 type PublicPrivateWhatsAppMessage = Omit<
   PrivateWhatsAppMessage,
-  'userId' | 'sourceAccountId' | 'rawMatrixEvent' | 'matrixRoomId' | 'matrixEventId' | 'matrixSenderId'
->;
+  | 'userId'
+  | 'sourceAccountId'
+  | 'rawMatrixEvent'
+  | 'matrixRoomId'
+  | 'matrixEventId'
+  | 'matrixSenderId'
+  | 'media'
+  | 'reaction'
+  | 'reactions'
+> & {
+  media?: PublicPrivateWhatsAppMedia;
+  reaction?: {
+    emoji: string;
+    targetMessageId: string;
+  };
+  reactions?: PublicPrivateWhatsAppReaction[];
+};
 type PublicPrivateWhatsAppSenderDay = Omit<
   PrivateWhatsAppSenderDay,
   'userId' | 'sourceAccountId' | 'chatIds'
 >;
+
+interface LegacyPrivateWhatsAppReaction {
+  emoji: string;
+  targetMatrixEventId: string;
+}
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(
@@ -139,6 +195,17 @@ function getPublicChatMessagesLogMetadata(
   };
 }
 
+function getPrivateChatTranscriptionLogMetadata(
+  params: Partial<PrivateChatTranscriptionParams>,
+  body: Partial<PrivateChatTranscriptionBody>
+): Record<string, unknown> {
+  return {
+    route: 'whatsapp_private_chat_transcription_update',
+    hasChatId: typeof params.chatId === 'string',
+    enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+  };
+}
+
 function getPublicMessagesLogMetadata(
   query: Partial<PrivateMessagesQuerystring>
 ): Record<string, unknown> {
@@ -197,7 +264,6 @@ function isConnectedPhone(mappingPhones: string[], phoneNumberNormalized: string
 
 function toPublicAccount(account: PrivateWhatsAppAccount): PublicPrivateWhatsAppAccount {
   return omitUndefined({
-    sourceAccountId: account.sourceAccountId,
     phoneNumberNormalized: account.phoneNumberNormalized,
     displayName: account.displayName,
     status: account.status,
@@ -235,11 +301,60 @@ function toPublicChat(chat: PrivateWhatsAppChat): PublicPrivateWhatsAppChat {
     avatarMxcUri: chat.avatarMxcUri,
     messageCount: chat.messageCount,
     participantCount: chat.participantCount,
+    transcriptionEnabled: chat.transcriptionEnabled,
+    transcriptionEnabledAt: chat.transcriptionEnabledAt,
+    transcriptionUpdatedAt: chat.transcriptionUpdatedAt,
     firstSeenAt: chat.firstSeenAt,
     lastEventAt: chat.lastEventAt,
     updatedAt: chat.updatedAt,
     schemaVersion: chat.schemaVersion,
   }) as PublicPrivateWhatsAppChat;
+}
+
+function toPublicMedia(
+  media: PrivateWhatsAppMessage['media']
+): PublicPrivateWhatsAppMedia | undefined {
+  if (media === undefined) return undefined;
+  return omitUndefined({
+    mxcUri: media.mxcUri,
+    mimeType: media.mimeType,
+    fileName: media.fileName,
+    sizeBytes: media.sizeBytes,
+    width: media.width,
+    height: media.height,
+    durationMs: media.durationMs,
+    sha256: media.sha256,
+    storageStatus: media.storageStatus,
+    hasMedia: media.gcsPath !== undefined,
+    hasThumbnail: media.thumbnailGcsPath !== undefined,
+    storedMimeType: media.storedMimeType,
+    storedSizeBytes: media.storedSizeBytes,
+    storedAt: media.storedAt,
+  }) as PublicPrivateWhatsAppMedia;
+}
+
+function toPublicReaction(reaction: PrivateWhatsAppReactionSummary): PublicPrivateWhatsAppReaction {
+  return omitUndefined({
+    id: reaction.id,
+    emoji: reaction.emoji,
+    senderKey: reaction.senderKey,
+    senderDisplayName: reaction.senderDisplayName,
+    senderPhoneNumber: reaction.senderPhoneNumber,
+    direction: reaction.direction,
+    eventTimestamp: reaction.eventTimestamp,
+  }) as PublicPrivateWhatsAppReaction;
+}
+
+function toReactionSummary(message: PrivateWhatsAppMessage, emoji: string): PrivateWhatsAppReactionSummary {
+  return omitUndefined({
+    id: message.id,
+    emoji,
+    senderKey: message.senderKey,
+    senderDisplayName: message.senderDisplayName,
+    senderPhoneNumber: message.senderPhoneNumber,
+    direction: message.direction,
+    eventTimestamp: message.eventTimestamp,
+  }) as PrivateWhatsAppReactionSummary;
 }
 
 function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsAppMessage {
@@ -253,7 +368,15 @@ function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsApp
     direction: message.direction,
     messageType: message.messageType,
     text: message.text,
-    media: message.media,
+    media: toPublicMedia(message.media),
+    reaction:
+      message.reaction === undefined
+        ? undefined
+        : {
+            emoji: message.reaction.emoji,
+            targetMessageId: message.reaction.targetMessageId,
+          },
+    reactions: message.reactions?.map(toPublicReaction),
     eventTimestamp: message.eventTimestamp,
     eventDayKey: message.eventDayKey,
     eventTimeZone: message.eventTimeZone,
@@ -262,8 +385,113 @@ function toPublicMessage(message: PrivateWhatsAppMessage): PublicPrivateWhatsApp
     receivedAt: message.receivedAt,
     ingestedAt: message.ingestedAt,
     deliveryMode: message.deliveryMode,
+    transcription: message.transcription,
     schemaVersion: message.schemaVersion,
   }) as PublicPrivateWhatsAppMessage;
+}
+
+async function hydrateInlineReactions(input: {
+  sourceAccountId: string;
+  chatId?: string;
+  messages: PrivateWhatsAppMessage[];
+}): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>> {
+  const targetsByMatrixEventId = new Map<string, string>();
+  const targets = input.messages
+    .filter((message) => message.messageType !== 'reaction')
+    .map((message) => {
+      targetsByMatrixEventId.set(message.matrixEventId, message.id);
+      return {
+        messageId: message.id,
+        matrixEventId: message.matrixEventId,
+      };
+    });
+  if (targets.length === 0) {
+    return ok(input.messages.filter((message) => message.messageType !== 'reaction' || message.reaction !== undefined));
+  }
+
+  const reactionsResult = await getServices().privateWhatsAppRepository.findReactionsForMessageIds({
+    sourceAccountId: input.sourceAccountId,
+    ...(input.chatId !== undefined ? { chatId: input.chatId } : {}),
+    targets,
+  });
+  if (!reactionsResult.ok) {
+    return err(reactionsResult.error);
+  }
+
+  const attachedReactionIds = new Set(reactionsResult.value.attachedReactionMessageIds);
+  const reactionsByMessageId = new Map<string, PrivateWhatsAppReactionSummary[]>(
+    Object.entries(reactionsResult.value.reactionsByMessageId)
+  );
+  for (const message of input.messages) {
+    if (message.messageType !== 'reaction' || message.reaction !== undefined) {
+      continue;
+    }
+    if (attachedReactionIds.has(message.id)) {
+      continue;
+    }
+
+    const legacyReaction = extractLegacyReaction(message.rawMatrixEvent);
+    const targetMessageId =
+      legacyReaction === undefined ? undefined : targetsByMatrixEventId.get(legacyReaction.targetMatrixEventId);
+    if (legacyReaction !== undefined && targetMessageId !== undefined) {
+      const summaries = reactionsByMessageId.get(targetMessageId) ?? [];
+      summaries.push(toReactionSummary(message, legacyReaction.emoji));
+      reactionsByMessageId.set(targetMessageId, summaries);
+    }
+    attachedReactionIds.add(message.id);
+  }
+
+  return ok(
+    input.messages
+      .filter((message) => message.messageType !== 'reaction' || !attachedReactionIds.has(message.id))
+      .map((message) => {
+        const reactions = reactionsByMessageId.get(message.id);
+        return reactions === undefined
+          ? message
+          : { ...message, reactions: [...reactions].sort(compareReactionSummaries) };
+      })
+  );
+}
+
+function compareReactionSummaries(
+  left: PrivateWhatsAppReactionSummary,
+  right: PrivateWhatsAppReactionSummary
+): number {
+  const timestampComparison = left.eventTimestamp.localeCompare(right.eventTimestamp);
+  return timestampComparison === 0 ? left.id.localeCompare(right.id) : timestampComparison;
+}
+
+function extractLegacyReaction(rawMatrixEvent: unknown): LegacyPrivateWhatsAppReaction | undefined {
+  if (!isRecord(rawMatrixEvent)) {
+    return undefined;
+  }
+  const content = rawMatrixEvent['content'];
+  if (!isRecord(content)) {
+    return undefined;
+  }
+  const relatesTo = content['m.relates_to'];
+  if (!isRecord(relatesTo) || relatesTo['rel_type'] !== 'm.annotation') {
+    return undefined;
+  }
+
+  const targetMatrixEventId = firstNonEmptyString(asOptionalString(relatesTo['event_id']));
+  const emoji = firstNonEmptyString(asOptionalString(relatesTo['key']));
+  if (targetMatrixEventId === undefined || emoji === undefined) {
+    return undefined;
+  }
+  return { emoji, targetMatrixEventId };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function firstNonEmptyString(...values: (string | undefined)[]): string | undefined {
+  return values.map((value) => value?.trim()).find((value) => value !== undefined && value.length > 0);
 }
 
 function toPublicSenderDay(senderDay: PrivateWhatsAppSenderDay): PublicPrivateWhatsAppSenderDay {
@@ -539,6 +767,99 @@ export function createPrivateReadRoutes(): FastifyPluginCallback {
       }
     );
 
+    fastify.patch<{
+      Params: PrivateChatTranscriptionParams;
+      Body: PrivateChatTranscriptionBody;
+    }>(
+      '/private/chats/:chatId/transcription',
+      {
+        attachValidation: true,
+        schema: {
+          operationId: 'updatePrivateWhatsAppChatTranscription',
+          summary: 'Update private WhatsApp chat transcription settings',
+          tags: ['whatsapp'],
+          params: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              chatId: { type: 'string', minLength: 1 },
+            },
+            required: ['chatId'],
+          },
+          body: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              enabled: { type: 'boolean' },
+            },
+            required: ['enabled'],
+          },
+          response: {
+            200: {
+              description: 'Private WhatsApp chat transcription settings updated successfully',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', const: true },
+                data: { type: 'object', additionalProperties: true },
+              },
+              required: ['success', 'data'],
+            },
+            ...privateReadErrorResponses(),
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{
+          Params: PrivateChatTranscriptionParams;
+          Body: PrivateChatTranscriptionBody;
+        }>,
+        reply: FastifyReply
+      ) => {
+        logIncomingRequest(request, {
+          message: 'Received request to PATCH /whatsapp/private/chats/:chatId/transcription',
+          bodyPreviewLength: 0,
+          additionalFields: getPrivateChatTranscriptionLogMetadata(
+            request.params,
+            request.body
+          ),
+        });
+        const user = await requirePrivateWhatsAppOwner(request, reply);
+        if (user === null) {
+          return;
+        }
+        const validatedRequest = request as ValidatedRequest;
+        if (validatedRequest.validationError !== undefined) {
+          return await reply.fail('INVALID_REQUEST', 'Validation failed');
+        }
+        const account = await resolveActivePrivateAccount(user, reply);
+        if (account === null) {
+          return;
+        }
+
+        const result = await getServices().privateWhatsAppRepository.updateChatTranscriptionSetting({
+          sourceAccountId: account.sourceAccountId,
+          chatId: request.params.chatId,
+          enabled: request.body.enabled,
+          now: new Date().toISOString(),
+        });
+        if (!result.ok) {
+          if (result.error.code === 'NOT_FOUND') {
+            return await reply.fail('NOT_FOUND', result.error.message);
+          }
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+        request.log.info(
+          {
+            route: 'whatsapp_private_chat_transcription_update',
+            chatId: result.value.id,
+            transcriptionEnabled: result.value.transcriptionEnabled,
+          },
+          'Private WhatsApp chat transcription settings updated'
+        );
+        return await reply.ok(toPublicChat(result.value));
+      }
+    );
+
     fastify.get<{
       Params: PrivateChatMessagesParams;
       Querystring: PrivateChatMessagesQuerystring;
@@ -632,6 +953,14 @@ export function createPrivateReadRoutes(): FastifyPluginCallback {
         if (!result.ok) {
           return await reply.fail('INTERNAL_ERROR', result.error.message);
         }
+        const hydratedResult = await hydrateInlineReactions({
+          sourceAccountId: account.sourceAccountId,
+          chatId: request.params.chatId,
+          messages: result.value.messages,
+        });
+        if (!hydratedResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', hydratedResult.error.message);
+        }
         request.log.info(
           {
             route: 'whatsapp_private_chat_messages_query',
@@ -640,7 +969,7 @@ export function createPrivateReadRoutes(): FastifyPluginCallback {
           'Private WhatsApp chat messages retrieved'
         );
         const response: { messages: PublicPrivateWhatsAppMessage[]; nextCursor?: string } = {
-          messages: result.value.messages.map(toPublicMessage),
+          messages: hydratedResult.value.map(toPublicMessage),
         };
         if (result.value.nextCursor !== undefined) {
           response.nextCursor = result.value.nextCursor;
@@ -812,12 +1141,19 @@ export function createPrivateReadRoutes(): FastifyPluginCallback {
         if (!result.ok) {
           return await reply.fail('INTERNAL_ERROR', result.error.message);
         }
+        const hydratedResult = await hydrateInlineReactions({
+          sourceAccountId: account.sourceAccountId,
+          messages: result.value.messages,
+        });
+        if (!hydratedResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', hydratedResult.error.message);
+        }
         request.log.info(
           { route: 'whatsapp_private_messages_query', resultCount: result.value.messages.length },
           'Private WhatsApp messages retrieved'
         );
         const response: { messages: PublicPrivateWhatsAppMessage[]; nextCursor?: string } = {
-          messages: result.value.messages.map(toPublicMessage),
+          messages: hydratedResult.value.map(toPublicMessage),
         };
         if (result.value.nextCursor !== undefined) {
           response.nextCursor = result.value.nextCursor;

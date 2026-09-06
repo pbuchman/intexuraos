@@ -1,4 +1,5 @@
 import { type Logger, getErrorMessage } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { OrchestratorConfig } from '../../types/config.js';
 import type { Task, TaskResult } from '../../types/task.js';
 import type { TurnMetricsCollector } from '../turn-metrics-collector.js';
@@ -12,6 +13,7 @@ import type { LogForwarder } from '../log-forwarder.js';
 import { readSessionTranscript } from '../transcript-reader.js';
 import { formatTranscript } from '../transcript-formatter.js';
 import { extractPrNumber } from '../deep-validator-helpers.js';
+import { buildRequiredTaskCallbackUrl } from '../callback-url.js';
 import { appendOrchestratorTaskLog } from './log-streaming.js';
 
 /**
@@ -94,7 +96,10 @@ export async function prepareComplianceValidationInput(
 
     const prNumber = extractPrNumber(finalResult.prUrl);
     if (prNumber === undefined) {
-      logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no PR number');
+      logger.warn(
+        { taskId: task.taskId, [SKIP_SENTRY_KEY]: true },
+        'Compliance validation skipped: no PR number'
+      );
       return undefined;
     }
 
@@ -103,7 +108,10 @@ export async function prepareComplianceValidationInput(
     const entries = await readSessionTranscript(config.secretsBasePath, task.taskId, logger);
 
     if (entries.length === 0) {
-      logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no transcript entries');
+      logger.warn(
+        { taskId: task.taskId, [SKIP_SENTRY_KEY]: true },
+        'Compliance validation skipped: no transcript entries'
+      );
       return undefined;
     }
 
@@ -168,49 +176,42 @@ export async function executeComplianceValidation(
       logger.info({ taskId }, 'Compliance validation completed');
 
       // Fire-and-forget: send structured report to code-agent
-      const complianceReportUrl = task.webhookUrl.replace(
-        '/internal/webhooks/task-complete',
+      const complianceReportUrl = buildRequiredTaskCallbackUrl(
+        task.webhookUrl,
         '/internal/webhooks/compliance-report'
       );
-      if (!task.webhookUrl.includes('/internal/webhooks/task-complete')) {
-        logger.warn(
-          { taskId, webhookUrl: task.webhookUrl },
-          'Compliance report webhook URL does not contain expected path — skipping delivery'
-        );
-      } else {
-        void webhookClient
-          .send({
-            url: complianceReportUrl,
-            secret: task.webhookSecret,
-            payload: {
-              taskId: input.taskId,
-              prNumber: input.prNumber,
-              report: result.report,
-              model: result.model,
-              promptVersion: result.promptVersion,
-              costUsd: result.costUsd,
-              workerType: input.workerType,
-              transcriptTooLong: result.transcriptTooLong,
-            },
-            taskId,
-          })
-          .then((webhookResult) => {
-            if (webhookResult.ok) {
-              logger.info({ taskId }, 'Compliance report webhook delivered');
-            } else {
-              logger.warn(
-                { taskId, error: webhookResult.error.message },
-                'Compliance report webhook delivery failed'
-              );
-            }
-          })
-          .catch((error: unknown) => {
+      void webhookClient
+        .send({
+          url: complianceReportUrl,
+          secret: task.webhookSecret,
+          payload: {
+            taskId: input.taskId,
+            prNumber: input.prNumber,
+            report: result.report,
+            model: result.model,
+            promptVersion: result.promptVersion,
+            costUsd: result.costUsd,
+            workerType: input.workerType,
+            transcriptTooLong: result.transcriptTooLong,
+          },
+          taskId,
+        })
+        .then((webhookResult) => {
+          if (webhookResult.ok) {
+            logger.info({ taskId }, 'Compliance report webhook delivered');
+          } else {
             logger.warn(
-              { taskId, error: getErrorMessage(error) },
-              'Compliance report webhook send error'
+              { taskId, error: webhookResult.error.message },
+              'Compliance report webhook delivery failed'
             );
-          });
-      }
+          }
+        })
+        .catch((error: unknown) => {
+          logger.warn(
+            { taskId, error: getErrorMessage(error) },
+            'Compliance report webhook send error'
+          );
+        });
     } else {
       appendOrchestratorTaskLog(
         logForwarder,

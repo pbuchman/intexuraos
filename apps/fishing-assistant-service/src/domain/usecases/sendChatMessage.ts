@@ -1,5 +1,8 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { MobileNotificationsServiceClient } from '@intexuraos/internal-clients';
+import type {
+  MessageDigestServiceClient,
+  WhatsAppServiceClient,
+} from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type {
   FishingChat,
@@ -37,10 +40,11 @@ export interface SendChatMessageDeps {
   embeddingClient: KnowledgeEmbeddingClient;
   chunkRepository: KnowledgeChunkRepository;
   pageRepository: KnowledgePageRepository;
-  mobileNotificationsClient: Pick<
-    MobileNotificationsServiceClient,
-    'listDigestSubscriptions' | 'queryDigests' | 'queryGroupMessages'
+  messageDigestClient: Pick<
+    MessageDigestServiceClient,
+    'queryLegacyDigestDefinitions' | 'queryLegacyDigestRuns'
   >;
+  whatsappClient: Pick<WhatsAppServiceClient, 'queryPrivateDigestMessages'>;
   generateId: () => string;
   now: Date;
 }
@@ -283,7 +287,8 @@ export async function sendChatMessage(
     {
       embeddingClient: deps.embeddingClient,
       chunkRepository: deps.chunkRepository,
-      mobileNotificationsClient: deps.mobileNotificationsClient,
+      messageDigestClient: deps.messageDigestClient,
+      whatsappClient: deps.whatsappClient,
       now: deps.now,
     },
     {

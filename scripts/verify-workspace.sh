@@ -45,7 +45,7 @@ if [ "$WORKSPACE" = "web" ]; then
 
   echo ""
   echo "[3/3] Tests (no coverage threshold)..."
-  pnpm run test -- $SERVICE_DIR
+  pnpm --filter @intexuraos/$WORKSPACE test
 
   echo ""
   echo "=== All checks passed for $WORKSPACE ==="
@@ -97,7 +97,11 @@ pnpm run lint -- $SERVICE_DIR/src
 
 echo ""
 echo "[4/4] Tests + Coverage..."
-pnpm run test -- $SERVICE_DIR --coverage --coverage.include="$SERVICE_DIR/src/**/*.ts"
+pnpm --filter @intexuraos/$WORKSPACE exec vitest run \
+  --exclude '**/e2e*.test.ts' \
+  --coverage \
+  --coverage.include="src/**/*.ts" \
+  --fileParallelism=false
 
 echo ""
 echo "=== All checks passed for $WORKSPACE ==="

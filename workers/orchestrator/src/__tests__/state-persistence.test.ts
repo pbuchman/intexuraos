@@ -1,5 +1,14 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { StatePersistence } from '../services/state-persistence.js';
@@ -79,6 +88,68 @@ describe('StatePersistence', () => {
       expect(loaded).toEqual(mockState);
     });
 
+    it.each([
+      ['missing', undefined],
+      ['empty', ''],
+      ['non-HTTP', 'file:///tmp/callback'],
+    ])('fails closed on a %s required persisted task callback', async (_label, webhookUrl) => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      const state = structuredClone(mockState) as unknown as {
+        tasks: Record<string, Record<string, unknown>>;
+      };
+      if (webhookUrl === undefined) {
+        delete state.tasks['task-1']?.['webhookUrl'];
+      } else if (state.tasks['task-1'] !== undefined) {
+        state.tasks['task-1']['webhookUrl'] = webhookUrl;
+      }
+      mkdirSync(tempDir, { recursive: true });
+      writeFileSync(stateFilePath, JSON.stringify(state));
+
+      await expect(persistence.load()).rejects.toThrow(
+        'Persisted task task-1 has an invalid required webhookUrl'
+      );
+      expect(existsSync(stateFilePath)).toBe(true);
+    });
+
+    it.each([
+      ['missing', undefined],
+      ['empty', ''],
+      ['non-string', 42],
+    ])('fails closed on a %s required persisted task secret', async (_label, webhookSecret) => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      const state = structuredClone(mockState) as unknown as {
+        tasks: Record<string, Record<string, unknown>>;
+      };
+      if (webhookSecret === undefined) {
+        delete state.tasks['task-1']?.['webhookSecret'];
+      } else if (state.tasks['task-1'] !== undefined) {
+        state.tasks['task-1']['webhookSecret'] = webhookSecret;
+      }
+      mkdirSync(tempDir, { recursive: true });
+      writeFileSync(stateFilePath, JSON.stringify(state));
+
+      await expect(persistence.load()).rejects.toThrow(
+        'Persisted task task-1 has an invalid required webhookSecret'
+      );
+      expect(existsSync(stateFilePath)).toBe(true);
+    });
+
+    it.each([
+      ['non-object root', null],
+      ['missing tasks', { githubToken: null, pendingWebhooks: [] }],
+      ['array tasks', { tasks: [], githubToken: null, pendingWebhooks: [] }],
+      ['null task', { tasks: { 'task-bad': null }, githubToken: null, pendingWebhooks: [] }],
+      ['array task', { tasks: { 'task-bad': [] }, githubToken: null, pendingWebhooks: [] }],
+      ['primitive task', { tasks: { 'task-bad': 1 }, githubToken: null, pendingWebhooks: [] }],
+    ])('fails closed on a structurally malformed persisted state: %s', async (_label, state) => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      mkdirSync(tempDir, { recursive: true });
+      writeFileSync(stateFilePath, JSON.stringify(state));
+
+      await expect(persistence.load()).rejects.toThrow(/Persisted state|Persisted task/);
+      expect(existsSync(stateFilePath)).toBe(true);
+    });
+
     it('should return empty state if file does not exist', async () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
 
@@ -90,9 +161,71 @@ describe('StatePersistence', () => {
         pendingWebhooks: [],
       });
     });
+
+    it('keeps a missing file unknown even after normal in-memory initialization', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+
+      await expect(persistence.getPendingWebhookCountForDrain()).resolves.toBeNull();
+      await persistence.load();
+      await expect(persistence.getPendingWebhookCountForDrain()).resolves.toBeNull();
+    });
+
+    it('reads the pending callback count without mutating persisted state', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      await persistence.save({
+        ...mockState,
+        pendingWebhooks: [
+          {
+            url: 'https://example.com/callback',
+            secret: 'secret',
+            payload: { status: 'completed' },
+            taskId: 'task-pending',
+            attempts: 3,
+            createdAt: 1,
+          },
+        ],
+      });
+      const before = readFileSync(stateFilePath, 'utf8');
+
+      await expect(persistence.getPendingWebhookCountForDrain()).resolves.toBe(1);
+      expect(readFileSync(stateFilePath, 'utf8')).toBe(before);
+    });
+
+    it('never reclassifies a deleted previously saved state file as known empty', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      await persistence.save(mockState);
+      rmSync(stateFilePath);
+
+      await persistence.load();
+
+      await expect(persistence.getPendingWebhookCountForDrain()).resolves.toBeNull();
+    });
+
+    it('keeps a deleted state unknown across an orchestrator process restart', async () => {
+      const originalProcess = new StatePersistence(stateFilePath, mockLogger);
+      await originalProcess.save(mockState);
+      rmSync(stateFilePath);
+
+      const restartedProcess = new StatePersistence(stateFilePath, mockLogger);
+      await restartedProcess.load();
+
+      await expect(restartedProcess.getPendingWebhookCountForDrain()).resolves.toBeNull();
+    });
   });
 
   describe('atomic writes', () => {
+    it('persists state with owner-only permissions when a permissive temp file exists', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      mkdirSync(tempDir, { recursive: true });
+      writeFileSync(`${stateFilePath}.tmp`, 'stale', { mode: 0o644 });
+      chmodSync(`${stateFilePath}.tmp`, 0o644);
+      expect(statSync(`${stateFilePath}.tmp`).mode & 0o777).toBe(0o644);
+
+      await persistence.saveAtomic(mockState);
+
+      expect(statSync(stateFilePath).mode & 0o777).toBe(0o600);
+    });
+
     it('should write to temp file then rename', async () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
 
@@ -145,6 +278,22 @@ describe('StatePersistence', () => {
   });
 
   describe('corruption recovery', () => {
+    it('returns unknown for corrupt drain state without moving or rewriting the file', async () => {
+      const corruptedDir = join(tempDir, 'drain-corrupted-test');
+      const corruptedPath = join(corruptedDir, 'state.json');
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      await mkdir(corruptedDir, { recursive: true });
+      await writeFile(corruptedPath, '{ invalid json', 'utf-8');
+      const persistence = new StatePersistence(corruptedPath, mockLogger);
+
+      await expect(persistence.getPendingWebhookCountForDrain()).resolves.toBeNull();
+
+      expect(existsSync(corruptedPath)).toBe(true);
+      expect(readFileSync(corruptedPath, 'utf8')).toBe('{ invalid json');
+      const { readdirSync } = await import('node:fs');
+      expect(readdirSync(corruptedDir).filter((name) => name.includes('.corrupted.'))).toEqual([]);
+    });
+
     it('should backup corrupted file and return empty state', async () => {
       // Create corrupted JSON file in temp directory
       const corruptedDir = join(tempDir, 'corrupted-test');
@@ -179,7 +328,7 @@ describe('StatePersistence', () => {
       expect(backupFiles.length).toBeGreaterThan(0);
     });
 
-    it('should handle valid JSON but wrong structure gracefully', async () => {
+    it('should reject valid JSON with the wrong structure without moving it', async () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       // Create directory first (afterEach might have cleaned it up)
@@ -190,10 +339,9 @@ describe('StatePersistence', () => {
       const { writeFile } = await import('node:fs/promises');
       await writeFile(stateFilePath, '{"wrong": "structure"}', 'utf-8');
 
-      // Should parse but won't match expected structure
-      const loaded = await persistence.load();
-      // TypeScript allows this but runtime will have the wrong shape
-      expect(loaded).toEqual({ wrong: 'structure' });
+      await expect(persistence.load()).rejects.toThrow('Persisted state has no tasks object');
+      expect(existsSync(stateFilePath)).toBe(true);
+      await expect(persistence.getPendingWebhookCountForDrain()).resolves.toBeNull();
     });
   });
 

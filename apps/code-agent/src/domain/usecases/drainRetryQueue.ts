@@ -10,6 +10,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask } from '../models/codeTask.js';
 import type { DispatchRetry } from '../models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
@@ -117,18 +118,20 @@ async function recordRetryTaskDispatchProblem(
   deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
   task: CodeTask,
   problem: DispatchProblem,
-): Promise<Result<void, DrainRetryQueueError>> {
+  dispatchToken: string,
+): Promise<Result<boolean, DrainRetryQueueError>> {
   const dispatchStatus = buildDispatchStatusForProblem({
     task,
     problem,
   });
-  const updateResult = await deps.codeTaskRepo.update(task.id, {
-    status: 'queued',
+  const rollbackResult = await deps.codeTaskRepo.rollbackDispatch(
+    task.id,
+    dispatchToken,
     dispatchStatus,
-  });
-  if (!updateResult.ok) {
+  );
+  if (!rollbackResult.ok) {
     deps.logger.warn(
-      { taskId: task.id, reason: problem.reason, error: updateResult.error },
+      { taskId: task.id, reason: problem.reason, error: rollbackResult.error },
       'Failed to persist task-level retry dispatch blocker status'
     );
     return err({
@@ -136,8 +139,15 @@ async function recordRetryTaskDispatchProblem(
       message: 'Failed to persist retry dispatch status',
     });
   }
+  if (!rollbackResult.value) {
+    deps.logger.info(
+      { taskId: task.id },
+      'Skipped stale retry dispatch rollback because the task or user lease moved on',
+    );
+    return ok(false);
+  }
   await reportOrNotifyRetryDispatchProblem(deps, task, dispatchStatus, problem, 'waiting');
-  return ok(undefined);
+  return ok(true);
 }
 
 async function reportOrNotifyRetryDispatchProblem(
@@ -180,17 +190,36 @@ async function reportOrNotifyRetryDispatchProblem(
 }
 
 async function resolveDispatchBlockersForRetry(
-  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskDispatchStatusService'>,
+  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'codeTaskDispatchStatusService'>,
   task: CodeTask
 ): Promise<void> {
   if (deps.codeTaskDispatchStatusService === undefined) {
     return;
   }
 
+  const observedBefore = new Date();
   try {
+    const queuedResult = await deps.codeTaskRepo.listQueued();
+    if (!queuedResult.ok) {
+      deps.logger.error(
+        { taskId: task.id, workerType: task.workerType, error: queuedResult.error },
+        'Failed to reconcile queued tasks before resolving retry dispatch blockers'
+      );
+      return;
+    }
+    const anotherBlockedTaskRemains = queuedResult.value.some((queuedTask) =>
+      queuedTask.id !== task.id
+      && queuedTask.userId === task.userId
+      && queuedTask.workerType === task.workerType
+      && queuedTask.dispatchStatus?.terminal === false
+    );
+    if (anotherBlockedTaskRemains) {
+      return;
+    }
     await deps.codeTaskDispatchStatusService.resolveDispatchBlockers({
       userId: task.userId,
       workerType: task.workerType,
+      observedBefore,
     });
   } catch (error) {
     deps.logger.warn(
@@ -260,7 +289,7 @@ export function _resetRetryDrainGuard(): void {
 }
 
 export interface DrainRetryQueueResult {
-  action: 'dispatched' | 'message_sent' | 'expired' | 'exhausted' | 'retry_failed' | 'failed' | 'empty' | 'skipped' | 'stale_task_fallback';
+  action: 'dispatched' | 'message_sent' | 'expired' | 'exhausted' | 'retry_failed' | 'failed' | 'empty' | 'skipped' | 'stale_task_fallback' | 'still_busy';
   taskId?: string;
   locksToCleanup?: LockCleanupInfo[];
 }
@@ -375,6 +404,7 @@ export async function drainRetryQueue(
             problem,
             'retry_expired'
           );
+          await resolveDispatchBlockersForRetry(deps, taskResult.value);
           const deleteResult = await dispatchRetryRepo.delete(entry.id);
           if (!deleteResult.ok) {
             logger.error({ retryId: entry.id, error: deleteResult.error }, 'Failed to delete expired retry entry');
@@ -456,6 +486,7 @@ export async function drainRetryQueue(
             problem,
             'retry_exhausted'
           );
+          await resolveDispatchBlockersForRetry(deps, taskResult.value);
           const deleteResult = await dispatchRetryRepo.delete(entry.id);
           if (!deleteResult.ok) {
             logger.error({ retryId: entry.id, error: deleteResult.error }, 'Failed to delete exhausted retry entry');
@@ -595,11 +626,23 @@ async function handleNewTaskRetry(
       healthByWorkerName: {},
     }) as DispatchBlocker;
     await recordDispatchBlockedForRetry(deps, task, dispatchability);
-    logger.warn({ userId: task.userId }, 'No enabled workers during retry');
+    logger.warn(
+      {
+        userId: task.userId,
+        taskId: task.id,
+        workerType: task.workerType,
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 1,
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'No enabled workers during retry',
+    );
     const failResult = await failRetryTaskForDispatchProblem(deps, task, dispatchProblemFromBlocker(dispatchability));
     if (!failResult.ok) {
       return err(failResult.error);
     }
+    await resolveDispatchBlockersForRetry(deps, task);
     const deleteResult = await deleteRetryEntryOrError(
       deps,
       entry,
@@ -701,14 +744,27 @@ async function handleNewTaskRetry(
     logger.error({ taskId: task.id, error: taskClaimResult.error }, 'Failed to claim retry task for dispatch');
     return err({ code: 'internal_error', message: 'Failed to claim retry task for dispatch' });
   }
-  if (!taskClaimResult.value) {
+  if (taskClaimResult.value.kind === 'user_busy') {
+    logger.info(
+      {
+        retryId: entry.id,
+        taskId: task.id,
+        activeTaskId: taskClaimResult.value.activeTaskId,
+      },
+      'Retry task remains queued because the user dispatch lease is busy',
+    );
+    return ok({ action: 'skipped', taskId: entry.taskId });
+  }
+  if (taskClaimResult.value.kind === 'task_not_queued') {
     logger.info({ retryId: entry.id, taskId: task.id }, 'Retry task was claimed by another dispatcher or is no longer queued');
     return ok({ action: 'skipped', taskId: entry.taskId });
   }
+  const dispatchToken = taskClaimResult.value.dispatchToken;
 
   // Attempt dispatch
   const dispatchResult = await taskDispatcher.dispatch({
     taskId: task.id,
+    dispatchAttemptId: dispatchToken,
     prompt: task.sanitizedPrompt,
     systemPromptHash: task.systemPromptHash,
     repository: task.repository,
@@ -740,6 +796,47 @@ async function handleNewTaskRetry(
     const dispatchError = dispatchResult.error;
     const dispatchProblem = dispatchProblemFromError(dispatchError);
 
+    if (dispatchError.outcomeUnknown === true) {
+      const dispatchStatus = buildDispatchStatusForProblem({ task, problem: dispatchProblem });
+      const updateResult = await codeTaskRepo.update(task.id, {
+        dispatchStatus,
+        ...(dispatchError.workerLocation !== undefined && {
+          workerLocation: dispatchError.workerLocation,
+        }),
+      });
+      if (!updateResult.ok) {
+        logger.warn(
+          { taskId: task.id, error: updateResult.error },
+          'Failed to persist unknown retry dispatch outcome while retaining the claim',
+        );
+        return err({
+          code: 'internal_error',
+          message: 'Failed to persist unknown retry dispatch outcome',
+        });
+      }
+
+      const deleteResult = await deleteRetryEntryOrError(
+        deps,
+        entry,
+        'Failed to delete retry entry after unknown dispatch outcome',
+        'Failed to delete retry entry after unknown dispatch outcome',
+      );
+      if (!deleteResult.ok) {
+        return err(deleteResult.error);
+      }
+
+      logger.warn(
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: task.id,
+          dispatchAttemptId: dispatchToken,
+          error: dispatchError,
+        },
+        'Retry worker POST outcome is unknown; retaining the dispatch claim and user lease',
+      );
+      return ok({ action: 'still_busy', taskId: entry.taskId });
+    }
+
     // Note: at_capacity is NOT retryable at entry *creation* (the regular task queue handles queuing),
     // but IS retryable during *drain* — if a retry entry already exists and the worker is at capacity,
     // we should increment and try again rather than permanently failing the task.
@@ -748,9 +845,17 @@ async function handleNewTaskRetry(
     }
 
     if (!dispatchProblem.terminal) {
-      const recordResult = await recordRetryTaskDispatchProblem(deps, task, dispatchProblem);
+      const recordResult = await recordRetryTaskDispatchProblem(
+        deps,
+        task,
+        dispatchProblem,
+        dispatchToken,
+      );
       if (!recordResult.ok) {
         return err(recordResult.error);
+      }
+      if (!recordResult.value) {
+        return ok({ action: 'skipped', taskId: entry.taskId });
       }
       const updateResult = await updateRetryEntryOrError(deps, entry, {
         attempts: entry.attempts + 1,
@@ -765,10 +870,22 @@ async function handleNewTaskRetry(
     }
 
     // Non-retryable — fail permanently
+    if (dispatchError.blocker === undefined) {
+      logger.error(
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: task.id,
+          dispatchAttemptId: dispatchToken,
+          error: dispatchError,
+        },
+        'Retry dispatch failed with permanent error',
+      );
+    }
     const failResult = await failRetryTaskForDispatchProblem(deps, task, dispatchProblem);
     if (!failResult.ok) {
       return err(failResult.error);
     }
+    await resolveDispatchBlockersForRetry(deps, task);
     const deleteResult = await deleteRetryEntryOrError(
       deps,
       entry,

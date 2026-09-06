@@ -2,12 +2,13 @@
  * Use case: Start an ask-agent task for interactive conversations.
  *
  * Follows the same pattern as POST /code/submit but without Linear integration.
- * Tasks are created with agentType: 'ask_agent' and workerType: 'opus'.
+ * Tasks are created with agentType: 'ask_agent' and workerType: 'codex'.
  */
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { randomUUID } from 'node:crypto';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
@@ -82,7 +83,7 @@ export async function startAskAgent(
     prompt,
     sanitizedPrompt: sanitizedPromptText,
     systemPromptHash: 'ask-agent',
-    workerType: 'opus',
+    workerType: 'codex',
     workerLocation: 'pending',
     repository: 'pbuchman/intexuraos',
     baseBranch: 'development',
@@ -137,7 +138,18 @@ export async function startAskAgent(
   const enabledWorkers = settings?.workers.filter((w) => w.enabled) ?? [];
 
   if (enabledWorkers.length === 0) {
-    logger.warn({ userId }, 'User has no workers configured for ask-agent');
+    logger.warn(
+      {
+        userId,
+        taskId: task.id,
+        workerType: task.workerType,
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 1,
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'User has no workers configured for ask-agent',
+    );
     const dispatchability = classifyCodeTaskDispatchability({
       workerType: task.workerType,
       workers: enabledWorkers,

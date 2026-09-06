@@ -1,5 +1,6 @@
 import type {
   CalendarCreatedEvent as ContractCalendarCreatedEvent,
+  CalendarListEvent as ContractCalendarListEvent,
   CalendarPreview as ContractCalendarPreview,
 } from '@intexuraos/http-contracts';
 import { err, ok, type Result, type ServiceFeedback } from '@intexuraos/common-core';
@@ -13,20 +14,28 @@ import type {
   CalendarAgentRequestOptions,
   CalendarAgentServiceClient,
   CalendarAgentServiceConfig,
+  CalendarEvent,
+  CalendarEventsPage,
   CalendarPreview,
   CreateCalendarEventRequest,
   CreatedCalendarEvent,
   GeneratePreviewRequest,
+  ListCalendarEventsRequest,
   ProcessCalendarRequest,
+  UpdateCalendarEventRequest,
+  UpdateCalendarEventAttendeesRequest,
 } from './types.js';
 
 const CREATE_EVENT_TIMEOUT_MS = 60_000;
+const LIST_EVENTS_TIMEOUT_MS = 30_000;
+const UPDATE_EVENT_ATTENDEES_TIMEOUT_MS = 30_000;
 const PROCESS_ACTION_TIMEOUT_MS = 60_000;
 const GENERATE_PREVIEW_TIMEOUT_MS = 30_000;
 
 interface CalendarErrorEnvelope {
   success?: boolean;
   error?: {
+    code?: string;
     message?: string;
   };
 }
@@ -88,13 +97,29 @@ function toCreatedCalendarEvent(event: ContractCalendarCreatedEvent): CreatedCal
   };
 }
 
+function toCalendarListEvent(event: ContractCalendarListEvent): CalendarEvent {
+  return {
+    id: event.id,
+    summary: event.summary,
+    start: event.start,
+    end: event.end,
+    ...(event.etag !== undefined ? { etag: event.etag } : {}),
+    ...(event.location !== undefined ? { location: event.location } : {}),
+    ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
+  };
+}
+
 function mapCalendarHttpError(error: InternalHttpClientError, errorPrefix: string): Error {
   if (error.code === 'API_ERROR') {
     const responseBody = error.body as CalendarErrorEnvelope;
     const message =
       (responseBody.success === true ? undefined : responseBody.error?.message) ??
       `HTTP ${String(error.status)}: ${error.statusText}`;
-    return new Error(message);
+    return new Error(
+      responseBody.success !== true && responseBody.error?.code === 'CONFLICT'
+        ? `CONFLICT: ${message}`
+        : message
+    );
   }
 
   if (error.code === 'ENVELOPE_ERROR' || error.code === 'MALFORMED_ENVELOPE') {
@@ -127,6 +152,82 @@ async function createEvent(
   }
 
   return err(mapCalendarHttpError(result.error, 'Failed to create calendar event'));
+}
+
+async function listEvents(
+  config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
+  request: ListCalendarEventsRequest,
+  options: CalendarAgentRequestOptions | undefined
+): Promise<Result<CalendarEventsPage>> {
+  const result = await httpClient.request<{
+    events: ContractCalendarListEvent[];
+    truncated: boolean;
+  }>({
+    path: '/internal/calendar/events/query',
+    method: 'POST',
+    body: request,
+    timeoutMs: resolveTimeoutMs(LIST_EVENTS_TIMEOUT_MS, config, options),
+    requestId: options?.requestId,
+  });
+
+  if (result.ok) {
+    if (!Array.isArray(result.value.events) || typeof result.value.truncated !== 'boolean') {
+      return err(new Error('Invalid response from calendar-agent'));
+    }
+    return ok({
+      events: result.value.events.map(toCalendarListEvent),
+      truncated: result.value.truncated,
+    });
+  }
+
+  return err(mapCalendarHttpError(result.error, 'Failed to list calendar events'));
+}
+
+async function updateEventAttendees(
+  config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
+  request: UpdateCalendarEventAttendeesRequest,
+  options: CalendarAgentRequestOptions | undefined
+): Promise<Result<CreatedCalendarEvent>> {
+  const { eventId, ...body } = request;
+  const result = await httpClient.request<{ event: ContractCalendarCreatedEvent }>({
+    path: `/internal/calendar/events/${encodeURIComponent(eventId)}`,
+    method: 'PATCH',
+    body: {
+      userId: body.userId,
+      calendarId: body.calendarId,
+      expectedEtag: body.expectedEtag,
+      changes: { attendeesToAdd: body.attendeesToAdd },
+    },
+    timeoutMs: resolveTimeoutMs(UPDATE_EVENT_ATTENDEES_TIMEOUT_MS, config, options),
+    requestId: options?.requestId,
+  });
+
+  if (result.ok) {
+    return ok(toCreatedCalendarEvent(result.value.event));
+  }
+
+  return err(mapCalendarHttpError(result.error, 'Failed to update calendar event attendees'));
+}
+
+async function updateEvent(
+  config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
+  request: UpdateCalendarEventRequest,
+  options: CalendarAgentRequestOptions | undefined
+): Promise<Result<CreatedCalendarEvent>> {
+  const { eventId, ...body } = request;
+  const result = await httpClient.request<{ event: ContractCalendarCreatedEvent }>({
+    path: `/internal/calendar/events/${encodeURIComponent(eventId)}`,
+    method: 'PATCH',
+    body,
+    timeoutMs: resolveTimeoutMs(UPDATE_EVENT_ATTENDEES_TIMEOUT_MS, config, options),
+    requestId: options?.requestId,
+  });
+
+  if (result.ok) return ok(toCreatedCalendarEvent(result.value.event));
+  return err(mapCalendarHttpError(result.error, 'Failed to update calendar event'));
 }
 
 async function readPreviewResponse(
@@ -170,6 +271,27 @@ export function createCalendarAgentServiceClient(
       options?: CalendarAgentRequestOptions
     ): Promise<Result<CreatedCalendarEvent>> {
       return await createEvent(config, httpClient, request, options);
+    },
+
+    async listEvents(
+      request: ListCalendarEventsRequest,
+      options?: CalendarAgentRequestOptions
+    ): Promise<Result<CalendarEventsPage>> {
+      return await listEvents(config, httpClient, request, options);
+    },
+
+    async updateEventAttendees(
+      request: UpdateCalendarEventAttendeesRequest,
+      options?: CalendarAgentRequestOptions
+    ): Promise<Result<CreatedCalendarEvent>> {
+      return await updateEventAttendees(config, httpClient, request, options);
+    },
+
+    async updateEvent(
+      request: UpdateCalendarEventRequest,
+      options?: CalendarAgentRequestOptions
+    ): Promise<Result<CreatedCalendarEvent>> {
+      return await updateEvent(config, httpClient, request, options);
     },
 
     async processAction(

@@ -5,8 +5,8 @@ This guide covers creating Google OAuth credentials and configuring them for Int
 ## Prerequisites
 
 - Google Cloud Console access to the `intexuraos-dev-pbuchman` project
-- GCP Secret Manager access
-- Terraform applied with Google OAuth secret resources
+- GCP Secret Manager access for the OAuth client secret
+- Repository access for the versioned OAuth client ID
 
 ## Step 1: Create OAuth Consent Screen
 
@@ -42,66 +42,60 @@ While the app is in "Testing" status, add your Google account(s) as test users. 
 2. Click **Create Credentials** → **OAuth client ID**
 3. Fill in:
 
-| Field                      | Dev Value                                                              | Prod Value                                                         |
-| -------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Application type           | Web application                                                        | Web application                                                    |
-| Name                       | `IntexuraOS Dev`                                                       | `IntexuraOS`                                                       |
-| Authorized redirect URIs   | `https://dev.intexuraos.cloud/api/user-service/oauth/google/callback`  | `https://intexuraos.cloud/api/user-service/oauth/google/callback`  |
+| Field                    | Retained DEV recovery value                                             | Production value                                                    |
+| ------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Application type         | Web application                                                         | Web application                                                     |
+| Name                     | `IntexuraOS Dev`                                                        | `IntexuraOS`                                                        |
+| Authorized redirect URIs | `https://dev.intexuraos.cloud/api/user-service/oauth/google/callback`   | `https://intexuraos.cloud/api/user-service/oauth/google/callback`   |
 
 4. Copy the **Client ID** and **Client Secret**
 
 > **Note:** Google OAuth uses refresh tokens. The `access_type: 'offline'` and `prompt: 'consent'` parameters ensure a refresh token is returned on first authorization.
 
-## Step 3: Populate GCP Secret Manager
+Keep the retained DEV recovery redirect allow-listed so a reviewed resume remains possible, but
+do not use it for routine authorization or verification while DEV is hibernated. Normal OAuth
+traffic and all ordinary checks use production.
 
-Three secrets need values:
+## Step 3: Configure Client ID And Secret
+
+Store `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID` in
+`config/environments/common.json`. The callback URL is derived by user-service
+from the request origin and is configured only in Google Console; there is no
+runtime `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` value.
+
+Only the client secret belongs in Secret Manager:
 
 ```bash
 # Activate service account
 gcloud auth activate-service-account --key-file=$HOME/.config/gcloud/sa-key.json
 
-# Client ID
-echo -n "YOUR_GOOGLE_CLIENT_ID" | gcloud secrets versions add INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID \
-  --data-file=- --project=intexuraos-dev-pbuchman
-
 # Client Secret
 echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets versions add INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET \
   --data-file=- --project=intexuraos-dev-pbuchman
-
-# Redirect URI
-echo -n "https://dev.intexuraos.cloud/api/user-service/oauth/google/callback" | \
-  gcloud secrets versions add INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI \
-  --data-file=- --project=intexuraos-dev-pbuchman
 ```
 
-> **Note:** Use `versions add` (not `create`) — Terraform already created the secret resources. You're adding a version with the actual value.
+Use `versions add` rather than `create`; Terraform owns the client-secret
+container. Do not add versions for the client ID or redirect URI.
 
-## Step 4: Add to Dev Environment
+## Step 4: Stage The Retained DEV Recovery Configuration
 
-On home-dev, add to `~/.envrc.local`:
-
-```bash
-export INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID="your-client-id"
-export INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
-```
-
-> **Note:** `INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` is not needed in dev — user-service constructs the callback URL dynamically from the request origin.
-
-Then:
+During an approved Home Dev staging window, regenerate the merged environment without starting the
+retained DEV application stack:
 
 ```bash
+./scripts/sync-secrets.sh
 direnv allow
-pm2 restart user-service
 ```
 
-## Step 5: Re-apply Terraform
+Do not restart `user-service` while DEV is hibernated. If callback recovery must be exercised, use
+the DEV hibernation runbook's explicitly authorized resume transaction; its mode controller owns
+validation and service start order. A direct `pm2 restart` is not a resume procedure.
 
-```bash
-cd terraform/environments/dev
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-terraform apply
-```
+## Step 5: Deploy The Versioned Configuration
+
+Commit the `config/environments/` change and use the normal deployment
+workflow. Terraform is required only when the client-secret container or its
+IAM policy changes.
 
 ## Step 6: Enable Calendar API
 
@@ -114,11 +108,15 @@ gcloud services enable calendar-json.googleapis.com --project=intexuraos-dev-pbu
 ## Verification
 
 ```bash
-# Check secrets have versions
-gcloud secrets versions list INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID --project=intexuraos-dev-pbuchman
+# Validate the versioned client ID without reading Secret Manager
+node scripts/render-runtime-config.mjs --environment dev --format dotenv \
+  --key INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID >/dev/null
+
+# Check only the client secret has an enabled version
+gcloud secrets versions list INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET --project=intexuraos-dev-pbuchman
 
 # Test the OAuth initiation endpoint
-curl -X POST https://dev.intexuraos.cloud/api/user-service/oauth/connections/google/initiate \
+curl -X POST https://intexuraos.cloud/api/user-service/oauth/connections/google/initiate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -128,8 +126,9 @@ Expected: response with `authorizationUrl` pointing to `https://accounts.google.
 
 | File                                 | What It Does                                          |
 | ------------------------------------ | ----------------------------------------------------- |
-| `terraform/environments/dev/main.tf` | Declares secrets in `secret_manager` module           |
-| `terraform/environments/dev/main.tf` | Passes secrets to `user_service` module               |
+| `config/environments/common.json`    | Stores the versioned Google OAuth client ID            |
+| `config/environments/policy.json`    | Enforces config-versus-secret classification           |
+| `terraform/environments/dev/main.tf` | Retains the OAuth client secret and its access policy  |
 | `apps/user-service/src/index.ts`     | Lists in `REQUIRED_ENV` for startup validation        |
 | `ecosystem.config.cjs`               | Maps env vars for PM2 dev environment                 |
 

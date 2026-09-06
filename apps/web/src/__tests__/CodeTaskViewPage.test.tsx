@@ -12,6 +12,7 @@ import type { CodeTask } from '../types/index.js';
 const mockNavigate = vi.fn();
 const mockUseTaskView = vi.fn();
 const mockUseWorkersStatus = vi.fn();
+const mockUseTimeTick = vi.fn();
 
 vi.mock('react-router-dom', () => ({
   useNavigate: (): typeof mockNavigate => mockNavigate,
@@ -20,6 +21,10 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@/hooks', () => ({
   useTaskView: (...args: unknown[]): ReturnType<typeof mockUseTaskView> => mockUseTaskView(...args),
+  useTimeTick: (...args: unknown[]): number => {
+    mockUseTimeTick(...args);
+    return 0;
+  },
   useWorkersStatus: (): ReturnType<typeof mockUseWorkersStatus> => mockUseWorkersStatus(),
 }));
 
@@ -92,6 +97,7 @@ function createTask(overrides?: Partial<CodeTask>): CodeTask {
     dedupKey: 'dedup-123',
     callbackReceived: false,
     createdAt: '2026-03-28T18:58:40.428Z',
+    statusChangedAt: '2026-03-28T18:59:08.181Z',
     updatedAt: '2026-03-28T18:59:08.181Z',
     agentType: 'review',
     ...overrides,
@@ -132,6 +138,7 @@ function createTaskViewState(task: CodeTask | null): TaskViewState {
 describe('CodeTaskViewPage', () => {
   beforeEach(() => {
     mockUseWorkersStatus.mockReturnValue({ status: null });
+    mockUseTimeTick.mockReturnValue(0);
   });
 
   afterEach(() => {
@@ -179,6 +186,15 @@ describe('CodeTaskViewPage', () => {
 
       expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
     });
+  });
+
+  it('uses one detail-level lifecycle clock', () => {
+    mockUseTaskView.mockReturnValue(createTaskViewState(createTask({ workerType: 'auto' })));
+
+    render(<CodeTaskViewPage />);
+
+    expect(mockUseTimeTick).toHaveBeenCalledTimes(1);
+    expect(mockUseTimeTick).toHaveBeenCalledWith(30000);
   });
 
   describe('Implement button (isImplementable)', () => {
@@ -295,9 +311,114 @@ describe('CodeTaskViewPage', () => {
 
       render(<CodeTaskViewPage />);
 
-      expect(screen.getByText(/Final cause: worker_health_contract_mismatch/)).toBeInTheDocument();
+      expect(screen.getByText(/Final cause: Worker health information incomplete/)).toBeInTheDocument();
+      expect(screen.getByText('Restart orchestrator')).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent('worker_health_contract_mismatch');
       expect(screen.getByText(/home-dev: unknown/)).toHaveTextContent('providerApiKeys');
       expect(screen.getByText(/Last attempt:/)).toBeInTheDocument();
+    });
+
+    it('presents an intentional Codex auth failure at its lifecycle time without duplicate or raw diagnostics', () => {
+      const message = 'No reachable worker has active Codex auth for codex-xhigh.';
+      const task = {
+        ...createTask({
+          status: 'failed',
+          workerType: 'codex-xhigh',
+          statusChangedAt: '2026-07-27T12:28:15.885Z',
+          completedAt: '2026-07-27T12:28:15.885Z',
+          updatedAt: '2026-07-27T12:35:09.634Z',
+          error: {
+            code: 'codex_auth_unavailable',
+            message,
+          },
+        }),
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'codex_auth_unavailable',
+          terminal: true,
+          severity: 'critical',
+          message,
+          remediation: 'Retry on a reachable worker with active Codex authorization, or choose another available worker type.',
+          workerNames: ['home-dev'],
+          firstSeenAt: '2026-07-27T12:28:15.885Z',
+          lastSeenAt: '2026-07-27T12:28:15.885Z',
+          nextAction: 'retry_after_fix',
+        },
+      } as CodeTask;
+      mockUseTaskView.mockReturnValue(createTaskViewState(task));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.getByText('Codex authorization unavailable')).toBeInTheDocument();
+      expect(screen.queryByText('codex_auth_unavailable')).not.toBeInTheDocument();
+      expect(screen.getAllByText(message)).toHaveLength(1);
+      expect(screen.getByText(/Choose a worker with active Codex authorization/)).toBeInTheDocument();
+      expect(screen.getByText(/home-dev/)).toBeInTheDocument();
+      expect(document.querySelector('time[datetime="2026-07-27T12:28:15.885Z"]')).toBeInTheDocument();
+      expect(screen.getByText(/Never started/)).toBeInTheDocument();
+      expect(screen.queryByText('Task Failed')).not.toBeInTheDocument();
+    });
+
+    it('does not call a dispatched terminal failure Never started', () => {
+      const task = {
+        ...createTask({
+          status: 'failed',
+          dispatchedAt: '2026-07-27T12:25:00.000Z',
+          statusChangedAt: '2026-07-27T12:28:15.885Z',
+          completedAt: '2026-07-27T12:28:15.885Z',
+        }),
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'dispatch_failed',
+          terminal: true,
+          severity: 'critical',
+          message: 'The worker rejected dispatch.',
+          remediation: 'Retry the task.',
+          workerNames: ['home-dev'],
+          firstSeenAt: '2026-07-27T12:28:15.885Z',
+          lastSeenAt: '2026-07-27T12:28:15.885Z',
+          nextAction: 'retry_after_fix',
+        },
+      } as CodeTask;
+      mockUseTaskView.mockReturnValue(createTaskViewState(task));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.queryByText('Never started')).not.toBeInTheDocument();
+    });
+
+    it('does not repeat an identical terminal cause', () => {
+      const message = 'No reachable worker has active Codex auth.';
+      const remediation = 'Retry on a reachable worker with active Codex authorization, or choose another available worker type.';
+      const task = {
+        ...createTask({ status: 'failed' }),
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'codex_auth_unavailable',
+          terminal: true,
+          severity: 'critical',
+          message,
+          remediation,
+          workerNames: ['home-dev'],
+          firstSeenAt: '2026-07-27T12:28:15.885Z',
+          lastSeenAt: '2026-07-27T12:28:15.885Z',
+          nextAction: 'retry_after_fix',
+          terminalCause: {
+            reason: 'codex_auth_unavailable',
+            message,
+            remediation,
+            workerNames: ['home-dev'],
+            lastSeenAt: '2026-07-27T12:28:15.885Z',
+          },
+        },
+      } as CodeTask;
+      mockUseTaskView.mockReturnValue(createTaskViewState(task));
+
+      render(<CodeTaskViewPage />);
+
+      expect(screen.getAllByText(message)).toHaveLength(1);
+      expect(screen.getAllByText('Choose a worker with active Codex authorization, or configure authorization on a worker intended to run Codex tasks.')).toHaveLength(1);
+      expect(screen.queryByText(/Final cause:/)).not.toBeInTheDocument();
     });
   });
 

@@ -63,18 +63,25 @@ Create the isolated Docker network that worker containers use:
 ./scripts/setup-worker-network.sh
 ```
 
-This creates a bridge network named `code-worker-net` on subnet `172.28.0.0/16`.
+This creates a non-internal dual-stack Docker bridge named `code-worker-net` on the fixed
+Linux interface `code-worker-br`, IPv4 subnet `172.28.0.0/16`, and IPv6 subnet
+`fd00:172:28::/64`. IP masquerading is enabled and both gateway modes must be absent
+(Docker's `nat` default) or explicitly `nat`. The setup fails closed when a network with
+the same name exists but does not satisfy this exact contract.
 
 To verify:
 
 ```bash
-docker network inspect code-worker-net --format '{{.Name}}: {{range .IPAM.Config}}{{.Subnet}}{{end}}'
+./scripts/setup-worker-network.sh
 ```
 
 **Expected output:**
 
 ```
-code-worker-net: 172.28.0.0/16
+Network 'code-worker-net' already exists
+Network details:
+code-worker-net: 172.28.0.0/16 fd00:172:28::/64
+Network setup complete: code-worker-net
 ```
 
 ---
@@ -113,7 +120,7 @@ docker run -it --rm \
   -e ANTHROPIC_API_KEY=your-api-key \
   -e ANTHROPIC_BASE_URL=https://api.anthropic.com \
   -e LINEAR_API_KEY=your-linear-key \
-  -e SENTRY_AUTH_TOKEN=your-sentry-token \
+  -e ERROR_HUB_HOST=home-dev.example.ts.net:8443 \
   -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json \
   -e GIT_USER_NAME="Test User" \
   -e GIT_USER_EMAIL="test@example.com" \
@@ -320,13 +327,13 @@ The E2E test suite verifies container lifecycle, mount permissions, input/output
 
 ```bash
 docker build -t code-worker:test -f docker/code-worker/Dockerfile.test docker/code-worker/
-docker network create --driver bridge --subnet 172.28.0.0/16 code-worker-net 2>/dev/null || true
+./scripts/setup-worker-network.sh
 ```
 
 ### Step 7.2: Run the E2E tests
 
 ```bash
-WORKER_IMAGE=code-worker:test WORKER_NETWORK=code-worker-net pnpm --filter orchestrator test:e2e
+WORKER_IMAGE=code-worker:test pnpm --filter orchestrator test:e2e
 ```
 
 **Expected test suites:**

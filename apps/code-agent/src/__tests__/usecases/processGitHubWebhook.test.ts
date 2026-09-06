@@ -59,7 +59,12 @@ function buildPREvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
 }
 
 interface MocksShape {
-  gitHubPREventRepo: { save: ReturnType<typeof vi.fn> };
+  gitHubPREventRepo: {
+    save: ReturnType<typeof vi.fn>;
+    acquireTriage: ReturnType<typeof vi.fn>;
+    completeTriage: ReturnType<typeof vi.fn>;
+    failTriage: ReturnType<typeof vi.fn>;
+  };
   gitHubPRSummaryRepo: { upsert: ReturnType<typeof vi.fn> };
   gitHubWebhookAuditEventRepo: {
     save: ReturnType<typeof vi.fn>;
@@ -83,6 +88,13 @@ function buildMocksAndInstall(): MocksShape {
   const logger = createMockLogger();
   const gitHubPREventRepo = {
     save: vi.fn().mockResolvedValue(ok(buildPREvent())),
+    acquireTriage: vi.fn().mockResolvedValue(ok({
+      kind: 'acquired',
+      event: buildPREvent(),
+      leaseToken: 'lease-1',
+    })),
+    completeTriage: vi.fn().mockResolvedValue(ok(undefined)),
+    failTriage: vi.fn().mockResolvedValue(ok(undefined)),
   };
   const gitHubPRSummaryRepo = {
     upsert: vi.fn().mockResolvedValue(ok(undefined)),
@@ -338,9 +350,9 @@ describe('processGitHubWebhook', () => {
     );
   });
 
-  it('returns duplicate when the PR event repo reports DUPLICATE_EVENT', async () => {
+  it('republishes triage when a duplicate delivery identifies the saved event', async () => {
     mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
-      err({ code: 'DUPLICATE_EVENT', message: 'already seen' }),
+      err({ code: 'DUPLICATE_EVENT', message: 'already seen', eventId: 'evt-existing' }),
     );
 
     const result = await processGitHubWebhook(runInput({}));
@@ -349,10 +361,48 @@ describe('processGitHubWebhook', () => {
     if (result.ok) {
       expect(result.outcome).toBe('duplicate');
     }
-    expect(mocks.prTriagePublisher.publishPRTriage).not.toHaveBeenCalled();
+    expect(mocks.prTriagePublisher.publishPRTriage).toHaveBeenCalledWith({
+      eventId: 'evt-existing',
+      repository: 'intexuraos/intexuraos',
+      pullRequestNumber: 7,
+      correlationId: 'evt-existing',
+    });
     expect(mocks.eventDecisionRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'duplicate_delivery' }),
     );
+  });
+
+  it('does not publish triage when a legacy duplicate result has no event id', async () => {
+    mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
+      err({ code: 'DUPLICATE_EVENT', message: 'already seen' }),
+    );
+
+    const result = await processGitHubWebhook(runInput({}));
+
+    expect(result.ok).toBe(true);
+    expect(mocks.prTriagePublisher.publishPRTriage).not.toHaveBeenCalled();
+  });
+
+  it('requests redelivery when duplicate triage cannot be published or leased inline', async () => {
+    mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
+      err({ code: 'DUPLICATE_EVENT', message: 'already seen', eventId: 'evt-existing' }),
+    );
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ code: 'PUBLISH_FAILED', message: 'pubsub unavailable' }),
+    );
+    mocks.gitHubPREventRepo.acquireTriage.mockResolvedValueOnce(ok({
+      kind: 'busy',
+      owner: 'other-delivery',
+    }));
+
+    const result = await processGitHubWebhook(runInput({}));
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'Failed to hand off GitHub PR event for triage',
+    });
+    expect(mocks.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
   });
 
   it('ignores events from repositories outside the IntexuraOS allow-list', async () => {
@@ -380,18 +430,178 @@ describe('processGitHubWebhook', () => {
     expect(mocks.prTriagePublisher.publishPRTriage).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: 'evt_1', repository: 'intexuraos/intexuraos', pullRequestNumber: 7 }),
     );
-    expect(mocks.gitHubPRSummaryRepo.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: 'intexuraos/intexuraos',
+        pullRequestNumber: 7,
+        state: 'open',
+        lastConflictCheckedAt: null,
+      }),
+    );
   });
 
-  it('falls back to the inline evaluator when triage publish fails', async () => {
-    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
-      err({ message: 'pub/sub unavailable' }),
+  it('requests webhook redelivery when the normalized event cannot be saved', async () => {
+    mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'Firestore unavailable' }),
     );
 
     const result = await processGitHubWebhook(runInput({}));
 
+    expect(result).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'Failed to save GitHub PR event',
+    });
+    expect(mocks.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'normalized_event_save_failed',
+        decision: 'skip',
+      }),
+    );
+    expect(mocks.gitHubEventLogEntryRepo.complete).toHaveBeenCalledWith(
+      expect.objectContaining({ decisionOutcome: 'skip' }),
+    );
+    expect(mocks.gitHubWebhookAuditEventRepo.updateNormalizationStatus).toHaveBeenCalledWith({
+      id: 'audit-1',
+      normalizationStatus: 'failed',
+    });
+  });
+
+  it('leases, evaluates, and completes inline triage when publish fails', async () => {
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'pub/sub unavailable' }),
+    );
+    let finishEvaluation: (() => void) | undefined;
+    mocks.unifiedEvaluator.evaluate.mockImplementationOnce(async () =>
+      await new Promise<void>((resolve) => {
+        finishEvaluation = resolve;
+      }),
+    );
+
+    let webhookSettled = false;
+    const processing = processGitHubWebhook(runInput({})).then((result) => {
+      webhookSettled = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(mocks.unifiedEvaluator.evaluate).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(webhookSettled).toBe(false);
+    finishEvaluation?.();
+    const result = await processing;
+
     expect(result.ok).toBe(true);
+    expect(mocks.gitHubPREventRepo.completeTriage).toHaveBeenCalledOnce();
+    expect(mocks.gitHubPREventRepo.acquireTriage).toHaveBeenCalledWith({
+      eventId: 'evt_1',
+      leaseOwner: 'webhook-inline:audit-1',
+      acquiredAt: expect.any(Date),
+      leaseDurationMs: 15 * 60 * 1000,
+    });
     expect(mocks.unifiedEvaluator.evaluate).toHaveBeenCalledTimes(1);
+    expect(mocks.gitHubPREventRepo.completeTriage).toHaveBeenCalledWith({
+      eventId: 'evt_1',
+      leaseToken: 'lease-1',
+      completedAt: expect.any(Date),
+    });
+    expect(mocks.gitHubPREventRepo.failTriage).not.toHaveBeenCalled();
+  });
+
+  it('requests webhook redelivery when the inline fallback lease is busy', async () => {
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'ambiguous publish failure' }),
+    );
+    mocks.gitHubPREventRepo.acquireTriage.mockResolvedValueOnce(ok({ kind: 'busy' }));
+
+    const result = await processGitHubWebhook(runInput({}));
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'Failed to hand off GitHub PR event for triage',
+    });
+    await vi.waitFor(() => expect(mocks.gitHubPREventRepo.acquireTriage).toHaveBeenCalledOnce());
+    expect(mocks.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+    expect(mocks.gitHubPREventRepo.completeTriage).not.toHaveBeenCalled();
+    expect(mocks.gitHubPREventRepo.failTriage).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a redelivery after inline triage has already completed', async () => {
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'ambiguous publish failure' }),
+    );
+    mocks.gitHubPREventRepo.acquireTriage.mockResolvedValueOnce(ok({ kind: 'completed' }));
+
+    const result = await processGitHubWebhook(runInput({}));
+
+    expect(result).toEqual({ ok: true, outcome: 'processed', message: 'processed' });
+    expect(mocks.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+    expect(mocks.gitHubPREventRepo.completeTriage).not.toHaveBeenCalled();
+    expect(mocks.gitHubPREventRepo.failTriage).not.toHaveBeenCalled();
+  });
+
+  it('does not evaluate when the inline fallback lease cannot be acquired', async () => {
+    const logger = createMockLogger();
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'pub/sub unavailable' }),
+    );
+    mocks.gitHubPREventRepo.acquireTriage.mockResolvedValueOnce(err({
+      code: 'FIRESTORE_ERROR',
+      message: 'lease store unavailable',
+    }));
+
+    const result = await processGitHubWebhook(runInput({ logger }));
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'Failed to hand off GitHub PR event for triage',
+    });
+    expect(mocks.gitHubPREventRepo.acquireTriage).toHaveBeenCalledOnce();
+    expect(mocks.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'evt_1' }),
+      'Failed to acquire PR triage lease for inline fallback',
+    );
+  });
+
+  it('logs a lease completion failure after successful inline evaluation', async () => {
+    const logger = createMockLogger();
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'pub/sub unavailable' }),
+    );
+    mocks.gitHubPREventRepo.completeTriage.mockResolvedValueOnce(err({
+      code: 'FIRESTORE_ERROR',
+      message: 'completion unavailable',
+    }));
+
+    const result = await processGitHubWebhook(runInput({ logger }));
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'Failed to hand off GitHub PR event for triage',
+    });
+    expect(mocks.gitHubPREventRepo.completeTriage).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'evt_1' }),
+      'Failed to complete PR triage lease after inline evaluation',
+    );
+  });
+
+  it('requests webhook redelivery when the saved event disappears before inline triage', async () => {
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'pub/sub unavailable' }),
+    );
+    mocks.gitHubPREventRepo.acquireTriage.mockResolvedValueOnce(ok({ kind: 'not_found' }));
+
+    const result = await processGitHubWebhook(runInput({}));
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'Failed to hand off GitHub PR event for triage',
+    });
+    expect(mocks.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
   });
 
   it('skips fallback decision persist when an existing decision is already recorded', async () => {
@@ -408,11 +618,14 @@ describe('processGitHubWebhook', () => {
 
     const result = await processGitHubWebhook(runInput({}));
 
-    expect(result.ok).toBe(true);
-    // Wait for fire-and-forget fallback chain to settle
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    expect(result.ok).toBe(false);
 
+    expect(mocks.gitHubPREventRepo.failTriage).toHaveBeenCalledWith({
+      eventId: 'evt_1',
+      leaseToken: 'lease-1',
+      failedAt: expect.any(Date),
+      reason: 'evaluator failure',
+    });
     expect(mocks.eventDecisionRepo.findByEventIds).toHaveBeenCalledWith(['audit-1']);
     // The fallback must NOT record another decision because one already exists
     const fallbackCalls = mocks.eventDecisionRepo.save.mock.calls.filter(
@@ -435,9 +648,7 @@ describe('processGitHubWebhook', () => {
 
     const result = await processGitHubWebhook(runInput({}));
 
-    expect(result.ok).toBe(true);
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    expect(result.ok).toBe(false);
 
     expect(mocks.eventDecisionRepo.findByEventIds).toHaveBeenCalledWith(['audit-1']);
     const fallbackCalls = mocks.eventDecisionRepo.save.mock.calls.filter(
@@ -447,6 +658,30 @@ describe('processGitHubWebhook', () => {
       },
     );
     expect(fallbackCalls.length).toBeGreaterThan(0);
+  });
+
+  it('persists the fallback decision when releasing a failed inline lease also fails', async () => {
+    const logger = createMockLogger();
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'pub/sub unavailable' }),
+    );
+    mocks.unifiedEvaluator.evaluate.mockRejectedValueOnce(new Error('evaluator failure'));
+    mocks.gitHubPREventRepo.failTriage.mockResolvedValueOnce(err({
+      code: 'FIRESTORE_ERROR',
+      message: 'release unavailable',
+    }));
+
+    const result = await processGitHubWebhook(runInput({ logger }));
+
+    expect(result.ok).toBe(false);
+    expect(mocks.gitHubPREventRepo.failTriage).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'evt_1' }),
+      'Failed to release PR triage lease after inline evaluator error',
+    );
+    expect(mocks.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'evaluation_failed:evaluator failure' }),
+    );
   });
 
   it('processes a valid push event and triggers merge-conflict detection', async () => {

@@ -11,8 +11,9 @@ import {
 import { Card, Layout } from '@/components';
 import { MarkdownContent } from '@/components/MarkdownContent.js';
 import { PREventsGroup } from '@/components/PREventsGroup.js';
-import { useTaskView, useWorkersStatus } from '@/hooks';
-import { formatElapsedTime } from '@/utils/dateFormat';
+import { useTaskView, useTimeTick, useWorkersStatus } from '@/hooks';
+import { formatDateTime, formatDateTimeAccessible, formatElapsedTime } from '@/utils/dateFormat';
+import { getBrowserTimezone } from '@/utils/scheduledDispatch';
 import type { CodeTask, WorkerStatusTag } from '@/types';
 import { TaskHeader } from '@/components/code-tasks/TaskHeader.js';
 import { LogStream } from '@/components/code-tasks/LogStream.js';
@@ -21,6 +22,12 @@ import { NextSteps } from '@/components/code-tasks/NextSteps.js';
 import { ARCHIVABLE_STATUSES, EXECUTION_MEMORY_STATUS_STYLES, isActiveStatus } from '@/components/code-tasks/shared.js';
 import type { WorkerType } from '@/components/code-tasks/shared.js';
 import { isTaskMergeable, getTaskMergeUrl } from '@/utils/issueGroups.js';
+import { TaskLifecycleTime } from '@/components/code-tasks/TaskLifecycleTime.js';
+import {
+  formatDispatchDiagnosticText,
+  getDispatchReasonLabel,
+  getDispatchRemediationText,
+} from '@/utils/taskLifecycle.js';
 
 export function CodeTaskViewPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +43,7 @@ export function CodeTaskViewPage(): React.JSX.Element {
     cancelTask, retryTask, sendMessage,
   } = useTaskView(id ?? '');
   const { status: workersStatus } = useWorkersStatus();
+  const timeTick = useTimeTick(30000);
 
   const [selectedWorkerType, setSelectedWorkerType] = useState<WorkerType>('auto');
   const [showRetryDropdown, setShowRetryDropdown] = useState(false);
@@ -135,10 +143,10 @@ export function CodeTaskViewPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} />
+      <MemoTaskHeader task={task} workerStatusTag={workerStatusTag} timeTick={timeTick} />
 
       <MemoActiveProgressCard task={task} />
-      <MemoDispatchStatusCard task={task} />
+      <MemoDispatchStatusCard task={task} timeTick={timeTick} />
 
       {task.parentTaskId !== undefined && task.followUpReason === 'execution_implement' ? (
         <DesignTaskBanner parentTaskId={task.parentTaskId} />
@@ -155,7 +163,9 @@ export function CodeTaskViewPage(): React.JSX.Element {
         : null}
 
       <MemoTaskResultSection task={task} />
-      {task.error !== undefined ? <MemoTaskErrorCard task={task} /> : null}
+      {task.error !== undefined && task.dispatchStatus?.terminal !== true
+        ? <MemoTaskErrorCard task={task} />
+        : null}
 
       <MemoLogStream
         logs={logs}
@@ -227,11 +237,26 @@ const MemoTaskHeader = memo(TaskHeader);
 const MemoLogStream = memo(LogStream);
 const MemoNextSteps = memo(NextSteps);
 const MemoTaskActions = memo(TaskActions);
-function formatDispatchTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
+function DispatchDiagnosticTime({ label, at }: { label: string; at: string }): React.JSX.Element {
+  const timeZone = getBrowserTimezone();
+  const accessible = `${label}: ${formatDateTimeAccessible(at, timeZone)}`;
+  return (
+    <span>
+      {label}:{' '}
+      <time dateTime={at} title={accessible} aria-label={accessible}>
+        {formatDateTime(at, timeZone)}
+      </time>
+    </span>
+  );
 }
 
-const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task: CodeTask }): React.JSX.Element | null {
+const MemoDispatchStatusCard = memo(function DispatchStatusCard({
+  task,
+  timeTick,
+}: {
+  task: CodeTask;
+  timeTick: number;
+}): React.JSX.Element | null {
   const dispatchStatus = task.dispatchStatus;
   if (dispatchStatus === undefined) return null;
 
@@ -246,15 +271,29 @@ const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task
           ? 'This task is waiting for its scheduled dispatch time.'
           : 'This task is waiting for another active task to finish.';
   const workerText = dispatchStatus.workerNames.length > 0
-    ? `Workers: ${dispatchStatus.workerNames.join(', ')}`
+    ? `Checked workers: ${dispatchStatus.workerNames.join(', ')}`
     : null;
-  const timeText = [
-    `First seen: ${formatDispatchTimestamp(dispatchStatus.firstSeenAt)}`,
-    `Last seen: ${formatDispatchTimestamp(dispatchStatus.lastSeenAt)}`,
-    dispatchStatus.lastAttemptAt !== undefined ? `Last attempt: ${formatDispatchTimestamp(dispatchStatus.lastAttemptAt)}` : null,
-  ].filter((value): value is string => value !== null).join(' | ');
   const terminalCause = dispatchStatus.terminalCause;
   const healthDetails = dispatchStatus.workerHealthDetails ?? [];
+  const neverStarted = isTerminal && task.dispatchedAt === undefined;
+  const dispatchMessage = formatDispatchDiagnosticText(dispatchStatus.message);
+  const dispatchRemediation = getDispatchRemediationText(
+    dispatchStatus.reason,
+    dispatchStatus.remediation
+  );
+  const terminalCauseMessage = terminalCause === undefined
+    ? undefined
+    : formatDispatchDiagnosticText(terminalCause.message);
+  const terminalCauseRemediation = terminalCause === undefined
+    ? undefined
+    : getDispatchRemediationText(terminalCause.reason, terminalCause.remediation);
+  const terminalCauseAddsContext = terminalCause !== undefined
+    && (
+      terminalCause.reason !== dispatchStatus.reason
+      || terminalCauseMessage !== dispatchMessage
+    );
+  const terminalCauseAddsRemediation = terminalCauseRemediation !== undefined
+    && terminalCauseRemediation !== dispatchRemediation;
 
   return (
     <Card className={`mb-6 ${isTerminal ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30' : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30'}`}>
@@ -266,31 +305,54 @@ const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task
               {title}
             </h3>
             <span className={`rounded px-2 py-0.5 text-xs font-medium ${isTerminal ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'}`}>
-              {dispatchStatus.reason}
+              {getDispatchReasonLabel(dispatchStatus.reason)}
             </span>
           </div>
+          <p className={`mb-2 flex flex-wrap items-center gap-1 text-sm ${isTerminal ? 'text-red-800 dark:text-red-300' : 'text-amber-800 dark:text-amber-300'}`}>
+            <TaskLifecycleTime
+              status={task.status}
+              at={task.statusChangedAt}
+              timeTick={timeTick}
+            />
+            {neverStarted ? (
+              <span className="font-medium">&middot; Never started</span>
+            ) : null}
+          </p>
           <p className={`text-sm ${isTerminal ? 'text-red-800 dark:text-red-300' : 'text-amber-800 dark:text-amber-300'}`}>
-            {dispatchStatus.message}
+            {dispatchMessage}
           </p>
           <p className={`mt-2 text-sm font-medium ${isTerminal ? 'text-red-900 dark:text-red-200' : 'text-amber-900 dark:text-amber-200'}`}>
             {nextActionText}
           </p>
           <p className={`mt-1 text-sm ${isTerminal ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}`}>
-            {dispatchStatus.remediation}
+            {dispatchRemediation}
           </p>
           {workerText !== null ? (
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{workerText}</p>
           ) : null}
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{timeText}</p>
-          {terminalCause !== undefined ? (
-            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-              Final cause: {terminalCause.reason} - {terminalCause.message}
-            </p>
+          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+            <DispatchDiagnosticTime label="First seen" at={dispatchStatus.firstSeenAt} />
+            <DispatchDiagnosticTime label="Last seen" at={dispatchStatus.lastSeenAt} />
+            {dispatchStatus.lastAttemptAt !== undefined ? (
+              <DispatchDiagnosticTime label="Last attempt" at={dispatchStatus.lastAttemptAt} />
+            ) : null}
+          </p>
+          {terminalCause !== undefined && (terminalCauseAddsContext || terminalCauseAddsRemediation) ? (
+            <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              {terminalCauseAddsContext && terminalCauseMessage !== undefined ? (
+                <p>
+                  Final cause: {getDispatchReasonLabel(terminalCause.reason)} — {terminalCauseMessage}
+                </p>
+              ) : null}
+              {terminalCauseAddsRemediation ? (
+                <p className="mt-1">{terminalCauseRemediation}</p>
+              ) : null}
+            </div>
           ) : null}
           {healthDetails.map((detail) => (
             <p key={`${detail.workerName}-${detail.tag}`} className="mt-1 text-xs text-slate-600 dark:text-slate-300">
               {detail.workerName}: {detail.tag}
-              {detail.error !== undefined ? ` - ${detail.error}` : ''}
+              {detail.error !== undefined ? ` - ${formatDispatchDiagnosticText(detail.error)}` : ''}
               {detail.missingFields !== undefined && detail.missingFields.length > 0
                 ? ` (${detail.missingFields.join(', ')})`
                 : ''}
@@ -300,7 +362,13 @@ const MemoDispatchStatusCard = memo(function DispatchStatusCard({ task }: { task
       </div>
     </Card>
   );
-}, (prev, next) => prev.task.dispatchStatus === next.task.dispatchStatus);
+}, (prev, next) =>
+  prev.timeTick === next.timeTick
+  && prev.task.dispatchStatus === next.task.dispatchStatus
+  && prev.task.status === next.task.status
+  && prev.task.statusChangedAt === next.task.statusChangedAt
+  && prev.task.dispatchedAt === next.task.dispatchedAt
+);
 const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { task: CodeTask }): React.JSX.Element | null {
   const context = task.executionMemoryContext;
   const postRun = task.executionMemoryPostRun;
@@ -487,7 +555,7 @@ const MemoActiveProgressCard = memo(function ActiveProgressCard({ task }: { task
 function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
-      {'This task implements the IntexuraOS Agent-Based Code Task Execution Flow. '}
+      {'This task implements the IntexuraOS agent-based code task execution flow. '}
       <a
         href={`/#/code-tasks/${parentTaskId}`}
         className="font-medium underline hover:no-underline"
@@ -501,7 +569,7 @@ function DesignTaskBanner({ parentTaskId }: { parentTaskId: string }): React.JSX
 function ImplementationLinkBanner({ implementationTaskIds }: { implementationTaskIds: string[] }): React.JSX.Element {
   return (
     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-      {'This task is the planning step of the IntexuraOS Agent-Based Code Task Execution Flow. '}
+      {'This task is the planning step of the IntexuraOS agent-based code task execution flow. '}
       {implementationTaskIds.map((taskId, index) => (
         <span key={taskId}>
           {index > 0 ? ', ' : null}

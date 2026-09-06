@@ -82,6 +82,8 @@ export type ProcessGitHubWebhookErr =
 
 export type ProcessGitHubWebhookResult = ProcessGitHubWebhookOk | ProcessGitHubWebhookErr;
 
+const PR_TRIAGE_LEASE_DURATION_MS = 15 * 60 * 1000;
+
 function extractRepositoryDetails(body: GitHubWebhookBody): {
   repository: string | null;
   repositoryId: number | null;
@@ -262,6 +264,117 @@ async function ensureDecisionAfterEvaluationFailure(input: {
       'Failed to persist fallback decision after evaluation failure',
     );
   }
+}
+
+async function runInlineTriageFallback(input: {
+  eventId: string;
+  auditEvent: GitHubWebhookAuditEvent;
+  pendingEntry: GitHubEventLogEntry;
+  logger: Logger;
+}): Promise<boolean> {
+  const { gitHubPREventRepo, unifiedEvaluator } = getServices();
+  const acquireResult = await gitHubPREventRepo.acquireTriage({
+    eventId: input.eventId,
+    leaseOwner: `webhook-inline:${input.auditEvent.id}`,
+    acquiredAt: new Date(),
+    leaseDurationMs: PR_TRIAGE_LEASE_DURATION_MS,
+  });
+
+  if (!acquireResult.ok) {
+    input.logger.error(
+      { error: acquireResult.error, eventId: input.eventId },
+      'Failed to acquire PR triage lease for inline fallback',
+    );
+    return false;
+  }
+
+  const acquisition = acquireResult.value; // @allow-result-access -- narrowed by !acquireResult.ok above
+  if (acquisition.kind === 'completed') {
+    input.logger.debug(
+      { eventId: input.eventId, triageState: acquisition.kind },
+      'Skipping inline PR triage fallback because the event is already completed',
+    );
+    return true;
+  }
+  if (acquisition.kind === 'busy') {
+    input.logger.debug(
+      { eventId: input.eventId, triageState: acquisition.kind },
+      'Deferring inline PR triage fallback because the event has an active lease',
+    );
+    return false;
+  }
+  if (acquisition.kind === 'not_found') {
+    input.logger.error(
+      { eventId: input.eventId },
+      'Saved PR event disappeared before inline triage fallback',
+    );
+    return false;
+  }
+
+  try {
+    await unifiedEvaluator.evaluate(acquisition.event, input.logger);
+  } catch (evalErr: unknown) {
+    const errorMessage = getErrorMessage(evalErr, 'unknown_evaluation_error');
+    const failResult = await gitHubPREventRepo.failTriage({
+      eventId: input.eventId,
+      leaseToken: acquisition.leaseToken,
+      failedAt: new Date(),
+      reason: errorMessage,
+    });
+    if (!failResult.ok) {
+      input.logger.error(
+        { error: failResult.error, eventId: input.eventId },
+        'Failed to release PR triage lease after inline evaluator error',
+      );
+    }
+    input.logger.error({ evalErr }, 'Unhandled error in unified evaluator (fallback path)');
+    await ensureDecisionAfterEvaluationFailure({
+      auditEvent: input.auditEvent,
+      pendingEntry: input.pendingEntry,
+      logger: input.logger,
+      errorMessage,
+    });
+    return false;
+  }
+
+  const completeResult = await gitHubPREventRepo.completeTriage({
+    eventId: input.eventId,
+    leaseToken: acquisition.leaseToken,
+    completedAt: new Date(),
+  });
+  if (!completeResult.ok) {
+    input.logger.error(
+      { error: completeResult.error, eventId: input.eventId },
+      'Failed to complete PR triage lease after inline evaluation',
+    );
+    return false;
+  }
+  return true;
+}
+
+async function publishPRTriageWithFallback(input: {
+  eventId: string;
+  repository: string;
+  pullRequestNumber: number;
+  auditEvent: GitHubWebhookAuditEvent;
+  pendingEntry: GitHubEventLogEntry;
+  logger: Logger;
+}): Promise<boolean> {
+  const { prTriagePublisher } = getServices();
+  const publishResult = await prTriagePublisher.publishPRTriage({
+    eventId: input.eventId,
+    repository: input.repository,
+    pullRequestNumber: input.pullRequestNumber,
+    correlationId: input.eventId,
+  });
+
+  if (publishResult.ok) return true;
+
+  input.logger.error(
+    { error: publishResult.error, eventId: input.eventId },
+    'Failed to publish PR triage event — falling back to inline evaluator',
+  );
+  return await runInlineTriageFallback(input);
 }
 
 export async function processGitHubWebhook(
@@ -502,7 +615,19 @@ export async function processGitHubWebhook(
 
   if (!saveResult.ok) {
     if (saveResult.error.code === 'DUPLICATE_EVENT') { // @allow-result-access -- narrowed by !saveResult.ok
-      logger.debug({ deliveryId }, 'Duplicate webhook delivery, skipping evaluation');
+      logger.debug({ deliveryId }, 'Duplicate webhook delivery, replaying triage publication');
+      const duplicateEventId = saveResult.error.eventId; // @allow-result-access -- narrowed by !saveResult.ok above
+      let triageHandoffSucceeded = true;
+      if (duplicateEventId !== undefined) {
+        triageHandoffSucceeded = await publishPRTriageWithFallback({
+          eventId: duplicateEventId,
+          repository: parsedEvent.repository,
+          pullRequestNumber: parsedEvent.pullRequestNumber,
+          auditEvent,
+          pendingEntry,
+          logger,
+        });
+      }
       if (parsedEvent.pullRequestNumber !== 0) {
         void automationLog.record(
           { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
@@ -521,6 +646,13 @@ export async function processGitHubWebhook(
       });
       if (!saved) {
         return { ok: false, reason: 'internal_error', message: 'Failed to persist GitHub event decision' };
+      }
+      if (!triageHandoffSucceeded) {
+        return {
+          ok: false,
+          reason: 'internal_error',
+          message: 'Failed to hand off GitHub PR event for triage',
+        };
       }
       return { ok: true, outcome: 'duplicate', message: 'duplicate' };
     }
@@ -546,7 +678,7 @@ export async function processGitHubWebhook(
     if (!saved) {
       return { ok: false, reason: 'internal_error', message: 'Failed to persist GitHub event decision' };
     }
-    return { ok: true, outcome: 'acknowledged', message: 'acknowledged' };
+    return { ok: false, reason: 'internal_error', message: 'Failed to save GitHub PR event' };
   }
 
   const savedEvent = saveResult.value; // @allow-result-access -- narrowed by !saveResult.ok above
@@ -568,6 +700,7 @@ export async function processGitHubWebhook(
         mergedAt: parsedEvent.mergedAt ?? null,
         baseBranch: parsedEvent.baseBranch,
         authorLogin: parsedEvent.prAuthorLogin,
+        ...(parsedEvent.state === 'open' && { lastConflictCheckedAt: null }),
       }),
     };
     const summaryResult = await gitHubPRSummaryRepo.upsert(summaryInput);
@@ -586,30 +719,20 @@ export async function processGitHubWebhook(
     'GitHub PR event saved',
   );
 
-  const { prTriagePublisher } = getServices();
-
-  const publishResult = await prTriagePublisher.publishPRTriage({
+  const triageHandoffSucceeded = await publishPRTriageWithFallback({
     eventId: savedEvent.id,
     repository: parsedEvent.repository,
     pullRequestNumber: parsedEvent.pullRequestNumber,
-    correlationId: savedEvent.id,
+    auditEvent,
+    pendingEntry,
+    logger,
   });
-
-  if (!publishResult.ok) {
-    logger.error(
-      { error: publishResult.error, eventId: savedEvent.id }, // @allow-result-access -- narrowed by !publishResult.ok
-      'Failed to publish PR triage event — falling back to inline evaluator',
-    );
-    const { unifiedEvaluator } = getServices();
-    void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {
-      logger.error({ evalErr }, 'Unhandled error in unified evaluator (fallback path)');
-      void ensureDecisionAfterEvaluationFailure({
-        auditEvent,
-        pendingEntry,
-        logger,
-        errorMessage: getErrorMessage(evalErr, 'unknown_evaluation_error'),
-      });
-    });
+  if (!triageHandoffSucceeded) {
+    return {
+      ok: false,
+      reason: 'internal_error',
+      message: 'Failed to hand off GitHub PR event for triage',
+    };
   }
 
   if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed') {

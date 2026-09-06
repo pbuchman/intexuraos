@@ -15,7 +15,7 @@
   },
   "postFixVerdict": {
     "kind": "parsed",
-    "missingRequired": ["linear_issue", "plan_pr"],
+    "missingRequired": ["linear_issue"],
     "dataAssertions": {
       "outcome": "unclear",
       "superpowers_writing_plans_used": false,

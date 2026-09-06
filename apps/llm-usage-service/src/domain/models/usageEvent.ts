@@ -36,6 +36,7 @@ export interface UsageEvent {
       | 'research'
       | 'generate'
       | 'image_generation'
+      | 'embedding'
       | 'tool_calling'
       | 'other';
     success: boolean;

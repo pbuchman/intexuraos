@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Logger } from 'pino';
 import { IntexuraOSError } from '@intexuraos/common-core';
 import {
@@ -8,6 +8,7 @@ import {
   fetchWithRetry,
   logWorkerAuthStartupStatus,
   validateWorkerApiKeys,
+  validateThirdPartyApiKey,
   type FetchWithRetryDeps,
 } from '../../bootstrap/api-key-validator.js';
 import type { WorkerAuthRegistry, WorkerAuthProvider } from '../../services/worker-auth/index.js';
@@ -239,6 +240,8 @@ describe('logWorkerAuthStartupStatus', () => {
       ([level, , message]) => level === 'warn' && message === 'Code worker auth not ready'
     );
     expect(claudeWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: expired-token startup warn must not page.
+    expect(claudeWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
   });
 
   it('logs info for codex when the codex state is active', () => {
@@ -280,6 +283,8 @@ describe('logWorkerAuthStartupStatus', () => {
       ([level, , message]) => level === 'warn' && message === 'Codex worker auth not ready'
     );
     expect(codexWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: expired-token startup warn must not page.
+    expect(codexWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
   });
 });
 
@@ -331,6 +336,9 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
         level === 'warn' && message === 'Code worker auth not ready at startup'
     );
     expect(claudeWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: this is the exact warn that produced the issue;
+    // it must carry `_skipSentry` so the Pino transport does not forward it.
+    expect(claudeWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
   });
 
   it('logs info for codex when the codex state is active', async () => {
@@ -372,5 +380,168 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
         level === 'warn' && message === 'Codex worker auth not ready at startup'
     );
     expect(codexWarn).toHaveLength(1);
+    // Sentry INTEXURAOS-HOME-DEV-1G: same suppression contract as the Claude warn.
+    expect(codexWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
+  });
+});
+
+describe('validateThirdPartyApiKey', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  // Sentry INTEXURAOS-HOME-DEV-1F: an OpenRouter startup-time validation
+  // error is informational — the real user impact
+  // (a worker task failing) surfaces via the per-task error path. The Pino
+  // Sentry transport must not page on every orchestrator restart when one
+  // of these keys has been rotated/revoked upstream.
+  it('carries _skipSentry on the error log when the upstream returns a non-2xx', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"error":"unauthorized"}', { status: 401 }));
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
+
+    expect(fetchSpy).toHaveBeenCalled();
+    const errorCall = logger.calls.find(
+      ([level, , message]) =>
+        level === 'error' && typeof message === 'string' && message.startsWith('OPENROUTER_API_KEY')
+    );
+    expect(errorCall).toBeDefined();
+    expect(errorCall?.[1]).toMatchObject({ _skipSentry: true });
+  });
+
+  it('does not carry _skipSentry on the success info log', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{"content":[]}', { status: 200 })
+    );
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
+
+    const successCall = logger.calls.find(
+      ([level, , message]) =>
+        level === 'info' && typeof message === 'string' && message.startsWith('OPENROUTER_API_KEY')
+    );
+    expect(successCall).toBeDefined();
+    // Success path must remain pageable — a successful validation is a
+    // positive signal we want to keep in Sentry noise.
+    expect(successCall?.[1]).not.toMatchObject({ _skipSentry: true });
+  });
+
+  it('carries _skipSentry on OpenRouter startup validation errors', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('nope', { status: 401 }));
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
+
+    const errorCall = logger.calls.find(
+      ([level, , message]) =>
+        level === 'error' &&
+        typeof message === 'string' &&
+        message.startsWith('OPENROUTER_API_KEY validation failed')
+    );
+    expect(errorCall).toBeDefined();
+    expect(errorCall?.[1]).toMatchObject({ _skipSentry: true });
+  });
+
+  it('uses the OpenRouter key introspection endpoint and bearer authorization', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"data":{}}', { status: 200 }));
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
+
+    const [url, options] = fetchSpy.mock.calls[0] ?? [];
+    expect(url).toBe('https://openrouter.ai/api/v1/key');
+    expect(options).toMatchObject({
+      method: 'GET',
+      headers: { Authorization: 'Bearer sk-test-key-1234' },
+    });
+  });
+
+  it('uses the models endpoint for direct API-key runtimes without a configured model', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"data":[]}', { status: 200 }));
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('auto', 'sk-test-key-1234', logger);
+
+    const [url, options] = fetchSpy.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.anthropic.com/v1/models');
+    expect(options).toMatchObject({
+      method: 'GET',
+      headers: {
+        'x-api-key': 'sk-test-key-1234',
+        'anthropic-version': '2023-06-01',
+      },
+    });
+  });
+
+  it('uses a minimal messages request for a direct Anthropic runtime with a configured model', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"content":[]}', { status: 200 }));
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('sonnet', 'sk-test-key-1234', logger);
+
+    const [url, options] = fetchSpy.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.anthropic.com/v1/messages');
+    expect(options).toMatchObject({
+      method: 'POST',
+      headers: {
+        'x-api-key': 'sk-test-key-1234',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+    });
+    expect(JSON.parse(String(options?.body))).toEqual({
+      model: 'sonnet',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    });
+  });
+
+  it('skips validation for runtimes without direct API-key authentication', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('codex', 'sk-test-key-1234', logger);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(logger.calls).toContainEqual([
+      'info',
+      { workerTypeName: 'codex' },
+      'Skipping API-key validation for runtime without direct API-key authentication',
+    ]);
+  });
+
+  it('logs a warning without _skipSentry when validation cannot reach upstream', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'));
+
+    const logger = makeLogger();
+    const validation = validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await validation;
+
+    const warnCall = logger.calls.find(
+      ([level, , message]) =>
+        level === 'warn' &&
+        message ===
+          'OPENROUTER_API_KEY validation request failed (network issue) — key may still be valid'
+    );
+    expect(warnCall).toBeDefined();
+    expect(warnCall?.[1]).toMatchObject({
+      error: 'network down',
+      url: 'https://openrouter.ai/api/v1/key',
+      apiKey: '...1234',
+    });
+    expect(warnCall?.[1]).not.toMatchObject({ _skipSentry: true });
   });
 });

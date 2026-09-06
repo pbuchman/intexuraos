@@ -4,6 +4,7 @@
 
 export type {
   CalendarEvent,
+  CalendarEventsPage,
   CreateEventInput,
   UpdateEventInput,
   ListEventsInput,
@@ -26,6 +27,7 @@ export type { CalendarError, CalendarErrorCode } from './errors.js';
 
 export type {
   GoogleCalendarClient,
+  UpdateEventOptions,
   UserServiceClient,
   OAuthTokenResult,
   FailedEventRepository,
@@ -35,6 +37,36 @@ export type {
   ProcessedActionRepository,
   CalendarPreviewRepository,
 } from './ports.js';
+
+export type {
+  CalendarSchedule,
+  CalendarScheduleRun,
+  CalendarScheduleStatus,
+  CalendarScheduleTaskType,
+  ClaimedCalendarSchedule,
+  MatrixDeliveryStatus,
+  OutboundMatrixMessageResult,
+  WhatsAppScheduleClient,
+} from './schedules/types.js';
+export type {
+  CalendarScheduleRepository,
+  ClaimDueSchedulesInput,
+  MarkRunSentInput,
+  MarkRunFailedInput,
+} from './schedules/scheduleRepository.js';
+export {
+  CALENDAR_DAILY_LOOKAHEAD_PROMPT,
+  CALENDAR_DAILY_LOOKAHEAD_TASK_TYPE,
+} from './schedules/types.js';
+export {
+  validateScheduleCadence,
+  getLocalDateInTimeZone,
+  calculateNextScheduleRunAt,
+  calculateNextDailyRunAfterLocalDate,
+} from './schedules/scheduleTime.js';
+export { getDailyLookaheadSchedule } from './schedules/getDailyLookaheadSchedule.js';
+export { upsertDailyLookaheadSchedule } from './schedules/upsertDailyLookaheadSchedule.js';
+export { runDueSchedules } from './schedules/runDueSchedules.js';
 
 export {
   listEvents,
@@ -56,6 +88,17 @@ export {
   type UpdateEventRequest,
   type UpdateEventDeps,
 } from './useCases/updateEvent.js';
+export {
+  addEventAttendees,
+  type AddEventAttendeesRequest,
+  type AddEventAttendeesDeps,
+} from './useCases/addEventAttendees.js';
+export {
+  updateExistingEvent,
+  type UpdateExistingEventRequest,
+  type UpdateExistingEventChanges,
+  type UpdateExistingEventDeps,
+} from './useCases/updateExistingEvent.js';
 export {
   deleteEvent,
   type DeleteEventRequest,

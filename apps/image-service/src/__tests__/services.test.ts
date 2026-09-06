@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import {
   getServices,
@@ -75,47 +75,22 @@ describe('services', () => {
       expect(services.generateId).toBeDefined();
     });
 
-    it('createPromptGenerator returns google adapter for google provider', () => {
+    it('createPromptGenerator returns an OpenRouter adapter', () => {
       initializeServices();
 
       const services = getServices();
-      const generator = services.createPromptGenerator(LlmProviders.Google, LlmModels.Gemini25Pro, 'test-key', 'test-user-id', mockLogger);
+      const generator = services.createPromptGenerator('openrouter', 'gpt-4.1', 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
     });
 
-    it('createPromptGenerator returns openai adapter for openai provider', () => {
-      initializeServices();
-
-      const services = getServices();
-      const generator = services.createPromptGenerator('openai', 'gpt-4.1', 'test-key', 'test-user-id', mockLogger);
-
-      expect(generator).toBeDefined();
-      expect(generator.generateThumbnailPrompt).toBeDefined();
-    });
-
-    it('createImageGenerator returns OpenAI generator for gpt-image-1', () => {
+    it('createImageGenerator returns an OpenRouter generator for gpt-image-1', () => {
       initializeServices();
 
       const services = getServices();
       const generator = services.createImageGenerator(
         LlmModels.GPTImage1,
-        'test-key',
-        'test-user-id',
-        mockLogger
-      );
-
-      expect(generator).toBeDefined();
-      expect(generator.generate).toBeDefined();
-    });
-
-    it('createImageGenerator returns Google generator for gemini-2.5-flash-image', () => {
-      initializeServices();
-
-      const services = getServices();
-      const generator = services.createImageGenerator(
-        LlmModels.Gemini25FlashImage,
         'test-key',
         'test-user-id',
         mockLogger

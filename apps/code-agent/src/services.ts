@@ -141,7 +141,7 @@ export function initServices(config: ServiceConfig): void {
     evaluateEvent: (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> =>
       evaluateEvent({ logger, gitHubPRClient, resolveToolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS }, event, correctionContext),
     createReviewTask: (taskLogger, request) => createReviewTask({
-      logger: taskLogger, codeTaskRepo: repos.codeTaskRepo, userLookupService, taskDispatcher, taskEnqueueService,
+      logger: taskLogger, firestore, codeTaskRepo: repos.codeTaskRepo, userLookupService, taskDispatcher, taskEnqueueService,
       linearAgentClient, gitHubPRClient, userServiceClient, workerSettingsRepo: repos.workerSettingsRepo,
       orchestratorSecret: config.orchestratorSecret, automationLog, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo,
     }, request),
@@ -154,7 +154,16 @@ export function initServices(config: ServiceConfig): void {
       return resolvedUser.userId;
     },
     allowedBots: ALLOWED_BOTS, codeTaskRepo: repos.codeTaskRepo,
-    onReviewSkipped: createOnReviewSkippedCallback({ codeTaskRepo: repos.codeTaskRepo, linearAgentClient, automationLog, groupSummaryRepo: repos.groupSummaryRepo, logger }),
+    onReviewSkipped: createOnReviewSkippedCallback({
+      codeTaskRepo: repos.codeTaskRepo,
+      linearAgentClient,
+      gitHubPRClient,
+      whatsappNotifier,
+      resolveGitHubToken: async (userId: string) => await fetchGitHubToken(userServiceClient, userId, logger),
+      automationLog,
+      groupSummaryRepo: repos.groupSummaryRepo,
+      logger,
+    }),
     onUnauthorizedSender: createUnauthorizedSenderCommentHandler({ gitHubPRClient, userServiceClient, logger }),
   });
 
@@ -180,6 +189,7 @@ export function initServices(config: ServiceConfig): void {
     unifiedEvaluator, prTriagePublisher, mergeConflictDetector, automationLog, taskEnqueueService,
     codeTaskDispatchNotificationRepo: repos.codeTaskDispatchNotificationRepo,
     mergeQueueWatchRepo: repos.mergeQueueWatchRepo, executionMemoryRepo: repos.executionMemoryRepo,
+    sentryIssueEventRepo: repos.sentryIssueEventRepo,
     executionMemoryApplicationRepo: repos.executionMemoryApplicationRepo,
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
     ...(usageServiceClient !== undefined && { usageServiceClient }),

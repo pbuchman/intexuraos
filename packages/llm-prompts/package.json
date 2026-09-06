@@ -7,7 +7,8 @@
     "node": ">=22.0.0"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./message-digest/templates": "./src/message-digest/templates.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -18,6 +19,7 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "pino": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-json-schema": "^3.25.1"
   }
 }

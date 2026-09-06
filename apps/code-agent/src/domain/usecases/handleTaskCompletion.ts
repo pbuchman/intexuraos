@@ -50,8 +50,11 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 /* eslint-disable eqeqeq */
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { isRebaseClean, parseCodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 import { getServices } from '../../services.js';
 import { loadConfig } from '../../config.js';
+import type { CodeTask } from '../models/codeTask.js';
 import { parseLinearIdentifierFromUrl } from '../utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../utils/parseOwnerRepo.js';
 import { drainTaskQueue } from './drainTaskQueue.js';
@@ -60,6 +63,7 @@ import { deletePRTaskLock } from '../utils/prTaskLock.js';
 import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
 import { resolveCompletedTaskStatus } from '../utils/resolveCompletedTaskStatus.js';
 import { validatePrUrl } from '../utils/validatePrUrl.js';
+import { notifyTaskReadyForMergeIfEligible } from '../services/readyToMergeNotification.js';
 import {
   flushPendingTaskLogLines,
   recordRemediationDecision,
@@ -78,9 +82,11 @@ export type TaskCompleteWebhookBody = {
     summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
-    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    rebaseResult?: unknown;
     comment_replied?: boolean;
+    pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
     planning_outcome_label?: 'planned' | 'unclear';
+    planning_has_plan_doc?: '0' | '1';
     planning_superpowers_writing_plans_used?: '0' | '1';
     planning_linear_url?: string;
     planning_is_complex?: '0' | '1';
@@ -101,6 +107,12 @@ export type TaskCompleteWebhookBody = {
     gh_actions_status?: string;
     needs_remediation?: string;
     requires_re_review?: string;
+    merge_ready?: '1';
+    merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
+    sentry_issue_url?: string;
+    sentry_linear_issue?: string;
+    sentry_outcome?: 'fixed' | 'suppressed';
+    sentry_verification?: string;
   };
   error?: {
     code: string;
@@ -115,6 +127,18 @@ export type TaskCompleteWebhookBody = {
   duration?: number;
   resumedCompletion?: boolean;
 };
+
+type MergeReadyReason = NonNullable<NonNullable<TaskCompleteWebhookBody['result']>['merge_ready_reason']>;
+type TaskCompleteWebhookResult = NonNullable<TaskCompleteWebhookBody['result']>;
+
+function normalizeTaskResult(result: TaskCompleteWebhookResult | undefined): CodeTask['result'] | undefined {
+  if (result === undefined) return undefined;
+  const { rebaseResult, ...rest } = result;
+  if (rebaseResult === undefined) return rest;
+  const parsedRebaseResult = parseCodeTaskRebaseResult(rebaseResult);
+  if (parsedRebaseResult === undefined) return rest;
+  return { ...rest, rebaseResult: parsedRebaseResult };
+}
 
 export type HandleTaskCompletionResult =
   | { kind: 'received' }
@@ -147,7 +171,8 @@ export async function handleTaskCompletion(
         gitHubPRClient,
         userServiceClient,
       } = getServices();
-      const { taskId, status, result, error } = body;
+      const { taskId, status, error } = body;
+      const result = normalizeTaskResult(body.result);
 
       logger.info(
         {
@@ -155,7 +180,7 @@ export async function handleTaskCompletion(
           status,
           traceId,
           hasResult: result !== undefined,
-          resultKeys: result ? Object.keys(result) : [],
+          resultKeys: body.result ? Object.keys(body.result) : [],
           resultBranch: result?.branch,
           resultPrUrl: result?.prUrl,
           bodyKeys: Object.keys(body),
@@ -173,6 +198,19 @@ export async function handleTaskCompletion(
       const task = taskResult.value;
       const completedAt = new Date();
 
+      const markTaskMergeReady = async (reason: MergeReadyReason): Promise<void> => {
+        await codeTaskRepo.update(taskId, {
+          result: {
+            ...(task.result ?? {}),
+            /* v8 ignore start -- schema: merge-ready callers require result fields before invoking this helper; this fallback is defensive for malformed webhook payloads @preserve */
+            ...(result ?? {}),
+            /* v8 ignore stop @preserve */
+            merge_ready: '1',
+            merge_ready_reason: reason,
+          },
+        });
+      };
+
       // Set `ready-to-merge` on the Linear issue associated with a PR.
       // Shared between two callbacks that produce the same outcome:
       //   1. review completed with `needs_remediation='0'`
@@ -180,7 +218,7 @@ export async function handleTaskCompletion(
       //      `execution_outcome_label='already_completed'` (no new commits pushed)
       // Guarded by a PR-already-merged check (summary + GitHub API fallback) and
       // a planning-origin guard that auto-merges the plan PR instead of labeling.
-      const applyReadyToMergeLabel = async (prNumber: number): Promise<void> => {
+      const applyReadyToMergeLabel = async (prNumber: number, reason: MergeReadyReason): Promise<void> => {
         // Best-effort: set review-outcome label on the associated Linear issue
         // Skip if PR is already merged — handlePrClose already cleaned up labels.
         let prAlreadyMerged = false;
@@ -223,6 +261,7 @@ export async function handleTaskCompletion(
           const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
           let targetLinearIssueId: string | undefined;
           let targetUserId: string | undefined;
+          let targetTask: CodeTask = task;
           let label: string | undefined;
           let source: string | undefined;
 
@@ -240,6 +279,7 @@ export async function handleTaskCompletion(
             } else {
               targetLinearIssueId = originResult.value.linearIssueId;
               targetUserId = originResult.value.userId;
+              targetTask = originResult.value;
               label = 'ready-to-merge';
               source = 'origin';
             }
@@ -262,14 +302,17 @@ export async function handleTaskCompletion(
           }
 
           if (targetLinearIssueId === undefined) {
-            requestLog.warn({ taskId, prNumber },
+            requestLog.warn({ taskId, prNumber, [SKIP_SENTRY_KEY]: true },
               'No Linear issue available for review-outcome label — skipping');
           } else {
+            await markTaskMergeReady(reason);
+
             const issueValidation = await linearAgentClient.validateIssue({
               userId: targetUserId!,
               identifier: targetLinearIssueId,
             });
             if (issueValidation.ok) {
+              const readyToMergeAlreadyPresent = issueValidation.value.labels.includes('ready-to-merge');
               const labelResult = await linearAgentClient.updateIssueMetadata({
                 userId: targetUserId!,
                 issueId: issueValidation.value.id,
@@ -282,6 +325,34 @@ export async function handleTaskCompletion(
                 } else {
                   requestLog.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
                     'Set review-outcome label');
+
+                  if (label === 'ready-to-merge' && !readyToMergeAlreadyPresent) {
+                    const notificationPrUrl = result?.prUrl ?? targetTask.result?.prUrl ?? task.result?.prUrl;
+                    try {
+                      await notifyTaskReadyForMergeIfEligible(
+                        {
+                          gitHubPRClient,
+                          whatsappNotifier,
+                          resolveGitHubToken: async (userId: string) =>
+                            await fetchGitHubToken(userServiceClient, userId, logger),
+                          logger: requestLog,
+                        },
+                        {
+                          task: targetTask,
+                          userId: targetUserId!,
+                          linearIssueId: targetLinearIssueId,
+                          repository: task.repository,
+                          prNumber,
+                          ...(notificationPrUrl !== undefined && { prUrl: notificationPrUrl }),
+                        },
+                      );
+                    } catch (notificationError: unknown) {
+                      requestLog.warn(
+                        { error: notificationError, taskId, prNumber, linearIssueId: targetLinearIssueId },
+                        'Review-pass ready-to-merge notification failed (best-effort)',
+                      );
+                    }
+                  }
 
                   // Best-effort: recompute group summary with the new label so
                   // cached aggregateStatus reflects the actionable state.
@@ -333,9 +404,14 @@ export async function handleTaskCompletion(
           return { ok: false, message: 'Planning enforcement requires original linearIssueId' };
         }
 
+        let planningPrUrl = '';
         if (outcome === 'planned') {
-          const prUrl = planningResult.planning_pr_url ?? planningResult.prUrl;
-          if (!prUrl) {
+          if (planningResult.planning_pr_url !== undefined && planningResult.planning_pr_url !== '') {
+            planningPrUrl = planningResult.planning_pr_url;
+          } else if (planningResult.prUrl !== undefined && planningResult.prUrl !== '') {
+            planningPrUrl = planningResult.prUrl;
+          }
+          if (!planningPrUrl) {
             return {
               ok: false,
               message: 'Planning enforcement requires a PR URL for planned outcomes — all planned tasks must produce an evidence PR',
@@ -355,9 +431,6 @@ export async function handleTaskCompletion(
         const originalIssueUuid = originalIssue.id;
 
         if (outcome === 'planned') {
-          const isComplex = planningResult.planning_is_complex === '1';
-
-          // Normalize original issue: state → todo, labels based on complexity
           const [markTodo, parentLabels] = await Promise.all([
             linearAgentClient.updateIssueState({
               userId: task.userId,
@@ -367,8 +440,8 @@ export async function handleTaskCompletion(
             linearAgentClient.updateIssueMetadata({
               userId: task.userId,
               issueId: originalIssueUuid,
-              addLabels: isComplex ? ['complex-task'] : [],
-              removeLabels: isComplex ? ['unclear', 'code-task', 'planning-task'] : ['unclear', 'complex-task', 'planning-task'],
+              addLabels: ['code-task'],
+              removeLabels: ['unclear', 'planning-task', 'complex-task'],
             }),
           ]);
           if (!markTodo.ok) {
@@ -378,138 +451,13 @@ export async function handleTaskCompletion(
             return { ok: false, message: `Failed to normalize original issue labels: ${parentLabels.error.message}` };
           }
 
-          if (isComplex) {
-            /* v8 ignore start -- ts-type: planning_subtask_urls ?? '' fallback unreachable — webhook payload always sets the field on complex-path success @preserve */
-            const subtaskUrls = (planningResult.planning_subtask_urls ?? '')
-            /* v8 ignore stop @preserve */
-              .split(',')
-              .map((s) => s.trim())
-              .filter((s) => s !== '');
-
-            if (subtaskUrls.length > 0 && subtaskUrls.length >= originalIssue.childCount) {
-              for (const url of subtaskUrls) {
-                const identifier = parseLinearIdentifierFromUrl(url);
-                if (identifier === null) {
-                  return { ok: false, message: `Invalid subtask URL: ${url}` };
-                }
-
-                const subtaskValidation = await linearAgentClient.validateIssue({
-                  userId: task.userId,
-                  identifier,
-                });
-                if (!subtaskValidation.ok) {
-                  return { ok: false, message: `Failed to validate subtask ${identifier}: ${subtaskValidation.error.message}` };
-                }
-
-                const subtask = subtaskValidation.value;
-                if (subtask.parentId !== originalIssueUuid) {
-                  return { ok: false, message: `Subtask ${subtask.identifier} is not a direct child of the input issue — task rejected` };
-                }
-
-                const normalizeState = await linearAgentClient.updateIssueState({
-                  userId: task.userId,
-                  issueId: subtask.id,
-                  state: 'todo',
-                });
-                if (!normalizeState.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${subtask.identifier} state: ${normalizeState.error.message}` };
-                }
-
-                const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
-                  userId: task.userId,
-                  issueId: subtask.id,
-                  assigneeId: null,
-                  removeLabels: ['complex-task', 'unclear', 'planning-task'],
-                  addLabels: ['code-task'],
-                });
-                if (!normalizeMetadata.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${subtask.identifier} metadata: ${normalizeMetadata.error.message}` };
-                }
-              }
-
-              /* v8 ignore start -- ts-type: planning_pr_url ?? '' fallback unreachable in complex-success branch — webhook always sets pr_url after planning PR creation @preserve */
-              const planningPrUrl = planningResult.planning_pr_url ?? '';
-              /* v8 ignore stop @preserve */
-              if (planningPrUrl !== '') {
-                const prComment = await linearAgentClient.addComment({
-                  userId: task.userId,
-                  issueId: originalIssueUuid,
-                  body: `Planning PR: ${planningPrUrl}`,
-                });
-                if (!prComment.ok) {
-                  return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
-                }
-              }
-            } else {
-              const reason =
-                subtaskUrls.length === 0
-                  ? 'no subtask URLs provided'
-                  : `partial URL extraction (${String(subtaskUrls.length)} URLs < ${String(originalIssue.childCount)} children)`;
-              requestLog.warn(
-                { taskId, linearIssueId: task.linearIssueId, subtaskUrlCount: subtaskUrls.length, childCount: originalIssue.childCount },
-                `Complex planning: ${reason} — falling back to fetchDirectChildrenLive`
-              );
-
-              const directChildrenResult = await linearAgentClient.fetchDirectChildrenLive({
-                userId: task.userId,
-                issueId: originalIssueUuid,
-              });
-              if (!directChildrenResult.ok) {
-                return { ok: false, message: `Failed to fetch live direct children: ${directChildrenResult.error.message}` };
-              }
-
-              const directChildren = directChildrenResult.value.filter(
-                (child) => child.parentId === originalIssueUuid
-              );
-
-              for (const child of directChildren) {
-                const normalizeState = await linearAgentClient.updateIssueState({
-                  userId: task.userId,
-                  issueId: child.id,
-                  state: 'todo',
-                });
-                if (!normalizeState.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} state: ${normalizeState.error.message}` };
-                }
-
-                const normalizeMetadata = await linearAgentClient.updateIssueMetadata({
-                  userId: task.userId,
-                  issueId: child.id,
-                  assigneeId: null,
-                  removeLabels: ['complex-task', 'unclear', 'planning-task'],
-                  addLabels: ['code-task'],
-                });
-                if (!normalizeMetadata.ok) {
-                  return { ok: false, message: `Failed to normalize subtask ${child.identifier} metadata: ${normalizeMetadata.error.message}` };
-                }
-              }
-
-              /* v8 ignore start -- ts-type: planning_pr_url ?? '' fallback unreachable in complex-fallback branch (live-fetch path) — webhook always sets pr_url after planning PR creation @preserve */
-              const planningPrUrl = planningResult.planning_pr_url ?? '';
-              /* v8 ignore stop @preserve */
-              if (planningPrUrl !== '') {
-                const prComment = await linearAgentClient.addComment({
-                  userId: task.userId,
-                  issueId: originalIssueUuid,
-                  body: `Planning PR: ${planningPrUrl}`,
-                });
-                if (!prComment.ok) {
-                  return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
-                }
-              }
-            }
-          } else {
-            // LAST: stamp code-task on parent — proof of successful processing
-            const stampCodeTask = await linearAgentClient.updateIssueMetadata({
-              userId: task.userId,
-              issueId: originalIssueUuid,
-              assigneeId: null,
-              addLabels: ['code-task'],
-              removeLabels: ['unclear', 'planning-task'],
-            });
-            if (!stampCodeTask.ok) {
-              return { ok: false, message: `Failed to add code-task label to original issue: ${stampCodeTask.error.message}` };
-            }
+          const prComment = await linearAgentClient.addComment({
+            userId: task.userId,
+            issueId: originalIssueUuid,
+            body: `Planning PR: ${planningPrUrl}`,
+          });
+          if (!prComment.ok) {
+            return { ok: false, message: `Failed to comment planning PR: ${prComment.error.message}` };
           }
 
           return { ok: true };
@@ -841,7 +789,7 @@ export async function handleTaskCompletion(
         if (!countIsValid) {
           if (hasReviewId) {
             requestLog.warn(
-              { taskId, rawReviewCommentsPosted: rawCount },
+              { taskId, rawReviewCommentsPosted: rawCount, [SKIP_SENTRY_KEY]: true },
               'review_comments_posted missing or non-numeric; defaulting to "0" because review_id is present'
             );
             reviewResult.review_comments_posted = '0';
@@ -863,6 +811,69 @@ export async function handleTaskCompletion(
             ok: false,
             code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
             message: 'Review enforcement requires result.review_types',
+          };
+        }
+
+        return { ok: true };
+      };
+
+      const enforceSentryOutcome = (
+        sentryResult: NonNullable<typeof result>
+      ): { ok: true } | { ok: false; message: string; code: string } => {
+        if (task.sentryIssue === undefined) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires task.sentryIssue context',
+          };
+        }
+        if (task.linearIssueId === undefined) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires routed linearIssueId',
+          };
+        }
+        if (!sentryResult.prUrl) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.prUrl',
+          };
+        }
+        if (sentryResult.sentry_outcome !== 'fixed' && sentryResult.sentry_outcome !== 'suppressed') {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_outcome fixed or suppressed',
+          };
+        }
+        if (!sentryResult.sentry_issue_url) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_issue_url',
+          };
+        }
+        if (sentryResult.sentry_issue_url !== task.sentryIssue.issueUrl) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_issue_url to match the task Sentry issue',
+          };
+        }
+        if (!sentryResult.sentry_linear_issue) {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_linear_issue',
+          };
+        }
+        if (sentryResult.sentry_verification === undefined || sentryResult.sentry_verification.trim() === '') {
+          return {
+            ok: false,
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.sentry_verification',
           };
         }
 
@@ -1249,6 +1260,75 @@ export async function handleTaskCompletion(
           }
         }
 
+        if (task.agentType === 'sentry') {
+          if (result === undefined) {
+            requestLog.error(
+              { taskId, routedIssueId: task.linearIssueId, sentryIssue: task.sentryIssue },
+              'Sentry completion missing result payload'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              error: {
+                code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+                message: 'Sentry completion missing result payload',
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return { kind: 'fail' as const, code: 'INTERNAL_ERROR', message: failResult.error.message };
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: 'Sentry completion missing result payload',
+              errorCode: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return { kind: 'received' as const };
+          }
+
+          const sentryEnforcement = enforceSentryOutcome(result);
+          if (!sentryEnforcement.ok) {
+            requestLog.error(
+              {
+                taskId,
+                routedIssueId: task.linearIssueId,
+                sentryIssueUrl: task.sentryIssue?.issueUrl,
+                prUrl: result.prUrl,
+                errorCode: sentryEnforcement.code,
+                error: sentryEnforcement.message,
+              },
+              'Sentry deterministic enforcement failed'
+            );
+            const failResult = await codeTaskRepo.update(taskId, {
+              status: 'failed',
+              completedAt,
+              result,
+              error: {
+                code: sentryEnforcement.code,
+                message: sentryEnforcement.message,
+              },
+              callbackReceived: true,
+            });
+            if (!failResult.ok) {
+              return { kind: 'fail' as const, code: 'INTERNAL_ERROR', message: failResult.error.message };
+            }
+            await cleanupLockIfPR();
+
+            recordTaskFailed({
+              task, taskId, completedAt,
+              error: sentryEnforcement.message,
+              errorCode: sentryEnforcement.code,
+            });
+
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return { kind: 'received' as const };
+          }
+        }
+
         // Extract PR number from prUrl for findByPR correlation (INT-465).
         let prNumber: number | undefined;
         if (result?.prUrl) {
@@ -1260,6 +1340,21 @@ export async function handleTaskCompletion(
         if (prNumber === undefined && task.prNumber !== undefined) {
           prNumber = task.prNumber;
         }
+        const isPrStillOpen = (): boolean => task.prMergedAt === undefined && task.prClosedAt === undefined;
+        const getInReviewTransitionIssueId = (): string | undefined => {
+          if (
+            task.agentType === 'execution' ||
+            task.agentType === 'pull_request' ||
+            task.agentType === 'planning' ||
+            task.agentType === 'remediation' ||
+            prNumber === undefined ||
+            !isPrStillOpen()
+          ) {
+            return undefined;
+          }
+
+          return task.linearIssueId;
+        };
 
         const resolvedStatus = resolveCompletedTaskStatus(task.agentType);
         const executionMemoryPostRun = shouldQueueExecutionMemoryPostRun({
@@ -1303,24 +1398,34 @@ export async function handleTaskCompletion(
         // Best-effort: update PR summary when review completes
         if (resolvedStatus === 'reviewed' && prNumber !== undefined) {
           try {
-            const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
-            if (tokenResult.ok) {
-              const parsed = parseOwnerRepo(task.repository);
-              /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
-              if (parsed !== null) {
-              /* v8 ignore stop @preserve */
-                const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
-                if (detailsResult.ok) {
-                  await gitHubPRSummaryRepo.upsert({
-                    repository: task.repository,
-                    pullRequestNumber: prNumber,
-                    lastActivityAt: new Date(),
-                    lastReviewedCommitSha: detailsResult.value.headSha,
-                    lastReviewNeedsRemediation: result?.needs_remediation ?? null,
-                  });
-                  requestLog.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');
+            let reviewCommitSha: string | undefined = task.reviewCommitSha;
+
+            // Legacy tasks did not capture their review target. Preserve the old
+            // best-effort lookup for those documents only.
+            if (reviewCommitSha === undefined) {
+              const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+              if (tokenResult.ok) {
+                const parsed = parseOwnerRepo(task.repository);
+                /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
+                if (parsed !== null) {
+                /* v8 ignore stop @preserve */
+                  const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                  if (detailsResult.ok) {
+                    reviewCommitSha = detailsResult.value.headSha;
+                  }
                 }
               }
+            }
+
+            if (reviewCommitSha !== undefined) {
+              await gitHubPRSummaryRepo.upsert({
+                repository: task.repository,
+                pullRequestNumber: prNumber,
+                lastActivityAt: new Date(),
+                lastReviewedCommitSha: reviewCommitSha,
+                lastReviewNeedsRemediation: result?.needs_remediation ?? null,
+              });
+              requestLog.info({ taskId, prNumber, headSha: reviewCommitSha }, 'Updated lastReviewedCommitSha on PR summary');
             }
           } catch (reviewShaError: unknown) {
             requestLog.warn({ error: reviewShaError, taskId, prNumber }, 'Failed to update lastReviewedCommitSha (best-effort)');
@@ -1343,95 +1448,18 @@ export async function handleTaskCompletion(
                 signal: remediationSignal,
               });
 
-              await applyReadyToMergeLabel(prNumber);
+              await applyReadyToMergeLabel(prNumber, 'review_no_remediation');
             } else {
-              // Best-effort: remove stale review-outcome label from the associated Linear issue.
-              // A prior passing review may have set ready-to-merge / ready-to-implement;
-              // now that remediation is needed, clear it so the UI no longer shows merge-ready.
-              try {
-                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
-                let targetLinearIssueId: string | undefined; // @allow-undefined-type -- let binding requires union, not optional property
-                let targetUserId: string;
-                let labelToRemove: string;
-
-                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-                  targetLinearIssueId = originResult.value.linearIssueId;
-                  targetUserId = originResult.value.userId;
-                  labelToRemove = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
-                } else {
-                  targetLinearIssueId = task.linearIssueId;
-                  targetUserId = task.userId;
-                  labelToRemove = 'ready-to-merge';
-                }
-
-                if (targetLinearIssueId !== undefined) {
-                  await linearIssueService.removeLabel(targetUserId, targetLinearIssueId, labelToRemove);
-                  requestLog.info({ taskId, prNumber, label: labelToRemove, linearIssueId: targetLinearIssueId },
-                    'Removed stale review-outcome label after negative review');
-
-                  // Passing [] clears all label flags in the summary (same pattern as handlePrClose).
-                  // Safe because latestReviewNeedsRemediation is already true, which independently
-                  // blocks the merge-readiness check in deriveAggregateStatusFromSummary.
-                  const { groupSummaryRepo: summaryRepoForRemoval } = getServices();
-                  if (summaryRepoForRemoval !== undefined) {
-                    void summaryRepoForRemoval.recomputeWithLabels(
-                      targetUserId, targetLinearIssueId, [], completedAt.toISOString(),
-                    ).catch((recomputeErr: unknown) => {
-                      requestLog.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
-                        'Failed to recompute group summary after label removal (best-effort)');
-                    });
-                  }
-                }
-              } catch (labelRemovalError: unknown) {
-                requestLog.warn({ error: labelRemovalError, taskId, prNumber },
-                  'Failed to remove stale review-outcome label (best-effort)');
-              }
-
-              const { createRemediationTaskFn, logger: remediationLogger } = getServices();
-              if (createRemediationTaskFn !== undefined) {
-                const remediationResult = await createRemediationTaskFn(
-                  remediationLogger,
+              if (!isPrStillOpen()) {
+                requestLog.info(
                   {
-                    repository: task.repository,
+                    taskId,
                     prNumber,
-                    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
-                    senderLogin: task.repository.split('/')[0] ?? task.userId,
-                    /* v8 ignore stop @preserve */
-                    workerType: 'auto',
-                    eventId: taskId,
-                    ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
-                    ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-                    ...(task.prBranch !== undefined && { prBranch: task.prBranch }),
+                    hasPrMergedAt: task.prMergedAt !== undefined,
+                    hasPrClosedAt: task.prClosedAt !== undefined,
                   },
+                  'Skipping remediation task creation because PR is already merged or closed',
                 );
-                if (remediationResult.ok) {
-                  requestLog.info(
-                    { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
-                    'Created remediation task from review task-complete',
-                  );
-                  recordRemediationDecision({
-                    repository: task.repository,
-                    prNumber,
-                    userId: task.userId,
-                    required: true,
-                    signal: remediationSignal,
-                    taskId: remediationResult.value.taskId,
-                  });
-                } else {
-                  requestLog.warn(
-                    { taskId, prNumber, error: remediationResult.error },
-                    'Failed to create remediation task from review task-complete (best-effort)',
-                  );
-                  recordRemediationDecision({
-                    repository: task.repository,
-                    prNumber,
-                    userId: task.userId,
-                    required: true,
-                    signal: remediationSignal,
-                  });
-                }
-              } else {
-                requestLog.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
                 recordRemediationDecision({
                   repository: task.repository,
                   prNumber,
@@ -1439,6 +1467,107 @@ export async function handleTaskCompletion(
                   required: true,
                   signal: remediationSignal,
                 });
+              } else {
+                // Best-effort: remove stale review-outcome label from the associated Linear issue.
+                // A prior passing review may have set ready-to-merge / ready-to-implement;
+                // now that remediation is needed, clear it so the UI no longer shows merge-ready.
+                try {
+                  const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+                  let targetLinearIssueId: string | undefined; // @allow-undefined-type -- let binding requires union, not optional property
+                  let targetUserId: string;
+                  let labelToRemove: string;
+
+                  if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+                    targetLinearIssueId = originResult.value.linearIssueId;
+                    targetUserId = originResult.value.userId;
+                    labelToRemove = originResult.value.agentType === 'planning' ? 'ready-to-implement' : 'ready-to-merge';
+                  } else {
+                    targetLinearIssueId = task.linearIssueId;
+                    targetUserId = task.userId;
+                    labelToRemove = 'ready-to-merge';
+                  }
+
+                  if (targetLinearIssueId !== undefined) {
+                    await linearIssueService.removeLabel(targetUserId, targetLinearIssueId, labelToRemove);
+                    requestLog.info({ taskId, prNumber, label: labelToRemove, linearIssueId: targetLinearIssueId },
+                      'Removed stale review-outcome label after negative review');
+
+                    // Passing [] clears all label flags in the summary (same pattern as handlePrClose).
+                    // Safe because latestReviewNeedsRemediation is already true, which independently
+                    // blocks the merge-readiness check in deriveAggregateStatusFromSummary.
+                    const { groupSummaryRepo: summaryRepoForRemoval } = getServices();
+                    if (summaryRepoForRemoval !== undefined) {
+                      void summaryRepoForRemoval.recomputeWithLabels(
+                        targetUserId, targetLinearIssueId, [], completedAt.toISOString(),
+                      ).catch((recomputeErr: unknown) => {
+                        requestLog.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                          'Failed to recompute group summary after label removal (best-effort)');
+                      });
+                    }
+                  }
+                } catch (labelRemovalError: unknown) {
+                  requestLog.warn({ error: labelRemovalError, taskId, prNumber },
+                    'Failed to remove stale review-outcome label (best-effort)');
+                }
+
+                const { createRemediationTaskFn, logger: remediationLogger } = getServices();
+                if (createRemediationTaskFn !== undefined) {
+                  const remediationResult = await createRemediationTaskFn(
+                    remediationLogger,
+                    {
+                      repository: task.repository,
+                      prNumber,
+                      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard, repository always contains '/' @preserve */
+                      senderLogin: task.repository.split('/')[0] ?? task.userId,
+                      /* v8 ignore stop @preserve */
+                      workerType: 'auto',
+                      eventId: taskId,
+                      ...(task.baseBranch !== undefined && { baseBranch: task.baseBranch }),
+                      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+                      ...(task.prBranch !== undefined && { prBranch: task.prBranch }),
+                    },
+                  );
+                  if (remediationResult.ok) {
+                    requestLog.info(
+                      { taskId, prNumber, remediationTaskId: remediationResult.value.taskId },
+                      'Created remediation task from review task-complete',
+                    );
+                    recordRemediationDecision({
+                      repository: task.repository,
+                      prNumber,
+                      userId: task.userId,
+                      required: true,
+                      signal: remediationSignal,
+                      taskId: remediationResult.value.taskId,
+                    });
+                  } else {
+                    requestLog.warn(
+                      {
+                        taskId,
+                        prNumber,
+                        error: remediationResult.error,
+                        [SKIP_SENTRY_KEY]: true,
+                      },
+                      'Failed to create remediation task from review task-complete (best-effort)',
+                    );
+                    recordRemediationDecision({
+                      repository: task.repository,
+                      prNumber,
+                      userId: task.userId,
+                      required: true,
+                      signal: remediationSignal,
+                    });
+                  }
+                } else {
+                  requestLog.warn({ taskId, prNumber }, 'createRemediationTaskFn not configured, skipping remediation creation');
+                  recordRemediationDecision({
+                    repository: task.repository,
+                    prNumber,
+                    userId: task.userId,
+                    required: true,
+                    signal: remediationSignal,
+                  });
+                }
               }
             }
           } catch (remediationError: unknown) {
@@ -1473,13 +1602,22 @@ export async function handleTaskCompletion(
           result?.requires_re_review === '0' &&
           result.execution_outcome_label === 'already_completed'
         ) {
-          await applyReadyToMergeLabel(prNumber);
+          await applyReadyToMergeLabel(prNumber, 'remediation_already_completed');
         }
 
-        // Best-effort In Review transition for agent types without deterministic enforcement
-        // (planning, execution, and pull_request agents handle this in their own enforcement paths)
-        if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
-          await linearIssueService.markInReview(task.userId, task.linearIssueId);
+        if (
+          task.agentType === 'pull_request' &&
+          result?.pull_request_outcome_label === 'no_changes_needed' &&
+          isRebaseClean(parseCodeTaskRebaseResult(result.rebaseResult))
+        ) {
+          await markTaskMergeReady('pull_request_no_changes_rebase_clean');
+        }
+
+        // Best-effort In Review transition for agent types without deterministic enforcement.
+        // If the PR is already merged/closed, handlePrClose owns the final Linear state.
+        const inReviewTransitionIssueId = getInReviewTransitionIssueId();
+        if (inReviewTransitionIssueId !== undefined) {
+          await linearIssueService.markInReview(task.userId, inReviewTransitionIssueId);
         }
 
         // Send WhatsApp notification (use updated task with result populated)
@@ -1513,11 +1651,17 @@ export async function handleTaskCompletion(
         }
 
         metricsClient.incrementTasksCompleted(task.workerType, resolvedStatus).catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 
@@ -1623,11 +1767,17 @@ export async function handleTaskCompletion(
             await cleanupLockIfPR();
 
             metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((metricsErr) => {
-              requestLog.warn({ taskId, error: metricsErr }, 'Failed to record task completion metric');
+              requestLog.warn(
+                { taskId, [SKIP_SENTRY_KEY]: true, error: metricsErr },
+                'Failed to record task completion metric'
+              );
             });
             if (body.duration) {
               metricsClient.recordTaskDuration(task.workerType, body.duration).catch((metricsErr) => {
-                requestLog.warn({ taskId, error: metricsErr }, 'Failed to record task duration metric');
+                requestLog.warn(
+                  { taskId, [SKIP_SENTRY_KEY]: true, error: metricsErr },
+                  'Failed to record task duration metric'
+                );
               });
             }
 
@@ -1655,11 +1805,17 @@ export async function handleTaskCompletion(
         );
 
         metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 
@@ -1698,11 +1854,17 @@ export async function handleTaskCompletion(
         );
 
         metricsClient.incrementTasksCompleted(task.workerType, 'interrupted').catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 
@@ -1742,11 +1904,17 @@ export async function handleTaskCompletion(
         );
 
         metricsClient.incrementTasksCompleted(task.workerType, 'cancelled').catch((err) => {
-          requestLog.warn({ taskId, error: err }, 'Failed to record task completion metric');
+          requestLog.warn(
+            { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+            'Failed to record task completion metric'
+          );
         });
         if (body.duration) {
           metricsClient.recordTaskDuration(task.workerType, body.duration).catch((err) => {
-            requestLog.warn({ taskId, error: err }, 'Failed to record task duration metric');
+            requestLog.warn(
+              { taskId, [SKIP_SENTRY_KEY]: true, error: err },
+              'Failed to record task duration metric'
+            );
           });
         }
 

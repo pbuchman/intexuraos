@@ -51,8 +51,8 @@ describe('missingFieldsPrompt', () => {
 // ---------------------------------------------------------------------------
 // runVerification — selects between the test-only verifier override and the
 // production `verifyCompletion`. Both arms are exercised here directly so the
-// dispatcher-body branch doesn't need a v8 ignore. (v8 ignore on branches is
-// not allowed — see .claude/reference/coverage-exemptions.md.)
+// dispatcher-body branch doesn't need a v8 ignore. Branch ignores are not
+// allowed by the repository coverage verifier.
 // ---------------------------------------------------------------------------
 
 describe('runVerification [INT-1470]', () => {

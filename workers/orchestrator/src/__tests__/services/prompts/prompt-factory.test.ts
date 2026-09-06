@@ -9,6 +9,7 @@ import {
   pullRequestPrompt,
   remediationPrompt,
   reviewPrompt,
+  sentryPrompt,
 } from '../../../services/system-prompt.js';
 
 const baseParams = {
@@ -44,6 +45,10 @@ describe('getPromptForAgent', () => {
 
   it('returns askAgentPrompt for ask_agent', () => {
     expect(getPromptForAgent('ask_agent')).toBe(askAgentPrompt);
+  });
+
+  it('returns sentryPrompt for sentry', () => {
+    expect(getPromptForAgent('sentry')).toBe(sentryPrompt);
   });
 });
 
@@ -102,5 +107,58 @@ describe('buildSystemPrompt dispatch', () => {
       agentType: 'ask_agent',
     });
     expect(prompt).toContain('[ASK AGENT MODE]');
+  });
+
+  it('uses Sentry prompt with issue context when agentType is sentry', () => {
+    const prompt = systemPrompt.build({
+      ...baseParams,
+      agentType: 'sentry',
+      sentryIssue: {
+        organizationSlug: 'intexura',
+        projectSlug: 'code-agent',
+        projectId: 'project-1',
+        issueId: '123456',
+        issueShortId: 'CODE-1',
+        issueUrl: 'https://intexura.sentry.io/issues/123456/',
+        title: 'TypeError: cannot read property',
+        action: 'created',
+        eventId: 'event-1',
+        receivedAt: '2026-06-28T12:00:00.000Z',
+      },
+    });
+
+    expect(prompt).toContain('[AGENT:SENTRY]');
+    expect(prompt).toContain('- Project ID: project-1');
+    expect(prompt).toContain('- Short ID: CODE-1');
+    expect(prompt).toContain('- Event ID: event-1');
+    expect(prompt).toContain('https://intexura.sentry.io/issues/123456/');
+    expect(prompt).toContain('Fetch current SentryBox issue details');
+    expect(prompt).toContain('recent events');
+    expect(prompt).toContain('attempt reproduction');
+    expect(prompt).toContain('SENTRY_AGENT_FINAL:');
+    expect(prompt).toContain('outcome: <fixed|suppressed|failed>');
+    expect(prompt).toContain('pr: <GitHub PR URL>');
+  });
+
+  it('uses Sentry prompt fallbacks when issue context and optional metadata are absent', () => {
+    const {
+      workerType: _workerType,
+      modelName: _modelName,
+      taskUrl: _taskUrl,
+      ...params
+    } = baseParams;
+    const prompt = systemPrompt.build({
+      ...params,
+      agentType: 'sentry',
+    });
+
+    expect(prompt).toContain('- Organization: unknown');
+    expect(prompt).toContain('- Issue URL: unknown');
+    expect(prompt).toContain('- SentryBox: <SentryBox issue URL>');
+    expect(prompt).toContain(
+      '- Worker Type: `<auto|opus|sonnet|codex|codex-xhigh|openrouter-free>`'
+    );
+    expect(prompt).toContain('- Model: `default`');
+    expect(prompt).not.toContain('IntexuraOS Code Task: [View task]');
   });
 });

@@ -9,12 +9,9 @@
  * them testable in unit tests.
  */
 
-import { writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
-import { initWorker } from '@intexuraos/infra-sentry';
-
 import { main } from './main.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
@@ -31,6 +28,7 @@ import {
 } from './bootstrap/service-wiring.js';
 import { ensureDirectoryExists } from './bootstrap/fs-utils.js';
 import { defaultNodeEnv } from './bootstrap/node-env.js';
+import { initOrchestratorObservability } from './bootstrap/observability-identity.js';
 
 function buildOrchestratorConfig(
   env: BootstrapEnvConfig,
@@ -71,7 +69,7 @@ function readCodeVersion(): string {
  * `.catch` reports and exits.
  *
  * The body itself is unit-tested in `start.test.ts`, which mocks every
- * bootstrap module plus `node:fs`, `@intexuraos/infra-sentry`, and
+ * bootstrap module plus `node:fs`, the observability identity boundary, and
  * `node:child_process`. Only `readCodeVersion` is excluded from coverage
  * because it wraps `execSync` directly.
  *
@@ -97,21 +95,15 @@ export async function start(): Promise<void> {
   ensureDirectoryExists(orchestratorDir);
   ensureDirectoryExists(worktreeDir);
   ensureDirectoryExists(logsDir);
+  ensureDirectoryExists(join(logsDir, 'inactivity-evidence'));
 
   const env = loadEnvConfig();
   const repoPath = env.repoPath ?? defaultRepoPath;
 
   validateGcpCredentials(env.gcpSaKeyPath, env.projectId);
 
-  const privateKeyPath = join(orchestratorDir, 'github-app.pem');
-  const githubPrivateKey = fetchGitHubKeys({
-    projectId: env.projectId,
-    cachePath: privateKeyPath,
-    ...(env.githubPrivateKeyOverride !== undefined
-      ? { override: env.githubPrivateKeyOverride }
-      : {}),
-  });
-  writeFileSync(privateKeyPath, githubPrivateKey, { mode: 0o600 });
+  const privateKeyPath = env.githubPrivateKeyPath;
+  fetchGitHubKeys({ privateKeyPath });
 
   await ensurePortAvailable(env.port);
 
@@ -122,9 +114,7 @@ export async function start(): Promise<void> {
     logsDir,
     privateKeyPath
   );
-  const { logger, flush } = initWorker({
-    serviceName: 'orchestrator',
-    environment: env.environment,
+  const { logger, flush } = initOrchestratorObservability({
     ...(env.sentryDsn !== undefined ? { sentryDsn: env.sentryDsn } : {}),
     ...(env.release !== undefined ? { release: env.release } : {}),
   });
@@ -154,10 +144,6 @@ export async function start(): Promise<void> {
   void validateWorkerApiKeys(
     services.workerAuthRegistry,
     {
-      minimaxKey: env.minimaxApiKey,
-      mimoKey: env.mimoApiKey,
-      dashscopeKey: env.dashscopeApiKey,
-      kimiKey: env.kimiApiKey,
       openRouterKey: env.openRouterApiKey,
     },
     logger

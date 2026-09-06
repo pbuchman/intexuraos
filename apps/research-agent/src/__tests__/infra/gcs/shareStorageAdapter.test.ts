@@ -36,7 +36,7 @@ describe('GcsShareStorageAdapter', () => {
   });
 
   describe('upload', () => {
-    it('uploads HTML content to GCS successfully', async () => {
+    it('uses a non-resumable upload for HTML content', async () => {
       mockSave.mockResolvedValueOnce(undefined);
 
       const result = await adapter.upload('research/abc123.html', '<html></html>');
@@ -49,6 +49,7 @@ describe('GcsShareStorageAdapter', () => {
       expect(mockFile).toHaveBeenCalledWith('research/abc123.html');
       expect(mockSave).toHaveBeenCalledWith('<html></html>', {
         contentType: 'text/html; charset=utf-8',
+        resumable: false,
         metadata: {
           cacheControl: 'public, max-age=3600',
         },

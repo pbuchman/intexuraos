@@ -148,7 +148,7 @@ describe('repairArchivedOpenPrGroups', () => {
     }
   });
 
-  it('restores the newest archived review task for an open PR group and preserves updatedAt', async () => {
+  it('restores the newest archived review task without backdating updatedAt', async () => {
     const olderArchived = makeTask({
       id: 'task-older',
       agentType: 'planning',
@@ -175,7 +175,6 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenCalledWith('task-latest-review', {
       status: 'reviewed',
-      updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
     expect(recomputeGroupFromTasksMock).toHaveBeenCalledWith(
       'user-1',
@@ -194,7 +193,7 @@ describe('repairArchivedOpenPrGroups', () => {
     }
   });
 
-  it('repairs standalone archived tasks and converts Date-like updatedAt values before update', async () => {
+  it('repairs standalone archived tasks without forwarding their historical updatedAt', async () => {
     const dateWithToMillis = new DateWithToMillis('2026-05-07T09:00:00Z');
     const standaloneTask = {
       ...makeTask({
@@ -220,7 +219,6 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(findRecentTasksByLinearIssueMock).not.toHaveBeenCalled();
     expect(updateMock).toHaveBeenCalledWith('task-standalone', {
       status: 'reviewed',
-      updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
     expect(recomputeGroupFromTasksMock).toHaveBeenCalledWith(
       'user-1',
@@ -273,7 +271,6 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenCalledWith('task-stable-execution-sibling', {
       status: 'implemented',
-      updatedAt: new Date('2026-05-07T08:00:00Z'),
     });
     expect(recomputeGroupFromTasksMock).toHaveBeenCalledWith(
       'user-1',
@@ -348,7 +345,6 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenCalledWith('task-merge-ready-review', {
       status: 'reviewed',
-      updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
     expect(recomputeGroupFromTasksMock).toHaveBeenCalledWith(
       'user-1',
@@ -426,7 +422,6 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenCalledWith('task-planning-sibling', {
       status: 'planned',
-      updatedAt: new Date('2026-05-07T08:00:00Z'),
     });
   });
 
@@ -466,7 +461,6 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenCalledWith('task-stable-execution-sibling', {
       status: 'implemented',
-      updatedAt: new Date('2026-05-07T08:00:00Z'),
     });
   });
 
@@ -517,7 +511,6 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenCalledWith('task-pr', {
       status: 'implemented',
-      updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
   });
 
@@ -570,11 +563,9 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenNthCalledWith(1, 'task-latest-review', {
       status: 'reviewed',
-      updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
     expect(updateMock).toHaveBeenNthCalledWith(2, 'task-latest-review', {
       status: 'archived',
-      updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
     if (result.ok) {
       expect(result.value.groupsRepaired).toBe(0);
@@ -847,12 +838,114 @@ describe('repairArchivedOpenPrGroups', () => {
     expect(updateMock).toHaveBeenCalledTimes(1);
     expect(updateMock).toHaveBeenCalledWith('task-open-pr-2', {
       status: 'implemented',
-      updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
     if (result.ok) {
       expect(result.value.groupsEvaluated).toBe(1);
       expect(result.value.groupsRepaired).toBe(1);
     }
+  });
+
+  it('selects the newest repair candidate by createdAt instead of metadata updatedAt', async () => {
+    const olderAttemptWithNewerMetadata = makeTask({
+      id: 'task-older-attempt',
+      agentType: 'review',
+      status: 'archived',
+      createdAt: Timestamp.fromDate(new Date('2026-05-07T08:00:00Z')),
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T11:00:00Z')),
+    });
+    const newerAttemptWithOlderMetadata = makeTask({
+      id: 'task-newer-attempt',
+      agentType: 'review',
+      status: 'archived',
+      createdAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T07:00:00Z')),
+    });
+
+    findRecentTasksByPRMock.mockResolvedValue(ok([
+      olderAttemptWithNewerMetadata,
+      newerAttemptWithOlderMetadata,
+    ]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(ok([
+      olderAttemptWithNewerMetadata,
+      newerAttemptWithOlderMetadata,
+    ]));
+    updateMock.mockResolvedValue(ok({
+      ...newerAttemptWithOlderMetadata,
+      status: 'reviewed',
+    }));
+
+    const useCase = createRepairArchivedOpenPrGroupsUseCase(deps);
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith('task-newer-attempt', {
+      status: 'reviewed',
+    });
+  });
+
+  it('uses task ID descending as the deterministic tie-breaker for equal createdAt', async () => {
+    const createdAt = Timestamp.fromDate(new Date('2026-05-07T09:00:00Z'));
+    const lowerIdWithNewerMetadata = makeTask({
+      id: 'task-a',
+      agentType: 'review',
+      status: 'archived',
+      createdAt,
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T11:00:00Z')),
+    });
+    const higherIdWithOlderMetadata = makeTask({
+      id: 'task-z',
+      agentType: 'review',
+      status: 'archived',
+      createdAt,
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T07:00:00Z')),
+    });
+
+    findRecentTasksByPRMock.mockResolvedValue(ok([
+      lowerIdWithNewerMetadata,
+      higherIdWithOlderMetadata,
+    ]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(ok([
+      lowerIdWithNewerMetadata,
+      higherIdWithOlderMetadata,
+    ]));
+    updateMock.mockResolvedValue(ok({
+      ...higherIdWithOlderMetadata,
+      status: 'reviewed',
+    }));
+
+    const useCase = createRepairArchivedOpenPrGroupsUseCase(deps);
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith('task-z', { status: 'reviewed' });
+  });
+
+  it('recomputes the summary with the exact task returned by the repository', async () => {
+    const archivedTask = makeTask({
+      id: 'task-exact-result',
+      agentType: 'review',
+      status: 'archived',
+      completedAt: Timestamp.fromDate(new Date('2026-05-06T09:00:00Z')),
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
+    });
+    const persistedTask = {
+      ...archivedTask,
+      status: 'reviewed' as const,
+      statusChangedAt: Timestamp.fromDate(new Date('2026-05-07T12:00:00Z')),
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T12:00:00Z')),
+    };
+    findRecentTasksByPRMock.mockResolvedValue(ok([archivedTask]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(ok([archivedTask]));
+    updateMock.mockResolvedValue(ok(persistedTask));
+
+    const useCase = createRepairArchivedOpenPrGroupsUseCase(deps);
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    const recomputeCall = recomputeGroupFromTasksMock.mock.calls[0];
+    expect(recomputeCall).toBeDefined();
+    const recomputedTasks = recomputeCall?.[2] ?? [];
+    expect(recomputedTasks.find((task) => task.id === persistedTask.id)).toBe(persistedTask);
   });
 
   it('counts failed task restores when the status update fails', async () => {

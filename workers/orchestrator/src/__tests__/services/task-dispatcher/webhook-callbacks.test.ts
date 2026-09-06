@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
   sendSetupFailureWebhook,
   buildResultFromVerification,
@@ -155,9 +156,7 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
         summary: 'Planned it',
         superpowers_writing_plans_used: true,
         linear_issue: 'https://linear.app/x',
-        complex_task: true,
         plan_doc: true,
-        subtask_urls: ['https://linear.app/y'],
         plan_pr: 'https://github.com/pr/1',
         clarification_message: '',
       }),
@@ -170,6 +169,30 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
     expect(result.planning_pr_url).toBe('https://github.com/pr/1');
   });
 
+  it('maps planning results without complex or subtask fields', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        outcome: 'planned',
+        superpowers_writing_plans_used: true,
+        linear_issue: 'https://linear.app/pbuchman/issue/INT-1841/example',
+        plan_doc: true,
+        plan_pr: 'https://github.com/pbuchman/intexuraos/pull/1',
+        clarification_message: '',
+        summary: 'done',
+      }),
+      'planning'
+    );
+
+    expect(result.planning_outcome_label).toBe('planned');
+    expect(result.planning_has_plan_doc).toBe('1');
+    expect(result.planning_pr_url).toBe('https://github.com/pbuchman/intexuraos/pull/1');
+    expect(result.planning_is_complex).toBeUndefined();
+    expect(result.planning_subtask_urls).toBeUndefined();
+  });
+
   it('records planning flag as "0" when not-used and skips empty plan_pr', () => {
     const task = makeTask();
     const result = buildResultFromVerification(
@@ -180,9 +203,7 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
         summary: 'Planned it',
         superpowers_writing_plans_used: false,
         linear_issue: 'https://linear.app/x',
-        complex_task: false,
         plan_doc: false,
-        subtask_urls: [],
         plan_pr: '',
         clarification_message: 'why',
       }),
@@ -319,7 +340,7 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
     expect(result.requires_re_review).toBe('0');
   });
 
-  it('overlays pull_request fields (pr, comment_replied=yes)', () => {
+  it('overlays pull_request fields (pr, pull_request_outcome, comment_replied=yes)', () => {
     const task = makeTask();
     const result = buildResultFromVerification(
       task,
@@ -327,12 +348,63 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
       parsedVerdict({
         summary: 'Replied',
         pr: 'https://github.com/pr/55',
+        pull_request_outcome: 'no_changes_needed',
         comment_replied: 'yes',
       }),
       'pull_request'
     );
     expect(result.prUrl).toBe('https://github.com/pr/55');
+    expect(result.pull_request_outcome_label).toBe('no_changes_needed');
     expect(result.comment_replied).toBe(true);
+  });
+
+  it('overlays Sentry fields including PR, issue URLs, outcome, and verification evidence', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Fixed a Sentry issue',
+        outcome: 'fixed',
+        pr: 'https://github.com/pbuchman/intexuraos/pull/123',
+        sentry_issue: 'https://intexura.sentry.io/issues/123456/',
+        linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        verification: 'pnpm --dir apps/code-agent test sentry',
+      }),
+      'sentry'
+    );
+
+    expect(result.prUrl).toBe('https://github.com/pbuchman/intexuraos/pull/123');
+    expect(result.sentry_issue_url).toBe('https://intexura.sentry.io/issues/123456/');
+    expect(result.sentry_linear_issue).toBe(
+      'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror'
+    );
+    expect(result.sentry_outcome).toBe('fixed');
+    expect(result.sentry_verification).toBe('pnpm --dir apps/code-agent test sentry');
+  });
+
+  it('infers Sentry result fields and omits empty PR or invalid successful outcome', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Sentry task failed before code changes',
+        outcome: 'failed',
+        pr: '',
+        sentry_issue: 'https://intexura.sentry.io/issues/123456/',
+        linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        verification: 'not run',
+      })
+    );
+
+    expect(result.prUrl).toBeUndefined();
+    expect(result.sentry_outcome).toBeUndefined();
+    expect(result.sentry_issue_url).toBe('https://intexura.sentry.io/issues/123456/');
+    expect(result.sentry_linear_issue).toBe(
+      'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror'
+    );
+    expect(result.sentry_verification).toBe('not run');
   });
 
   it('pull_request: treats non-yes comment_replied as false', () => {
@@ -814,13 +886,14 @@ describe('checkForResult', () => {
     expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
   });
 
-  it('swallows exec errors and logs them', async () => {
+  it('swallows exec errors and suppresses expected best-effort result checks from Sentry', async () => {
     const task = makeTask();
     const exec = makeExec([[isGitBranchShowCurrent, new Error('not a git repo')]]);
     const read = makeRead('{}');
     expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 'task-1' }),
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-1', [SKIP_SENTRY_KEY]: true }),
       'Failed to check for task result'
     );
   });

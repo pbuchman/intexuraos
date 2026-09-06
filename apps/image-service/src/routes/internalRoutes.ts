@@ -93,7 +93,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       schema: {
         operationId: 'generateImageInternal',
         summary: 'Generate image from prompt (internal)',
-        description: 'Internal endpoint for generating images using OpenAI or Google models',
+        description: 'Internal endpoint for generating images through OpenRouter',
         tags: ['internal'],
         body: generateImageBodySchema,
         response: {

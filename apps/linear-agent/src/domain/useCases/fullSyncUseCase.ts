@@ -148,13 +148,28 @@ export async function fullSyncAllUsers(deps: FullSyncDeps & {
   logger.info({ userCount: userIds.length }, 'Starting full sync for all users');
 
   let totalIssues = 0;
+  let firstFailure: LinearError | null = null;
+  let transientFailure: LinearError | null = null;
+
   for (const userId of userIds) {
     const result = await fullSync(userId, deps);
     if (result.ok) {
       totalIssues += result.value.total;
-    } else {
-      logger.error({ userId, error: result.error }, 'Failed to sync user');
+      continue;
     }
+
+    logger.error({ userId, error: result.error }, 'Failed to sync user');
+    firstFailure ??= result.error;
+    if (result.error.code === 'UPSTREAM_UNAVAILABLE') {
+      transientFailure = result.error;
+    }
+  }
+
+  if (transientFailure !== null) {
+    return err(transientFailure);
+  }
+  if (firstFailure !== null) {
+    return err(firstFailure);
   }
 
   return ok({ userCount: userIds.length, totalIssues });

@@ -22,6 +22,19 @@ export function formatPrice(pricePerMillion: number): string {
   return pricePerMillion.toFixed(2);
 }
 
+export function orderModelsForDisplay(
+  availableModels: readonly OpenRouterModelInfo[],
+  selectedModelIds: readonly string[],
+): OpenRouterModelInfo[] {
+  const byId = new Map(availableModels.map((model) => [model.id, model]));
+  const selected = selectedModelIds.flatMap((id) => {
+    const model = byId.get(id);
+    return model === undefined ? [] : [model];
+  });
+  const selectedIds = new Set(selected.map((model) => model.id));
+  return [...selected, ...availableModels.filter((model) => !selectedIds.has(model.id))];
+}
+
 function formatContextLength(length: number): string {
   if (length >= 1_000_000) {
     return `${(length / 1_000_000).toFixed(1)}M`;
@@ -40,9 +53,10 @@ export function OpenRouterModelSelector({
 }: OpenRouterModelSelectorProps): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
 
+  const orderedModels = orderModelsForDisplay(availableModels, selectedModelIds);
   const filteredModels = searchQuery.trim() === ''
-    ? availableModels
-    : availableModels.filter(
+    ? orderedModels
+    : orderedModels.filter(
         (m) =>
           m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           m.provider.toLowerCase().includes(searchQuery.toLowerCase())

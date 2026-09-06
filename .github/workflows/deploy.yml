@@ -1,8 +1,6 @@
 name: Deploy
 
 on:
-  push:
-    branches: [development]
   workflow_dispatch:
     inputs:
       target:
@@ -13,7 +11,6 @@ on:
         options:
           - hetzner-prod
           - firestore
-          - vm-lifecycle
           - transcription
           - code-worker
       deploy_nginx:
@@ -25,25 +22,28 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: read
 
 concurrency:
-  group: deploy-${{ github.event_name == 'push' && 'hetzner-prod' || inputs.target }}
+  group: deploy-${{ inputs.target }}
   cancel-in-progress: false
 
 jobs:
   deploy-hetzner-prod:
     name: Deploy Hetzner Production
-    if: ${{ github.event_name == 'push' || inputs.target == 'hetzner-prod' }}
+    if: ${{ inputs.target == 'hetzner-prod' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 210
     env:
+      GH_TOKEN: ${{ github.token }}
       HETZNER_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_PRIVATE_KEY }}
       HETZNER_PROD_HOST: ${{ vars.HETZNER_PROD_HOST || '162.55.210.48' }}
-      DEPLOY_NGINX: ${{ github.event_name == 'push' && 'true' || inputs.deploy_nginx }}
+      DEPLOY_NGINX: ${{ inputs.deploy_nginx }}
+      SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Deploy via Hetzner runtime scripts
         run: bash scripts/hetzner/github-actions-deploy.sh
@@ -56,13 +56,13 @@ jobs:
 
     steps:
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
 
       - name: Trigger retained Cloud Build target
         id: trigger
@@ -73,7 +73,7 @@ jobs:
           set -euo pipefail
 
           case "$TARGET" in
-            firestore|vm-lifecycle|transcription|code-worker) ;;
+            firestore|transcription|code-worker) ;;
             *)
               echo "Unsupported retained GCP target: $TARGET" >&2
               exit 1
@@ -81,7 +81,7 @@ jobs:
           esac
 
           BUILD_ID="$(gcloud builds triggers run "$TARGET" \
-            --branch="${GITHUB_REF_NAME:-development}" \
+            --sha="${GITHUB_SHA}" \
             --region="$REGION" \
             --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME:-development}" \
             --format="value(metadata.build.id)")"
@@ -102,6 +102,18 @@ jobs:
 
             case "$STATUS" in
               SUCCESS)
+                RESOLVED_COMMIT_SHA="$(gcloud builds describe "$BUILD_ID" \
+                  --region="$REGION" \
+                  --format="value(sourceProvenance.resolvedGitSource.revision)")"
+                if [[ -z "$RESOLVED_COMMIT_SHA" ]]; then
+                  RESOLVED_COMMIT_SHA="$(gcloud builds describe "$BUILD_ID" \
+                    --region="$REGION" \
+                    --format="value(sourceProvenance.resolvedRepoSource.commitSha)")"
+                fi
+                if [[ "$RESOLVED_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
+                  echo "Cloud Build provenance SHA mismatch: expected $GITHUB_SHA, resolved ${RESOLVED_COMMIT_SHA:-<empty>}" >&2
+                  exit 1
+                fi
                 exit 0
                 ;;
               FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)

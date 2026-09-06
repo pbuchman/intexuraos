@@ -14,13 +14,11 @@ import {
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
   'INTEXURAOS_SERVICE_URL', // Public code-agent API URL
   'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL', // Worker callback URL base for internal code-task callbacks
-  'INTEXURAOS_WEB_APP_URL', // Public web app URL for user-facing links
 ];
 
 /**
@@ -31,6 +29,7 @@ const REQUIRED_ENV = [
  * - INTEXURAOS_LINEAR_AGENT_URL: Service integration
  * - INTEXURAOS_SERVICE_URL: Public service URL
  * - INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: Worker callback URL base
+ * - INTEXURAOS_WEB_APP_URL: Public web app URL for user-facing links (defaults to production)
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
  * - INTEXURAOS_ENABLE_METRICS: Set to 'true' to enable Cloud Monitoring metrics (requires monitoring.metricWriter IAM role)
  */
@@ -45,9 +44,12 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_SENTRY_WEBHOOK_SECRET', // For Sentry webhook signature verification
+  'INTEXURAOS_SENTRY_AUTOMATION_USER_ID', // User that owns automatic Sentry code tasks
+  'INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY', // Repository targeted by automatic Sentry code tasks
+  'INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH', // Base branch targeted by automatic Sentry code tasks
   'INTEXURAOS_OPENROUTER_APP_API_KEY',
   'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
-  'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
   'INTEXURAOS_LLM_USAGE_SERVICE_URL', // Usage event forwarding to llm-usage-service
 ];
 
@@ -77,14 +79,12 @@ async function main(): Promise<void> {
     whatsappSendTopic: config.whatsappSendTopic,
     prTriageTopic: config.prTriageTopic,
     linearAgentUrl: config.linearAgentUrl,
-    webhookVerifySecret: config.webhookVerifySecret,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
     codeTaskCallbackBaseUrl: config.codeTaskCallbackBaseUrl,
     webAppUrl: config.webAppUrl,
     userServiceUrl: config.userServiceUrl,
     openRouterAppApiKey: config.openRouterAppApiKey,
-    openaiAppApiKey: config.openaiAppApiKey,
     llmUsageServiceUrl: config.llmUsageServiceUrl,
   });
 

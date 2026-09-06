@@ -52,8 +52,10 @@ describe('getTaskEventUrl', () => {
     );
   });
 
-  it('returns the input unchanged when the path is not the task-complete endpoint', () => {
-    expect(getTaskEventUrl('https://api.test/other/path')).toBe('https://api.test/other/path');
+  it('derives the task-event endpoint from a callback owner without the canonical marker', () => {
+    expect(getTaskEventUrl('https://api.test/other/path')).toBe(
+      'https://api.test/internal/webhooks/task-event'
+    );
   });
 });
 
@@ -167,6 +169,12 @@ describe('parseRebaseResultOutput', () => {
       success: false,
       conflictFiles: ['a.ts', 'b.ts'],
     });
+  });
+
+  it('returns not-required rebase evidence for attempted=false', () => {
+    const output = JSON.stringify({ attempted: false });
+    const result = parseRebaseResultOutput(output, 'task-1', mockLogger as never);
+    expect(result).toEqual({ attempted: false, reason: 'not_required' });
   });
 
   it('returns undefined when the JSON does not include attempted=true', () => {

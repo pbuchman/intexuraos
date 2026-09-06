@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
+import { LlmProviders, LegacyGoogleModels } from '@intexuraos/llm-contract';
 import { buildUsageEvent } from '../buildUsageEvent.js';
 import type { UsageLogParams } from '../usageLogger.js';
 
@@ -113,7 +113,7 @@ describe('buildUsageEvent with promptType', () => {
     const params: UsageLogParams = {
       userId: 'user-123',
       provider: LlmProviders.Google,
-      model: LlmModels.Gemini25Flash,
+      model: LegacyGoogleModels.Gemini25Flash,
       callType: 'generate' as const,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
       success: true,
@@ -133,7 +133,7 @@ describe('buildUsageEvent with promptType', () => {
     const params: UsageLogParams = {
       userId: 'user-123',
       provider: LlmProviders.Google,
-      model: LlmModels.Gemini25Flash,
+      model: LegacyGoogleModels.Gemini25Flash,
       callType: 'generate' as const,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
       success: true,
@@ -197,5 +197,16 @@ describe('buildUsageEvent image usage', () => {
 
     expect(event.usage.imageCount).toBe(0);
     expect(event.usage.imageSize).toBeUndefined();
+  });
+});
+
+describe('buildUsageEvent embedding usage', () => {
+  it('preserves embedding as the canonical operation', () => {
+    const event = buildUsageEvent(
+      { ...baseParams, callType: 'embedding' },
+      baseSource
+    ) as EventForTests;
+
+    expect(event.request.operation).toBe('embedding');
   });
 });

@@ -13,20 +13,21 @@ import type {
   ThumbnailPrompt,
 } from './types.js';
 
+// The provider allows an image request to run for 14 minutes; reserve another minute for storage.
+const IMAGE_GENERATION_TIMEOUT_MS = 900_000;
+
 async function parseImageResponse<T>(
   config: ImageServiceConfig,
   path: string,
   body: unknown,
-  method: 'POST' | 'DELETE'
+  method: 'POST' | 'DELETE',
+  timeoutMs?: number
 ): Promise<Result<T, ImageServiceError>> {
   const httpClient = createInternalHttpClient({
     baseUrl: config.baseUrl,
     token: config.internalAuthToken,
     logger: {
-      info: () => undefined,
       warn: () => undefined,
-      error: () => undefined,
-      debug: () => undefined,
     },
   });
 
@@ -34,6 +35,7 @@ async function parseImageResponse<T>(
     path,
     method,
     ...(body !== undefined ? { body } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
 
   if (method === 'DELETE' && result.ok) {
@@ -107,7 +109,8 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
           ...(options?.promptType !== undefined ? { promptType: options.promptType } : {}),
           ...(options?.correlation !== undefined ? { correlation: options.correlation } : {}),
         },
-        'POST'
+        'POST',
+        IMAGE_GENERATION_TIMEOUT_MS
       );
     },
 

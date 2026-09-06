@@ -1,26 +1,22 @@
 import type { AppConfig } from '@/types';
 import { WEB_SERVICE_URLS } from './config.generated';
+import { readPublicWebEnv, type PublicWebEnvKey } from './publicEnv';
 
 type ServiceEnvVar = (typeof WEB_SERVICE_URLS)[number]['envVar'];
 
-function getEnvVar(key: string): string {
-  const value = import.meta.env[key] as string | undefined;
+const publicEnv = readPublicWebEnv();
+
+function getEnvVar(key: PublicWebEnvKey): string {
+  const value = publicEnv[key];
   if (value === undefined || value === '') {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value;
 }
 
-function getServiceUrl(envVar: string, apiPath: string): string {
-  if (import.meta.env.DEV) {
-    return apiPath;
-  }
-  return getEnvVar(envVar);
-}
-
 function getGeneratedServiceUrls(): Record<ServiceEnvVar, string> {
   return Object.fromEntries(
-    WEB_SERVICE_URLS.map(({ envVar, apiPath }) => [envVar, getServiceUrl(envVar, apiPath)])
+    WEB_SERVICE_URLS.map(({ envVar, apiPath }) => [envVar, apiPath])
   ) as Record<ServiceEnvVar, string>;
 }
 
@@ -35,6 +31,7 @@ export function getConfig(): AppConfig {
     whatsappServiceUrl: serviceUrls.INTEXURAOS_WHATSAPP_SERVICE_URL,
     notionServiceUrl: serviceUrls.INTEXURAOS_NOTION_SERVICE_URL,
     mobileNotificationsServiceUrl: serviceUrls.INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL,
+    messageDigestServiceUrl: serviceUrls.INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL,
     fishingAssistantServiceUrl: serviceUrls.INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL,
     ResearchAgentUrl: serviceUrls.INTEXURAOS_RESEARCH_AGENT_URL,
     notesAgentUrl: serviceUrls.INTEXURAOS_NOTES_AGENT_URL,

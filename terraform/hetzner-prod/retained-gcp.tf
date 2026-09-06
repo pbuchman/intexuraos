@@ -11,6 +11,7 @@ locals {
   }
 
   retained_gcp_pubsub_topics = {
+    message_digest_runs      = "intexuraos-message-digest-runs-${local.retained_gcp_environment}"
     whatsapp_media_cleanup   = "intexuraos-whatsapp-media-cleanup-${local.retained_gcp_environment}"
     whatsapp_webhook_process = "intexuraos-whatsapp-webhook-process-${local.retained_gcp_environment}"
     audio_stored             = "intexuraos-audio-stored-${local.retained_gcp_environment}"
@@ -27,8 +28,6 @@ locals {
   }
 
   retained_gcp_cloud_function_names = {
-    vm_start      = "intexuraos-vm-start-${local.retained_gcp_environment}"
-    vm_stop       = "intexuraos-vm-stop-${local.retained_gcp_environment}"
     transcription = "intexuraos-transcription-${local.retained_gcp_environment}"
   }
 
@@ -43,12 +42,12 @@ locals {
     web           = "web"
     firestore     = "firestore"
     code_worker   = "code-worker"
-    vm_lifecycle  = "vm-lifecycle"
     transcription = "transcription"
   }
 
   retained_gcp_service_accounts = {
     cloud_scheduler              = "intexuraos-scheduler-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
+    message_digest_service       = "intexuraos-message-digest-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     cloud_functions              = "intexuraos-functions-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     transcription_function       = "ixos-transcription-fn-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     user_service                 = "intexuraos-user-svc-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
@@ -71,66 +70,24 @@ locals {
     llm_usage_service            = "intexuraos-llm-usage-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
   }
 
-  retained_gcp_secret_ids = toset([
-    "INTEXURAOS_AUTH0_DOMAIN",
-    "INTEXURAOS_AUTH0_CLIENT_ID",
-    "INTEXURAOS_AUTH0_SPA_CLIENT_ID",
-    "INTEXURAOS_AUTH_JWKS_URL",
-    "INTEXURAOS_AUTH_ISSUER",
-    "INTEXURAOS_AUTH_AUDIENCE",
-    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
-    "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
-    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
-    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
-    "INTEXURAOS_WHATSAPP_WABA_ID",
-    "INTEXURAOS_WHATSAPP_APP_SECRET",
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY",
+  retained_gcp_target_secret_ids = toset([
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
-    "INTEXURAOS_FIREBASE_PROJECT_ID",
-    "INTEXURAOS_FIREBASE_API_KEY",
-    "INTEXURAOS_FIREBASE_AUTH_DOMAIN",
-    "INTEXURAOS_SSL_PRIVATE_KEY",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_SENTRY_DSN",
-    "INTEXURAOS_SENTRY_DSN_WEB",
-    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID",
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
-    var.cloudflare_dns_api_token_secret_id,
-    "INTEXURAOS_OPENAI_APP_API_KEY",
-    "INTEXURAOS_MINIMAX_APP_API_KEY",
-    "INTEXURAOS_MIMO_APP_API_KEY",
-    "INTEXURAOS_GEMINI_APP_API_KEY",
-    "INTEXURAOS_DASHSCOPE_APP_API_KEY",
-    "INTEXURAOS_KIMI_APP_API_KEY",
-    "INTEXURAOS_OPENROUTER_APP_API_KEY",
-    "INTEXURAOS_LINEAR_API_KEY",
-    "INTEXURAOS_SENTRY_AUTH_TOKEN",
-    "INTEXURAOS_ORCHESTRATOR_SECRET",
-    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
-    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY",
-    "INTEXURAOS_GITHUB_APP_ID",
-    "INTEXURAOS_GITHUB_INSTALLATION_ID",
-    "INTEXURAOS_REPOSITORY_URL",
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
+    "INTEXURAOS_SECRET_PACKAGE_DEV",
+    "INTEXURAOS_SECRET_PACKAGE_PROD",
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY",
   ])
 
   retained_gcp_inventory = {
-    project_id                    = local.retained_gcp.project_id
-    project_number                = local.retained_gcp.project_number
-    source_environment            = local.retained_gcp_environment
-    firestore_database_id         = local.retained_gcp.firestore_database_id
-    buckets                       = local.retained_gcp_buckets
-    pubsub_topics                 = local.retained_gcp_pubsub_topics
-    cloud_functions               = local.retained_gcp_cloud_function_names
-    artifact_registry             = local.retained_gcp_artifact_registry
-    cloud_build_triggers          = local.retained_gcp_cloud_build_triggers
-    service_accounts              = local.retained_gcp_service_accounts
-    secret_ids                    = local.retained_gcp_secret_ids
-    cloudflare_dns_api_token_name = local.retained_gcp.cloudflare_dns_api_token_secret_id
+    project_id            = local.retained_gcp.project_id
+    project_number        = local.retained_gcp.project_number
+    source_environment    = local.retained_gcp_environment
+    firestore_database_id = local.retained_gcp.firestore_database_id
+    buckets               = local.retained_gcp_buckets
+    pubsub_topics         = local.retained_gcp_pubsub_topics
+    cloud_functions       = local.retained_gcp_cloud_function_names
+    artifact_registry     = local.retained_gcp_artifact_registry
+    cloud_build_triggers  = local.retained_gcp_cloud_build_triggers
+    service_accounts      = local.retained_gcp_service_accounts
+    secret_ids            = local.retained_gcp_target_secret_ids
   }
 }

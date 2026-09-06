@@ -93,7 +93,11 @@ This will take several minutes. The longest steps are usually:
 
 ## 5. Populate Secrets
 
-Terraform creates empty secrets. You must populate them with actual values.
+Terraform creates containers only for actual secret material. Populate only
+names classified as secrets in `config/environments/policy.json`. This inventory
+must remain fully disjoint from repository-backed configuration. Identifiers,
+public URLs, DSNs, and public keys belong in `config/environments/`; see the
+[runtime configuration policy](../operations/runtime-configuration.md).
 
 ### Option A: Interactive Script (Recommended)
 
@@ -109,7 +113,7 @@ Use the single secrets script in `--add-new` mode to sync and populate missing s
 
 The script will:
 
-1. Sync readable/exportable Terraform-defined secrets into `.envrc`
+1. Render repository-backed configuration and sync readable actual secrets into mode-600 `.envrc`
 2. Print missing/unreadable secrets
 3. Prompt only for missing secret values (sensitive values are hidden)
 4. Re-sync `.envrc` after successful additions
@@ -118,38 +122,11 @@ The script will:
 
 ### Option B: Manual Population
 
-#### Auth0 Secrets
+#### Auth0 Configuration
 
-```bash
-# Set your Auth0 configuration
-export INTEXURAOS_AUTH0_DOMAIN="your-tenant.auth0.com"
-export INTEXURAOS_AUTH0_CLIENT_ID="your-native-app-client-id"
-export AUTH0_AUDIENCE="urn:intexuraos:api"
-
-# Add secret versions (Terraform created the secrets, we add values)
-
-# Auth0 domain - required for user-service DAF endpoints
-echo -n "${INTEXURAOS_AUTH0_DOMAIN}" | \
-  gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=-
-
-# Auth0 client ID - required for user-service DAF endpoints
-echo -n "${INTEXURAOS_AUTH0_CLIENT_ID}" | \
-  gcloud secrets versions add INTEXURAOS_AUTH0_CLIENT_ID --data-file=-
-
-# Auth JWKS URL - required for JWT verification
-echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/.well-known/jwks.json" | \
-  gcloud secrets versions add INTEXURAOS_AUTH_JWKS_URL --data-file=-
-
-# Auth issuer - required for JWT verification
-echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/" | \
-  gcloud secrets versions add INTEXURAOS_AUTH_ISSUER --data-file=-
-
-# Auth audience - required for JWT verification
-echo -n "${AUTH0_AUDIENCE}" | \
-  gcloud secrets versions add INTEXURAOS_AUTH_AUDIENCE --data-file=-
-```
-
-> See [06-auth0.md](./06-auth0.md) for detailed Auth0 setup instructions.
+Auth0 domains, client IDs, audience, issuer, and JWKS URL are versioned runtime
+configuration, not Secret Manager values. Follow [06-auth0.md](./06-auth0.md)
+and never create Secret Manager containers or versions for them.
 
 ### WhatsApp Business Cloud API Secrets
 

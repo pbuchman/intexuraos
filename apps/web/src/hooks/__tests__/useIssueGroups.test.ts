@@ -46,6 +46,7 @@ function makeTask(overrides: Partial<CodeTask> = {}): CodeTask {
     dedupKey: 'dedup-1',
     callbackReceived: false,
     createdAt: '2026-01-01T00:00:00Z',
+    statusChangedAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
   };
@@ -60,6 +61,10 @@ function makeGroup(overrides: Partial<IssueGroup> = {}): IssueGroup {
     pipeline: { steps: [], pr: null, failedAttempts: 0, archivedCount: 0 },
     latestTask: task,
     aggregateStatus: 'active',
+    lastActivityAt: task.statusChangedAt,
+    lastActivityStatus: task.status,
+    lastActivityTaskId: task.id,
+    lastModifiedAt: task.updatedAt,
     ...overrides,
   };
 }
@@ -86,7 +91,7 @@ describe('mergeGroups', () => {
   it('preserves reference for unchanged groups', () => {
     const group = makeGroup();
     const prev = [group];
-    const incoming = [makeGroup()]; // same aggregateStatus & updatedAt
+    const incoming = [makeGroup()];
 
     const result = mergeGroups(prev, incoming);
     expect(result[0]).toBe(group); // reference preserved
@@ -111,13 +116,62 @@ describe('mergeGroups', () => {
     expect(result).not.toBe(prev);
   });
 
-  it('replaces groups that changed updatedAt', () => {
-    const prev = [makeGroup({ latestTask: makeTask({ updatedAt: '2026-01-01T00:00:00Z' }) })];
-    const updated = makeGroup({ latestTask: makeTask({ updatedAt: '2026-01-02T00:00:00Z' }) });
+  it('replaces groups when technical lastModifiedAt changes', () => {
+    const prev = [makeGroup({ lastModifiedAt: '2026-01-01T00:00:00Z' })];
+    const updated = makeGroup({ lastModifiedAt: '2026-01-02T00:00:00Z' });
     const incoming = [updated];
 
     const result = mergeGroups(prev, incoming);
     expect(result[0]).toBe(updated);
+  });
+
+  it('replaces groups when lifecycle activity time changes', () => {
+    const prev = [makeGroup({ lastActivityAt: '2026-01-01T00:00:00Z' })];
+    const updated = makeGroup({ lastActivityAt: '2026-01-01T00:01:00Z' });
+
+    expect(mergeGroups(prev, [updated])[0]).toBe(updated);
+  });
+
+  it('replaces groups when the lifecycle event identity changes at the same instant', () => {
+    const prev = [makeGroup({
+      lastActivityStatus: 'failed',
+      lastActivityTaskId: 'task-old',
+    })];
+    const updated = makeGroup({
+      lastActivityStatus: 'archived',
+      lastActivityTaskId: 'task-new',
+    });
+
+    expect(mergeGroups(prev, [updated])[0]).toBe(updated);
+  });
+
+  it('replaces groups when the newest attempt identity or task count changes', () => {
+    const original = makeGroup();
+    const newerTask = makeTask({ id: 'task-2' });
+    const updated = makeGroup({
+      latestTask: newerTask,
+      tasks: [original.latestTask, newerTask],
+    });
+
+    expect(mergeGroups([original], [updated])[0]).toBe(updated);
+  });
+
+  it('replaces groups when hydrated Linear presentation changes', () => {
+    const linearIssue = {
+      identifier: 'INT-100',
+      title: 'Original title',
+      state: { name: 'In Progress', type: 'started' },
+      priority: 1,
+      assignee: null,
+      labels: [],
+      url: 'https://linear.app/issue/INT-100',
+      commentCount: 0,
+      lastCommentAt: null,
+    };
+    const original = makeGroup({ linearIssue });
+    const updated = makeGroup({ linearIssue: { ...linearIssue, title: 'Updated title' } });
+
+    expect(mergeGroups([original], [updated])[0]).toBe(updated);
   });
 
   it('detects length change', () => {
@@ -153,7 +207,7 @@ describe('mergeGroups', () => {
     const incoming = [makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 'task-A' }) })];
 
     const result = mergeGroups(prev, incoming);
-    // Same key, same status/updatedAt → reference preserved
+    // Same key and lifecycle/technical identity → reference preserved
     expect(result[0]).toBe(prev[0]);
   });
 });

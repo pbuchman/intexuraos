@@ -5,7 +5,7 @@ import { validateGcpCredentials, type GcpValidatorDeps } from '../../bootstrap/g
 function makeDeps(overrides: Partial<GcpValidatorDeps> = {}): GcpValidatorDeps {
   return {
     existsSync: () => true,
-    execSync: () => Buffer.from(''),
+    execFileSync: () => Buffer.from('access-token'),
     ...overrides,
   };
 }
@@ -18,20 +18,30 @@ describe('validateGcpCredentials', () => {
     );
   });
 
-  it('calls gcloud with the provided key and project', () => {
-    const execSync: GcpValidatorDeps['execSync'] = vi.fn(() => Buffer.from(''));
-    const deps = makeDeps({ execSync });
+  it('checks a token with an isolated credential override and does not mutate global gcloud auth', () => {
+    const execFileSync: GcpValidatorDeps['execFileSync'] = vi.fn(() =>
+      Buffer.from('access-token-that-must-not-be-logged')
+    );
+    const deps = makeDeps({ execFileSync });
     validateGcpCredentials('/path/sa.json', 'my-proj', deps);
-    const mockFn = vi.mocked(execSync);
+    const mockFn = vi.mocked(execFileSync);
     const call = mockFn.mock.calls[0];
     expect(call).toBeDefined();
-    expect(call?.[0]).toContain('/path/sa.json');
-    expect(call?.[0]).toContain('my-proj');
+    expect(call?.[0]).toBe('gcloud');
+    expect(call?.[1]).toEqual(['auth', 'print-access-token', '--project', 'my-proj']);
+    expect(call?.[1]).not.toContain('activate-service-account');
+    expect(call?.[2]).toMatchObject({
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/path/sa.json',
+        CLOUDSDK_CORE_PROJECT: 'my-proj',
+      },
+    });
   });
 
   it('wraps gcloud failures in an error mentioning the key path', () => {
     const deps = makeDeps({
-      execSync: () => {
+      execFileSync: () => {
         throw new Error('gcloud: auth failed');
       },
     });
@@ -40,13 +50,21 @@ describe('validateGcpCredentials', () => {
     );
   });
 
-  it('preserves non-Error throwables from gcloud', () => {
+  it('redacts failure details from gcloud', () => {
+    const sentinel = 'access-token-that-must-not-be-logged';
     const deps = makeDeps({
-      execSync: () => {
-        throw 'bare string';
+      execFileSync: () => {
+        throw new Error(sentinel);
       },
     });
-    expect(() => validateGcpCredentials('/path/sa.json', 'proj', deps)).toThrow(/bare string/);
+    let thrown: unknown;
+    try {
+      validateGcpCredentials('/path/sa.json', 'proj', deps);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(IntexuraOSError);
+    expect((thrown as Error).message).not.toContain(sentinel);
   });
 
   // INT-1565 acceptance: bootstrap failures must be typed `IntexuraOSError`s.
@@ -63,7 +81,7 @@ describe('validateGcpCredentials', () => {
 
   it('throws an IntexuraOSError with code MISCONFIGURED on auth failure', () => {
     const deps = makeDeps({
-      execSync: () => {
+      execFileSync: () => {
         throw new Error('gcloud: auth failed');
       },
     });

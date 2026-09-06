@@ -4,7 +4,10 @@ Container configurations for local development.
 
 ## Overview
 
-Local development uses a **Pub/Sub emulator** for message isolation. All other GCP services (Firestore, Google Cloud Storage) use **real GCP** via Application Default Credentials (ADC).
+Local development uses a **Pub/Sub emulator** for message isolation. Firestore
+and Google Cloud Storage use the retained GCP project through an explicitly
+selected least-privilege identity. Runtime configuration is rendered from an
+exact numeric DEV secret-package version before containers start.
 
 This setup provides:
 
@@ -25,7 +28,9 @@ pnpm run emulators:stop
 pnpm run emulators:logs
 ```
 
-This starts **2 Docker containers**:
+This leaves exactly **2 persistent Docker containers**. The lifecycle first starts the emulator,
+builds the UI image, runs one explicit idempotent `bootstrap.mjs` process in a disposable `--rm`
+container, and only then starts the non-mutating long-running server:
 
 | Service         | Image                                                     | Ports |
 | --------------- | --------------------------------------------------------- | ----- |
@@ -58,14 +63,12 @@ In production, GCP Pub/Sub automatically pushes messages to Cloud Run endpoints.
 
 ### How pubsub-ui works
 
-The bridge reads topic-to-endpoint mappings from `tools/pubsub-ui/topics.json`:
+The bridge reads the closed topic-to-endpoint mapping from `tools/pubsub-ui/topology.mjs`:
 
-```json
+```javascript
 {
-  "intex-message-ingest": {
-    "endpoint": "http://localhost:8134/internal/intex-agent/messages",
-    "description": "Route WhatsApp text messages into Intex"
-  }
+  name: 'intex-message-ingest',
+  endpoint: 'http://host.docker.internal:8134/internal/intex-agent/messages',
 }
 ```
 
@@ -87,8 +90,8 @@ These are read from the shell environment (via direnv) at `docker compose up` ti
 **Setup:**
 
 ```bash
-# Sync secrets from GCP Secret Manager (creates .envrc)
-./scripts/sync-secrets.sh
+# Render one reviewed DEV package version (creates mode-0600 .envrc)
+./scripts/sync-secrets.sh --version <dev-numeric-version>
 
 # Copy local overrides template
 cp .envrc.local.example .envrc.local
@@ -97,13 +100,26 @@ cp .envrc.local.example .envrc.local
 direnv allow
 ```
 
+`sync-secrets.sh` fetches only `INTEXURAOS_SECRET_PACKAGE_DEV`, validates CRC32C,
+schema, environment, and exact membership, then atomically renders the local
+projection. It never reads individual legacy secrets and never accepts
+`latest`. `.envrc.local` is for host-only overrides; do not copy shared secret
+values into it.
+
+Docker receives only the variables declared by Compose. The Pub/Sub emulator
+does not need the package, a service-account JSON file, or Secret Manager IAM.
+Any local container that uses retained Firestore/GCS receives only an explicit
+short-lived or separately managed least-privilege credential, mounted
+read-only. DEV intentionally contains no GCP service-account JSON. Never mount
+`.envrc`, a full package payload, or an operator/provisioner credential.
+
 ## Files
 
-| File                               | Purpose                    |
-| ---------------------------------- | -------------------------- |
-| `docker/docker-compose.local.yaml` | Pub/Sub emulator + UI      |
-| `tools/pubsub-ui/`                 | Message bridge source code |
-| `tools/pubsub-ui/topics.json`      | Topic → endpoint mapping   |
+| File                               | Purpose                                 |
+| ---------------------------------- | --------------------------------------- |
+| `docker/docker-compose.local.yaml` | Pub/Sub emulator + UI                   |
+| `tools/pubsub-ui/`                 | Message bridge source code              |
+| `tools/pubsub-ui/topology.mjs`     | Topic → endpoint/classification mapping |
 
 ## Troubleshooting
 
@@ -119,19 +135,25 @@ direnv allow
 # Check both containers are running
 docker compose -f docker/docker-compose.local.yaml ps
 
-# If pubsub-ui is missing, restart all:
-docker compose -f docker/docker-compose.local.yaml up -d --build
+# If pubsub-ui is missing, run the full explicit lifecycle:
+pnpm run emulators:start
 ```
 
 ### "Topic not found" errors in service logs
 
 **Symptom:** Service logs show `5 NOT_FOUND: Topic not found`.
 
-**Cause:** pubsub-ui creates topics on startup. If services started before pubsub-ui was ready, the topics don't exist yet.
+**Cause:** The explicit one-shot bootstrap did not establish the tracked topics and monitor
+subscriptions before the non-mutating `pubsub-ui` server started. The long-running server never
+creates resources and will fail closed when they are missing.
 
-**Fix:** Restart the affected service after pubsub-ui is fully running:
+**Fix:** Inspect the bootstrap, then rerun the local Compose stack and only restart an affected
+publisher after both bootstrap and UI health pass:
 
 ```bash
+docker compose -f docker/docker-compose.local.yaml logs pubsub-ui
+pnpm run emulators:start
+curl -fsS http://localhost:8105/health | jq -e '.drainContractVersion == 1 and .drain.topologyMatch == true'
 pnpm exec pm2 restart <service-name>
 ```
 

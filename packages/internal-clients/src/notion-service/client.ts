@@ -39,10 +39,7 @@ export function createNotionServiceClient(config: NotionServiceConfig): NotionSe
     baseUrl: config.baseUrl,
     token: config.internalAuthToken,
     logger: {
-      info: () => undefined,
       warn: () => undefined,
-      error: () => undefined,
-      debug: () => undefined,
     },
   });
 

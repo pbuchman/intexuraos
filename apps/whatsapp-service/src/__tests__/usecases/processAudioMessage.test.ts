@@ -10,6 +10,7 @@ import {
   ProcessAudioMessageUseCase,
 } from '../../domain/whatsapp/index.js';
 import {
+  FakeEventPublisher,
   FakeMediaStorage,
   FakeWhatsAppCloudApiPort,
   FakeWhatsAppMessageRepository,
@@ -59,6 +60,7 @@ describe('ProcessAudioMessageUseCase', () => {
   let messageRepository: FakeWhatsAppMessageRepository;
   let mediaStorage: FakeMediaStorage;
   let whatsappCloudApi: FakeWhatsAppCloudApiPort;
+  let eventPublisher: FakeEventPublisher;
   let usecase: ProcessAudioMessageUseCase;
   let deps: ProcessAudioMessageDeps;
   let logger: ProcessAudioMessageLogger;
@@ -67,12 +69,14 @@ describe('ProcessAudioMessageUseCase', () => {
     messageRepository = new FakeWhatsAppMessageRepository();
     mediaStorage = new FakeMediaStorage();
     whatsappCloudApi = new FakeWhatsAppCloudApiPort();
+    eventPublisher = new FakeEventPublisher();
     logger = createTestLogger();
     deps = {
       webhookEventRepository,
       messageRepository,
       mediaStorage,
       whatsappCloudApi,
+      eventPublisher,
     };
     usecase = new ProcessAudioMessageUseCase(deps);
     whatsappCloudApi.setMediaUrl('audio-media-id-123', {
@@ -105,6 +109,28 @@ describe('ProcessAudioMessageUseCase', () => {
 
       const events = webhookEventRepository.getAll();
       expect(events[0]?.status).toBe('completed');
+    });
+    it('publishes an audio stored event after saving the message', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      const input = createTestInput();
+
+      const result = await usecase.execute(input, logger);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        return;
+      }
+      expect(eventPublisher.getAudioStoredEvents()).toEqual([
+        {
+          type: 'whatsapp.audio.stored',
+          userId: 'test-user-id',
+          messageId: result.value.messageId,
+          mediaId: 'audio-media-id-123',
+          gcsPath: result.value.gcsPath,
+          mimeType: 'audio/ogg',
+          timestamp: expect.any(String),
+        },
+      ]);
     });
     it('handles audio without sha256', async () => {
       webhookEventRepository.setEvent(createTestWebhookEvent());
@@ -216,6 +242,21 @@ describe('ProcessAudioMessageUseCase', () => {
       }
       const events = webhookEventRepository.getAll();
       expect(events[0]?.status).toBe('failed');
+    });
+    it('returns error when audio stored event publish fails', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      eventPublisher.setAudioStoredFailure('Pub/Sub unavailable');
+      const input = createTestInput();
+
+      const result = await usecase.execute(input, logger);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Pub/Sub unavailable');
+      }
+      const events = webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Failed to publish audio stored event');
     });
   });
 });

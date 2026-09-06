@@ -1,5 +1,7 @@
 # Tiered Completion Verification — Split Deliverable vs Telemetry
 
+> Historical note: The `MiniMax-M2.7` example below reflects prior worker output, not the current active MiniMax model. Active defaults now use MiniMax M3.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Source of truth:** [INT-1459](https://linear.app/pbuchman/issue/INT-1459). This plan replaces any earlier draft and is self-contained — no cross-reference to prior planning issues is needed.

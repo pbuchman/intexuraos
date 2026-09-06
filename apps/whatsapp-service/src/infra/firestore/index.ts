@@ -50,7 +50,9 @@ export {
 } from './notificationPreferencesRepository.js';
 
 export {
+  PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION,
   PRIVATE_WHATSAPP_CHATS_COLLECTION,
+  PRIVATE_WHATSAPP_CONTEXT_CHANGES_COLLECTION,
   PRIVATE_WHATSAPP_MESSAGES_COLLECTION,
   PRIVATE_WHATSAPP_SENDERS_COLLECTION,
   PRIVATE_WHATSAPP_SENDER_DAYS_COLLECTION,
@@ -60,3 +62,24 @@ export {
   createPrivateWhatsAppSenderId,
   createPrivateWhatsAppRepository,
 } from './privateWhatsAppRepository.js';
+
+export {
+  PRIVATE_WHATSAPP_ERASURE_REQUESTS_COLLECTION,
+  createPrivateWhatsAppErasureRepository,
+} from './privateWhatsAppErasureRepository.js';
+
+export {
+  CONTEXT_CHUNK_MAX_BYTES,
+  TRANSCRIPT_CHUNK_MAX_BYTES,
+  WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION,
+  WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION,
+  WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION,
+  WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
+  createConversationAssistantRepository,
+} from './conversationAssistantRepository.js';
+
+export {
+  CONVERSATION_ASSISTANT_TURN_REQUEST_HARD_INPUT_TOKEN_LIMIT,
+  WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_COLLECTION,
+  createConversationAssistantTurnRequestRepository,
+} from './conversationAssistantTurnRequestRepository.js';

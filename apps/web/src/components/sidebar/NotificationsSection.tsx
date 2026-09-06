@@ -6,6 +6,7 @@ import { buildFilterUrl, filterMatchesUrl } from './navItems.js';
 interface NotificationsSectionProps {
   isOpen: boolean;
   onToggle: (next: boolean) => void;
+  onCollapsedOpen?: () => void;
   isCollapsed: boolean;
   savedFilters: SavedNotificationFilter[];
 }
@@ -13,6 +14,7 @@ interface NotificationsSectionProps {
 export function NotificationsSection({
   isOpen,
   onToggle,
+  onCollapsedOpen,
   isCollapsed,
   savedFilters,
 }: NotificationsSectionProps): React.JSX.Element {
@@ -22,17 +24,16 @@ export function NotificationsSection({
   return (
     <div className="pt-2">
       <button
+        aria-label="Mobile"
         onClick={(): void => {
-          if (!isOpen) {
-            void navigate('/notifications');
+          if (isCollapsed) {
+            onToggle(true);
+            onCollapsedOpen?.();
+            return;
           }
           onToggle(!isOpen);
         }}
-        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-          location.pathname.startsWith('/notifications')
-            ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-        }`}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
       >
         <BellRing className="h-5 w-5 shrink-0" />
         {!isCollapsed ? (

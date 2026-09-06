@@ -2,6 +2,61 @@ import { describe, expect, it } from 'vitest';
 import { CreateTaskRequestSchema } from '../types/schemas.js';
 
 describe('CreateTaskRequestSchema', () => {
+  const callbackRequest = {
+    taskId: 'task_00000000-0000-0000-0000-0000000000f1',
+    workerType: 'auto',
+    prompt: 'Validate callback ownership',
+    webhookSecret: 'secret',
+  } as const;
+
+  it.each(['file:///tmp/callback', 'ftp://example.com/callback', 'mailto:callback@example.com'])(
+    'rejects non-HTTP callback URL %s before task creation',
+    (webhookUrl) => {
+      expect(CreateTaskRequestSchema.safeParse({ ...callbackRequest, webhookUrl }).success).toBe(
+        false
+      );
+    }
+  );
+
+  it.each(['http://localhost:8080/callback', 'https://example.com/callback'])(
+    'accepts HTTP(S) callback URL %s',
+    (webhookUrl) => {
+      expect(CreateTaskRequestSchema.safeParse({ ...callbackRequest, webhookUrl }).success).toBe(
+        true
+      );
+    }
+  );
+
+  it('accepts Sentry agent tasks with issue context', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      taskId: 'task_00000000-0000-0000-0000-0000000000a4',
+      workerType: 'codex-xhigh',
+      prompt: 'Fix Sentry issue',
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret',
+      linearIssueLabels: ['sentry', 'code-task'],
+      hasChildren: false,
+      agentType: 'sentry',
+      sentryIssue: {
+        organizationSlug: 'intexura',
+        projectSlug: 'code-agent',
+        issueId: '123456',
+        issueUrl: 'https://intexura.sentry.io/issues/123456/',
+        title: 'TypeError: cannot read property',
+        action: 'created',
+        receivedAt: '2026-06-28T12:00:00.000Z',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.agentType).toBe('sentry');
+    if (result.data.sentryIssue === undefined) {
+      throw new Error('Expected parsed Sentry issue context');
+    }
+    expect(result.data.sentryIssue.issueUrl).toBe('https://intexura.sentry.io/issues/123456/');
+  });
+
   it('accepts executionMemoryContext for execution tasks', () => {
     const executionMemoryContext = {
       applicationId: 'app_123',
@@ -42,6 +97,7 @@ describe('CreateTaskRequestSchema', () => {
     'implementation_pattern',
     'verification_pattern',
     'pitfall_pattern',
+    'single_artifact_planning',
     'decomposition_pattern',
     'planning_decision',
     'review_finding',
@@ -100,7 +156,7 @@ describe('CreateTaskRequestSchema — retriedFrom', () => {
 describe('CreateTaskRequestSchema — reviewTypes', () => {
   const baseRequest = {
     taskId: 'task_00000000-0000-0000-0000-0000000000c1',
-    workerType: 'mimo-pro',
+    workerType: 'openrouter-free',
     prompt: 'Review PR documentation and code quality',
     webhookUrl: 'https://intexuraos.cloud/api/code/internal/task-hook',
     webhookSecret: 'sec',

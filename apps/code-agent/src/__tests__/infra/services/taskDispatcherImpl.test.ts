@@ -456,6 +456,73 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
+  describe('dispatch includes Sentry issue context when provided', () => {
+    it('sends sentryIssue in the dispatch request body', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+      const sentryIssue = {
+        organizationSlug: 'intexura',
+        projectSlug: 'code-agent',
+        projectId: '42',
+        issueId: '123456',
+        issueShortId: 'CODE-AGENT-1',
+        issueUrl: 'https://intexura.sentry.io/issues/123456/',
+        title: 'TypeError: Cannot read properties of undefined',
+        action: 'created',
+        receivedAt: '2026-06-28T12:00:00.000Z',
+        eventId: 'event-1',
+      };
+
+      let capturedBody: Record<string, unknown> | undefined;
+      nock(WORKER_URL)
+        .post('/tasks', (body: Record<string, unknown>) => {
+          capturedBody = body;
+          return true;
+        })
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        taskId: 'task-sentry-context',
+        prompt: 'Fix Sentry issue',
+        systemPromptHash: 'hash-123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'codex-xhigh',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue,
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody?.['sentryIssue']).toEqual(sentryIssue);
+    });
+  });
+
   describe('dispatch non-OK response handling', () => {
     it('returns dispatch_failed with worker error message for non-retryable status 400', async () => {
       const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
@@ -473,12 +540,17 @@ describe('taskDispatcherImpl', () => {
 
       const service = createTaskDispatcherService(deps);
 
+      let capturedBody: Record<string, unknown> | undefined;
       nock(WORKER_URL)
-        .post('/tasks')
+        .post('/tasks', (body: Record<string, unknown>) => {
+          capturedBody = body;
+          return true;
+        })
         .reply(400, { error: 'String must contain at least 1 character(s)' });
 
       const result = await service.dispatch({
         taskId: 'task-validation-failure',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000001',
         prompt: 'Fix CI',
         systemPromptHash: 'hash-123',
         repository: 'test/repo',
@@ -506,6 +578,17 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.message).toContain('400');
         expect(result.error.message).toContain('String must contain at least 1 character(s)');
       }
+
+      expect(capturedBody).not.toHaveProperty('dispatchAttemptId');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-validation-failure',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000001',
+          status: 400,
+          _skipSentry: true,
+        }),
+        'Worker dispatch request failed',
+      );
     });
   });
 
@@ -571,6 +654,320 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.code).toBe('at_capacity');
         expect(result.error.blocker?.reason).toBe('workers_at_capacity');
       }
+    });
+
+    it('skips Sentry capture when blocker reason is workers_at_capacity', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 2,
+          available: 0,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-at-capacity',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-at-capacity',
+          reason: 'workers_at_capacity',
+          _skipSentry: true,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('skips Sentry capture when blocker reason is a critical capability condition', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'orchestrator-unreachable',
+          healthy: false,
+          reason: 'connection refused',
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-unreachable',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-unreachable',
+          reason: 'workers_unreachable',
+          _skipSentry: true,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('skips Sentry capture when intentionally unavailable Codex auth blocks dispatch', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+          workerAuths: {
+            ...HEALTHY_WORKER_DETAILS.workerAuths,
+            codex: { status: 'expired', refreshSupported: false, message: 'Codex token expired' },
+          },
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-codex-auth',
+        workerType: 'codex-xhigh',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-codex-auth',
+          reason: 'codex_auth_unavailable',
+          _skipSentry: true,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('keeps an incompatible worker health contract visible in Sentry', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['workerAuths'],
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-contract-mismatch',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-contract-mismatch',
+          reason: 'worker_health_contract_mismatch',
+          _skipSentry: false,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('keeps malformed worker health responses visible in Sentry', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Invalid health response format',
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-invalid-health',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000003',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-invalid-health',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000003',
+          remediationFamily: 'code-task.dispatch',
+          reason: 'workers_unreachable',
+          _skipSentry: false,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('keeps malformed health visible when another worker produces an auth blocker', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'malformed': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Invalid health response format',
+        },
+        'healthy': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+          workerAuths: {
+            ...HEALTHY_WORKER_DETAILS.workerAuths,
+            codex: { status: 'not_configured' },
+          },
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      const result = await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-mixed-auth-health',
+        workerType: 'codex-xhigh',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'malformed',
+              url: 'https://malformed-worker.example.com',
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+            {
+              name: 'healthy',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-mixed-auth-health',
+          reason: 'codex_auth_unavailable',
+          unexpectedWorkerHealth: [expect.objectContaining({ workerName: 'malformed', tag: 'unknown' })],
+          _skipSentry: false,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('reports malformed health even when another worker can dispatch the task', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'malformed': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Invalid health response format',
+        },
+        'healthy': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+        },
+      });
+      nock(WORKER_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+      const service = createTaskDispatcherService(deps);
+
+      const result = await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-mixed-dispatchable-health',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000002',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'malformed',
+              url: 'https://malformed-worker.example.com',
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+            {
+              name: 'healthy',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-mixed-dispatchable-health',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000002',
+          remediationFamily: 'code-task.dispatch',
+          reason: 'unexpected_worker_health_response',
+          unexpectedWorkerHealth: [expect.objectContaining({ workerName: 'malformed', tag: 'unknown' })],
+          _skipSentry: false,
+        }),
+        'Worker health probe returned an unexpected response'
+      );
     });
   });
 
@@ -761,14 +1158,42 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('cancelOnWorker non-OK response', () => {
-    it('logs warning and returns when worker returns non-OK status', async () => {
+    it('marks already-completed worker cancellation responses as expected for Sentry', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .delete('/tasks/task-already-complete')
+        .reply(409, { error: 'Task already completed' });
+
+      await service.cancelOnWorker(
+        'task-already-complete',
+        'test-worker',
+        {
+          url: WORKER_URL,
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+        }
+      );
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-already-complete',
+          location: 'test-worker',
+          status: 409,
+          _skipSentry: true,
+        }),
+        'Worker cancellation target already completed'
+      );
+    });
+
+    it('rejects when worker returns a non-OK status', async () => {
       const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .delete('/tasks/task-cancel-fail')
         .reply(500, 'Internal Server Error');
 
-      await service.cancelOnWorker(
+      await expect(service.cancelOnWorker(
         'task-cancel-fail',
         'test-worker',
         {
@@ -776,7 +1201,7 @@ describe('taskDispatcherImpl', () => {
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
         }
-      );
+      )).rejects.toThrow('Worker cancellation failed with HTTP 500');
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'task-cancel-fail', location: 'test-worker', status: 500 }),
@@ -784,14 +1209,14 @@ describe('taskDispatcherImpl', () => {
       );
     });
 
-    it('completes without throwing when worker returns 404', async () => {
+    it('rejects when the worker cannot find the task', async () => {
       const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .delete('/tasks/task-not-found')
         .reply(404, 'Not Found');
 
-      await service.cancelOnWorker(
+      await expect(service.cancelOnWorker(
         'task-not-found',
         'test-worker',
         {
@@ -799,11 +1224,48 @@ describe('taskDispatcherImpl', () => {
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
         }
-      );
+      )).rejects.toThrow('Worker cancellation failed with HTTP 404');
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'task-not-found', location: 'test-worker', status: 404 }),
         'Worker cancellation request failed'
+      );
+    });
+
+    it('rejects before transport when worker credentials are unavailable', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      await expect(service.cancelOnWorker(
+        'task-no-credentials',
+        'test-worker',
+      )).rejects.toThrow('Worker cancellation credentials unavailable');
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-no-credentials', location: 'test-worker' }),
+        'No credentials provided for cancellation, skipping worker notification',
+      );
+    });
+
+    it('rejects when cancellation transport fails', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .delete('/tasks/task-network-error')
+        .replyWithError('socket reset');
+
+      await expect(service.cancelOnWorker(
+        'task-network-error',
+        'test-worker',
+        {
+          url: WORKER_URL,
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+        },
+      )).rejects.toThrow();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-network-error', location: 'test-worker' }),
+        'Failed to notify worker of cancellation',
       );
     });
   });

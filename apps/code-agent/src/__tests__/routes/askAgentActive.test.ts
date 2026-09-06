@@ -278,10 +278,61 @@ describe('GET /code/ask-agent/active', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { success: boolean; data: { task: { id: string } } };
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { task: { id: string; createdAt: string; statusChangedAt: string } };
+    };
     expect(body.success).toBe(true);
     expect(body.data.task).not.toBeNull();
     expect(body.data.task.id).toBe('task_active_1');
+    expect(body.data.task.statusChangedAt).toBe(body.data.task.createdAt);
+  });
+
+  it('returns completedAt for the latest terminal non-archived ask-agent task', async () => {
+    const completedAt = new Date('2026-07-27T09:15:00.000Z');
+    const created = await codeTaskRepo.create({
+      id: 'task_terminal_1',
+      userId: 'test-user-id',
+      prompt: 'Completed conversation',
+      sanitizedPrompt: 'Completed conversation',
+      systemPromptHash: 'ask-agent',
+      workerType: 'opus',
+      workerLocation: 'pending',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_terminal',
+      agentType: 'ask_agent',
+    });
+    expect(created.ok).toBe(true);
+    const updated = await codeTaskRepo.update('task_terminal_1', {
+      status: 'failed',
+      completedAt,
+    });
+    expect(updated.ok).toBe(true);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/ask-agent/active',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        task: {
+          id: string;
+          status: string;
+          statusChangedAt: string;
+          completedAt?: string | null;
+        };
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.task.id).toBe('task_terminal_1');
+    expect(body.data.task.status).toBe('failed');
+    expect(body.data.task.statusChangedAt).toBe(completedAt.toISOString());
+    expect(body.data.task.completedAt).toBe(completedAt.toISOString());
   });
 
   it('returns 500 when repository fails', async () => {

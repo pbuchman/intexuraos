@@ -1,5 +1,15 @@
 locals {
   hetzner_pubsub_push_subscriptions = {
+    message_digest_runs = {
+      subscription_name     = "intexuraos-message-digest-runs-prod-hetzner"
+      topic_name            = local.pubsub_topics.message_digest_runs
+      push_path             = "/internal/message-digests/pubsub/run"
+      service_account_key   = "message_digest_service"
+      ack_deadline_seconds  = 600
+      retry_minimum_backoff = "10s"
+      retry_maximum_backoff = "600s"
+      max_delivery_attempts = 5
+    }
     whatsapp_send = {
       subscription_name     = "intexuraos-whatsapp-send-prod-hetzner"
       topic_name            = local.pubsub_topics.whatsapp_send
@@ -24,6 +34,16 @@ locals {
       subscription_name     = "intexuraos-whatsapp-webhook-process-prod-hetzner"
       topic_name            = local.pubsub_topics.whatsapp_webhook_process
       push_path             = "/internal/whatsapp/pubsub/process-webhook"
+      service_account_key   = "whatsapp_service"
+      ack_deadline_seconds  = 120
+      retry_minimum_backoff = "10s"
+      retry_maximum_backoff = "600s"
+      max_delivery_attempts = 5
+    }
+    whatsapp_transcription_completed = {
+      subscription_name     = "intexuraos-transcription-completed-prod-hetzner"
+      topic_name            = local.pubsub_topics.transcription_completed
+      push_path             = "/internal/whatsapp/pubsub/transcription-completed"
       service_account_key   = "whatsapp_service"
       ack_deadline_seconds  = 120
       retry_minimum_backoff = "10s"
@@ -103,6 +123,38 @@ locals {
   }
 }
 
+resource "google_pubsub_topic" "hetzner_push_dlq" {
+  for_each = local.hetzner_pubsub_push_subscriptions
+
+  name    = "${each.value.subscription_name}-dlq"
+  project = var.project_id
+  labels  = local.common_labels
+}
+
+resource "google_pubsub_subscription" "hetzner_push_dlq_inspect" {
+  for_each = local.hetzner_pubsub_push_subscriptions
+
+  name                       = "${each.value.subscription_name}-dlq-sub"
+  topic                      = google_pubsub_topic.hetzner_push_dlq[each.key].id
+  project                    = var.project_id
+  labels                     = local.common_labels
+  ack_deadline_seconds       = 600
+  message_retention_duration = "2678400s"
+
+  expiration_policy {
+    ttl = ""
+  }
+}
+
+resource "google_pubsub_topic_iam_member" "hetzner_push_dlq_publisher" {
+  for_each = local.hetzner_pubsub_push_subscriptions
+
+  project = var.project_id
+  topic   = google_pubsub_topic.hetzner_push_dlq[each.key].name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:service-${data.google_project.retained.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
 resource "google_pubsub_subscription" "hetzner_push" {
   for_each = local.hetzner_pubsub_push_subscriptions
 
@@ -134,25 +186,29 @@ resource "google_pubsub_subscription" "hetzner_push" {
   }
 
   dead_letter_policy {
-    dead_letter_topic     = data.google_pubsub_topic.hetzner_push_dlq[each.key].id
+    dead_letter_topic     = google_pubsub_topic.hetzner_push_dlq[each.key].id
     max_delivery_attempts = each.value.max_delivery_attempts
   }
 
   expiration_policy {
     ttl = ""
   }
+
+  depends_on = [google_pubsub_topic_iam_member.hetzner_push_dlq_publisher]
+}
+
+resource "google_pubsub_subscription_iam_member" "hetzner_push_dlq_subscriber" {
+  for_each = local.hetzner_pubsub_push_subscriptions
+
+  project      = var.project_id
+  subscription = google_pubsub_subscription.hetzner_push[each.key].name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:service-${data.google_project.retained.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
 data "google_pubsub_topic" "hetzner_push" {
   for_each = local.hetzner_pubsub_push_subscriptions
 
   name    = each.value.topic_name
-  project = var.project_id
-}
-
-data "google_pubsub_topic" "hetzner_push_dlq" {
-  for_each = local.hetzner_pubsub_push_subscriptions
-
-  name    = "${each.value.topic_name}-dlq"
   project = var.project_id
 }

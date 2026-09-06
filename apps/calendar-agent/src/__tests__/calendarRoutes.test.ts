@@ -799,7 +799,7 @@ describe('Calendar Routes', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('processes valid action and returns completed status', async () => {
+    it('processes valid action and omits resourceUrl without Google htmlLink', async () => {
       fakeCalendarActionExtractionService.extractEventResult = {
         ok: true,
         value: {
@@ -825,7 +825,8 @@ describe('Calendar Routes', () => {
       const body = response.json();
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('completed');
-      expect(body.data.resourceUrl).toBe('/#/calendar');
+      expect(body.data.resourceUrl).toBeUndefined();
+      expect(response.body).not.toContain('/#/calendar');
     });
 
     it('returns failed status when event extraction is invalid', async () => {

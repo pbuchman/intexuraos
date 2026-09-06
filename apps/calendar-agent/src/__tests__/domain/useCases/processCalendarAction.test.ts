@@ -562,9 +562,15 @@ describe('processCalendarAction', () => {
         expect(result.value.message).toBe('Event "Doctor Appointment" created successfully');
         expect(result.value.resourceUrl).toBe('https://calendar.google.com/event');
       }
+
+      const processedActionResult = await processedActionRepository.getByActionId('action-123');
+      expect(processedActionResult.ok).toBe(true);
+      if (processedActionResult.ok) {
+        expect(processedActionResult.value?.resourceUrl).toBe('https://calendar.google.com/event');
+      }
     });
 
-    it('falls back to internal calendar URL when htmlLink is not available', async () => {
+    it('omits resourceUrl when htmlLink is not available', async () => {
       const mockEvent = {
         id: 'event-no-link',
         summary: 'No Link Event',
@@ -605,7 +611,13 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('completed');
-        expect(result.value.resourceUrl).toBe('/#/calendar');
+        expect(result.value).not.toHaveProperty('resourceUrl');
+      }
+
+      const processedActionResult = await processedActionRepository.getByActionId('action-no-link');
+      expect(processedActionResult.ok).toBe(true);
+      if (processedActionResult.ok) {
+        expect(processedActionResult.value).not.toHaveProperty('resourceUrl');
       }
     });
 
@@ -886,6 +898,71 @@ describe('processCalendarAction', () => {
         actionId: 'action-123',
         userId: 'user-456',
         eventId: 'existing-event-id',
+        createdAt: '2025-01-15T10:00:00Z',
+      });
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Meeting tomorrow at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value).not.toHaveProperty('resourceUrl');
+      }
+    });
+
+    it('returns cached Google Calendar resourceUrl when action was already processed with a link', async () => {
+      processedActionRepository.seedProcessedAction({
+        actionId: 'action-123',
+        userId: 'user-456',
+        eventId: 'existing-event-id',
+        resourceUrl: 'https://calendar.google.com/event?eid=existing-event-id',
+        createdAt: '2025-01-15T10:00:00Z',
+      });
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Meeting tomorrow at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.resourceUrl).toBe('https://calendar.google.com/event?eid=existing-event-id');
+      }
+    });
+
+    it('omits legacy internal calendar resourceUrl when action was already processed with fallback link', async () => {
+      processedActionRepository.seedProcessedAction({
+        actionId: 'action-123',
+        userId: 'user-456',
+        eventId: 'existing-event-id',
         resourceUrl: '/#/calendar',
         createdAt: '2025-01-15T10:00:00Z',
       });
@@ -910,7 +987,7 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('completed');
-        expect(result.value.resourceUrl).toBe('/#/calendar');
+        expect(result.value).not.toHaveProperty('resourceUrl');
       }
     });
 

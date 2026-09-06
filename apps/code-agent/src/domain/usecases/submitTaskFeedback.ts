@@ -362,7 +362,7 @@ ${feedback.trim()}
 
   return ok({
     codeTaskId: followUpTask.id,
-    resourceUrl: `/#/code-tasks/${followUpTask.id}`,
+    resourceUrl: buildCodeTaskUrl(followUpTask.id),
     workerLocation: 'queued',
     followUpFor: originalTask.id,
   });

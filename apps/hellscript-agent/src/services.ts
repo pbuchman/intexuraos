@@ -7,8 +7,8 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FirestoreHellscriptRepository } from './infra/firestore/firestoreHellscriptRepository.js';
 import { FirestoreWritingConfigRepository } from './infra/firestore/firestoreWritingConfigRepository.js';
-import { GeminiIntentInterpreter } from './infra/llm/geminiIntentInterpreter.js';
-import { GeminiDraftGenerator } from './infra/llm/geminiDraftGenerator.js';
+import { LlmIntentInterpreter } from './infra/llm/llmIntentInterpreter.js';
+import { LlmDraftGenerator } from './infra/llm/llmDraftGenerator.js';
 
 export interface LlmAdapters {
   interpreter: IntentInterpreter;
@@ -36,8 +36,8 @@ export function initServices(config: ServiceConfig): void {
     writingConfigRepository: new FirestoreWritingConfigRepository(),
     userServiceClient: config.userServiceClient,
     createLlmAdapters: (llmClient: LlmGenerateClient): LlmAdapters => ({
-      interpreter: new GeminiIntentInterpreter(llmClient),
-      draftGenerator: new GeminiDraftGenerator(llmClient),
+      interpreter: new LlmIntentInterpreter(llmClient),
+      draftGenerator: new LlmDraftGenerator(llmClient),
     }),
     logger: config.logger,
   };

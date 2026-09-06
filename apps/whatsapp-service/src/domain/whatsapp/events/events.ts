@@ -1,6 +1,7 @@
 /**
  * Event definitions for Pub/Sub messaging.
  */
+import type { MatrixCorpusSignedIngestV1 } from '@intexuraos/http-contracts';
 
 /**
  * Event published when media needs cleanup (message deleted).
@@ -25,6 +26,168 @@ export interface MediaCleanupEvent {
    * GCS paths to delete (original + thumbnail if applicable).
    */
   gcsPaths: string[];
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
+ * Event published after an inbound WhatsApp audio message has been stored.
+ * Triggers the transcription worker.
+ */
+export interface AudioStoredEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'whatsapp.audio.stored';
+
+  /**
+   * Source collection where the message is stored.
+   */
+  messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * Stored WhatsApp message document ID.
+   */
+  messageId: string;
+
+  /**
+   * WhatsApp media ID.
+   */
+  mediaId: string;
+
+  /**
+   * GCS path to the original audio file.
+   */
+  gcsPath: string;
+
+  /**
+   * MIME type of the audio file.
+   */
+  mimeType: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
+ * Event published after inbound WhatsApp media has been stored.
+ * Triggers the transcription worker for audio and video inputs.
+ */
+export interface MediaTranscriptionRequestedEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'whatsapp.media.transcription.requested';
+
+  /**
+   * Source collection where the message is stored.
+   */
+  messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /**
+   * Kind of media the worker should transcribe.
+   */
+  mediaKind: 'audio' | 'video';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * Stored WhatsApp message document ID.
+   */
+  messageId: string;
+
+  /**
+   * WhatsApp media ID.
+   */
+  mediaId: string;
+
+  /**
+   * GCS path to the original media file.
+   */
+  gcsPath: string;
+
+  /**
+   * MIME type of the stored media file.
+   */
+  mimeType: string;
+
+  /**
+   * Event timestamp (ISO 8601).
+   */
+  timestamp: string;
+}
+
+/**
+ * Event received after the transcription worker completes an audio job.
+ */
+export interface TranscriptionCompletedEvent {
+  /**
+   * Event type identifier.
+   */
+  type: 'srt.transcription.completed';
+
+  /**
+   * Source collection where the message is stored.
+   */
+  messageSource?: 'public_whatsapp' | 'private_whatsapp';
+
+  /**
+   * Kind of media that was transcribed.
+   */
+  mediaKind?: 'audio' | 'video';
+
+  /**
+   * IntexuraOS user ID.
+   */
+  userId: string;
+
+  /**
+   * Stored WhatsApp message document ID.
+   */
+  messageId: string;
+
+  /**
+   * Transcription provider job ID.
+   */
+  jobId: string;
+
+  /**
+   * Transcription result status.
+   */
+  status: 'completed' | 'failed';
+
+  /**
+   * Transcribed text when status is completed.
+   */
+  transcript?: string;
+
+  /**
+   * Optional transcription summary.
+   */
+  summary?: string;
+
+  /**
+   * Optional detected language code from the provider.
+   */
+  detectedLanguage?: string;
+
+  /**
+   * Failure detail when status is failed.
+   */
+  error?: string;
 
   /**
    * Event timestamp (ISO 8601).
@@ -70,11 +233,41 @@ export interface SendMessageEvent {
    */
   ctaUrl?: { displayText: string; url: string };
 
+  /** Approved-template presentation for a Message Digest delivery. */
+  presentation?:
+    | {
+        kind: 'message_digest_v1';
+        digestName: string;
+        digestExcerpt: string;
+        runUrlSuffix: string;
+      }
+    | {
+        kind: 'message_digest_v2';
+        digestName: string;
+        windowLabel: string;
+        headline: string;
+        digestBody: string;
+        runUrlSuffix: string;
+      };
+
+  /** Private delivery fence for a Message Digest event. */
+  deliveryAuthorization?: {
+    kind: 'message_digest_delivery_v1';
+    definitionId: string;
+    runId: string;
+  };
+
+  /** Defaults to true. Message Digest deliveries explicitly disable text retention. */
+  retainMessageText?: boolean;
+
   /**
    * Optional: marks the message as important. When true, delivery bypasses
    * the recipient's 'important'-only notification filter.
    */
   important?: boolean;
+
+  /** Optional consumer-side key for durable delivery deduplication. */
+  idempotencyKey?: string;
 
   /**
    * Correlation ID for tracing across services.
@@ -97,6 +290,24 @@ export interface WhatsAppInteractiveButton {
     title: string;
   };
 }
+
+export type IntexMessageReplyContextSource =
+  | 'inbound_user_message'
+  | 'outbound_assistant_message';
+
+export interface IntexMessageReplyContext {
+  replyToWamid: string;
+  source: IntexMessageReplyContextSource;
+  text: string;
+  truncated: boolean;
+}
+
+export type IntexMessageSourceType =
+  | 'whatsapp_text'
+  | 'whatsapp_image'
+  | 'whatsapp_audio_transcript'
+  | 'whatsapp_video_transcript'
+  | 'whatsapp_button';
 
 /**
  * Event published when a WhatsApp Assistant message is ready for intex-agent.
@@ -126,7 +337,13 @@ export interface IntexMessageIngestEvent {
   /**
    * Source type identifier.
    */
-  sourceType: 'whatsapp_text';
+  sourceType: IntexMessageSourceType;
+
+  /**
+   * Optional original or media URL for external-save processing.
+   * Consumers must pass this through without fetching unless they own that behavior.
+   */
+  sourceUrl?: string;
 
   /**
    * Optional WhatsApp sender phone number for diagnostics.
@@ -134,10 +351,29 @@ export interface IntexMessageIngestEvent {
   whatsappSender?: string;
 
   /**
+   * Optional user-owned WhatsApp message content that the current message replied to.
+   * This is context only for Intex, never a new instruction.
+   */
+  replyContext?: IntexMessageReplyContext;
+
+  /**
+   * Optional WhatsApp interactive button response.
+   * Present only when sourceType is whatsapp_button.
+   */
+  buttonResponse?: {
+    buttonId: string;
+    buttonTitle: string;
+    replyToWamid: string;
+  };
+
+  /**
    * Event timestamp (ISO 8601).
    */
   timestamp: string;
 }
+
+/** A signed Home Dev Matrix-corpus ingest carried only inside the existing Pub/Sub seam. */
+export type MatrixCorpusSignedIngestEvent = MatrixCorpusSignedIngestV1;
 
 /**
  * Event published when a webhook needs async processing.
@@ -162,11 +398,39 @@ export interface ExtractLinkPreviewsEvent {
 }
 
 /**
+ * Event published after a Conversation Assistant analysis shell is persisted.
+ * The worker freezes the selected WhatsApp range without holding the browser request open.
+ */
+export interface ConversationAssistantPreparationRequestedEvent {
+  type: 'whatsapp.conversation-assistant.prepare';
+  sessionId: string;
+  userId: string;
+  attempt: number;
+  generationId?: string;
+}
+
+/** Content-free work item for preparing one immutable context update draft. */
+export interface ConversationAssistantContextAttachmentPreparationRequestedEvent {
+  type: 'whatsapp.conversation-assistant.context-attachment.prepare';
+  userId: string;
+  sessionId: string;
+  sessionGenerationId: string;
+  attachmentId: string;
+  attempt: number;
+}
+
+/**
  * Union of all event types for type safety.
  */
 export type WhatsAppEvent =
   | MediaCleanupEvent
+  | AudioStoredEvent
+  | MediaTranscriptionRequestedEvent
+  | TranscriptionCompletedEvent
   | IntexMessageIngestEvent
+  | MatrixCorpusSignedIngestEvent
   | SendMessageEvent
   | WebhookProcessEvent
-  | ExtractLinkPreviewsEvent;
+  | ExtractLinkPreviewsEvent
+  | ConversationAssistantPreparationRequestedEvent
+  | ConversationAssistantContextAttachmentPreparationRequestedEvent;

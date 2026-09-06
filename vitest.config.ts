@@ -18,9 +18,8 @@ export default mergeConfig(
         '**/node_modules/**',
         '**/dist/**',
         'e2e/**',
-        '.claude/hooks/__tests__/**',
         '**/e2e-container.test.ts',
-        '.claude/worktrees/**',
+        '.worktrees/**',
       ],
       coverage: {
         include: ['packages/**/src/**/*.ts', 'apps/**/src/**/*.ts', 'workers/**/src/**/*.ts'],

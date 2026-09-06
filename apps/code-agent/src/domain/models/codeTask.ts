@@ -1,7 +1,8 @@
-import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
+import type { CodeTaskRebaseResult, CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { Timestamp } from '@google-cloud/firestore';
 import type { ExecutionMemoryType } from './executionMemory.js';
 import type { ExecutionMemoryApplicationCandidate } from './executionMemoryApplication.js';
+import type { SentryIssueTaskContext } from './sentryIssueEvent.js';
 
 /**
  * Worker type determines which model Claude uses.
@@ -16,7 +17,7 @@ export type WorkerType = CodeTaskWorkerType;
  */
 export type WorkerLocation = string;
 
-export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+export type AgentType = 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent' | 'sentry';
 
 /** System prompt hash for auto-triggered merge-conflict resolution tasks. */
 export const MERGE_CONFLICT_SYSTEM_PROMPT_HASH = 'pr-merge-conflict-auto';
@@ -68,13 +69,17 @@ export interface TaskResult {
   summary?: string;         // AI-generated summary of changes
   ciFailed?: boolean;       // True if CI checks failed
   partialWork?: boolean;    // True if task timed out with partial progress
-  rebaseResult?: 'success' | 'conflict' | 'skipped';  // For long tasks (design lines 1356-1364)
+  rebaseResult?: CodeTaskRebaseResult;  // For long tasks (design lines 1356-1364)
   comment_replied?: boolean; // True if PR comment reply was sent (for pull_request agent)
+  pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+  merge_ready?: '1';
+  merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
   planning_outcome_label?: 'planned' | 'unclear';
   planning_superpowers_writing_plans_used?: '0' | '1';
   planning_linear_url?: string;
   planning_is_complex?: '0' | '1';
   planning_subtask_urls?: string;
+  planning_has_plan_doc?: '0' | '1';
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
   execution_outcome_label?: 'implemented' | 'already_completed';
@@ -93,6 +98,10 @@ export interface TaskResult {
   gh_actions_status?: string;
   needs_remediation?: string;
   requires_re_review?: string;
+  sentry_issue_url?: string;
+  sentry_linear_issue?: string;
+  sentry_outcome?: 'fixed' | 'suppressed';
+  sentry_verification?: string;
 }
 
 export interface ExecutionMemoryContextMemory {
@@ -286,6 +295,8 @@ export interface CodeTask {
 
   // Task state
   status: TaskStatus;
+  /** Internal fence for the per-user dispatch lease. Never supplied by clients. */
+  dispatchToken?: string;
 
   // Prompt data
   prompt: string;               // Original user request
@@ -321,6 +332,7 @@ export interface CodeTask {
 
   // Timestamps
   createdAt: Timestamp;
+  statusChangedAt?: Timestamp;    // Canonical lifecycle transition clock; optional during legacy compatibility
   queuedAt?: Timestamp;           // When task entered queue (INT-619)
   dispatchedAt?: Timestamp;
   completedAt?: Timestamp;
@@ -357,11 +369,15 @@ export interface CodeTask {
 
   // Review task metadata
   reviewTypes?: string[];        // Review types requested (e.g., ['code_quality', 'security'])
+  reviewCommitSha?: string;      // PR head SHA captured when this review task was created
   executionMemoryContext?: ExecutionMemoryContext;
   executionMemoryPostRun?: ExecutionMemoryPostRun;
 
   // Remediation task metadata
   requiresReReview?: boolean;    // Set by remediation tasks before pushing code
+
+  // Sentry issue metadata
+  sentryIssue?: SentryIssueTaskContext;
 
   // Auto-retry metadata (INT-1375)
   failedWorkerLocation?: string;   // Worker location that failed, to exclude on retry dispatch

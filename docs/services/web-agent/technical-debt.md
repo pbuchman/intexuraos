@@ -172,15 +172,15 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 ### Platform LLM Fallback Chain
 
-**Decision:** When user has no API key, fall back to platform Gemini 2.5 Flash.
+**Decision:** When a supported user preference cannot be resolved, use the platform OpenRouter default.
 
 **Rationale:**
 
-- ZAI's glm-4.7-flash took 29s for summarization, exceeding HTTP timeouts (ZAI removed in v3.3.0)
-- Gemini 2.5 Flash is faster and already supported in llm-factory
-- Users without configured API keys still get summarization functionality
+- OpenRouter centralizes traffic, spend, and model observability
+- Direct Google model preferences are normalized instead of using a separate platform credential
+- Users without configured provider keys still get summarization functionality
 
-**Trade-off:** Platform pays API costs for users without keys; keys are optional in `createUserServiceClient()` so services that do not want this behaviour keep existing semantics.
+**Trade-off:** Platform pays API costs for fallback traffic; OpenRouter availability is required.
 
 ### Browser-Like Headers (INT-191)
 

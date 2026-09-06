@@ -18,9 +18,3 @@ variable "services" {
     max_scale = number
   }))
 }
-
-variable "secret_ids" {
-  description = "Map of secret names to their IDs"
-  type        = map(string)
-}
-

@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { ok } from '@intexuraos/common-core';
 
 const commonHttpState = vi.hoisted(() => ({
   logIncomingRequest: vi.fn(),
@@ -14,6 +15,24 @@ vi.mock('@intexuraos/common-http', async (importOriginal) => {
 });
 
 import { beforeEach, createToken, describe, expect, it, setupTestContext } from './testUtils.js';
+import type { StorePrivateWhatsAppMessageInput } from '../domain/whatsapp/index.js';
+
+interface PublicPrivateWhatsAppMediaDto {
+  mxcUri: string;
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  storageStatus?: 'stored';
+  hasMedia?: boolean;
+  hasThumbnail?: boolean;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+}
 
 describe('Private WhatsApp Sync Routes', () => {
   const ctx = setupTestContext();
@@ -443,10 +462,10 @@ describe('Private WhatsApp Sync Routes', () => {
     };
     expect(body.success).toBe(true);
     expect(body.data).toMatchObject({
-      sourceAccountId: 'pbuchman-private-whatsapp',
       phoneNumberNormalized: '48123456789',
       status: 'active',
     });
+    expect(body.data).not.toHaveProperty('sourceAccountId');
     expect(body.data.userId).toBeUndefined();
   });
 
@@ -555,15 +574,15 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as {
       success: boolean;
-      data: { sourceAccountId: string; phoneNumberNormalized: string; status: string };
+      data: { sourceAccountId?: string; phoneNumberNormalized: string; status: string };
     };
     expect(body.success).toBe(true);
     expect(body.data).toMatchObject({
       phoneNumberNormalized: '48987654321',
       status: 'active',
     });
-    expect(body.data.sourceAccountId).toEqual(expect.any(String));
-    expect(body.data.sourceAccountId).not.toBe('');
+    expect(body.data.sourceAccountId).toBeUndefined();
+    expect(JSON.stringify(body.data)).not.toContain('sourceAccountId');
   });
 
   it('rejects private WhatsApp mirror enablement for phones not connected to the user', async () => {
@@ -943,6 +962,837 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(invalidLimit.statusCode).toBe(400);
   });
 
+  it('updates private WhatsApp chat transcription settings for the authenticated account', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as {
+      data: { chats: { id: string; transcriptionEnabled?: boolean }[] };
+    };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    expect(chatsBody.data.chats[0]?.transcriptionEnabled).toBeUndefined();
+
+    const updateResponse = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    const updateBody = JSON.parse(updateResponse.body) as {
+      success: boolean;
+      data: {
+        id: string;
+        transcriptionEnabled?: boolean;
+        transcriptionEnabledAt?: string;
+        transcriptionUpdatedAt?: string;
+      };
+    };
+    expect(updateBody.success).toBe(true);
+    expect(updateBody.data).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: true,
+    });
+    expect(updateBody.data.transcriptionEnabledAt).toEqual(expect.any(String));
+    expect(updateBody.data.transcriptionUpdatedAt).toEqual(expect.any(String));
+
+    const updatedChatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const updatedChatsBody = JSON.parse(updatedChatsResponse.body) as {
+      data: {
+        chats: {
+          id: string;
+          transcriptionEnabled?: boolean;
+          transcriptionEnabledAt?: string;
+          transcriptionUpdatedAt?: string;
+        }[];
+      };
+    };
+    expect(updatedChatsBody.data.chats[0]).toMatchObject({
+      id: chatId,
+      transcriptionEnabled: true,
+      transcriptionEnabledAt: updateBody.data.transcriptionEnabledAt,
+      transcriptionUpdatedAt: updateBody.data.transcriptionUpdatedAt,
+    });
+  });
+
+  it('requires auth before updating private WhatsApp chat transcription settings', async () => {
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('validates private WhatsApp chat transcription update bodies', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: 'yes' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('returns not found when updating transcription for a user without a private WhatsApp account', async () => {
+    const token = await createToken({ sub: 'user-without-private-whatsapp' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns not found when updating transcription for a missing private WhatsApp chat', async () => {
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns internal error when updating private WhatsApp chat transcription settings fails', async () => {
+    ctx.privateWhatsAppRepository.failNextChatTranscriptionUpdate({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated transcription setting update failure',
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'PATCH',
+      url: '/private/chats/missing-chat/transcription',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('publishes one private audio transcription job after chat transcription is enabled', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    const updateResponse = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+
+    const audioPayload = createPayload({
+      events: [
+        {
+          ...(createPayload()['events'] as Record<string, unknown>[])[0],
+          matrixEventId: '$event-private-audio',
+          message: {
+            direction: 'incoming',
+            type: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/private-audio',
+              mimeType: 'audio/ogg',
+              storageStatus: 'stored',
+              gcsPath: 'whatsapp/private/user-123/private-audio/audio.ogg',
+              storedMimeType: 'audio/ogg',
+              storedSizeBytes: 2048,
+            },
+          },
+        },
+      ],
+    });
+
+    const firstIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: audioPayload,
+    });
+    const duplicateIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: audioPayload,
+    });
+
+    expect(firstIngest.statusCode).toBe(200);
+    expect(duplicateIngest.statusCode).toBe(200);
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([
+      {
+        type: 'whatsapp.audio.stored',
+        messageSource: 'private_whatsapp',
+        userId: 'user-123',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio',
+        mediaId: 'mxc://home-dev/private-audio',
+        gcsPath: 'whatsapp/private/user-123/private-audio/audio.ogg',
+        mimeType: 'audio/ogg',
+        timestamp: expect.any(String),
+      },
+    ]);
+  });
+
+  it('backfills stored private audio media and publishes one transcription job', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+
+    const messageId = 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder';
+    const sparseAudioPayload = createPayload({
+      events: [
+        {
+          ...(createPayload()['events'] as Record<string, unknown>[])[0],
+          matrixEventId: '$event-private-audio-placeholder',
+          message: {
+            direction: 'incoming',
+            type: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/private-audio-placeholder',
+              mimeType: 'audio/ogg',
+              fileName: 'Voice message.ogg',
+            },
+          },
+        },
+      ],
+    });
+    const ingestResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: sparseAudioPayload,
+    });
+    expect(ingestResponse.statusCode).toBe(200);
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([]);
+
+    const backfillPayload = {
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      messageId,
+      media: {
+        mxcUri: 'mxc://home-dev/private-audio-placeholder',
+        mimeType: 'audio/ogg',
+        fileName: 'Voice message.ogg',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        storedMimeType: 'audio/ogg',
+        storedSizeBytes: 2048,
+        storedAt: '2026-06-22T10:05:00.000Z',
+      },
+    };
+    const firstBackfill = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: backfillPayload,
+    });
+    const secondBackfill = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: backfillPayload,
+    });
+
+    expect(firstBackfill.statusCode).toBe(200);
+    expect(secondBackfill.statusCode).toBe(200);
+    const firstBody = JSON.parse(firstBackfill.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    const secondBody = JSON.parse(secondBackfill.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(firstBody.data).toEqual({ status: 'updated', transcriptionPublished: true });
+    expect(secondBody.data).toEqual({
+      status: 'already_stored',
+      transcriptionPublished: false,
+    });
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([
+      {
+        type: 'whatsapp.audio.stored',
+        messageSource: 'private_whatsapp',
+        userId: 'user-123',
+        messageId,
+        mediaId: 'mxc://home-dev/private-audio-placeholder',
+        gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        mimeType: 'audio/ogg',
+        timestamp: expect.any(String),
+      },
+    ]);
+
+    const storedMessageResult = await ctx.privateWhatsAppRepository.getMessageById(messageId);
+    expect(storedMessageResult.ok).toBe(true);
+    if (storedMessageResult.ok) {
+      expect(storedMessageResult.value?.media).toMatchObject({
+        mxcUri: 'mxc://home-dev/private-audio-placeholder',
+        storageStatus: 'stored',
+        gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        storedMimeType: 'audio/ogg',
+      });
+    }
+  });
+
+  it('requires internal auth for private WhatsApp media backfills', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('validates private WhatsApp media backfill request bodies before mutation', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('logs malformed private WhatsApp media backfill bodies without inspecting contents', async () => {
+    const nonObjectResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: {
+        'content-type': 'application/json',
+        'x-internal-auth': 'test-internal-token',
+      },
+      payload: 'null',
+    });
+    const missingMediaResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+      },
+    });
+
+    expect(nonObjectResponse.statusCode).toBe(400);
+    expect(missingMediaResponse.statusCode).toBe(400);
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_media_backfill',
+        }),
+      })
+    );
+  });
+
+  it('returns not found when media backfill targets an inactive private source account', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'unknown-private-whatsapp',
+        messageId: 'message:unknown-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns internal error when media backfill account lookup fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated account lookup failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-placeholder',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('returns not found when media backfill targets a missing private message', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$missing-audio',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-placeholder',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-placeholder/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns invalid request when media backfill does not match stored message media', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-audio-mismatch',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/original-audio',
+                mimeType: 'audio/ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-mismatch',
+        media: {
+          mxcUri: 'mxc://home-dev/different-audio',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-mismatch/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns internal error when media backfill transcription publishing fails', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-audio-publish-failure',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/private-audio-publish-failure',
+                mimeType: 'audio/ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+    ctx.eventPublisher.setAudioStoredFailure('Simulated audio publish failure');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-publish-failure',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-publish-failure',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-publish-failure/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('backfills private audio media without publishing when chat transcription is disabled', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-audio-transcription-disabled',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/private-audio-transcription-disabled',
+                mimeType: 'audio/ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-audio-transcription-disabled',
+        media: {
+          mxcUri: 'mxc://home-dev/private-audio-transcription-disabled',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-audio-transcription-disabled/audio.ogg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(body.data).toEqual({ status: 'updated', transcriptionPublished: false });
+    expect(ctx.eventPublisher.getAudioStoredEvents()).toEqual([]);
+  });
+
+  it('backfills private image media without publishing a transcription job', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-private-image-backfill',
+            message: {
+              direction: 'incoming',
+              type: 'image',
+              media: {
+                mxcUri: 'mxc://home-dev/private-image-backfill',
+                mimeType: 'image/jpeg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media/backfill',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-image-backfill',
+        media: {
+          mxcUri: 'mxc://home-dev/private-image-backfill',
+          mimeType: 'image/jpeg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/private-image-backfill/image.jpg',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { status: string; transcriptionPublished: boolean };
+    };
+    expect(body.data).toEqual({ status: 'updated', transcriptionPublished: false });
+    expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()).toEqual([]);
+  });
+
+  it('publishes one private video transcription job after chat transcription is enabled', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+    const updateResponse = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/private/chats/${encodeURIComponent(chatId)}/transcription`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { enabled: true },
+    });
+    expect(updateResponse.statusCode).toBe(200);
+
+    const videoPayload = createPayload({
+      events: [
+        {
+          ...(createPayload()['events'] as Record<string, unknown>[])[0],
+          matrixEventId: '$event-private-video',
+          message: {
+            direction: 'incoming',
+            type: 'video',
+            media: {
+              mxcUri: 'mxc://home-dev/private-video',
+              mimeType: 'video/mp4',
+              storageStatus: 'stored',
+              gcsPath: 'whatsapp/private/user-123/private-video/video.mp4',
+              storedMimeType: 'video/mp4',
+              storedSizeBytes: 4096,
+            },
+          },
+        },
+      ],
+    });
+
+    const firstIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: videoPayload,
+    });
+    const duplicateIngest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: videoPayload,
+    });
+
+    expect(firstIngest.statusCode).toBe(200);
+    expect(duplicateIngest.statusCode).toBe(200);
+    expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()).toEqual([
+      {
+        type: 'whatsapp.media.transcription.requested',
+        messageSource: 'private_whatsapp',
+        mediaKind: 'video',
+        userId: 'user-123',
+        messageId: 'message:pbuchman-private-whatsapp:$event-private-video',
+        mediaId: 'mxc://home-dev/private-video',
+        gcsPath: 'whatsapp/private/user-123/private-video/video.mp4',
+        mimeType: 'video/mp4',
+        timestamp: expect.any(String),
+      },
+    ]);
+  });
+
+  it('returns stored private WhatsApp message transcription state in chat messages', async () => {
+    const ingestResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$event-transcribed-audio',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/transcribed-audio',
+                mimeType: 'audio/ogg',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/transcribed-audio/audio.ogg',
+              },
+            },
+          },
+        ],
+      }),
+    });
+    const ingestBody = JSON.parse(ingestResponse.body) as {
+      data: { messages: { chatId?: string; messageId?: string }[] };
+    };
+    const chatId = ingestBody.data.messages[0]?.chatId ?? '';
+    const messageId = ingestBody.data.messages[0]?.messageId ?? '';
+    const updateResult = await ctx.privateWhatsAppRepository.updateMessageTranscription({
+      userId: 'user-123',
+      messageId,
+      transcription: {
+        status: 'completed',
+        jobId: 'job-private-api',
+        text: 'Timeline transcript.',
+        detectedLanguage: 'en',
+        completedAt: '2026-06-28T10:10:00.000Z',
+      },
+    });
+    expect(updateResult.ok).toBe(true);
+    if (!updateResult.ok) throw new Error(updateResult.error.message);
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=10`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          id: string;
+          transcription?: {
+            status: string;
+            jobId?: string;
+            text?: string;
+            detectedLanguage?: string;
+            completedAt?: string;
+          };
+        }[];
+      };
+    };
+    expect(body.data.messages[0]).toMatchObject({
+      id: messageId,
+      transcription: {
+        status: 'completed',
+        jobId: 'job-private-api',
+        text: 'Timeline transcript.',
+        detectedLanguage: 'en',
+        completedAt: '2026-06-28T10:10:00.000Z',
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('sourceAccountId');
+    expect(JSON.stringify(body)).not.toContain('rawMatrixEvent');
+  });
+
   it('returns standard errors when private WhatsApp chat data queries fail', async () => {
     const token = await createToken({ sub: 'user-123' });
     ctx.privateWhatsAppRepository.failNextDataQuery({
@@ -1105,6 +1955,645 @@ describe('Private WhatsApp Sync Routes', () => {
     expect(logged).not.toContain('phone:+48123456789');
   });
 
+  it('returns private chat messages with inline reactions and without Matrix identifiers', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$target-event',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'original post',
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$reaction-event',
+            eventTimestamp: '2026-06-22T10:05:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$target-event',
+                  key: '👍',
+                },
+              },
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$second-event',
+            eventTimestamp: '2026-06-22T10:10:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'newer post',
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=10`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { emoji: string; senderDisplayName?: string; direction: string }[];
+        }[];
+      };
+    };
+    const target = body.data.messages.find((message) => message.text === 'original post');
+    expect(target).toMatchObject({
+      text: 'original post',
+      reactions: [
+        {
+          emoji: '👍',
+          senderDisplayName: 'Alice',
+          direction: 'incoming',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('returns sender private messages with inline reactions and omits attached reaction rows', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$sender-target-event',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'sender original post',
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$sender-reaction-event',
+            eventTimestamp: '2026-06-22T10:05:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$sender-reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$sender-target-event',
+                  key: '👍',
+                },
+              },
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$sender-second-event',
+            eventTimestamp: '2026-06-22T10:10:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'sender newer post',
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { emoji: string; senderDisplayName?: string; direction: string }[];
+        }[];
+      };
+    };
+    const target = body.data.messages.find((message) => message.text === 'sender original post');
+    expect(target).toMatchObject({
+      text: 'sender original post',
+      reactions: [
+        {
+          emoji: '👍',
+          senderDisplayName: 'Alice',
+          direction: 'incoming',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('returns standalone reaction rows when the target is outside the sender page', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$standalone-target-event',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'standalone target post',
+            },
+          },
+          {
+            ...(createPayload()['events'] as Record<string, unknown>[])[0],
+            matrixEventId: '$standalone-reaction-event',
+            eventTimestamp: '2026-06-22T10:05:00.000Z',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+              reaction: {
+                emoji: '👍',
+                targetMatrixEventId: '$standalone-target-event',
+              },
+            },
+          },
+        ],
+      }),
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          messageType: string;
+          reaction?: { emoji: string; targetMessageId: string };
+        }[];
+      };
+    };
+    expect(body.data.messages).toMatchObject([
+      {
+        messageType: 'reaction',
+        reaction: {
+          emoji: '👍',
+        },
+      },
+    ]);
+    expect(body.data.messages[0]?.reaction?.targetMessageId).toContain('standalone-target-event');
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('suppresses raw-only legacy reaction rows when the target is outside the sender page', async () => {
+    const baseMessage: StorePrivateWhatsAppMessageInput['message'] = {
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$legacy-standalone-target-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      senderDisplayName: 'Alice',
+      senderPhoneNumber: '+48123456789',
+      senderPhoneNumberNormalized: '48123456789',
+      direction: 'incoming',
+      type: 'text',
+      text: 'legacy standalone target post',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$legacy-standalone-target-event',
+      },
+    };
+    await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-22T10:00:01.000Z',
+      chat: {
+        matrixRoomId: '!room:matrix.example',
+        type: 'direct',
+        displayName: 'Alice',
+      },
+      message: {
+        ...baseMessage,
+        matrixEventId: '$legacy-standalone-target-event',
+        eventTimestamp: '2026-06-22T10:00:00.000Z',
+        type: 'text',
+        text: 'legacy standalone target post',
+      },
+    });
+    await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-22T10:05:01.000Z',
+      chat: {
+        matrixRoomId: '!room:matrix.example',
+        type: 'direct',
+        displayName: 'Alice',
+      },
+      message: {
+        ...baseMessage,
+        matrixEventId: '$legacy-standalone-reaction-event',
+        eventTimestamp: '2026-06-22T10:05:00.000Z',
+        type: 'reaction',
+        text: '👍',
+        rawMatrixEvent: {
+          type: 'm.reaction',
+          event_id: '$legacy-standalone-reaction-event',
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$legacy-standalone-target-event',
+              key: '👍',
+            },
+          },
+        },
+      },
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: { messageType: string; reaction?: { emoji: string; targetMessageId: string } }[];
+      };
+    };
+    expect(body.data.messages).toEqual([]);
+    expect(JSON.stringify(body.data)).not.toContain('legacy-standalone-target-event');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('folds page-local raw-only legacy reactions when the repository only returns normalized reactions', async () => {
+    const baseMessage: StorePrivateWhatsAppMessageInput['message'] = {
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$fallback-inline-target-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      senderDisplayName: 'Alice',
+      senderPhoneNumber: '+48123456789',
+      senderPhoneNumberNormalized: '48123456789',
+      direction: 'incoming',
+      type: 'text',
+      text: 'fallback inline target post',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$fallback-inline-target-event',
+      },
+    };
+    const store = (
+      message: StorePrivateWhatsAppMessageInput['message']
+    ): ReturnType<typeof ctx.privateWhatsAppRepository.storeIncomingMessage> =>
+      ctx.privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: '2026-06-22T10:00:01.000Z',
+        chat: {
+          matrixRoomId: '!room:matrix.example',
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message,
+      });
+    await store(baseMessage);
+    await store({
+      ...baseMessage,
+      matrixEventId: '$fallback-inline-reaction',
+      type: 'reaction',
+      text: '💚',
+      eventTimestamp: '2026-06-22T10:05:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$fallback-inline-target-event',
+            key: '  💚  ',
+          },
+        },
+      },
+    });
+    const originalFindReactions =
+      ctx.privateWhatsAppRepository.findReactionsForMessageIds.bind(ctx.privateWhatsAppRepository);
+    ctx.privateWhatsAppRepository.findReactionsForMessageIds = ():
+      ReturnType<typeof ctx.privateWhatsAppRepository.findReactionsForMessageIds> =>
+      Promise.resolve(ok({ reactionsByMessageId: {}, attachedReactionMessageIds: [] }));
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    ctx.privateWhatsAppRepository.findReactionsForMessageIds = originalFindReactions;
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { id: string; emoji: string }[];
+        }[];
+      };
+    };
+    expect(body.data.messages).toHaveLength(1);
+    expect(body.data.messages[0]).toMatchObject({
+      text: 'fallback inline target post',
+      reactions: [
+        {
+          id: 'message:pbuchman-private-whatsapp:$fallback-inline-reaction',
+          emoji: '💚',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('folds page-local raw-only legacy reactions and suppresses malformed legacy rows', async () => {
+    const baseMessage: StorePrivateWhatsAppMessageInput['message'] = {
+      matrixRoomId: '!room:matrix.example',
+      matrixEventId: '$legacy-inline-target-event',
+      matrixSenderId: '@alice:matrix.example',
+      senderKey: 'phone:+48123456789',
+      senderDisplayName: 'Alice',
+      senderPhoneNumber: '+48123456789',
+      senderPhoneNumberNormalized: '48123456789',
+      direction: 'incoming',
+      type: 'text',
+      text: 'legacy inline target post',
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      eventDayKey: '2026-06-22',
+      eventTimeZone: 'Europe/Warsaw',
+      rawMatrixEvent: {
+        type: 'm.room.message',
+        event_id: '$legacy-inline-target-event',
+      },
+    };
+    const store = (
+      message: StorePrivateWhatsAppMessageInput['message']
+    ): ReturnType<typeof ctx.privateWhatsAppRepository.storeIncomingMessage> =>
+      ctx.privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: '2026-06-22T10:00:01.000Z',
+        chat: {
+          matrixRoomId: '!room:matrix.example',
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message,
+      });
+    await store(baseMessage);
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-inline-reaction-b',
+      type: 'reaction',
+      text: '👋',
+      eventTimestamp: '2026-06-22T10:05:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$legacy-inline-target-event',
+            key: '👋',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-inline-reaction-c',
+      type: 'reaction',
+      text: '✅',
+      eventTimestamp: '2026-06-22T10:04:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$legacy-inline-target-event',
+            key: '✅',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-inline-reaction-a',
+      type: 'reaction',
+      text: '🔥',
+      eventTimestamp: '2026-06-22T10:05:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '$legacy-inline-target-event',
+            key: '  🔥  ',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-raw',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:06:00.000Z',
+      rawMatrixEvent: 'not-an-event',
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-content',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:07:00.000Z',
+      rawMatrixEvent: { content: 'not-content' },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-relation',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:08:00.000Z',
+      rawMatrixEvent: { content: { 'm.relates_to': { rel_type: 'm.replace' } } },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-empty',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:09:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: '   ',
+            key: '   ',
+          },
+        },
+      },
+    });
+    await store({
+      ...baseMessage,
+      matrixEventId: '$legacy-malformed-non-string',
+      type: 'reaction',
+      text: 'malformed',
+      eventTimestamp: '2026-06-22T10:10:00.000Z',
+      rawMatrixEvent: {
+        content: {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: 123,
+            key: 456,
+          },
+        },
+      },
+    });
+    const token = await createToken({ sub: 'user-123' });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        messages: {
+          text?: string;
+          messageType: string;
+          reactions?: { id: string; emoji: string }[];
+        }[];
+      };
+    };
+    expect(body.data.messages).toHaveLength(1);
+    expect(body.data.messages[0]).toMatchObject({
+      text: 'legacy inline target post',
+      reactions: [
+        {
+          id: 'message:pbuchman-private-whatsapp:$legacy-inline-reaction-c',
+          emoji: '✅',
+        },
+        {
+          id: 'message:pbuchman-private-whatsapp:$legacy-inline-reaction-a',
+          emoji: '🔥',
+        },
+        {
+          id: 'message:pbuchman-private-whatsapp:$legacy-inline-reaction-b',
+          emoji: '👋',
+        },
+      ],
+    });
+    expect(body.data.messages.some((message) => message.messageType === 'reaction')).toBe(false);
+    expect(JSON.stringify(body.data)).not.toContain('targetMatrixEventId');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+  });
+
+  it('returns standard errors when inline reaction hydration fails for chat and sender reads', async () => {
+    await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    const token = await createToken({ sub: 'user-123' });
+    const chatsResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats?limit=1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(chatsResponse.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id ?? '';
+
+    ctx.privateWhatsAppRepository.failNextReactionQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated reaction hydration failure',
+    });
+    const chatMessagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${encodeURIComponent(chatId)}/messages?limit=10`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    ctx.privateWhatsAppRepository.failNextReactionQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated reaction hydration failure',
+    });
+    const senderMessagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/messages?senderKey=phone:%2B48123456789&eventDayKey=2026-06-22&limit=10',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(chatMessagesResponse.statusCode).toBe(500);
+    expect(senderMessagesResponse.statusCode).toBe(500);
+  });
+
   it('paginates public private WhatsApp messages and returns media metadata without text', async () => {
     await ctx.app.inject({
       method: 'POST',
@@ -1198,6 +2687,77 @@ describe('Private WhatsApp Sync Routes', () => {
     const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('projects stored private image media without leaking GCS paths to the browser', async () => {
+    const token = await createToken({ sub: 'user-123' });
+    await ctx.privateWhatsAppRepository.storeIncomingMessage({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      userId: 'user-123',
+      deliveryMode: 'live',
+      receivedAt: '2026-06-26T10:00:01.000Z',
+      chat: {
+        matrixRoomId: '!sparse-room:matrix.example',
+        type: 'unknown',
+      },
+      message: {
+        matrixRoomId: '!sparse-room:matrix.example',
+        matrixEventId: '$event-stored-image',
+        matrixSenderId: '@sparse:matrix.example',
+        senderKey: 'matrix:@sparse:matrix.example',
+        direction: 'incoming',
+        type: 'image',
+        media: {
+          mxcUri: 'mxc://matrix.example/stored-image',
+          mimeType: 'image/jpeg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user/message/image.jpg',
+          thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
+          storedMimeType: 'image/jpeg',
+          storedSizeBytes: 11,
+          storedAt: '2026-06-26T10:00:00.000Z',
+          width: 1280,
+          height: 720,
+          durationMs: 3456,
+        },
+        eventTimestamp: '2026-06-22T11:00:00.000Z',
+        rawMatrixEvent: {},
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/private/chats',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const chatsBody = JSON.parse(response.body) as { data: { chats: { id: string }[] } };
+    const chatId = chatsBody.data.chats[0]?.id;
+    expect(chatId).toBeDefined();
+
+    const messagesResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/private/chats/${String(chatId)}/messages`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(messagesResponse.statusCode).toBe(200);
+    const body = JSON.parse(messagesResponse.body) as {
+      data: { messages: { media?: PublicPrivateWhatsAppMediaDto }[] };
+    };
+    expect(body.data.messages[0]?.media).toMatchObject({
+      mxcUri: 'mxc://matrix.example/stored-image',
+      mimeType: 'image/jpeg',
+      width: 1280,
+      height: 720,
+      durationMs: 3456,
+      storageStatus: 'stored',
+      hasMedia: true,
+      hasThumbnail: true,
+      storedMimeType: 'image/jpeg',
+      storedSizeBytes: 11,
+    });
+    expect(JSON.stringify(body.data.messages[0]?.media)).not.toContain('gcsPath');
+    expect(JSON.stringify(body.data.messages[0]?.media)).not.toContain('whatsapp/private');
   });
 
   it('rejects invalid public private WhatsApp message filters after owner auth', async () => {
@@ -1530,6 +3090,644 @@ describe('Private WhatsApp Sync Routes', () => {
     });
 
     expect(response.statusCode).toBe(401);
+  });
+
+  it('exports sanitized direct-chat conversation context for the active private account', async () => {
+    const textResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    expect(textResponse.statusCode).toBe(200);
+    const audioResponse = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            matrixRoomId: '!room:matrix.example',
+            matrixEventId: '$event-audio',
+            matrixSenderId: '@user:matrix.example',
+            eventTimestamp: '2026-06-22T10:05:00.000Z',
+            chat: { type: 'direct', displayName: 'Alice' },
+            sender: { displayName: 'Me' },
+            message: {
+              direction: 'outgoing',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://matrix.example/private-audio',
+                mimeType: 'audio/ogg',
+              },
+            },
+            rawMatrixEvent: {
+              type: 'm.room.message',
+              content: { url: 'mxc://matrix.example/private-audio' },
+            },
+          },
+        ],
+      }),
+    });
+    expect(audioResponse.statusCode).toBe(200);
+    const audioMessagesResult = await ctx.privateWhatsAppRepository.findMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 10,
+    });
+    expect(audioMessagesResult.ok).toBe(true);
+    if (!audioMessagesResult.ok) throw new Error(audioMessagesResult.error.message);
+    const audioMessage = audioMessagesResult.value.messages.find(
+      (message) => message.matrixEventId === '$event-audio'
+    );
+    if (audioMessage === undefined) throw new Error('Expected audio message');
+    const textMessage = audioMessagesResult.value.messages.find((message) => message.matrixEventId === '$event-1');
+    if (textMessage === undefined) throw new Error('Expected text message');
+    await ctx.privateWhatsAppRepository.updateMessageTranscription({
+      userId: 'user-123',
+      messageId: audioMessage.id,
+      transcription: {
+        status: 'completed',
+        text: 'Transcribed private voice note',
+        completedAt: '2026-06-22T10:06:00.000Z',
+      },
+    });
+
+    commonHttpState.logIncomingRequest.mockClear();
+    const chatId = audioMessage.chatId;
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+        maxMessages: 20,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        chat: { id: string; displayName?: string; chatType: string; messageCount: number };
+        messages: {
+          id: string;
+          eventTimestamp: string;
+          importedAt: string;
+          speakerLabel: string;
+          contentKind: string;
+          content: string;
+          matrixEventId?: string;
+          media?: unknown;
+          rawMatrixEvent?: unknown;
+          sourceAccountId?: string;
+        }[];
+        omitted: Record<string, number>;
+        messageCount: number;
+        transcriptSha256: string;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.chat).toMatchObject({
+      id: chatId,
+      displayName: 'Alice',
+      chatType: 'direct',
+      messageCount: 2,
+    });
+    expect(body.data.messages[0]).toMatchObject({
+      eventTimestamp: '2026-06-22T10:00:00.000Z',
+      importedAt: textMessage.ingestedAt,
+    });
+    expect(body.data.messages).toEqual([
+      expect.objectContaining({
+        importedAt: textMessage.ingestedAt,
+        speakerLabel: 'Alice',
+        contentKind: 'text',
+        content: 'hello from private whatsapp',
+      }),
+      expect.objectContaining({
+        importedAt: audioMessage.ingestedAt,
+        speakerLabel: 'You',
+        contentKind: 'transcription',
+        content: 'Transcribed private voice note',
+      }),
+    ]);
+    expect(body.data.omitted).toEqual({
+      mediaOnly: 0,
+      failedTranscriptions: 0,
+      pendingTranscriptions: 0,
+      nonText: 0,
+      overLimit: 0,
+    });
+    expect(body.data.messageCount).toBe(2);
+    expect(body.data.transcriptSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(body.data)).not.toContain('mxc://matrix.example/private-audio');
+    expect(JSON.stringify(body.data)).not.toContain('sourceAccountId');
+    expect(JSON.stringify(body.data)).not.toContain('rawMatrixEvent');
+    expect(JSON.stringify(body.data)).not.toContain('matrixEventId');
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: expect.objectContaining({
+          route: 'internal_whatsapp_private_conversation_context',
+          hasUserId: true,
+          hasChatId: true,
+        }),
+      })
+    );
+    expect(JSON.stringify(commonHttpState.logIncomingRequest.mock.calls)).not.toContain(
+      'hello from private whatsapp'
+    );
+  });
+
+  it('reports the full conversation context over-limit count', async () => {
+    for (let index = 0; index < 7; index += 1) {
+      const timestamp = `2026-06-22T10:0${String(index)}:00.000Z`;
+      const isLeadingMedia = index < 2;
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/private/events',
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: createPayload({
+          events: [
+            {
+              matrixRoomId: '!room:matrix.example',
+              matrixEventId: `$event-over-limit-${String(index)}`,
+              matrixSenderId: '@alice:matrix.example',
+              eventTimestamp: timestamp,
+              chat: { type: 'direct', displayName: 'Alice' },
+              sender: { displayName: 'Alice' },
+              message: isLeadingMedia
+                ? {
+                    direction: 'incoming',
+                    type: 'image',
+                    media: { mxcUri: `mxc://matrix.example/leading-${String(index)}` },
+                  }
+                : {
+                    direction: 'incoming',
+                    type: 'text',
+                    text: `message ${String(index)}`,
+                  },
+              rawMatrixEvent: { type: 'm.room.message' },
+            },
+          ],
+        }),
+      });
+      expect(response.statusCode).toBe(200);
+    }
+    const messagesResult = await ctx.privateWhatsAppRepository.findMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 10,
+    });
+    expect(messagesResult.ok).toBe(true);
+    if (!messagesResult.ok) throw new Error(messagesResult.error.message);
+    const chatId = messagesResult.value.messages[0]?.chatId;
+    if (chatId === undefined) throw new Error('Expected chat id');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+        maxMessages: 2,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { messages: unknown[]; omitted: { overLimit: number } };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.messages).toHaveLength(2);
+    expect(body.data.omitted.overLimit).toBe(3);
+  });
+
+  it('continues scanning raw conversation rows until maxMessages usable context messages are projected', async () => {
+    const chatMatrixRoomId = '!large-context-room:matrix.example';
+    const storedMessages: StorePrivateWhatsAppMessageInput[] = [];
+    for (let index = 0; index < 5100; index += 1) {
+      const isLeadingMedia = index < 100;
+      const timestamp = new Date(Date.UTC(2026, 5, 22, 10, 0, index)).toISOString();
+      storedMessages.push({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: timestamp,
+        chat: {
+          matrixRoomId: chatMatrixRoomId,
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message: {
+          matrixRoomId: chatMatrixRoomId,
+          matrixEventId: `$event-large-context-${String(index)}`,
+          matrixSenderId: '@alice:matrix.example',
+          senderDisplayName: 'Alice',
+          senderKey: 'matrix:@alice:matrix.example',
+          direction: 'incoming',
+          type: isLeadingMedia ? 'image' : 'text',
+          ...(isLeadingMedia
+            ? { media: { mxcUri: `mxc://matrix.example/large-leading-${String(index)}` } }
+            : { text: `message ${String(index)}` }),
+          eventTimestamp: timestamp,
+          rawMatrixEvent: { type: 'm.room.message' },
+        },
+      });
+    }
+    await Promise.all(
+      storedMessages.map(async (message) =>
+        ctx.privateWhatsAppRepository.storeIncomingMessage(message)
+      )
+    );
+    const chatId = `chat:pbuchman-private-whatsapp:${chatMatrixRoomId}`;
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T12:00:00.000Z',
+        maxMessages: 5000,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        messages: { content: string; contentKind: string }[];
+        omitted: { mediaOnly: number; overLimit: number };
+        messageCount: number;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.messages).toHaveLength(5000);
+    expect(body.data.messages[0]).toMatchObject({
+      content: 'message 100',
+      contentKind: 'text',
+    });
+    expect(body.data.messageCount).toBe(5000);
+    expect(body.data.omitted.mediaOnly).toBe(100);
+    expect(body.data.omitted.overLimit).toBe(0);
+  });
+
+  it('counts omissions across all raw conversation pages after maxMessages is filled', async () => {
+    const chatMatrixRoomId = '!large-over-limit-room:matrix.example';
+    const storedMessages: StorePrivateWhatsAppMessageInput[] = [];
+    for (let index = 0; index < 6010; index += 1) {
+      const isTrailingMedia = index >= 6000;
+      const timestamp = new Date(Date.UTC(2026, 5, 22, 10, 0, index)).toISOString();
+      storedMessages.push({
+        sourceAccountId: 'pbuchman-private-whatsapp',
+        userId: 'user-123',
+        deliveryMode: 'live',
+        receivedAt: timestamp,
+        chat: {
+          matrixRoomId: chatMatrixRoomId,
+          type: 'direct',
+          displayName: 'Alice',
+        },
+        message: {
+          matrixRoomId: chatMatrixRoomId,
+          matrixEventId: `$event-large-over-limit-${String(index)}`,
+          matrixSenderId: '@alice:matrix.example',
+          senderDisplayName: 'Alice',
+          senderKey: 'matrix:@alice:matrix.example',
+          direction: 'incoming',
+          type: isTrailingMedia ? 'image' : 'text',
+          ...(isTrailingMedia
+            ? { media: { mxcUri: `mxc://matrix.example/trailing-${String(index)}` } }
+            : { text: `message ${String(index)}` }),
+          eventTimestamp: timestamp,
+          rawMatrixEvent: { type: 'm.room.message' },
+        },
+      });
+    }
+    await Promise.all(
+      storedMessages.map(async (message) =>
+        ctx.privateWhatsAppRepository.storeIncomingMessage(message)
+      )
+    );
+    const chatId = `chat:pbuchman-private-whatsapp:${chatMatrixRoomId}`;
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T12:00:00.000Z',
+        maxMessages: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: {
+        messages: { content: string; contentKind: string }[];
+        omitted: { mediaOnly: number; overLimit: number };
+        messageCount: number;
+      };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.messages).toEqual([
+      expect.objectContaining({
+        content: 'message 0',
+        contentKind: 'text',
+      }),
+    ]);
+    expect(body.data.messageCount).toBe(1);
+    expect(body.data.omitted.overLimit).toBe(5999);
+    expect(body.data.omitted.mediaOnly).toBe(10);
+  });
+
+  it('rejects conversation context requests without internal auth', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      payload: {
+        userId: 'user-123',
+        chatId: 'chat-123',
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T10:00:00.000Z',
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('validates conversation context time ranges and limits', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: 'chat-123',
+        from: '2026-06-22T10:00:00.000Z',
+        to: '2026-06-22T10:00:00.000Z',
+        maxMessages: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('rejects conversation context ranges where from is not before to', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: 'chat-123',
+        from: '2026-06-22T10:00:00.000Z',
+        to: '2026-06-22T10:00:00.000Z',
+        maxMessages: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('rejects parseable non-ISO conversation context timestamps', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: 'chat-123',
+        from: '2026-06-22',
+        to: '2026-06-22T10:00:00.000Z',
+        maxMessages: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('rejects group chats for conversation context export', async () => {
+    const ingest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload({
+        events: [
+          {
+            matrixRoomId: '!group:matrix.example',
+            matrixEventId: '$group-event',
+            matrixSenderId: '@alice:matrix.example',
+            eventTimestamp: '2026-06-22T10:00:00.000Z',
+            chat: { type: 'group', displayName: 'Group Chat' },
+            sender: { displayName: 'Alice' },
+            message: { direction: 'incoming', type: 'text', text: 'group secret' },
+            rawMatrixEvent: { type: 'm.room.message' },
+          },
+        ],
+      }),
+    });
+    expect(ingest.statusCode).toBe(200);
+    const messagesResult = await ctx.privateWhatsAppRepository.findMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 10,
+    });
+    expect(messagesResult.ok).toBe(true);
+    if (!messagesResult.ok) throw new Error(messagesResult.error.message);
+    const storedMessage = messagesResult.value.messages.find(
+      (message) => message.matrixEventId === '$group-event'
+    );
+    if (storedMessage === undefined) throw new Error('Expected group message');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: storedMessage.chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INVALID_REQUEST');
+  });
+
+  it('logs non-object conversation context bodies without inspecting contents', async () => {
+    commonHttpState.logIncomingRequest.mockClear();
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(commonHttpState.logIncomingRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'internal_whatsapp_private_conversation_context',
+          bodyType: 'undefined',
+        },
+      })
+    );
+  });
+
+  it('returns not found when exporting conversation context without an active account', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'missing-user',
+        chatId: 'chat-123',
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns standard errors when conversation context account lookup fails', async () => {
+    ctx.privateWhatsAppRepository.failNext({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated conversation context account lookup failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: 'chat-123',
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns not found when exporting conversation context for an unknown chat', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: 'missing-chat',
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('returns standard errors when conversation context chat lookup fails', async () => {
+    ctx.privateWhatsAppRepository.failNextDataQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated conversation context chat lookup failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId: 'chat-123',
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns standard errors when conversation context message lookup fails', async () => {
+    const ingest = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/events',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: createPayload(),
+    });
+    expect(ingest.statusCode).toBe(200);
+    const messagesResult = await ctx.privateWhatsAppRepository.findMessages({
+      sourceAccountId: 'pbuchman-private-whatsapp',
+      limit: 10,
+    });
+    expect(messagesResult.ok).toBe(true);
+    if (!messagesResult.ok) throw new Error(messagesResult.error.message);
+    const chatId = messagesResult.value.messages[0]?.chatId;
+    if (chatId === undefined) throw new Error('Expected chat id');
+    ctx.privateWhatsAppRepository.failNextConversationContextQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Simulated conversation context message lookup failure',
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/conversation-context',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: {
+        userId: 'user-123',
+        chatId,
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
   });
 
   it('returns private WhatsApp messages for an internal sender range query without logging message bodies', async () => {

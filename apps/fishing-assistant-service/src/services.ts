@@ -2,13 +2,14 @@ import type { Logger } from '@intexuraos/common-core';
 import { getFirestore, type Firestore } from '@intexuraos/infra-firestore';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import {
-  createMobileNotificationsServiceClient,
+  createMessageDigestServiceClient,
   createUserServiceClient,
-  type MobileNotificationsServiceClient,
+  createWhatsAppServiceClient,
+  type MessageDigestServiceClient,
   type UserServiceClient,
+  type WhatsAppServiceClient,
 } from '@intexuraos/internal-clients';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
-import OpenAI from 'openai';
 import type { Config } from './config.js';
 import type { FishingChatRepository } from './domain/ports/chatRepository.js';
 import type { FixedModelChatAdapter } from './domain/ports/chatModel.js';
@@ -22,7 +23,7 @@ import { createFirestoreChatRepository } from './infra/firestore/chatRepository.
 import { createFirestoreChunkRepository } from './infra/firestore/chunkRepository.js';
 import { createFirestoreFolderRepository } from './infra/firestore/folderRepository.js';
 import { createFirestorePageRepository } from './infra/firestore/pageRepository.js';
-import { createOpenAiKnowledgeEmbeddingClient } from './infra/llm/embeddingClient.js';
+import { createOpenRouterKnowledgeEmbeddingClient } from './infra/llm/embeddingClient.js';
 import { createFixedGeminiFlashClient } from './infra/llm/fixedGeminiFlashClient.js';
 
 export interface FirestoreRepositories {
@@ -38,9 +39,9 @@ export interface ServiceContainer {
   repositories: FirestoreRepositories;
   chatRepository: FishingChatRepository;
   embeddingClient: KnowledgeEmbeddingClient;
-  openAiClient: OpenAI;
   userServiceClient: UserServiceClient;
-  mobileNotificationsClient: MobileNotificationsServiceClient;
+  messageDigestClient: MessageDigestServiceClient;
+  whatsappClient: WhatsAppServiceClient;
   usageSink: HttpInternalAuthUsageSink;
   chatAdapter: FixedModelChatAdapter;
 }
@@ -69,15 +70,23 @@ export function initServices(config: Config): void {
     logger,
   });
 
+  const embeddingUsageSink = new HttpInternalAuthUsageSink({
+    usageServiceUrl: config.llmUsageServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    service: 'fishing-assistant-service',
+    component: 'knowledge-embedding',
+    logger,
+  });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     logger,
     usageSink: userServiceUsageSink,
+    platformOpenRouterApiKey: config.openRouterAppApiKey,
   });
 
   const firestore = getFirestore();
-  const openAiClient = new OpenAI({ apiKey: config.openAiAppApiKey });
 
   container = {
     generateId: (): string => crypto.randomUUID(),
@@ -89,13 +98,23 @@ export function initServices(config: Config): void {
       chunkRepository: createFirestoreChunkRepository({ firestore, logger }),
     },
     chatRepository: createFirestoreChatRepository({ firestore, logger }),
-    embeddingClient: createOpenAiKnowledgeEmbeddingClient({ openAiClient, logger }),
-    openAiClient,
+    embeddingClient: createOpenRouterKnowledgeEmbeddingClient({
+      apiKey: config.openRouterAppApiKey,
+      logger,
+      usageSink: embeddingUsageSink,
+    }),
     userServiceClient,
-    mobileNotificationsClient: createMobileNotificationsServiceClient({
-      baseUrl: config.mobileNotificationsServiceUrl,
+    messageDigestClient: createMessageDigestServiceClient({
+      baseUrl: config.messageDigestServiceUrl,
       internalAuthToken: config.internalAuthToken,
       logger,
+      defaultTimeoutMs: 5_000,
+    }),
+    whatsappClient: createWhatsAppServiceClient({
+      baseUrl: config.whatsappServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      logger,
+      defaultTimeoutMs: 5_000,
     }),
     usageSink,
     chatAdapter: createFixedGeminiFlashClient({

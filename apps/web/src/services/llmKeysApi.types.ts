@@ -1,8 +1,43 @@
-import type { LlmProvider } from '@intexuraos/llm-contract';
+import type {
+  ExecutableLlmProvider,
+  IntexAgentModel,
+} from '@intexuraos/llm-contract';
 /**
  * LLM Provider types for API key management.
  */
-export type { LlmProvider };
+export type ConfigurableLlmProvider = ExecutableLlmProvider;
+
+export type IntexAgentModelSelectorOption =
+  | { id: 'or:deepseek/deepseek-v4-flash'; label: 'DeepSeek V4 Flash' }
+  | { id: 'or:minimax/minimax-m3'; label: 'MiniMax M3' }
+  | { id: 'or:google/gemini-3.6-flash'; label: 'Gemini 3.6 Flash' };
+
+export type IntexAgentModelSelectorV1 =
+  | {
+      status: 'available';
+      explicitModel: IntexAgentModel | null;
+      effectiveModel: IntexAgentModel;
+      source: 'explicit' | 'default_absent';
+      revision: number;
+      options: readonly [
+        Extract<IntexAgentModelSelectorOption, { id: 'or:deepseek/deepseek-v4-flash' }>,
+        Extract<IntexAgentModelSelectorOption, { id: 'or:minimax/minimax-m3' }>,
+        Extract<IntexAgentModelSelectorOption, { id: 'or:google/gemini-3.6-flash' }>,
+      ];
+    }
+  | { status: 'unavailable' };
+
+export interface IntexAgentModelPatchRequest {
+  intexAgentModel: IntexAgentModel | null;
+  expectedRevision: number;
+}
+
+export interface IntexAgentModelPatchResponse {
+  explicitModel: IntexAgentModel | null;
+  effectiveModel: IntexAgentModel;
+  source: 'explicit' | 'default_absent';
+  revision: number;
+}
 
 /**
  * Test result for an LLM API key.
@@ -20,25 +55,19 @@ export interface LlmTestResult {
 export interface LlmKeysResponse {
   defaultModel: string | null;
   fallbackModel: string | null;
-  google: string | null;
-  openai: string | null;
-  anthropic: string | null;
-  perplexity: string | null;
   openrouter: string | null;
+  accessSource: 'user' | 'platform' | 'unavailable';
   testResults: {
-    google: LlmTestResult | null;
-    openai: LlmTestResult | null;
-    anthropic: LlmTestResult | null;
-    perplexity: LlmTestResult | null;
     openrouter: LlmTestResult | null;
   };
+  intexAgentModelSelector: IntexAgentModelSelectorV1;
 }
 
 /**
  * Request body for PATCH /users/:uid/settings/llm-keys
  */
 export interface SetLlmKeyRequest {
-  provider: LlmProvider;
+  provider: ConfigurableLlmProvider;
   apiKey: string;
 }
 
@@ -46,6 +75,6 @@ export interface SetLlmKeyRequest {
  * Response from PATCH /users/:uid/settings/llm-keys
  */
 export interface SetLlmKeyResponse {
-  provider: LlmProvider;
+  provider: ConfigurableLlmProvider;
   masked: string;
 }

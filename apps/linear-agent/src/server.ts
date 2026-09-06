@@ -49,10 +49,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       url: 'https://intexuraos.cloud/api/linear',
       description: 'Production',
     },
-    {
-      url: 'https://dev.intexuraos.cloud/api/linear',
-      description: 'Development',
-    },
   ];
 
   return {
@@ -108,6 +104,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               'FORBIDDEN',
               'NOT_FOUND',
               'CONFLICT',
+              'SERVICE_UNAVAILABLE',
               'DOWNSTREAM_ERROR',
               'INTERNAL_ERROR',
               'MISCONFIGURED',

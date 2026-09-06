@@ -31,6 +31,8 @@ const task: CodeTask = {
   dedupKey: 'dedup-1',
   callbackReceived: true,
   createdAt: '2026-03-25T12:00:00.000Z',
+  statusChangedAt: '2026-03-25T12:05:00.000Z',
+  completedAt: '2026-03-25T12:05:00.000Z',
   updatedAt: '2026-03-25T12:05:00.000Z',
   result: {
     summary: 'Added request logging and route coverage.',
@@ -127,6 +129,7 @@ const task: CodeTask = {
 };
 
 vi.mock('@/hooks', () => ({
+  useTimeTick: (): number => Date.parse('2026-03-25T12:07:00.000Z'),
   useTaskView: (): unknown => ({
     task,
     logs: [],

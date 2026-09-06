@@ -17,6 +17,7 @@ import type {
   TaskStatus,
   WorkerType,
 } from '../models/codeTask.js';
+import type { SentryIssueTaskContext } from '../models/sentryIssueEvent.js';
 
 /**
  * Create/update input shapes: accept raw `Date` for timestamp fields as a
@@ -54,6 +55,11 @@ export type CodeTaskCallbackStateCreateInput =
     };
   };
 
+export type ClaimForDispatchResult =
+  | { kind: 'claimed'; dispatchToken: string }
+  | { kind: 'task_not_queued' }
+  | { kind: 'user_busy'; activeTaskId: string };
+
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
   id?: string;
@@ -84,6 +90,8 @@ export interface CreateTaskInput {
   agentType?: AgentType;
   /** Initial task status. Defaults to 'queued' if not specified. */
   initialStatus?: 'queued' | 'dispatched';
+  /** Initial persistent-queue timestamp when creation and admission are atomic. */
+  queuedAt?: Date | Timestamp;
 
   // Dispatch metadata stored for queue-based dispatch (INT-949)
   planningPrBranch?: string;
@@ -92,6 +100,7 @@ export interface CreateTaskInput {
 
   // Review task metadata
   reviewTypes?: string[];
+  reviewCommitSha?: string;
   executionMemoryContext?: ExecutionMemoryContextCreateInput | undefined;
   executionMemoryPostRun?: ExecutionMemoryPostRunCreateInput | undefined;
 
@@ -104,6 +113,15 @@ export interface CreateTaskInput {
 
   /** Custom per-task timeout in hours (1–12). INT-1585. */
   timeoutHours?: number;
+
+  /** Sentry issue metadata for tasks created from Sentry webhooks. */
+  sentryIssue?: SentryIssueTaskContext;
+}
+
+export interface CreateTaskOptions {
+  transaction?: FirebaseFirestore.Transaction;
+  /** Deterministic review reservations provide stronger idempotency and may bypass prompt dedup. */
+  skipPromptDedup?: boolean;
 }
 
 export interface UpdateTaskInput {
@@ -178,7 +196,7 @@ export interface CodeTaskRepository {
    * 1. dedupKey (prevents UI double-taps) - lines 1543-1554
    * 2. linearIssueId active check for non-review tasks - lines 448-458
    */
-  create(input: CreateTaskInput, options?: { transaction?: FirebaseFirestore.Transaction }): Promise<Result<CodeTask, RepositoryError>>;
+  create(input: CreateTaskInput, options?: CreateTaskOptions): Promise<Result<CodeTask, RepositoryError>>;
 
   findById(
     taskId: string,
@@ -189,6 +207,16 @@ export interface CodeTaskRepository {
     taskId: string,
     userId: string
   ): Promise<Result<CodeTask, RepositoryError>>;
+
+  /**
+   * Resolve an exact, caller-supplied task membership for one owner.
+   * Implementations preserve first-seen input order, omit missing/foreign
+   * documents, and fail the whole result when an infrastructure batch fails.
+   */
+  findByIdsForUser(
+    taskIds: readonly string[],
+    userId: string
+  ): Promise<Result<CodeTask[], RepositoryError>>;
 
   update(
     taskId: string,
@@ -275,11 +303,20 @@ export interface CodeTaskRepository {
   ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
 
   /**
-   * Atomically transitions queued → dispatched via a Firestore transaction. Returns true
-   * when this caller acquired the claim; false when the task was already past queued or
-   * does not exist. Caller must roll status back to queued on retryable dispatch failure.
+   * Atomically acquires the task and its user's single-flight lease, then transitions
+   * queued → dispatched. The returned dispatch token fences rollback against stale callers.
    */
-  claimForDispatch(taskId: string): Promise<Result<boolean, RepositoryError>>;
+  claimForDispatch(taskId: string): Promise<Result<ClaimForDispatchResult, RepositoryError>>;
+
+  /**
+   * Atomically rolls a dispatched task back to queued and releases its user lease only
+   * when both the task and lease still carry the caller's dispatch token.
+   */
+  rollbackDispatch(
+    taskId: string,
+    dispatchToken: string,
+    dispatchStatus?: CodeTaskDispatchStatusCreateInput,
+  ): Promise<Result<boolean, RepositoryError>>;
 
   /**
    * Find the newest execution-eligible task for a PR.
@@ -313,7 +350,8 @@ export interface CodeTaskRepository {
    */
   findRecentTasksByLinearIssue(
     linearIssueId: string,
-    limit: number
+    limit: number,
+    userId?: string,
   ): Promise<Result<CodeTask[], RepositoryError>>;
 
   /**

@@ -8,7 +8,9 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import nock from 'nock';
 import * as jose from 'jose';
+import { ok } from '@intexuraos/common-core';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { getOpenRouterRawId, RESEARCH_SYNTHESIS_MODELS } from '@intexuraos/llm-contract';
 import { buildServer } from '../../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../../services.js';
 import { resetOpenRouterCache } from '../../routes/openRouterRoutes.js';
@@ -117,8 +119,26 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     vi.useRealTimers();
   });
 
-  it('returns NOT_FOUND when OpenRouter API key is not configured', async () => {
-    // FakeUserServiceClient returns empty keys by default (no openrouter key)
+  it('uses the platform OpenRouter key when the user has no BYOK key', async () => {
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: unknown[] };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.models).toHaveLength(OPENROUTER_ALLOWED_MODELS.length);
+  });
+
+  it('returns NOT_FOUND when no OpenRouter key is available', async () => {
+    vi.spyOn(fakeUserServiceClient, 'getApiKeys').mockResolvedValueOnce(ok({}));
+
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
@@ -127,9 +147,13 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    const body = JSON.parse(response.body) as { success: boolean; error?: { code: string } };
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
     expect(body.success).toBe(false);
-    expect(body.error?.code).toBe('NOT_FOUND');
+    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.message).toBe('OpenRouter API key not configured');
   });
 
   it('returns all allowlisted models with live pricing when catalog fetch succeeds', async () => {
@@ -167,6 +191,32 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(firstModel?.pricing.inputPricePerMillion).toBe(1);
   });
 
+  it('returns recommended synthesis models first and preserves allowlist order for the rest', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: { id: string }[] };
+    };
+    const recommendedIds = RESEARCH_SYNTHESIS_MODELS.map(getOpenRouterRawId);
+    const remainingIds = OPENROUTER_ALLOWED_MODELS.map((model) => model.id).filter(
+      (modelId) => !recommendedIds.includes(modelId)
+    );
+
+    expect(body.data.models.map((model) => model.id)).toEqual([
+      ...recommendedIds,
+      ...remainingIds,
+    ]);
+  });
+
   it('returns fallback pricing when catalog fetch returns non-200', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
@@ -192,7 +242,10 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     // Verify fallback context lengths from allowlist were used
     const firstModel = body.data.models[0];
     expect(firstModel).toBeDefined();
-    expect(firstModel?.contextLength).toBe(OPENROUTER_ALLOWED_MODELS[0]?.contextLength);
+    const firstAllowlistedModel = OPENROUTER_ALLOWED_MODELS.find(
+      (model) => model.id === firstModel?.id
+    );
+    expect(firstModel?.contextLength).toBe(firstAllowlistedModel?.contextLength);
   });
 
   it('returns cached result within TTL without making new HTTP call', async () => {
@@ -350,10 +403,10 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(body.data.models).toHaveLength(OPENROUTER_ALLOWED_MODELS.length);
   });
 
-  it('uses parseFloat fallback when prompt is null', async () => {
+  it('uses reviewed fallback pricing when catalog prompt price is missing', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
-    // Catalog has a model with null prompt — parseFloat fallback should use 0
+    // Catalog has a model with null prompt — it must not invent a zero live price.
     const catalogData = OPENROUTER_ALLOWED_MODELS.map((m, i) => ({
       id: m.id,
       pricing: i === 0 ? { prompt: null, completion: '0.000005' } : { prompt: '0.000001', completion: '0.000005' },
@@ -377,15 +430,17 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; pricing: { inputPricePerMillion: number } }[] };
     };
     expect(body.success).toBe(true);
-    // First model uses fallback pricing (0) since prompt was null
+    // First model uses its reviewed fallback pricing since live prompt price is missing.
     const firstModel = body.data.models.find((m) => m.id === OPENROUTER_ALLOWED_MODELS[0]?.id);
-    expect(firstModel?.pricing.inputPricePerMillion).toBe(0);
+    expect(firstModel?.pricing.inputPricePerMillion).toBe(
+      Number(OPENROUTER_ALLOWED_MODELS[0]?.promptPerToken) * 1_000_000
+    );
   });
 
-  it('uses parseFloat fallback when completion is null', async () => {
+  it('uses reviewed fallback pricing when catalog completion price is missing', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
-    // Catalog has a model with null completion — parseFloat fallback should use 0
+    // Catalog has a model with null completion — it must not invent a zero live price.
     const catalogData = OPENROUTER_ALLOWED_MODELS.map((m, i) => ({
       id: m.id,
       pricing: i === 0 ? { prompt: '0.000001', completion: null } : { prompt: '0.000001', completion: '0.000005' },
@@ -409,15 +464,17 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; pricing: { outputPricePerMillion: number } }[] };
     };
     expect(body.success).toBe(true);
-    // First model uses fallback pricing (0) since completion was null
+    // First model uses its reviewed fallback pricing since live completion price is missing.
     const firstModel = body.data.models.find((m) => m.id === OPENROUTER_ALLOWED_MODELS[0]?.id);
-    expect(firstModel?.pricing.outputPricePerMillion).toBe(0);
+    expect(firstModel?.pricing.outputPricePerMillion).toBe(
+      Number(OPENROUTER_ALLOWED_MODELS[0]?.completionPerToken) * 1_000_000
+    );
   });
 
-  it('uses context_length fallback when catalog entry has no context_length', async () => {
+  it('uses reviewed context fallback when catalog context is missing', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
-    // Catalog returns models without context_length — fallback to 102400
+    // Catalog returns models without context_length — fall back to reviewed metadata.
     const catalogData = OPENROUTER_ALLOWED_MODELS.map((m) => ({
       id: m.id,
       pricing: { prompt: '0.000001', completion: '0.000005' },
@@ -441,9 +498,10 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; contextLength: number }[] };
     };
     expect(body.success).toBe(true);
-    // All models should use fallback context length of 102400
+    // All models use their entry-specific reviewed context length.
     for (const model of body.data.models) {
-      expect(model.contextLength).toBe(102400);
+      const allowlistedModel = OPENROUTER_ALLOWED_MODELS.find((entry) => entry.id === model.id);
+      expect(model.contextLength).toBe(allowlistedModel?.contextLength);
     }
   });
 });

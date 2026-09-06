@@ -9,6 +9,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // Track invocation order across mocks.
 const callOrder: string[] = [];
@@ -27,26 +29,21 @@ vi.mock('../bootstrap/env-config.js', () => ({
       usageWebhookUrl: 'https://usage.test',
       githubAppId: '1',
       githubInstallationId: '2',
+      githubPrivateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
       projectId: 'proj',
       gcpSaKeyPath: '/tmp/sa.json',
       port: 19199,
       capacity: 1,
       completionMaxAttempts: 3,
-      validationModels: 'gemini-2.5-flash',
+      validationModels: 'or:deepseek/deepseek-v4-flash',
       workerImage: 'image:latest',
       keepContainersAlive: false,
       workerForensicsMode: false,
       preserveWorkerContainers: true,
       linearApiKey: 'lin',
-      sentryAuthToken: 'sentry',
-      minimaxApiKey: 'm',
-      mimoApiKey: 'm',
-      dashscopeApiKey: 'd',
-      kimiApiKey: 'ABCDEFG',
+      errorHubHost: 'home-dev.example.ts.net:8443',
       openRouterApiKey: '',
-      geminiApiKey: 'g',
       logLevel: 'info',
-      environment: 'test',
     };
   }),
 }));
@@ -137,13 +134,13 @@ vi.mock('pino', () => {
   return { default: pino };
 });
 
-// Mock initWorker so the bootstrap path doesn't touch Sentry / OTel during
-// unit tests. The mock returns a fake logger + flush so we can assert that
-// `flush` is forwarded into `main()` on the SIGTERM handoff.
+// Mock the closed observability identity boundary so the bootstrap path does
+// not touch Sentry / OTel during unit tests. Its own unit tests verify the
+// private branded identity value is forwarded only to initWorker().
 const mockFlush = vi.fn(async () => undefined);
-vi.mock('@intexuraos/infra-sentry', () => ({
-  initWorker: vi.fn(() => {
-    callOrder.push('initWorker');
+vi.mock('../bootstrap/observability-identity.js', () => ({
+  initOrchestratorObservability: vi.fn(() => {
+    callOrder.push('initOrchestratorObservability');
     return {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
       flush: mockFlush,
@@ -173,7 +170,7 @@ import {
 } from '../bootstrap/service-wiring.js';
 import { ensureRepository } from '../services/repo-manager.js';
 import { main } from '../main.js';
-import { initWorker } from '@intexuraos/infra-sentry';
+import { initOrchestratorObservability } from '../bootstrap/observability-identity.js';
 
 describe('start() — full bootstrap happy path', () => {
   beforeEach(() => {
@@ -195,21 +192,19 @@ describe('start() — full bootstrap happy path', () => {
     expect(buildOrchestratorServices).toHaveBeenCalledOnce();
     expect(validateWorkerApiKeys).toHaveBeenCalledOnce();
     expect(validateWorkerApiKeys).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ kimiKey: 'ABCDEFG' }),
+      {},
+      { openRouterKey: '' },
       expect.anything()
     );
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
-    expect(initWorker).toHaveBeenCalledOnce();
+    expect(initOrchestratorObservability).toHaveBeenCalledOnce();
     expect(main).toHaveBeenCalledOnce();
   });
 
-  it('initializes the worker with serviceName=orchestrator and the env environment', async () => {
+  it('initializes observability through the closed identity boundary', async () => {
     await start();
 
-    expect(initWorker).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceName: 'orchestrator', environment: 'test' })
-    );
+    expect(initOrchestratorObservability).toHaveBeenCalledWith({});
   });
 
   it('forwards the flush callback returned by initWorker into main()', async () => {
@@ -223,7 +218,7 @@ describe('start() — full bootstrap happy path', () => {
     expect(mainArgs).toContain(mockFlush);
   });
 
-  it('forwards sentryDsn and release into initWorker when env supplies them', async () => {
+  it('forwards sentryDsn and release into the observability boundary when env supplies them', async () => {
     // Drives the truthy arms of the conditional spreads in start.ts:
     //   ...(env.sentryDsn !== undefined ? { sentryDsn: env.sentryDsn } : {})
     //   ...(env.release !== undefined ? { release: env.release } : {})
@@ -235,40 +230,31 @@ describe('start() — full bootstrap happy path', () => {
       usageWebhookUrl: 'https://usage.test',
       githubAppId: '1',
       githubInstallationId: '2',
+      githubPrivateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
       projectId: 'proj',
       gcpSaKeyPath: '/tmp/sa.json',
       port: 19199,
       capacity: 1,
       completionMaxAttempts: 3,
-      validationModels: 'gemini-2.5-flash',
+      validationModels: 'or:deepseek/deepseek-v4-flash',
       workerImage: 'image:latest',
       keepContainersAlive: false,
       workerForensicsMode: false,
       preserveWorkerContainers: true,
       linearApiKey: 'lin',
-      sentryAuthToken: 'sentry',
-      minimaxApiKey: 'm',
-      mimoApiKey: 'm',
-      dashscopeApiKey: 'd',
-      kimiApiKey: 'ABCDEFG',
+      errorHubHost: 'home-dev.example.ts.net:8443',
       openRouterApiKey: '',
-      geminiApiKey: 'g',
       logLevel: 'info',
-      environment: 'production',
       sentryDsn: 'https://x@sentry.io/1',
       release: 'orchestrator-00099-rev',
     });
 
     await start();
 
-    expect(initWorker).toHaveBeenCalledWith(
-      expect.objectContaining({
-        serviceName: 'orchestrator',
-        environment: 'production',
-        sentryDsn: 'https://x@sentry.io/1',
-        release: 'orchestrator-00099-rev',
-      })
-    );
+    expect(initOrchestratorObservability).toHaveBeenCalledWith({
+      sentryDsn: 'https://x@sentry.io/1',
+      release: 'orchestrator-00099-rev',
+    });
   });
 
   it('invokes bootstrap modules in the documented order', async () => {
@@ -288,7 +274,7 @@ describe('start() — full bootstrap happy path', () => {
       'validateGcpCredentials',
       'fetchGitHubKeys',
       'ensurePortAvailable',
-      'initWorker',
+      'initOrchestratorObservability',
       'ensureRepository',
       'buildOrchestratorServices',
       'startCredentialRefreshLoop',
@@ -308,9 +294,21 @@ describe('start() — full bootstrap happy path', () => {
     await expect(start()).rejects.toThrow(/Port 19199 is already in use/);
   });
 
-  it('forwards env overrides for repoPath, private-key, and git identity', async () => {
+  it('creates the inactivity-evidence directory alongside the orchestrator logs dir (INT-1787)', async () => {
+    // Regression for INT-1787: ensureDirectoryExists must be called for
+    // `<logsDir>/inactivity-evidence` so the directory is available before
+    // copyOut runs during an inactivity restart.
+    const { mkdirSync } = await import('node:fs');
+    await start();
+
+    expect(mkdirSync).toHaveBeenCalledWith(
+      join(homedir(), '.code-orchestrator', 'logs', 'inactivity-evidence'),
+      { recursive: true }
+    );
+  });
+
+  it('forwards env overrides for repoPath and git identity', async () => {
     // Drive the truthy arms of `env.repoPath ?? defaultRepoPath`,
-    // `env.githubPrivateKeyOverride !== undefined ? ... : {}`, and
     // `env.gitUserNameOverride ?? readHostGitConfig(...)` /
     // `env.gitUserEmailOverride ?? readHostGitConfig(...)` inside start().
     // Without these, the default mock env leaves only the falsy arms covered.
@@ -323,38 +321,30 @@ describe('start() — full bootstrap happy path', () => {
       usageWebhookUrl: 'https://usage.test',
       githubAppId: '1',
       githubInstallationId: '2',
+      githubPrivateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
       projectId: 'proj',
       gcpSaKeyPath: '/tmp/sa.json',
       port: 19199,
       capacity: 1,
       completionMaxAttempts: 3,
-      validationModels: 'gemini-2.5-flash',
+      validationModels: 'or:deepseek/deepseek-v4-flash',
       workerImage: 'image:latest',
       keepContainersAlive: false,
       workerForensicsMode: false,
       preserveWorkerContainers: true,
-      githubPrivateKeyOverride: 'INLINE-PEM',
       linearApiKey: 'lin',
-      sentryAuthToken: 'sentry',
-      minimaxApiKey: 'm',
-      mimoApiKey: 'm',
-      dashscopeApiKey: 'd',
-      kimiApiKey: 'ABCDEFG',
+      errorHubHost: 'home-dev.example.ts.net:8443',
       openRouterApiKey: '',
-      geminiApiKey: 'g',
       gitUserNameOverride: 'Test User',
       gitUserEmailOverride: 'test@example.com',
       logLevel: 'info',
-      environment: 'test',
     });
 
     await start();
 
-    // fetchGitHubKeys must receive the inline override so the truthy arm of
-    // the spread ternary runs.
-    expect(fetchGitHubKeys).toHaveBeenCalledWith(
-      expect.objectContaining({ override: 'INLINE-PEM' })
-    );
+    expect(fetchGitHubKeys).toHaveBeenCalledWith({
+      privateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
+    });
 
     // With both git-identity env vars set, readHostGitConfig is never called.
     const { readHostGitConfig } = await import('../bootstrap/git-identity.js');

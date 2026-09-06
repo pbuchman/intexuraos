@@ -14,6 +14,8 @@
  *   - llm-call
  *   - bookmark-enrich
  *   - bookmark-summarize
+ *   - message-digest-run
+ *   - runtime-credential-canary
  *   - all (publishes one of each)
  */
 import { PubSub } from '@google-cloud/pubsub';
@@ -85,13 +87,15 @@ const EVENTS = {
     },
   },
   transcription: {
-    topic: 'whatsapp-transcription',
+    topic: 'whatsapp-audio-stored',
     data: {
-      type: 'whatsapp.audio.transcribe',
+      type: 'whatsapp.audio.stored',
       messageId: 'msg-' + Date.now(),
       userId: 'test-user-456',
-      gcsPaths: 'whatsapp/test-user-456/audio-' + Date.now() + '.ogg',
+      mediaId: 'media-' + Date.now(),
+      gcsPath: 'whatsapp/test-user-456/audio-' + Date.now() + '.ogg',
       mimeType: 'audio/ogg',
+      timestamp: new Date().toISOString(),
     },
   },
   'intex-message-ingest': {
@@ -121,8 +125,8 @@ const EVENTS = {
       type: 'llm.report',
       researchId: 'research-' + Date.now(),
       userId: 'test-user-101',
-      provider: 'google',
-      model: 'gemini-2.0-flash-exp',
+      provider: 'openrouter',
+      model: 'or:google/gemini-3.6-flash',
       inputTokens: 1024,
       outputTokens: 512,
       durationMs: 1500,
@@ -134,7 +138,7 @@ const EVENTS = {
       type: 'llm.call',
       researchId: 'research-' + Date.now(),
       userId: 'test-user-101',
-      model: 'gemini-2.0-flash-exp',
+      model: 'or:google/gemini-3.6-flash',
       prompt: 'Research latest AI developments',
     },
   },
@@ -153,6 +157,25 @@ const EVENTS = {
       type: 'bookmarks.summarize',
       bookmarkId: 'bookmark-' + Date.now(),
       userId: 'test-user-303',
+    },
+  },
+  'message-digest-run': {
+    topic: 'message-digest-runs',
+    data: {
+      type: 'message-digest.run',
+      version: 1,
+      userId: 'test-user-404',
+      definitionId: 'md_test-digest-001',
+      runId: 'mdr_test-run-001',
+      requestedAt: new Date().toISOString(),
+    },
+  },
+  'runtime-credential-canary': {
+    topic: 'intexuraos-runtime-credential-canary-dev',
+    data: {
+      type: 'runtime.credential.canary',
+      canary: 'manual-local',
+      requestedAt: new Date().toISOString(),
     },
   },
 };

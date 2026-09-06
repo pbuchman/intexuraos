@@ -17,19 +17,12 @@ import type {
   WorkerHealthState,
 } from '../../domain/models/workerSettings.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import {
+  hasLegacyCapacityHealth,
+  parseOrchestratorHealthContract,
+} from '../../domain/services/orchestratorHealthContract.js';
 
 const PROBE_TIMEOUT_MS = 5000;
-const REQUIRED_HEALTH_FIELDS = [
-  'status',
-  'capacity',
-  'running',
-  'available',
-  'workerAuths',
-  'providerApiKeys',
-  'dockerHealthy',
-  'diskHealthy',
-] as const;
-
 /**
  * Helper type for building tunnel-down state with optional code.
  */
@@ -38,20 +31,6 @@ interface TunnelDownStateResult {
   healthy: false;
   reason: 'dns-failed' | 'connection-refused' | 'tls-error' | 'cf-error';
   code?: string;
-}
-
-/**
- * Expected orchestrator health response format.
- */
-interface OrchestratorHealthResponse {
-  status: string;
-  capacity: number;
-  running: number;
-  available: number;
-  workerAuths: Record<string, unknown>;
-  providerApiKeys: Record<string, { configured: boolean }>;
-  dockerHealthy: boolean;
-  diskHealthy: boolean;
 }
 
 export class WorkerHealthProbeImpl implements WorkerHealthProbe {
@@ -117,33 +96,34 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
         };
       }
 
-      if (this.isValidOrchestratorHealth(data)) {
+      const parsedHealth = parseOrchestratorHealthContract(data);
+      if (parsedHealth.ok) {
+        const health = parsedHealth.value;
         this.logger.info(
-          { worker: worker.name, capacity: data.capacity, available: data.available },
+          { worker: worker.name, capacity: health.capacity, available: health.available },
           'Worker is healthy'
         );
         return {
           _tag: 'healthy',
           healthy: true,
-          capacity: data.capacity,
-          running: data.running,
-          available: data.available,
-          workerAuths: data.workerAuths as Record<WorkerAuthProvider, WorkerAuthStatusDetails>,
-          providerApiKeys: data.providerApiKeys as Record<string, ProviderApiKeyStatus>,
-          dockerHealthy: data.dockerHealthy,
-          diskHealthy: data.diskHealthy,
+          capacity: health.capacity,
+          running: health.running,
+          available: health.available,
+          workerAuths: health.workerAuths as Record<WorkerAuthProvider, WorkerAuthStatusDetails>,
+          providerApiKeys: health.providerApiKeys as Record<string, ProviderApiKeyStatus>,
+          dockerHealthy: health.dockerHealthy,
+          diskHealthy: health.diskHealthy,
           responseTimeMs,
         };
       }
 
-      if (this.isLegacyCapacityHealth(data)) {
-        const missingFields = this.missingHealthFields(data);
+      if (hasLegacyCapacityHealth(data)) {
         return {
           _tag: 'unknown',
           healthy: false,
           error: 'Health response missing worker capability details',
           contractMismatch: true,
-          missingFields,
+          missingFields: parsedHealth.missingFields,
         };
       }
 
@@ -221,69 +201,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
     return results;
   }
 
-  private isValidOrchestratorHealth(data: unknown): data is OrchestratorHealthResponse {
-    return (
-      typeof data === 'object' &&
-      data !== null &&
-      'status' in data &&
-      data.status === 'ready' &&
-      'capacity' in data &&
-      typeof data.capacity === 'number' &&
-      'running' in data &&
-      typeof data.running === 'number' &&
-      'available' in data &&
-      typeof data.available === 'number' &&
-      'workerAuths' in data &&
-      typeof data.workerAuths === 'object' &&
-      data.workerAuths !== null &&
-      'providerApiKeys' in data &&
-      typeof data.providerApiKeys === 'object' &&
-      data.providerApiKeys !== null &&
-      'dockerHealthy' in data &&
-      typeof data.dockerHealthy === 'boolean' &&
-      'diskHealthy' in data &&
-      typeof data.diskHealthy === 'boolean'
-    );
-  }
-
-  private isLegacyCapacityHealth(data: unknown): boolean {
-    return (
-      typeof data === 'object' &&
-      data !== null &&
-      'status' in data &&
-      data.status === 'ready' &&
-      'capacity' in data &&
-      typeof data.capacity === 'number' &&
-      'running' in data &&
-      typeof data.running === 'number' &&
-      'available' in data &&
-      typeof data.available === 'number'
-    );
-  }
-
-  private missingHealthFields(data: unknown): string[] {
-    /* v8 ignore start -- ts-type: typeof/null narrowing fallback is defensive for malformed upstream JSON; object health response branches are covered @preserve */
-    if (typeof data !== 'object' || data === null) {
-      return [...REQUIRED_HEALTH_FIELDS];
-    }
-    /* v8 ignore stop @preserve */
-    const record = data as Record<string, unknown>;
-
-    return REQUIRED_HEALTH_FIELDS.filter((field) => {
-      if (!(field in record)) {
-        return true;
-      }
-      const value = record[field];
-      if (field === 'status') return value !== 'ready';
-      if (field === 'capacity' || field === 'running' || field === 'available') {
-        return typeof value !== 'number';
-      }
-      if (field === 'dockerHealthy' || field === 'diskHealthy') {
-        return typeof value !== 'boolean';
-      }
-      return typeof value !== 'object' || value === null;
-    });
-  }
 }
 
 /**

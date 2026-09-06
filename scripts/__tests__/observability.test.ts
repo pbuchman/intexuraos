@@ -53,7 +53,9 @@ describe('Grafana Alloy PM2 log collection', () => {
     expect(config).toContain('regex         = "^.*/(.+)-(out|error)(?:-[0-9]+)?\\\\.log$"');
     expect(config).toContain('loki.process "pm2_logs"');
     expect(config).toContain('stage.decolorize');
+    expect(config).toContain('sync_period = "10s"');
     expect(config).toContain('loki.write "grafana_cloud"');
+    expect(config).toContain('name     = "pm2_grafana_cloud"');
     expect(config).toContain('url      = sys.env("INTEXURAOS_GRAFANA_CLOUD_LOKI_URL")');
     expect(config).toContain('username = sys.env("INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME")');
     expect(config).toContain('password = sys.env("INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN")');
@@ -77,13 +79,14 @@ describe('Grafana Alloy PM2 log collection', () => {
     expect(installScript).toContain('setfacl');
     expect(installScript).toContain('u:alloy');
 
-    for (const secretName of [
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
-    ]) {
-      expect(loadEnvScript, secretName).toContain(secretName);
-    }
+    expect(loadEnvScript).toContain('GRAFANA_CLOUD_COLLECTOR_CONFIG=(');
+    expect(loadEnvScript).toContain(
+      'GRAFANA_CLOUD_COLLECTOR_TOKEN="INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN"'
+    );
+    expect(loadEnvScript).toContain('SECRET_PACKAGE_RENDER_DIR');
+    expect(loadEnvScript).toContain('render-runtime-config.mjs');
+    expect(loadEnvScript).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_URL');
+    expect(loadEnvScript).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME');
 
     expect(loadEnvScript).not.toContain('INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN');
     expect(installScript).not.toContain('INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN');
@@ -95,8 +98,8 @@ describe('Grafana dashboard provisioning', () => {
     const dashboard = JSON.parse(readRequired(dashboardPath)) as {
       uid?: string;
       title?: string;
-      panels?: Array<{ title?: string; targets?: Array<{ expr?: string }> }>;
-      templating?: { list?: Array<{ name?: string; query?: string }> };
+      panels?: { title?: string; targets?: { expr?: string }[] }[];
+      templating?: { list?: { name?: string; query?: string }[] };
     };
 
     expect(dashboard.uid).toBe('intexuraos-pm2-logs');

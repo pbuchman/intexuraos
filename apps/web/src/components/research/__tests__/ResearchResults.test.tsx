@@ -3,7 +3,7 @@
  */
 
 import { render, screen } from '@testing-library/react';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { createOpenRouterModelId, LlmProviders } from '@intexuraos/llm-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { ResearchResults } from '../ResearchResults.js';
 import type { Research } from '@/services/researchAgentApi.types';
@@ -16,27 +16,22 @@ vi.mock('@/components', () => ({
     </section>
   ),
   MarkdownContent: ({ content }: { content: string }): React.JSX.Element => <div>{content}</div>,
-  PROVIDER_MODELS: [
-    {
-      id: LlmProviders.OpenAI,
-      displayName: 'OpenAI',
-      models: [{ id: LlmModels.GPT54, name: 'GPT 5.4' }],
-    },
-  ],
 }));
+
+const ACTIVE_MODEL = createOpenRouterModelId('openai/gpt-5.4');
 
 const baseResearch: Research = {
   id: 'research-1',
   userId: 'user-1',
   title: 'Cost visibility',
   prompt: 'Compare image models',
-  selectedModels: [LlmModels.GPT54],
-  synthesisModel: LlmModels.GPT54,
+  selectedModels: [ACTIVE_MODEL],
+  synthesisModel: ACTIVE_MODEL,
   status: 'completed',
   llmResults: [
     {
-      provider: LlmProviders.OpenAI,
-      model: LlmModels.GPT54,
+      provider: LlmProviders.OpenRouter,
+      model: ACTIVE_MODEL,
       status: 'completed',
       result: 'Done',
     },
@@ -58,5 +53,35 @@ describe('ResearchResults', () => {
 
     expect(screen.getByText('Total Cost')).toBeInTheDocument();
     expect(screen.getByText('$0.1234')).toBeInTheDocument();
+  });
+
+  it('renders multiple OpenRouter results by model ID and marks retired history unavailable', () => {
+    const retiredModel = createOpenRouterModelId('google/gemini-3-flash-preview');
+    render(
+      <ResearchResults
+        research={{
+          ...baseResearch,
+          selectedModels: [ACTIVE_MODEL, retiredModel],
+          llmResults: [
+            ...baseResearch.llmResults,
+            {
+              provider: LlmProviders.OpenRouter,
+              model: retiredModel,
+              status: 'failed',
+              error: 'Retired',
+            },
+          ],
+        }}
+        copiedSection={null}
+        onCopy={vi.fn()}
+        availableModelIds={['openai/gpt-5.4']}
+        availabilityKnown
+      />,
+    );
+
+    expect(screen.getByText('GPT-5.4')).toBeInTheDocument();
+    expect(screen.getByText('Gemini 3 Flash Preview')).toBeInTheDocument();
+    expect(screen.getByText('Unavailable')).toBeInTheDocument();
+    expect(screen.getByText(/or:google\/gemini-3-flash-preview/)).toBeInTheDocument();
   });
 });

@@ -2,43 +2,29 @@ import express from 'express';
 import { PubSub } from '@google-cloud/pubsub';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { createPubSubPushEnvelope, resolvePubSubProjectId } from './pubsub-forwarding.mjs';
+import { collectPubSubDrainTopology, PubSubDrainTelemetry } from './pubsub-drain.mjs';
+import {
+  buildExpectedDrainTopology,
+  buildPreservedLegacyDrainTopology,
+  TOPICS,
+  TOPIC_ENDPOINTS,
+} from './topology.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PORT = process.env.PORT || 8105;
-const PROJECT_ID = process.env.PUBSUB_PROJECT_ID || 'demo-intexuraos';
 const INTEXURAOS_INTERNAL_AUTH_TOKEN =
   process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN || 'local-dev-token';
 
-const TOPICS = [
-  'whatsapp-media-cleanup',
-  'whatsapp-send-message',
-  'whatsapp-webhook-process',
-  'whatsapp-transcription',
-  'intex-message-ingest',
-  'research-process',
-  'llm-analytics',
-  'llm-call',
-  'bookmark-enrich',
-  'bookmark-summarize',
-];
+const EXPECTED_DRAIN_TOPOLOGY = buildExpectedDrainTopology(process.env);
+const PRESERVED_LEGACY_DRAIN_TOPOLOGY = buildPreservedLegacyDrainTopology(process.env);
 
-const TOPIC_ENDPOINTS = {
-  'whatsapp-send-message': 'http://host.docker.internal:8113/internal/whatsapp/pubsub/send-message',
-  'whatsapp-media-cleanup':
-    'http://host.docker.internal:8113/internal/whatsapp/pubsub/media-cleanup',
-  'whatsapp-webhook-process':
-    'http://host.docker.internal:8113/internal/whatsapp/pubsub/process-webhook',
-  'whatsapp-transcription':
-    'http://host.docker.internal:8113/internal/whatsapp/pubsub/transcribe-audio',
-  'intex-message-ingest': 'http://host.docker.internal:8134/internal/intex-agent/messages',
-  'research-process': 'http://host.docker.internal:8116/internal/llm/pubsub/process-research',
-  'llm-analytics': 'http://host.docker.internal:8116/internal/llm/pubsub/report-analytics',
-  'llm-call': 'http://host.docker.internal:8116/internal/llm/pubsub/process-llm-call',
-  'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
-  'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
-};
+const drainTelemetry = new PubSubDrainTelemetry({
+  expectedTopology: EXPECTED_DRAIN_TOPOLOGY,
+  preservedLegacyTopology: PRESERVED_LEGACY_DRAIN_TOPOLOGY,
+});
 
 const app = express();
 app.use(express.json());
@@ -55,7 +41,81 @@ app.use((req, res, next) => {
 
 const clients = new Set();
 
-const pubsub = new PubSub({ projectId: PROJECT_ID });
+const pubsubClients = new Map();
+
+function getPubSubClient(projectId) {
+  const existing = pubsubClients.get(projectId);
+  if (existing) return existing;
+  const client = new PubSub({ projectId });
+  pubsubClients.set(projectId, client);
+  return client;
+}
+
+async function setupTopicSubscription(topicName, projectId) {
+  const pubsub = getPubSubClient(projectId);
+  const topic = pubsub.topic(topicName);
+  const [exists] = await topic.exists();
+
+  if (!exists) {
+    throw new Error(`Required topic is missing: ${topicName} (${projectId})`);
+  }
+
+  const subscriptionName = `${topicName}-ui-monitor`;
+  const subscription = topic.subscription(subscriptionName);
+  const drainSubscription = {
+    projectId,
+    topicName,
+    subscriptionName,
+    classification: TOPIC_ENDPOINTS[topicName] === null ? 'monitor-only' : 'forwarded',
+  };
+  const [subExists] = await subscription.exists();
+
+  if (!subExists) {
+    throw new Error(`Required subscription is missing: ${subscriptionName} (${projectId})`);
+  }
+
+  subscription.on('message', async (message) => {
+    await drainTelemetry.observeMessage({
+      subscription: drainSubscription,
+      forward: async () => {
+        const event = {
+          topic: topicName,
+          messageId: message.id,
+          publishTime: message.publishTime,
+          data: JSON.parse(message.data.toString()),
+          attributes: message.attributes,
+          receivedAt: new Date().toISOString(),
+        };
+
+        console.log(`[PubSub UI] Received message on ${topicName}:`, event.data.type);
+
+        broadcastToClients({
+          type: 'event',
+          event,
+        });
+
+        return await forwardToServiceEndpoint(topicName, message);
+      },
+      ack: () => message.ack(),
+      nack: () => message.nack(),
+    });
+  });
+
+  subscription.on('error', (error) => {
+    drainTelemetry.recordSubscriberError(drainSubscription);
+    drainTelemetry.recordListenerStopped(drainSubscription);
+    console.error(`[PubSub UI] Subscription error on ${topicName} (${projectId}):`, error);
+  });
+
+  subscription.on('close', () => {
+    drainTelemetry.recordListenerStopped(drainSubscription);
+    console.error(`[PubSub UI] Subscription closed on ${topicName} (${projectId})`);
+  });
+
+  drainTelemetry.recordListenerStarted(drainSubscription);
+
+  console.log(`[PubSub UI] Listening on ${topicName} (${projectId})`);
+}
 
 async function forwardToServiceEndpoint(topicName, message) {
   const endpoint = TOPIC_ENDPOINTS[topicName];
@@ -65,14 +125,7 @@ async function forwardToServiceEndpoint(topicName, message) {
   }
 
   try {
-    const pubsubMessage = {
-      message: {
-        data: message.data.toString('base64'),
-        messageId: message.id,
-        publishTime: message.publishTime,
-      },
-      subscription: `${topicName}-push`,
-    };
+    const pubsubMessage = createPubSubPushEnvelope(topicName, message);
 
     console.log(`[PubSub UI] ┌─ Forwarding ${topicName}`);
     console.log(`[PubSub UI] │  Endpoint: ${endpoint}`);
@@ -91,6 +144,7 @@ async function forwardToServiceEndpoint(topicName, message) {
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Auth': INTEXURAOS_INTERNAL_AUTH_TOKEN,
+        From: 'noreply@google.com',
       },
       body: JSON.stringify(pubsubMessage),
     });
@@ -121,7 +175,14 @@ async function setupTopicsAndSubscriptions() {
   console.log('[PubSub UI] ===========================================');
   console.log('[PubSub UI] Configuration:');
   console.log('[PubSub UI]   PORT:', PORT);
-  console.log('[PubSub UI]   PROJECT_ID:', PROJECT_ID);
+  console.log(
+    '[PubSub UI]   PROJECT_ID:',
+    resolvePubSubProjectId('whatsapp-send-message', process.env)
+  );
+  console.log(
+    '[PubSub UI]   MESSAGE_DIGEST_PROJECT_ID:',
+    resolvePubSubProjectId('message-digest-runs', process.env)
+  );
   console.log('[PubSub UI]   PUBSUB_EMULATOR_HOST:', process.env.PUBSUB_EMULATOR_HOST);
   console.log(
     '[PubSub UI]   AUTH_TOKEN:',
@@ -135,58 +196,13 @@ async function setupTopicsAndSubscriptions() {
   console.log('[PubSub UI] ===========================================');
   console.log('[PubSub UI] Setting up topics and subscriptions...');
 
-  for (const topicName of TOPICS) {
+  for (const drainSubscription of EXPECTED_DRAIN_TOPOLOGY) {
+    const { projectId, topicName } = drainSubscription;
     try {
-      const topic = pubsub.topic(topicName);
-      const [exists] = await topic.exists();
-
-      if (!exists) {
-        await topic.create();
-        console.log(`[PubSub UI] Created topic: ${topicName}`);
-      }
-
-      const subscriptionName = `${topicName}-ui-monitor`;
-      const subscription = topic.subscription(subscriptionName);
-      const [subExists] = await subscription.exists();
-
-      if (!subExists) {
-        await subscription.create();
-        console.log(`[PubSub UI] Created subscription: ${subscriptionName}`);
-      }
-
-      subscription.on('message', async (message) => {
-        const event = {
-          topic: topicName,
-          messageId: message.id,
-          publishTime: message.publishTime,
-          data: JSON.parse(message.data.toString()),
-          attributes: message.attributes,
-          receivedAt: new Date().toISOString(),
-        };
-
-        console.log(`[PubSub UI] Received message on ${topicName}:`, event.data.type);
-
-        broadcastToClients({
-          type: 'event',
-          event,
-        });
-
-        const forwarded = await forwardToServiceEndpoint(topicName, message);
-
-        if (forwarded) {
-          message.ack();
-        } else {
-          message.nack();
-        }
-      });
-
-      subscription.on('error', (error) => {
-        console.error(`[PubSub UI] Subscription error on ${topicName}:`, error);
-      });
-
-      console.log(`[PubSub UI] Listening on ${topicName}`);
+      await setupTopicSubscription(topicName, projectId);
     } catch (error) {
-      console.error(`[PubSub UI] Error setting up ${topicName}:`, error);
+      drainTelemetry.recordSetupError(drainSubscription);
+      console.error(`[PubSub UI] Error setting up ${topicName} (${projectId}):`, error);
     }
   }
 
@@ -212,6 +228,7 @@ app.post('/publish', async (req, res) => {
   }
 
   try {
+    const pubsub = getPubSubClient(resolvePubSubProjectId(topic, process.env));
     const pubsubTopic = pubsub.topic(topic);
     const dataBuffer = Buffer.from(JSON.stringify(data));
     const messageId = await pubsubTopic.publishMessage({ data: dataBuffer });
@@ -241,8 +258,34 @@ app.get('/events', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', topics: TOPICS, clients: clients.size });
+app.get('/health', async (_req, res) => {
+  let drain;
+  try {
+    drain = drainTelemetry.snapshot(
+      await collectPubSubDrainTopology({
+        projectIds: [...EXPECTED_DRAIN_TOPOLOGY, ...PRESERVED_LEGACY_DRAIN_TOPOLOGY].map(
+          ({ projectId }) => projectId
+        ),
+        getClient: getPubSubClient,
+      })
+    );
+  } catch {
+    drainTelemetry.recordTopologyRefreshError();
+    drain = drainTelemetry.snapshot({
+      topics: [],
+      subscriptions: [],
+      topologyObservedAt: new Date().toISOString(),
+      topologyRefreshFailed: true,
+    });
+  }
+
+  res.json({
+    status: 'ok',
+    topics: TOPICS,
+    clients: clients.size,
+    drainContractVersion: 2,
+    drain,
+  });
 });
 
 app.get('/', (req, res) => {

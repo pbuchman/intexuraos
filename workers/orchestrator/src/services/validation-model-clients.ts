@@ -1,12 +1,12 @@
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
-import type { LLMModel } from '@intexuraos/llm-contract';
+import { isOpenRouterModel, type OpenRouterModelId } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
 
 export interface ParsedValidationModel {
-  provider: 'openrouter' | 'gemini';
+  provider: 'openrouter';
   /** Model ID as used by createLlmClient (with or: prefix for OpenRouter) */
-  modelId: string;
+  modelId: OpenRouterModelId;
   /** Raw model ID without or: prefix */
   rawId: string;
 }
@@ -15,7 +15,7 @@ export interface ParsedValidationModel {
  * Parse the comma-separated INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS env var
  * into an ordered list of model descriptors.
  *
- * Models prefixed with `or:` are OpenRouter models; unprefixed are Gemini models.
+ * Every validation model must be routed through OpenRouter.
  */
 export function parseValidationModels(raw: string): ParsedValidationModel[] {
   const trimmed = raw.trim();
@@ -40,19 +40,18 @@ export function parseValidationModels(raw: string): ParsedValidationModel[] {
       );
     }
 
-    if (entry.startsWith('or:')) {
-      models.push({
-        provider: 'openrouter',
-        modelId: entry,
-        rawId: entry.slice(3),
-      });
-    } else {
-      models.push({
-        provider: 'gemini',
-        modelId: entry,
-        rawId: entry,
-      });
+    if (!isOpenRouterModel(entry)) {
+      throw new IntexuraOSError(
+        'MISCONFIGURED',
+        `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS must use an or: OpenRouter model ID at position ${String(i + 1)}`
+      );
     }
+
+    models.push({
+      provider: 'openrouter',
+      modelId: entry,
+      rawId: entry.slice(3),
+    });
   }
 
   return models;
@@ -61,7 +60,6 @@ export function parseValidationModels(raw: string): ParsedValidationModel[] {
 export interface BuildValidationClientsConfig {
   models: ParsedValidationModel[];
   openRouterApiKey: string;
-  geminiApiKey: string;
   usageWebhookUrl: string;
   orchestratorSecret: string;
   internalAuthToken: string;
@@ -72,7 +70,7 @@ export interface BuildValidationClientsConfig {
 
 export interface ValidationClientEntry {
   client: LlmGenerateClient;
-  /** Model ID used for logging/reporting (e.g. 'gemini-2.5-flash' or 'or:google/gemma-4-31b-it:free') */
+  /** OpenRouter model ID used for logging/reporting. */
   modelName: string;
 }
 
@@ -84,47 +82,18 @@ export function buildValidationClients(
   config: BuildValidationClientsConfig
 ): ValidationClientEntry[] {
   return config.models.map((model) => {
-    if (model.provider === 'openrouter') {
-      if (config.openRouterApiKey === '') {
-        throw new IntexuraOSError(
-          'MISCONFIGURED',
-          `INTEXURAOS_OPENROUTER_APP_API_KEY is required for OpenRouter validation model: ${model.modelId}`
-        );
-      }
-
-      return {
-        modelName: model.modelId,
-        client: createLlmClient({
-          apiKey: config.openRouterApiKey,
-          model: model.modelId as LLMModel,
-          userId: 'orchestrator-validation',
-          logger: config.logger,
-          usageSink: new HttpWebhookUsageSink({
-            webhookUrl: config.usageWebhookUrl,
-            webhookSecret: config.orchestratorSecret,
-            internalAuthToken: config.internalAuthToken,
-            service: 'orchestrator',
-            component: 'validation',
-            logger: config.logger,
-            getCorrelationTaskId: config.getCorrelationTaskId,
-          }),
-        }),
-      };
-    }
-
-    // Gemini model
-    if (config.geminiApiKey === '') {
+    if (config.openRouterApiKey === '') {
       throw new IntexuraOSError(
         'MISCONFIGURED',
-        `INTEXURAOS_GEMINI_APP_API_KEY is required for Gemini validation model: ${model.modelId}`
+        `INTEXURAOS_OPENROUTER_APP_API_KEY is required for OpenRouter validation model: ${model.modelId}`
       );
     }
 
     return {
       modelName: model.modelId,
       client: createLlmClient({
-        apiKey: config.geminiApiKey,
-        model: model.modelId as LLMModel,
+        apiKey: config.openRouterApiKey,
+        model: model.modelId,
         userId: 'orchestrator-validation',
         logger: config.logger,
         usageSink: new HttpWebhookUsageSink({

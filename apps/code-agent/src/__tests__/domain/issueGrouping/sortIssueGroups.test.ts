@@ -18,6 +18,7 @@ function makeTask(overrides: Partial<SerializedTask> & { id: string }): Serializ
     callbackReceived: false,
     status: 'implemented',
     createdAt: '2026-03-01T10:00:00.000Z',
+    statusChangedAt: '2026-03-01T10:00:00.000Z',
     updatedAt: '2026-03-01T10:00:00.000Z',
     ...overrides,
   };
@@ -32,6 +33,10 @@ function makeGroup(overrides: Partial<IssueGroup>): IssueGroup {
     pipeline: { steps: [], pr: null, failedAttempts: 0, archivedCount: 0 },
     latestTask: defaultTask,
     aggregateStatus: 'done',
+    lastActivityAt: defaultTask.statusChangedAt,
+    lastActivityStatus: defaultTask.status,
+    lastActivityTaskId: defaultTask.id,
+    lastModifiedAt: defaultTask.updatedAt,
     ...overrides,
   };
 }
@@ -86,10 +91,10 @@ describe('sortIssueGroups', () => {
       expect(sorted[1]?.linearIssueId).toBe('INT-100');
     });
 
-    it('sorts standalone groups by updatedAt desc', () => {
+    it('sorts standalone groups by lifecycle activity rather than technical modification', () => {
       const groups = [
-        makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 't1', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
-        makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }) }),
+        makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 't1', updatedAt: '2026-03-10T10:00:00.000Z' }), lastActivityAt: '2026-03-01T10:00:00.000Z' }),
+        makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }), lastActivityAt: '2026-03-05T10:00:00.000Z' }),
       ];
 
       const sorted = sortIssueGroups(groups, 'linear-id');
@@ -98,10 +103,10 @@ describe('sortIssueGroups', () => {
       expect(sorted[1]?.latestTask.id).toBe('t1');
     });
 
-    it('breaks ties on same issue number by updatedAt desc', () => {
+    it('breaks ties on same issue number by lifecycle activity', () => {
       const groups = [
-        makeGroup({ linearIssueId: 'INT-100', latestTask: makeTask({ id: 't1', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
-        makeGroup({ linearIssueId: 'INT-100', latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }) }),
+        makeGroup({ linearIssueId: 'INT-100', latestTask: makeTask({ id: 't1', updatedAt: '2026-03-10T10:00:00.000Z' }), lastActivityAt: '2026-03-01T10:00:00.000Z' }),
+        makeGroup({ linearIssueId: 'INT-100', latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }), lastActivityAt: '2026-03-05T10:00:00.000Z' }),
       ];
 
       const sorted = sortIssueGroups(groups, 'linear-id');
@@ -135,12 +140,12 @@ describe('sortIssueGroups', () => {
       expect(sorted[2]?.pipeline.pr).toBeNull();
     });
 
-    it('falls back to updatedAt desc when neither has PR', () => {
+    it('falls back to lifecycle activity when neither has PR', () => {
       const noPr: PipelineState = { steps: [], pr: null, failedAttempts: 0, archivedCount: 0 };
 
       const groups = [
-        makeGroup({ pipeline: noPr, latestTask: makeTask({ id: 't1', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
-        makeGroup({ pipeline: noPr, latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }) }),
+        makeGroup({ pipeline: noPr, latestTask: makeTask({ id: 't1', updatedAt: '2026-03-10T10:00:00.000Z' }), lastActivityAt: '2026-03-01T10:00:00.000Z' }),
+        makeGroup({ pipeline: noPr, latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }), lastActivityAt: '2026-03-05T10:00:00.000Z' }),
       ];
 
       const sorted = sortIssueGroups(groups, 'pr-number');
@@ -151,11 +156,11 @@ describe('sortIssueGroups', () => {
   });
 
   describe('sort by last-updated', () => {
-    it('sorts by latestTask.updatedAt desc', () => {
+    it('sorts by lifecycle activity instead of latest-task technical modification', () => {
       const groups = [
-        makeGroup({ latestTask: makeTask({ id: 't1', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
-        makeGroup({ latestTask: makeTask({ id: 't2', updatedAt: '2026-03-10T10:00:00.000Z' }) }),
-        makeGroup({ latestTask: makeTask({ id: 't3', updatedAt: '2026-03-05T10:00:00.000Z' }) }),
+        makeGroup({ latestTask: makeTask({ id: 't1', updatedAt: '2026-03-10T10:00:00.000Z' }), lastActivityAt: '2026-03-01T10:00:00.000Z' }),
+        makeGroup({ latestTask: makeTask({ id: 't2', updatedAt: '2026-03-02T10:00:00.000Z' }), lastActivityAt: '2026-03-10T10:00:00.000Z' }),
+        makeGroup({ latestTask: makeTask({ id: 't3', updatedAt: '2026-03-05T10:00:00.000Z' }), lastActivityAt: '2026-03-05T10:00:00.000Z' }),
       ];
 
       const sorted = sortIssueGroups(groups, 'last-updated');
@@ -163,6 +168,28 @@ describe('sortIssueGroups', () => {
       expect(sorted[0]?.latestTask.id).toBe('t2');
       expect(sorted[1]?.latestTask.id).toBe('t3');
       expect(sorted[2]?.latestTask.id).toBe('t1');
+    });
+
+    it('breaks equal lifecycle activity ties by group identity', () => {
+      const tied = '2026-03-10T10:00:00.000Z';
+      const groups = [
+        makeGroup({ linearIssueId: 'INT-100', latestTask: makeTask({ id: 't1' }), lastActivityAt: tied }),
+        makeGroup({ linearIssueId: 'INT-200', latestTask: makeTask({ id: 't2' }), lastActivityAt: tied }),
+      ];
+
+      expect(sortIssueGroups(groups, 'last-updated').map((group) => group.linearIssueId))
+        .toEqual(['INT-200', 'INT-100']);
+    });
+
+    it('uses standalone task identity when lifecycle activity ties', () => {
+      const tied = '2026-03-10T10:00:00.000Z';
+      const groups = [
+        makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 'task-A' }), lastActivityAt: tied }),
+        makeGroup({ linearIssueId: null, latestTask: makeTask({ id: 'task-B' }), lastActivityAt: tied }),
+      ];
+
+      expect(sortIssueGroups(groups, 'last-updated').map((group) => group.latestTask.id))
+        .toEqual(['task-B', 'task-A']);
     });
   });
 
@@ -175,10 +202,12 @@ describe('sortIssueGroups', () => {
         makeGroup({
           mostRecentDispatchedAt: '2026-03-02T10:00:00.000Z',
           latestTask: makeTask({ id: 't2', createdAt: '2026-03-01T10:00:00.000Z' }),
+          lastActivityAt: '2026-03-10T10:00:00.000Z',
         }),
         makeGroup({
           mostRecentDispatchedAt: '2026-03-05T10:00:00.000Z',
           latestTask: makeTask({ id: 't3', createdAt: '2026-03-01T10:00:00.000Z' }),
+          lastActivityAt: '2026-03-01T10:00:00.000Z',
         }),
       ];
 
@@ -199,6 +228,34 @@ describe('sortIssueGroups', () => {
 
       expect(sorted[0]?.latestTask.id).toBe('t2');
       expect(sorted[1]?.latestTask.id).toBe('t1');
+    });
+
+    it('breaks equal createdAt fallback ties by group identity when neither is dispatched', () => {
+      const tied = '2026-03-05T10:00:00.000Z';
+      const groups = [
+        makeGroup({
+          linearIssueId: 'INT-100',
+          latestTask: makeTask({ id: 't1', createdAt: tied }),
+        }),
+        makeGroup({
+          linearIssueId: 'INT-200',
+          latestTask: makeTask({ id: 't2', createdAt: tied }),
+        }),
+      ];
+
+      expect(sortIssueGroups(groups, 'dispatched').map((group) => group.linearIssueId))
+        .toEqual(['INT-200', 'INT-100']);
+    });
+
+    it('breaks equal dispatched timestamps by group identity', () => {
+      const tied = '2026-03-05T10:00:00.000Z';
+      const groups = [
+        makeGroup({ linearIssueId: 'INT-100', mostRecentDispatchedAt: tied, latestTask: makeTask({ id: 't1' }) }),
+        makeGroup({ linearIssueId: 'INT-200', mostRecentDispatchedAt: tied, latestTask: makeTask({ id: 't2' }) }),
+      ];
+
+      expect(sortIssueGroups(groups, 'dispatched').map((group) => group.linearIssueId))
+        .toEqual(['INT-200', 'INT-100']);
     });
   });
 
@@ -286,14 +343,14 @@ describe('sortIssueGroups', () => {
       // 3 elements: [noPR-1, noPR-2, withPR] — the sort comparator will be called with
       // various pairs, ensuring both (a=noPR, b=withPR) and (a=noPR, b=noPR) are hit.
       const groups = [
-        makeGroup({ pipeline: noPrPipeline, latestTask: makeTask({ id: 't-noPR-1', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
-        makeGroup({ pipeline: noPrPipeline, latestTask: makeTask({ id: 't-noPR-2', updatedAt: '2026-03-05T10:00:00.000Z' }) }),
+        makeGroup({ pipeline: noPrPipeline, lastActivityAt: '2026-03-01T10:00:00.000Z', latestTask: makeTask({ id: 't-noPR-1', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
+        makeGroup({ pipeline: noPrPipeline, lastActivityAt: '2026-03-05T10:00:00.000Z', latestTask: makeTask({ id: 't-noPR-2', updatedAt: '2026-03-05T10:00:00.000Z' }) }),
         makeGroup({ pipeline: prPipeline('42'), latestTask: makeTask({ id: 't-pr42', updatedAt: '2026-03-01T10:00:00.000Z' }) }),
       ];
 
       const sorted = sortIssueGroups(groups, 'pr-number');
 
-      // PR group first, then noPR groups sorted by updatedAt desc
+      // PR group first, then noPR groups sorted by lifecycle activity desc
       expect(sorted[0]?.latestTask.id).toBe('t-pr42');
       expect(sorted[1]?.latestTask.id).toBe('t-noPR-2');
       expect(sorted[2]?.latestTask.id).toBe('t-noPR-1');
@@ -366,9 +423,9 @@ describe('comparePrNumber (direct comparator)', () => {
     expect(comparePrNumber(a, b)).toBe(1);
   });
 
-  it('falls back to updatedAt when neither has PR', () => {
-    const a = makeGroup({ pipeline: noPrPipeline, latestTask: makeTask({ id: 't1', updatedAt: '2026-03-01T10:00:00.000Z' }) });
-    const b = makeGroup({ pipeline: noPrPipeline, latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }) });
+  it('falls back to lifecycle activity when neither has PR', () => {
+    const a = makeGroup({ pipeline: noPrPipeline, latestTask: makeTask({ id: 't1', updatedAt: '2026-03-10T10:00:00.000Z' }), lastActivityAt: '2026-03-01T10:00:00.000Z' });
+    const b = makeGroup({ pipeline: noPrPipeline, latestTask: makeTask({ id: 't2', updatedAt: '2026-03-05T10:00:00.000Z' }), lastActivityAt: '2026-03-05T10:00:00.000Z' });
     expect(comparePrNumber(a, b)).toBeGreaterThan(0);
   });
 });

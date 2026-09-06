@@ -10,6 +10,7 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { validateWebhookSignature } from '../../infra/webhookValidation.js';
 import type { AutomationEvent } from '../../domain/ports/automationLog.js';
@@ -172,7 +173,10 @@ export const taskEventRoute: FastifyPluginCallback = (fastify, _opts, done) => {
       const task = taskResult.value;
 
       if (task.prNumber === undefined) {
-        logger.warn({ taskId }, 'Task-event webhook: task has no prNumber, skipping automation log');
+        logger.warn(
+          { taskId, [SKIP_SENTRY_KEY]: true },
+          'Task-event webhook: task has no prNumber, skipping automation log'
+        );
         // @allow-raw-send: orchestrator contract requires simple acknowledgment
         return await reply.send({ received: true });
       }

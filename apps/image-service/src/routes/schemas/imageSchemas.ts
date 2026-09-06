@@ -12,7 +12,7 @@ export const generateImageBodySchema = {
     },
     model: {
       type: 'string',
-      enum: [LlmModels.GPTImage1, LlmModels.Gemini25FlashImage],
+      enum: [LlmModels.GPTImage1],
       description: 'Image generation model to use',
     },
     userId: {
@@ -75,15 +75,11 @@ export const generateImageResponseSchema = {
   },
 } as const;
 
-import type {
-  Gemini25FlashImage,
-  GPTImage1,
-  LLMCorrelationOptions,
-} from '@intexuraos/llm-contract';
+import type { GPTImage1, LLMCorrelationOptions } from '@intexuraos/llm-contract';
 
 export interface GenerateImageBody {
   prompt: string;
-  model: GPTImage1 | Gemini25FlashImage;
+  model: GPTImage1;
   userId: string;
   title?: string;
   promptType?: string | undefined;

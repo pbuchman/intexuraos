@@ -227,7 +227,14 @@ function hasPlanningTaskLabel(labels: string[]): boolean;
 Shared contract for the set of valid worker type identifiers.
 
 ```typescript
-const CODE_TASK_WORKER_TYPES = ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi'] as const;
+const CODE_TASK_WORKER_TYPES = [
+  'auto',
+  'opus',
+  'sonnet',
+  'codex',
+  'codex-xhigh',
+  'openrouter-free',
+] as const;
 type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];
 
 function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType;
@@ -237,21 +244,11 @@ function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType;
 
 Nearly every package and app in the monorepo depends on `common-core`:
 
-**Packages (17):** `common-http`, `http-server`, `infra-pubsub`, `infra-firestore`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-notion`, `infra-perplexity`, `infra-sentry`, `infra-whatsapp`, `internal-clients`, `llm-utils`, `llm-prompts`, `llm-pricing`, `llm-factory`, `llm-contract`
+**Packages (21):** `common-http`, `common-worker`, `http-server`, `infra-claude`, `infra-firestore`, `infra-gpt`, `infra-notion`, `infra-openrouter`, `infra-pdf-export`, `infra-perplexity`, `infra-pubsub`, `infra-sentry`, `infra-whatsapp`, `internal-clients`, `llm-contract`, `llm-factory`, `llm-pricing`, `llm-prompts`, `llm-utils`, `pr-triage-pubsub-client`, `whatsapp-pubsub-client`
 
 **Apps:** `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `code-agent`, `image-service`, `intex-agent`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `user-service`, `web`, `web-agent`, `whatsapp-service`
 
 **Workers (3):** `orchestrator`, `vm-lifecycle`, `log-cleanup`
-
-## Recent Changes
-
-| Commit      | Description                                           |
-| ----------- | ----------------------------------------------------- |
-| `71968fa01` | Add kimi worker type                                  |
-| `33129fd77` | Normalize qwen worker naming                          |
-| `daa15657b` | Extract shared code-task worker types                 |
-| `092a937d7` | Add hasPlanningTaskLabel utility                      |
-| `eed6e8baf` | Add tests for v8-ignore blocks in errors.ts           |
 
 ## Source Files
 

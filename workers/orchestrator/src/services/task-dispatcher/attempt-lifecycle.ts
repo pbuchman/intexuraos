@@ -4,6 +4,7 @@ import type { CreateTaskRequest } from '../../types/api.js';
 import type { SendMessageResult, SendMessageError } from '../../types/schemas.js';
 import { WORKER_TYPES } from '../isolation/types.js';
 import { withTimeout } from '../../with-timeout.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { fetchDispatchMetadata } from '../dispatch-metadata-client.js';
 import {
   pickAgentLabel as pickAgentLabelFn,
@@ -124,7 +125,7 @@ export class AttemptLifecycle {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       ctx.logger.error(
-        { taskId: task.taskId, worktreePath: task.worktreePath, error },
+        { taskId: task.taskId, worktreePath: task.worktreePath, error, [SKIP_SENTRY_KEY]: true },
         'git worktree repair failed during adoption — marking task as WORKTREE_LOST'
       );
 
@@ -208,6 +209,7 @@ export class AttemptLifecycle {
         ...(request.actionId !== undefined && { actionId: request.actionId }),
         ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
         ...(request.agentType !== undefined && { agentType: request.agentType }),
+        ...(request.sentryIssue !== undefined && { sentryIssue: request.sentryIssue }),
         ...(request.executionMemoryContext !== undefined && {
           executionMemoryContext: request.executionMemoryContext,
         }),
@@ -517,7 +519,7 @@ export class AttemptLifecycle {
       'Inactivity restart triggered'
     );
 
-    const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
+    const evidenceDir = `${ctx.config.logBasePath}/inactivity-evidence/${taskId}/`;
     const [copyResult, statsResult] = await Promise.allSettled([
       withTimeout(
         ctx.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
@@ -539,8 +541,11 @@ export class AttemptLifecycle {
     if (statsResult.status === 'fulfilled') {
       ctx.logger.warn({ taskId, stats: statsResult.value }, 'Container stats at inactivity kill');
     } else {
+      // Best-effort pre-kill telemetry (EVIDENCE_CAPTURE_TIMEOUT_MS = 30s). The inactivity
+      // restart proceeds regardless of this outcome, so the warn is operational noise,
+      // not an actionable error. Suppress from Sentry to avoid alert fatigue.
       ctx.logger.warn(
-        { taskId, error: getErrorMessage(statsResult.reason) },
+        { taskId, error: getErrorMessage(statsResult.reason), [SKIP_SENTRY_KEY]: true },
         'Failed to capture container stats before inactivity kill'
       );
     }
@@ -553,8 +558,13 @@ export class AttemptLifecycle {
       );
     } catch (destroyError) {
       const message = getErrorMessage(destroyError);
+      // destroyWorker is bounded by WORKER_DESTROY_TIMEOUT_MS (30s) and the task is
+      // finalized below as 'failed' with TASK_INACTIVITY_RESTART_FAILED, so the
+      // failure is captured via the task status path. The warn itself reflects
+      // docker daemon unresponsiveness (infrastructure), not application
+      // error, and would otherwise be operational noise for Sentry.
       ctx.logger.warn(
-        { taskId, error: destroyError },
+        { taskId, error: destroyError, [SKIP_SENTRY_KEY]: true },
         'Failed to destroy worker for inactivity restart'
       );
       ctx.appendOrchestratorTaskLog(

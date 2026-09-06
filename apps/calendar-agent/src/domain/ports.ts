@@ -11,6 +11,7 @@ import type {
 import type { ExtractedCalendarEvent } from '@intexuraos/llm-prompts';
 import type {
   CalendarEvent,
+  CalendarEventsPage,
   CreateEventInput,
   FreeBusyInput,
   FreeBusySlot,
@@ -25,8 +26,15 @@ import type {
   UpdateCalendarPreviewInput,
 } from './models.js';
 import type { CalendarError } from './errors.js';
+import type { CalendarScheduleRepository } from './schedules/scheduleRepository.js';
+import type { WhatsAppScheduleClient } from './schedules/types.js';
 
 export type { UserServiceClient, OAuthTokenResult, ExtractedCalendarEvent };
+
+export interface UpdateEventOptions {
+  sendUpdates?: 'all' | 'externalOnly' | 'none';
+  expectedEtag?: string;
+}
 
 export interface GoogleCalendarClient {
   getCalendarTimezone(
@@ -40,7 +48,7 @@ export interface GoogleCalendarClient {
     calendarId: string,
     options: ListEventsInput,
     logger: Logger
-  ): Promise<Result<CalendarEvent[], CalendarError>>;
+  ): Promise<Result<CalendarEventsPage, CalendarError>>;
 
   getEvent(
     accessToken: string,
@@ -61,7 +69,8 @@ export interface GoogleCalendarClient {
     calendarId: string,
     eventId: string,
     event: UpdateEventInput,
-    logger: Logger
+    logger: Logger,
+    options?: UpdateEventOptions
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   deleteEvent(
@@ -118,7 +127,7 @@ export interface ProcessedActionRepository {
     actionId: string;
     userId: string;
     eventId: string;
-    resourceUrl: string;
+    resourceUrl?: string;
   }): Promise<Result<ProcessedAction, CalendarError>>;
 }
 
@@ -140,3 +149,5 @@ export interface CalendarPreviewRepository {
   /** Delete a preview by actionId */
   delete(actionId: string): Promise<Result<void, CalendarError>>;
 }
+
+export type { CalendarScheduleRepository, WhatsAppScheduleClient };

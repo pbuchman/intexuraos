@@ -123,10 +123,15 @@ This task handles data transmission to the backend with error handling and local
 
 - **Method:** `POST`
 - **Production URL:** `https://intexuraos.cloud/api/notifications/webhooks`
-- **Development URL:** `https://dev.intexuraos.cloud/api/notifications/webhooks`
+- **Retained DEV recovery URL:** `https://dev.intexuraos.cloud/api/notifications/webhooks`
 - **Headers:**
   - `Content-Type: application/json`
   - `X-Mobile-Notifications-Signature: YOUR_SIGNATURE`
+
+The Tasker profile must normally target the production URL. The retained DEV recovery URL is
+historical configuration for a separately authorized recovery drill; it returns `503` while DEV
+is hibernated. Do not enable or repoint a mobile producer to DEV outside that reviewed resume
+window, and restore the production URL before re-hibernation.
 
 ### 5.3. JSON Payload (Body)
 

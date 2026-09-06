@@ -3,7 +3,6 @@
  * Extracted from the switch statement in process-llm-call endpoint.
  */
 
-import { getProviderForModel } from '@intexuraos/llm-contract';
 import type { ResearchRepository, NotificationSender } from '../../domain/research/ports/index.js';
 import type { ServiceContainer, DecryptedApiKeys, ImageServiceClient } from '../../services.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
@@ -12,6 +11,10 @@ import type { ShareConfig } from '../../services.js';
 import { runSynthesis } from '../../domain/research/index.js';
 import { createSynthesisProviders } from './synthesisHelper.js';
 import type { Logger } from '@intexuraos/common-core';
+import {
+  getUnsupportedSynthesisMessage,
+  isExecutableSynthesisModel,
+} from './storedResearchModels.js';
 
 export interface AllCompletedHandlerParams {
   researchId: string;
@@ -74,8 +77,18 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
   logger.info({ researchId }, '[3.5.2] All LLMs completed, triggering synthesis (Phase 4)');
 
   const synthesisModel = freshResearch.value.synthesisModel;
-  const synthesisProvider = getProviderForModel(synthesisModel);
-  const synthesisKey = apiKeys[synthesisProvider];
+  const synthesisProvider = 'openrouter';
+  if (!isExecutableSynthesisModel(synthesisModel)) {
+    const error = getUnsupportedSynthesisMessage(synthesisModel);
+    logger.error({ researchId, model: synthesisModel }, '[3.5.2] Unsupported synthesis model');
+    await researchRepo.update(researchId, {
+      status: 'failed',
+      synthesisError: error,
+      completedAt: new Date().toISOString(),
+    });
+    return;
+  }
+  const synthesisKey = apiKeys.openrouter;
   if (synthesisKey === undefined) {
     logger.error({ researchId, model: synthesisModel }, '[3.5.2] API key missing for synthesis model');
     await researchRepo.update(researchId, {
@@ -133,7 +146,6 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
         logger.debug({ researchId, ...obj }, msg);
       },
     },
-    imageApiKeys: apiKeys,
     notionServiceClient: services.notionServiceClient,
     researchExportSettings: services.researchExportSettings,
     researchCostSummaryClient: services.researchCostSummaryClient ?? null,

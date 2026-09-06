@@ -12,7 +12,7 @@
  * 8. Appends additional context to prompt when provided
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTask } from '../../domain/models/codeTask.js';
@@ -54,6 +54,7 @@ describe('retryTask use case', () => {
   let mockMetricsClient: {
     incrementTasksSubmitted: ReturnType<typeof vi.fn>;
   };
+  let originalWebAppUrl: string | undefined;
   const userId = 'test-user-123';
   const originalTaskId = 'task_abc123';
   const linearIssueId = 'INT-520';
@@ -101,6 +102,8 @@ describe('retryTask use case', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
 
     // Mock logger
     mockLogger = {
@@ -164,6 +167,14 @@ describe('retryTask use case', () => {
       incrementTasksSubmitted: vi.fn().mockResolvedValue(undefined),
     };
 
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   function createDeps(): RetryTaskDeps {
@@ -560,7 +571,9 @@ describe('retryTask use case', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.codeTaskId).toBe(retryTaskId);
-        expect(result.value.resourceUrl).toContain('/code-tasks/');
+        expect(result.value.resourceUrl).toBe(
+          `https://intexuraos.cloud/#/code-tasks/${retryTaskId}`
+        );
         expect(result.value.retriedFrom).toBe(originalTaskId);
       }
 
@@ -572,6 +585,32 @@ describe('retryTask use case', () => {
       // Verify agentType is 'design' when validateIssue returns no 'code-task' label
       // (default mock returns labels: ['unclear'])
       expect(createCallInput?.agentType).toBe('planning');
+    });
+
+    it('should preserve the complete Sentry issue context on the retry task', async () => {
+      const sentryIssue = {
+        organizationSlug: 'intexuraos',
+        projectSlug: 'intexuraos-backend',
+        projectId: '4509002',
+        issueId: '110',
+        issueShortId: 'INTEXURAOS-6E',
+        issueUrl:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/110/',
+        title: 'Configuration warning',
+        action: 'created',
+        eventId: 'b493ff643e7e4856adbad08d108ba8b4',
+        receivedAt: '2026-08-11T12:34:56.000Z',
+      };
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo, sentryIssue });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      const result = await retryTask(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sentryIssue })
+      );
+      expect(mockCodeTaskRepo.create.mock.calls[0]?.[0]?.sentryIssue).toEqual(sentryIssue);
     });
 
     it('should update Linear issue state to In Progress', async () => {
@@ -998,14 +1037,23 @@ describe('retryTask use case', () => {
 
     it('should preserve review agentType from original task on retry', async () => {
       // Review tasks have no Linear issue — agentType must be preserved from original
-      const mockTask = createMockTask({ completedAt: sixMinutesAgo, agentType: 'review' });
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        agentType: 'review',
+        reviewTypes: ['code_quality', 'security'],
+        reviewCommitSha: 'reviewed-head-sha',
+      });
       const taskRecord = mockTask as unknown as Record<string, unknown>;
       delete taskRecord['linearIssueId'];
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
       let createInputAgentType: unknown;
+      let createInputReviewTypes: unknown;
+      let createInputReviewCommitSha: unknown;
       mockCodeTaskRepo.create.mockImplementation((input: Record<string, unknown>) => {
         createInputAgentType = input['agentType'];
+        createInputReviewTypes = input['reviewTypes'];
+        createInputReviewCommitSha = input['reviewCommitSha'];
         const agentTypeValue = input['agentType'] as CodeTask['agentType'];
         const newTask: CodeTask = {
           id: retryTaskId,
@@ -1035,6 +1083,8 @@ describe('retryTask use case', () => {
 
       expect(result.ok).toBe(true);
       expect(createInputAgentType).toBe('review');
+      expect(createInputReviewTypes).toEqual(['code_quality', 'security']);
+      expect(createInputReviewCommitSha).toBe('reviewed-head-sha');
       expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 
@@ -1404,6 +1454,19 @@ describe('retryTask use case', () => {
       // Verify warning was logged for metrics failure
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
+          taskId: retryTaskId,
+          error: expect.anything(),
+        }),
+        'Failed to record task submission metric for retry'
+      );
+
+      // INT-1763: best-effort Cloud Monitoring writes may fail with
+      // `monitoring.timeSeries.create denied`. The warning must carry the
+      // _skipSentry marker so the warning stays in stdout/Cloud Logging but
+      // does not generate a Sentry issue.
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _skipSentry: true,
           taskId: retryTaskId,
           error: expect.anything(),
         }),

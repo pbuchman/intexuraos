@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "backfill:events": "node src/backfill-private-events.mjs",
+    "backfill:media": "node src/backfill-private-media.mjs",
     "start": "node src/server.mjs",
     "test": "node --test src/*.test.mjs"
   },

@@ -415,6 +415,8 @@ describe('codeRoutes branch coverage', () => {
       expect(task.prNumber).toBe(42);
       expect(task.agentType).toBe('planning');
       expect(task.createdAt).toBeDefined();
+      expect(task.statusChangedAt).toBeDefined();
+      expect(task.completedAt).toBe(task.statusChangedAt);
       expect(task.updatedAt).toBeDefined();
     });
 
@@ -453,6 +455,62 @@ describe('codeRoutes branch coverage', () => {
       expect(task.followUpReason).toBeUndefined();
       expect(task.result).toBeUndefined();
       expect(task.error).toBeUndefined();
+      expect(task.statusChangedAt).toBe(task.createdAt);
+      expect(task.completedAt).toBeUndefined();
+    });
+
+    it('uses terminal dispatch lastSeenAt for a legacy task instead of its later metadata update', async () => {
+      const failureAt = Timestamp.fromDate(new Date('2026-07-26T15:20:19.625Z'));
+      const metadataUpdatedAt = Timestamp.fromDate(new Date('2026-07-26T15:23:48.130Z'));
+      const createdAt = Timestamp.fromDate(new Date('2026-07-26T15:19:00.000Z'));
+      const mockRepo = {
+        ...getServices().codeTaskRepo,
+        findByIdForUser: vi.fn().mockResolvedValue(ok({
+          id: 'task-legacy-terminal-dispatch',
+          userId: 'test-user-id',
+          prompt: 'Legacy failed task',
+          sanitizedPrompt: 'legacy failed task',
+          systemPromptHash: 'abc123',
+          workerType: 'codex',
+          workerLocation: 'home-dev',
+          repository: 'test/repo',
+          baseBranch: 'development',
+          traceId: 'trace-legacy-terminal',
+          status: 'failed',
+          dedupKey: 'dedup-legacy-terminal',
+          callbackReceived: false,
+          dispatchStatus: {
+            state: 'terminal',
+            reason: 'codex_auth_unavailable',
+            terminal: true,
+            severity: 'critical',
+            message: 'Codex authentication is unavailable.',
+            remediation: 'Configure Codex authentication, then retry.',
+            workerNames: ['home-dev'],
+            firstSeenAt: failureAt,
+            lastSeenAt: failureAt,
+            nextAction: 'retry_after_fix',
+          },
+          statusChangedAt: '',
+          createdAt,
+          updatedAt: metadataUpdatedAt,
+        })),
+      } as unknown as CodeTaskRepository;
+      setServices({ ...getServices(), codeTaskRepo: mockRepo } as never);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/tasks/task-legacy-terminal-dispatch',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: { statusChangedAt: string; completedAt: string; updatedAt: string };
+      };
+      expect(body.data.statusChangedAt).toBe('2026-07-26T15:20:19.625Z');
+      expect(body.data.completedAt).toBe('2026-07-26T15:20:19.625Z');
+      expect(body.data.updatedAt).toBe('2026-07-26T15:23:48.130Z');
     });
     it('returns task with dispatchedAt when set', async () => {
       const { Timestamp } = await import('@google-cloud/firestore');
@@ -494,9 +552,8 @@ describe('codeRoutes branch coverage', () => {
       expect(body.data.dispatchedAt).toBe(now.toISOString());
     });
 
-    it('falls back to empty string when timestampToIso returns undefined for createdAt and updatedAt', async () => {
-      // Mock findByIdForUser to return a task where createdAt and updatedAt are objects without toDate()
-      // This exercises the ?? '' fallback path for both timestamp fields
+    it('fails with a controlled server error when every lifecycle timestamp is malformed', async () => {
+      // Mock findByIdForUser with no valid canonical lifecycle candidate.
       const mockRepo = {
         ...getServices().codeTaskRepo,
         findByIdForUser: vi.fn().mockResolvedValue(ok({
@@ -539,13 +596,49 @@ describe('codeRoutes branch coverage', () => {
         headers: { authorization: 'Bearer test-token' },
       });
 
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('keeps the canonical lifecycle timestamp valid when legacy technical timestamps are malformed', async () => {
+      const lifecycleAt = Timestamp.fromDate(new Date('2026-07-27T08:01:00.000Z'));
+      const mockRepo = {
+        ...getServices().codeTaskRepo,
+        findByIdForUser: vi.fn().mockResolvedValue(ok({
+          id: 'task-with-valid-lifecycle',
+          userId: 'test-user-id',
+          prompt: 'Valid lifecycle task',
+          sanitizedPrompt: 'valid lifecycle task',
+          systemPromptHash: 'abc123',
+          workerType: 'opus',
+          workerLocation: 'vm',
+          repository: 'test/repo',
+          baseBranch: 'main',
+          traceId: 'trace-valid-lifecycle',
+          status: 'running',
+          dedupKey: 'dedup',
+          callbackReceived: false,
+          statusChangedAt: lifecycleAt,
+          createdAt: { seconds: 123 } as never,
+          updatedAt: { seconds: 456 } as never,
+        })),
+      } as unknown as CodeTaskRepository;
+
+      setServices({ ...getServices(), codeTaskRepo: mockRepo } as never);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/tasks/task-with-valid-lifecycle',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      // Both should fall back to '' since timestampToIso returns undefined
+      expect(body.data.statusChangedAt).toBe(lifecycleAt.toDate().toISOString());
       expect(body.data.createdAt).toBe('');
       expect(body.data.updatedAt).toBe('');
-      expect(body.data.dispatchStatus.firstSeenAt).toBe('');
-      expect(body.data.dispatchStatus.lastSeenAt).toBe('');
     });
   });
 
@@ -1079,24 +1172,6 @@ describe('codeRoutes branch coverage', () => {
       expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
     });
 
-    it('returns 409 for complex_task_no_qualifying_children error', async () => {
-      mockedSubmitToExecutionAgent.mockResolvedValue(err({
-        code: 'complex_task_no_qualifying_children',
-        message: 'Complex task has no direct child issues with code-task label',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/code/submit-phase2',
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: { taskId: 'task-123', userId: 'test-user-id' },
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('CONFLICT');
-    });
-
     it('returns 409 for already_implemented error', async () => {
       mockedSubmitToExecutionAgent.mockResolvedValue(err({
         code: 'already_implemented',
@@ -1444,24 +1519,6 @@ describe('codeRoutes branch coverage', () => {
       expect(body.error.code).toBe('WORKER_NOT_CONFIGURED');
     });
 
-    it('returns 409 for complex_task_no_qualifying_children', async () => {
-      mockedSubmitToExecutionAgent.mockResolvedValue(err({
-        code: 'complex_task_no_qualifying_children',
-        message: 'Complex task has no direct child issues with code-task label',
-      }));
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/tasks/task-123/implement',
-        headers: { authorization: 'Bearer test-token' },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(409);
-      const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('CONFLICT');
-    });
-
     it('returns 409 for already_implemented', async () => {
       mockedSubmitToExecutionAgent.mockResolvedValue(err({
         code: 'already_implemented',
@@ -1783,6 +1840,29 @@ describe('codeRoutes branch coverage', () => {
   // DELETE /code/tasks/:taskId - non-NOT_FOUND error (line 1891 false branch)
   // ============================================================
   describe('DELETE /code/tasks/:taskId internal error', () => {
+    it('returns CONFLICT when an active task must be cancelled first', async () => {
+      const mockRepo = {
+        ...getServices().codeTaskRepo,
+        deleteTask: vi.fn().mockResolvedValue(err({
+          code: 'ACTIVE_TASK_EXISTS',
+          message: 'Cancel active task before deleting it',
+          existingTaskId: 'task-active',
+        })),
+      } as unknown as CodeTaskRepository;
+
+      setServices({ ...getServices(), codeTaskRepo: mockRepo } as never);
+
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/tasks/task-active',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
     it('returns INTERNAL_ERROR when delete fails with non-NOT_FOUND error', async () => {
       const mockRepo = {
         ...getServices().codeTaskRepo,
@@ -1834,10 +1914,10 @@ describe('codeRoutes branch coverage', () => {
   });
 
   // ============================================================
-  // POST /code/cancel - worker settings null (line 2133 false branch)
+  // POST /code/cancel - worker settings unavailable
   // ============================================================
   describe('POST /code/cancel with no worker settings', () => {
-    it('cancels task without worker creds when settings lookup returns null', async () => {
+    it('keeps a running task active when settings lookup returns null', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1880,13 +1960,20 @@ describe('codeRoutes branch coverage', () => {
         payload: { taskId: created.value.id },
       });
 
-      expect(response.statusCode).toBe(200);
-      // cancelOnWorker should have been called with undefined creds
-      expect(cancelOnWorker).toHaveBeenCalledWith(
-        created.value.id,
-        'home-mac',
-        undefined
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe(
+        'Worker cancellation could not be confirmed; task remains active'
       );
+      expect(cancelOnWorker).not.toHaveBeenCalled();
+
+      const current = await repo.findById(created.value.id);
+      expect(current.ok).toBe(true);
+      if (current.ok) {
+        expect(current.value.status).toBe('running');
+      }
     });
   });
 

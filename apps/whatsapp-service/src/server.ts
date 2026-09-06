@@ -14,10 +14,51 @@ import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { createWhatsappRoutes } from './routes/routes.js';
 import { type Config, validateConfigEnv } from './config.js';
-import { initServices } from './services.js';
+import { getServices, initServices } from './services.js';
 
 const SERVICE_NAME = 'whatsapp-service';
 const SERVICE_VERSION = '0.0.4';
+const WHATSAPP_LOG_REDACTION = {
+  paths: [
+    'bodyPreview',
+    'rawBody',
+    'signatureReceived',
+    'userId',
+    'ownerUserId',
+    'auth0UserId',
+    'sourceAccountId',
+    'chatId',
+    'matrixEventId',
+    'matrixRoomId',
+    'phoneNumber',
+    'normalizedPhone',
+    'fromNumber',
+    'recipientPhone',
+    'phoneNumberId',
+    'displayPhoneNumber',
+    'senderPhoneNumber',
+    'whatsappSender',
+    'wabaId',
+    'receivedWabaId',
+    'receivedPhoneNumberId',
+    'receivedDisplayPhoneNumber',
+    'allowedWabaIds',
+    'allowedPhoneNumberIds',
+    'messageId',
+    'waMessageId',
+    'wamid',
+    'replyToWamid',
+    'replyToMessageId',
+    'mediaId',
+    'body.phoneNumber',
+    'body.userId',
+    'error.details.phoneNumber',
+    'error.details.userId',
+    'err.details.phoneNumber',
+    'err.details.userId',
+  ],
+  censor: '[Redacted]',
+};
 
 /**
  * Probe required secrets using this service's bespoke validation logic
@@ -48,6 +89,12 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   ];
 
   return {
+    refResolver: {
+      buildLocalReference(json, _baseUri, _fragment, index): string {
+        const schemaId = json['$id'];
+        return typeof schemaId === 'string' ? schemaId : `def-${String(index)}`;
+      },
+    },
     openapi: {
       openapi: '3.1.1',
       info: {
@@ -103,17 +150,38 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   };
 }
 
-export async function buildServer(config: Config): Promise<FastifyInstance> {
+export async function buildServer(
+  config: Config,
+  testLoggerStream?: NodeJS.WritableStream
+): Promise<FastifyInstance> {
   // Initialize service container with config
   const serviceConfig = {
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
+    ...(config.googleApplicationCredentialsFile === undefined
+      ? {}
+      : { googleApplicationCredentialsFile: config.googleApplicationCredentialsFile }),
     mediaCleanupTopic: config.mediaCleanupTopic,
+    audioStoredTopic: config.audioStoredTopic,
     intexMessageIngestTopic: config.intexMessageIngestTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    llmUsageServiceUrl: config.llmUsageServiceUrl,
+    userServiceUrl: config.userServiceUrl,
+    platformOpenRouterApiKey: config.platformOpenRouterApiKey,
+    messageDigestServiceUrl: config.messageDigestServiceUrl,
+    conversationAssistantModel: config.conversationAssistantModel,
+    matrixOutboundAdapterBaseUrl: process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] ?? '',
+    matrixOutboundAdapterAuthToken:
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] ?? '',
+    matrixOutboundCloudflareAccessClientId:
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'],
+    matrixOutboundCloudflareAccessClientSecret:
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'],
+    intexAgentBaseUrl: process.env['INTEXURAOS_INTEX_AGENT_URL'] ?? '',
+    matrixCorpus: config.matrixCorpus,
   };
   if (config.webhookProcessTopic !== undefined) {
     (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =
@@ -122,18 +190,25 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   initServices(serviceConfig);
 
   const app = Fastify({
-    logger:
-      process.env['NODE_ENV'] === 'test'
+    // Keep router matching above the largest public path-parameter bound so
+    // route schemas, rather than find-my-way's default 100-character limit,
+    // produce the documented validation response.
+    routerOptions: { maxParamLength: 512 },
+    logger: testLoggerStream
+      ? { level: 'info', redact: WHATSAPP_LOG_REDACTION, stream: testLoggerStream }
+      : process.env['NODE_ENV'] === 'test'
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
+            redact: WHATSAPP_LOG_REDACTION,
             stream: createLogStream(),
           },
     disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
   });
 
-  // Register quiet health check logging (skips /health endpoint logs)
-  registerQuietHealthCheckLogging(app);
+  // Matrix control-plane identifiers and errors are private even in global hooks.
+  const matrixCorpusPrivatePaths = ['/internal/matrix-corpus/'] as const;
+  registerQuietHealthCheckLogging(app, { privatePathPrefixes: matrixCorpusPrivatePaths });
 
   // Add content type parser to capture raw body
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -146,6 +221,14 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
       done(err as Error, undefined);
     }
   });
+
+  app.addContentTypeParser(
+    'application/octet-stream',
+    { parseAs: 'buffer' },
+    (_req, body, done) => {
+      done(null, body);
+    }
+  );
 
   await app.register(intexuraFastifyPlugin);
 
@@ -175,10 +258,22 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   // Register auth plugin (JWT validation)
   await app.register(fastifyAuthPlugin);
 
-  setupSentryErrorHandler(app as unknown as FastifyInstance);
+  setupSentryErrorHandler(app as unknown as FastifyInstance, {
+    privatePathPrefixes: matrixCorpusPrivatePaths,
+  });
 
   // Register whatsapp routes
   await app.register(createWhatsappRoutes(config));
+
+  if (config.matrixCorpus.enabled) {
+    const recoveryController = getServices().matrixCorpus?.recoveryController;
+    if (recoveryController === undefined) {
+      throw new Error('Matrix corpus recovery composition is unavailable');
+    }
+    app.addHook('onClose', async () => {
+      await recoveryController.stop();
+    });
+  }
 
   // Health endpoint (NOT wrapped in envelope per api-contracts.md)
   await registerHealthCheck(app, {

@@ -182,7 +182,7 @@ sequenceDiagram
 | Component                      | Purpose                         |
 | ------------------------------ | ------------------------------- |
 | Firestore (`notes` collection) | Note persistence                |
-| Sentry                         | Error tracking                  |
+| SentryBox                      | Error tracking                  |
 
 ### Internal Services (callers)
 

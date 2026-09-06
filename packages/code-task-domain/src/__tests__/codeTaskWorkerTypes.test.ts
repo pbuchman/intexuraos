@@ -4,11 +4,6 @@ const EXPECTED_CODE_TASK_WORKER_TYPES = [
   'auto',
   'opus',
   'sonnet',
-  'minimax',
-  'mimo-pro',
-  'glm',
-  'qwen',
-  'kimi',
   'codex',
   'codex-xhigh',
   'openrouter-free',
@@ -48,32 +43,26 @@ describe('code task worker types', () => {
     );
   });
 
-  it('describes auth requirements for codex, claude, and provider-backed workers', async () => {
+  it('preserves the runtime and auth contract for every supported worker', async () => {
     const commonCore = (await import('../index.js')) as Record<string, unknown>;
     const capabilities = commonCore['CODE_TASK_WORKER_CAPABILITIES'] as Record<
       string,
       { runtimeFamily: string; auth: { kind: string; envVar?: string }; requiresDocker: boolean }
     >;
 
-    expect(capabilities['codex']).toMatchObject({
-      runtimeFamily: 'codex',
-      auth: { kind: 'codex' },
-      requiresDocker: true,
-    });
-    expect(capabilities['sonnet']).toMatchObject({
-      runtimeFamily: 'claude',
-      auth: { kind: 'claude' },
-      requiresDocker: true,
-    });
-    expect(capabilities['glm']).toMatchObject({
-      runtimeFamily: 'provider',
-      auth: { kind: 'api_key', envVar: 'DASHSCOPE_API_KEY' },
-      requiresDocker: true,
-    });
-    expect(capabilities['openrouter-free']).toMatchObject({
-      runtimeFamily: 'provider',
-      auth: { kind: 'api_key', envVar: 'OPENROUTER_API_KEY' },
-      requiresDocker: true,
+    expect(capabilities).toEqual({
+      auto: expect.objectContaining({ runtimeFamily: 'claude', auth: { kind: 'claude' } }),
+      opus: expect.objectContaining({ runtimeFamily: 'claude', auth: { kind: 'claude' } }),
+      sonnet: expect.objectContaining({ runtimeFamily: 'claude', auth: { kind: 'claude' } }),
+      codex: expect.objectContaining({ runtimeFamily: 'codex', auth: { kind: 'codex' } }),
+      'codex-xhigh': expect.objectContaining({
+        runtimeFamily: 'codex',
+        auth: { kind: 'codex' },
+      }),
+      'openrouter-free': expect.objectContaining({
+        runtimeFamily: 'provider',
+        auth: { kind: 'api_key', envVar: 'OPENROUTER_API_KEY' },
+      }),
     });
   });
 });

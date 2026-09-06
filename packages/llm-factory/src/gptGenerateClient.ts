@@ -4,7 +4,7 @@ import type { Result } from '@intexuraos/common-core';
 import type {
   GenerateOptions,
   GenerateResult,
-  LlmClientConfig,
+  LegacyDirectLlmClientConfig,
   LlmGenerateClient,
 } from './llmClientFactory.js';
 
@@ -14,7 +14,7 @@ import type {
  * The underlying `createGptClient` already wraps `generate()` with `withRetry`
  * (Task 6 of INT-1533) so this wrapper is a thin adapter; do not double-wrap.
  */
-export function createGptGenerateClient(config: LlmClientConfig): LlmGenerateClient {
+export function createGptGenerateClient(config: LegacyDirectLlmClientConfig): LlmGenerateClient {
   const inner = createGptClient({
     apiKey: config.apiKey,
     model: config.model,

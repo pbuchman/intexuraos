@@ -56,6 +56,27 @@ describe('Routes', () => {
       getTask: vi.fn(async () => null),
       getRunningCount: vi.fn(() => 0),
       getCapacity: vi.fn(() => 5),
+      getDrainOwnershipSnapshot: vi.fn(async () => ({
+        workerContainers: 0,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 0,
+      })),
+      getLogForwarderDrainSnapshot: vi.fn(() => ({
+        counterEpochId: '00112233445566778899aabbccddeeff',
+        processStartedAt: '2026-08-28T10:00:00.000Z',
+        activeForwarders: 0,
+        bufferedBytes: 0,
+        partialLineBytes: 0,
+        queuedChunks: 0,
+        inFlightBatches: 0,
+        inFlightChunks: 0,
+        activeFlushOperations: 0,
+        openUploadRequests: 0,
+        detachedUploadRetryPromises: 0,
+        droppedChunksTotal: 0,
+        forwarderActivityTotal: 0,
+        lastActivityAt: null,
+      })),
     } as unknown as TaskDispatcher;
 
     tokenService = {
@@ -98,10 +119,8 @@ describe('Routes', () => {
       undefined,
       workerAuthRegistry,
       isolationProvider,
-      {
-        MINIMAX_API_KEY: { configured: true },
-        DASHSCOPE_API_KEY: { configured: false },
-      }
+      {},
+      () => false
     );
     await app.ready();
   });
@@ -549,7 +568,7 @@ describe('Routes', () => {
     it('forwards documentation reviewTypes to dispatcher.submitTask', async () => {
       const payload = {
         taskId: 'task_00000000-0000-0000-0000-00000000d0c5',
-        workerType: 'mimo-pro',
+        workerType: 'openrouter-free',
         prompt: 'Review documentation changes',
         webhookUrl: 'https://intexuraos.cloud/api/code/internal/task-hook',
         webhookSecret: 'sec',
@@ -601,6 +620,38 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(202);
       expect(dispatcher.submitTask).toHaveBeenCalledWith(
         expect.objectContaining({ timeoutHours: 8 })
+      );
+    });
+
+    it('forwards sentryIssue to dispatcher.submitTask for Sentry agent tasks', async () => {
+      const sentryIssue = {
+        organizationSlug: 'intexura',
+        projectSlug: 'code-agent',
+        issueId: '123456',
+        issueUrl: 'https://intexura.sentry.io/issues/123456/',
+        title: 'TypeError: cannot read property',
+        action: 'created',
+        receivedAt: '2026-06-28T12:00:00.000Z',
+      };
+      const payload = {
+        taskId: 'task_00000000-0000-0000-0000-00000000cafe',
+        workerType: 'codex-xhigh',
+        prompt: 'Fix Sentry issue',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue,
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'sentry',
+          sentryIssue,
+        })
       );
     });
 
@@ -747,11 +798,33 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(200);
       const json = response.json();
       expect(json).toMatchObject({
-        healthContractVersion: 1,
+        healthContractVersion: 2,
+        admissionFrozen: false,
+        pendingAdmissions: 0,
+        admissionActivityTotal: 0,
         status: 'ready',
         capacity: 5,
         running: 0,
         available: 5,
+        workerContainers: 0,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 0,
+        logForwarderDrain: {
+          counterEpochId: '00112233445566778899aabbccddeeff',
+          processStartedAt: '2026-08-28T10:00:00.000Z',
+          activeForwarders: 0,
+          bufferedBytes: 0,
+          partialLineBytes: 0,
+          queuedChunks: 0,
+          inFlightBatches: 0,
+          inFlightChunks: 0,
+          activeFlushOperations: 0,
+          openUploadRequests: 0,
+          detachedUploadRetryPromises: 0,
+          droppedChunksTotal: 0,
+          forwarderActivityTotal: 0,
+          lastActivityAt: null,
+        },
       });
       expect(json).toHaveProperty('githubTokenExpiresAt');
       expect(json.workerAuths.claude).toMatchObject({
@@ -764,10 +837,7 @@ describe('Routes', () => {
         authMode: 'chatgpt',
         refreshSupported: true,
       });
-      expect(json.providerApiKeys).toEqual({
-        MINIMAX_API_KEY: { configured: true },
-        DASHSCOPE_API_KEY: { configured: false },
-      });
+      expect(json.providerApiKeys).toEqual({});
     });
 
     it('should return null githubTokenExpiresAt when token expiry is not set', async () => {

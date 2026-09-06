@@ -5,7 +5,6 @@ import { extractDispatchWorkerType } from '../../utils/dispatchWorkerTriage.js';
 import {
   destroyPreservedContainer,
   resolveLoginForTaskCreation,
-  reusePreservedContainer,
 } from './prTaskHelpers.js';
 import type { DispatchContext, WebhookDispatchResult, WebhookDispatchServiceDeps } from './types.js';
 
@@ -73,7 +72,10 @@ async function handleNewTask(
     ? deps.messageBuilder.build(event)
     : event.body ?? '';
 
-  // Look up any preserved container for this PR once — used in both branches below.
+  // A preserved container is consulted only for explicit @worker replacement.
+  // Normal webhook triage always creates (or reuses by deterministic event ID)
+  // an event-owned task. Resuming a preserved container here is not replay-safe:
+  // an expired triage lease could deliver the same message to the worker twice.
   const preservedResult = await deps.codeTaskRepo.findPreservedPullRequestTask(
     event.repository,
     event.pullRequestNumber,
@@ -89,18 +91,6 @@ async function handleNewTask(
       'Destroying preserved container for @worker directive',
     );
     await destroyPreservedContainer(deps, preserved, logger);
-  }
-
-  // Check for preserved pull_request container to reuse (non-@worker comments only)
-  if (workerType === undefined && preserved !== null) {
-    const reuseResult = await reusePreservedContainer(deps, preserved, comment, logger);
-    if (reuseResult !== null) {
-      logger.info(
-        { taskId: preserved.id, prNumber: event.pullRequestNumber },
-        'Reused preserved container for PR comment',
-      );
-      return reuseResult;
-    }
   }
 
   const createResult = await createTaskForPR(

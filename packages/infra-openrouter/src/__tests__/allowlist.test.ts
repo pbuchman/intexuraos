@@ -7,14 +7,14 @@ import {
   buildModelInfo,
   type CatalogEntry,
 } from '../allowlist.js';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 
 const LEGACY_MIMO_MODEL_ID = 'xiaomi/mimo-' + 'v2-pro';
 
 describe('allowlist', () => {
   describe('OPENROUTER_ALLOWED_MODELS', () => {
-    it('has exactly 15 entries', () => {
-      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(15);
+    it('has exactly 16 entries', () => {
+      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(16);
     });
 
     it('contains all expected providers', () => {
@@ -44,15 +44,58 @@ describe('allowlist', () => {
     it('context lengths match documented values from Linear issue', () => {
       const byId = (id: string): (typeof OPENROUTER_ALLOWED_MODELS)[number] | undefined =>
         OPENROUTER_ALLOWED_MODELS.find((m) => m.id === id);
-      // xAI models: 2M context
+      // xAI models
       expect(byId('x-ai/grok-4.20-beta')?.contextLength).toBe(2_000_000);
-      expect(byId('x-ai/grok-4.1-fast')?.contextLength).toBe(2_000_000);
-      // MiniMax: 205K
-      expect(byId('minimax/minimax-m2.7')?.contextLength).toBe(205_000);
+      expect(byId('x-ai/grok-4.3')?.contextLength).toBe(1_000_000);
+      // MiniMax: 1M
+      expect(byId('minimax/minimax-m3')?.contextLength).toBe(1_000_000);
       // Z.ai: 203K
       expect(byId('z-ai/glm-5-turbo')?.contextLength).toBe(203_000);
       // Moonshot: 262K
       expect(byId('moonshotai/kimi-k2.5')?.contextLength).toBe(262_000);
+    });
+
+    it('admits raw DeepSeek V4 Flash with its reviewed fallback metadata', () => {
+      const entry = OPENROUTER_ALLOWED_MODELS.find(
+        (model) => model.id === 'deepseek/deepseek-v4-flash'
+      );
+
+      expect(entry).toEqual({
+        id: 'deepseek/deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        provider: 'DeepSeek',
+        contextLength: 1_048_576,
+        promptPerToken: '0.000000098',
+        completionPerToken: '0.000000196',
+      });
+    });
+
+    it('uses reviewed Gemini 3.6 Flash context and fallback pricing', () => {
+      const entry = OPENROUTER_ALLOWED_MODELS.find(
+        (model) => model.id === 'google/gemini-3.6-flash'
+      );
+
+      expect(entry).toEqual({
+        id: 'google/gemini-3.6-flash',
+        name: 'Gemini 3.6 Flash',
+        provider: 'Google',
+        contextLength: 1_048_576,
+        promptPerToken: '0.0000015',
+        completionPerToken: '0.0000075',
+      });
+    });
+
+    it('uses official Grok 4.3 context and fallback pricing', () => {
+      const entry = OPENROUTER_ALLOWED_MODELS.find((model) => model.id === 'x-ai/grok-4.3');
+
+      expect(entry).toEqual({
+        id: 'x-ai/grok-4.3',
+        name: 'Grok 4.3',
+        provider: 'xAI',
+        contextLength: 1_000_000,
+        promptPerToken: '0.00000125',
+        completionPerToken: '0.0000025',
+      });
     });
 
     it('all model IDs are in provider/model format', () => {
@@ -64,16 +107,17 @@ describe('allowlist', () => {
 
   describe('isAllowedModel', () => {
     it('returns true for known model IDs', () => {
+      expect(isAllowedModel('deepseek/deepseek-v4-flash')).toBe(true);
       expect(isAllowedModel('qwen/qwen3.5-plus-02-15')).toBe(true);
       expect(isAllowedModel('anthropic/claude-sonnet-4.6')).toBe(true);
-      expect(isAllowedModel('x-ai/grok-4.1-fast')).toBe(true);
+      expect(isAllowedModel('x-ai/grok-4.3')).toBe(true);
       expect(isAllowedModel('openai/gpt-5.4')).toBe(true);
       expect(isAllowedModel('xiaomi/mimo-v2.5-pro')).toBe(true);
     });
 
     it('returns false for unknown model IDs', () => {
       expect(isAllowedModel('unknown/model')).toBe(false);
-      expect(isAllowedModel(LlmModels.Gemini25Pro)).toBe(false);
+      expect(isAllowedModel(LegacyGoogleModels.Gemini25Pro)).toBe(false);
       expect(isAllowedModel('')).toBe(false);
       expect(isAllowedModel(LEGACY_MIMO_MODEL_ID)).toBe(false);
     });
@@ -82,8 +126,14 @@ describe('allowlist', () => {
       expect(isAllowedModel('or:anthropic/claude-sonnet-4.6')).toBe(false);
     });
 
-    it('accepts google/gemini-3-flash-preview', () => {
-      expect(isAllowedModel('google/gemini-3-flash-preview')).toBe(true);
+    it('accepts Gemini 3.6 Flash and retires Gemini 3 Flash Preview', () => {
+      expect(isAllowedModel('google/gemini-3.6-flash')).toBe(true);
+      expect(isAllowedModel('google/gemini-3-flash-preview')).toBe(false);
+    });
+
+    it('accepts Grok 4.3 and retires deprecated Grok 4.1 Fast', () => {
+      expect(isAllowedModel('x-ai/grok-4.3')).toBe(true);
+      expect(isAllowedModel('x-ai/grok-4.1-fast')).toBe(false);
     });
   });
 
@@ -96,9 +146,11 @@ describe('allowlist', () => {
   describe('allowlistModelIds', () => {
     it('returns comma-separated list of all model IDs', () => {
       const ids = allowlistModelIds();
-      expect(ids.split(', ')).toHaveLength(15);
+      expect(ids.split(', ')).toHaveLength(16);
+      expect(ids).toContain('deepseek/deepseek-v4-flash');
       expect(ids).toContain('anthropic/claude-sonnet-4.6');
-      expect(ids).toContain('x-ai/grok-4.1-fast');
+      expect(ids).toContain('x-ai/grok-4.3');
+      expect(ids).not.toContain('x-ai/grok-4.1-fast');
       expect(ids).toContain('xiaomi/mimo-v2.5-pro');
       expect(ids).not.toContain(LEGACY_MIMO_MODEL_ID);
     });

@@ -92,6 +92,10 @@ function buildCreateEventInput(
   return input;
 }
 
+function toExternalResourceUrl(resourceUrl: string | undefined): string | undefined {
+  return resourceUrl === '/#/calendar' ? undefined : resourceUrl;
+}
+
 export async function processCalendarAction(
   request: ProcessCalendarActionRequest,
   deps: ProcessCalendarActionDeps
@@ -110,6 +114,7 @@ export async function processCalendarAction(
 
   if (existingResult.value !== null) {
     const existing = existingResult.value;
+    const resourceUrl = toExternalResourceUrl(existing.resourceUrl);
     logger.info(
       { actionId, eventId: existing.eventId },
       'processCalendarAction: action already processed, returning existing result'
@@ -117,7 +122,7 @@ export async function processCalendarAction(
     return ok({
       status: 'completed',
       message: 'Calendar event created successfully',
-      resourceUrl: existing.resourceUrl,
+      ...(resourceUrl !== undefined ? { resourceUrl } : {}),
     });
   }
 
@@ -333,19 +338,21 @@ export async function processCalendarAction(
   }
 
   const createdEvent = createResult.value;
-  const resourceUrl = createdEvent.htmlLink ?? '/#/calendar';
+  const resourceUrl = createdEvent.htmlLink;
 
   logger.info(
     { userId, actionId, eventId: createdEvent.id },
     'processCalendarAction: event created successfully'
   );
 
-  const saveResult = await processedActionRepository.create({
+  const processedActionInput = {
     actionId,
     userId,
     eventId: createdEvent.id,
-    resourceUrl,
-  });
+    ...(resourceUrl !== undefined ? { resourceUrl } : {}),
+  };
+
+  const saveResult = await processedActionRepository.create(processedActionInput);
 
   if (!saveResult.ok) {
     logger.warn(
@@ -368,6 +375,6 @@ export async function processCalendarAction(
   return ok({
     status: 'completed',
     message: `Event "${createdEvent.summary}" created successfully`,
-    resourceUrl,
+    ...(resourceUrl !== undefined ? { resourceUrl } : {}),
   });
 }

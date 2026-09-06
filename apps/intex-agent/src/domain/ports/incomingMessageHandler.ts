@@ -1,10 +1,30 @@
+export type IntexIncomingMessageReplyContextSource =
+  | 'inbound_user_message'
+  | 'outbound_assistant_message';
+
+export interface IntexIncomingMessageReplyContext {
+  replyToWamid: string;
+  source: IntexIncomingMessageReplyContextSource;
+  text: string;
+  truncated: boolean;
+}
+
+export interface IntexIncomingMessageButtonResponse {
+  buttonId: string;
+  buttonTitle: string;
+  replyToWamid: string;
+}
+
 export interface IntexIncomingMessage {
   type: 'intex.message.ingest';
   userId: string;
   messageId: string;
   text: string;
   sourceType: string;
+  sourceUrl?: string;
   whatsappSender?: string;
+  replyContext?: IntexIncomingMessageReplyContext;
+  buttonResponse?: IntexIncomingMessageButtonResponse;
   timestamp: string;
 }
 

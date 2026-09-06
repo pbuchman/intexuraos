@@ -5,7 +5,7 @@ import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { createOpenRouterToolCallingClient } from '../toolCallingClient.js';
 
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
-const TEST_MODEL = 'google/gemini-3-flash-preview';
+const TEST_MODEL = 'google/gemini-3.6-flash';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -58,6 +58,33 @@ describe('createOpenRouterToolCallingClient', () => {
     nock.cleanAll();
   });
 
+  it('uses the evidence model for usage while keeping the raw model in the request body', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBody = body as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { content: 'done', role: 'assistant' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    const evidenceModelId = `or:${TEST_MODEL}`;
+    const client = createClientWithConfig({ evidenceModelId });
+
+    await client.run({
+      systemPrompt: 'System',
+      messages: [{ role: 'user', content: 'Finish' }],
+      tools: [],
+      toolChoice: 'auto',
+      promptType: 'evidence-model-test',
+    });
+
+    expect(capturedBody?.['model']).toBe(TEST_MODEL);
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ model: evidenceModelId })
+    );
+  });
   it('returns a text response and logs usage with promptType when no tool is called', async () => {
     let capturedBody: Record<string, unknown> | undefined;
     nock(API_BASE_URL)
@@ -92,6 +119,8 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(result.value.content).toBe('No review needed.');
     expect(result.value.toolCallsMade).toBe(0);
     expect(result.value.usage.inputTokens).toBe(11);
+    expect(result.value.usage.costUsd).toBe(0.00012);
+    expect(result.value.usage.providerReportedUsd).toBe(0.00012);
     expect(capturedBody?.['model']).toBe(TEST_MODEL);
     expect(capturedBody?.['messages']).toEqual([
       { role: 'system', content: 'You are a PR triage agent.' },
@@ -106,6 +135,1192 @@ describe('createOpenRouterToolCallingClient', () => {
         providerReportedUsd: 0.00012,
       })
     );
+  });
+
+  it('preserves an explicitly reported zero provider cost', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Done.' } }],
+        usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18, cost: 0 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.usage.providerReportedUsd).toBe(0);
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ providerReportedUsd: 0 })
+    );
+  });
+
+  it('returns one exact Matrix usage record per provider iteration', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'call_1', type: 'function', function: { name: 'note', arguments: '{}' } },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Done.' } }],
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15, cost: 0.0002 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.providerCalls).toEqual([
+      {
+        context: expect.objectContaining({ stage: 'agent_generation', callOrdinal: 1 }),
+        modelId: TEST_MODEL,
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+        providerReportedUsd: 0.0001,
+      },
+      {
+        context: expect.objectContaining({ stage: 'agent_generation', callOrdinal: 2 }),
+        modelId: TEST_MODEL,
+        inputTokens: 12,
+        outputTokens: 3,
+        totalTokens: 15,
+        providerReportedUsd: 0.0002,
+      },
+    ]);
+  });
+
+  it('stops after a terminal tool callback without asking the model to call it again', async () => {
+    const terminalRun = vi.fn().mockResolvedValue('{"status":"needs_confirmation"}');
+    const laterRun = vi.fn().mockResolvedValue('{}');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_terminal',
+                  type: 'function',
+                  function: { name: 'create_note', arguments: '{"content":"Door code"}' },
+                },
+                {
+                  id: 'call_later',
+                  type: 'function',
+                  function: { name: 'save_external', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'save a note' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note preview.',
+          parameters: { type: 'object' },
+          stopAfterRun: true,
+          run: terminalRun,
+        },
+        {
+          name: 'save_external',
+          description: 'Save externally.',
+          parameters: { type: 'object' },
+          run: laterRun,
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: '',
+        toolCallsMade: 1,
+        iterationCount: 1,
+        providerCalls: [
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 1 }) }),
+        ],
+      }),
+    });
+    expect(terminalRun).toHaveBeenCalledTimes(1);
+    expect(laterRun).not.toHaveBeenCalled();
+    expect(nock.isDone()).toBe(true);
+  });
+
+  it('returns terminal assistant content without Matrix corpus evidence', async () => {
+    const terminalRun = vi.fn().mockResolvedValue('preview ready');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'I prepared the note preview.',
+              tool_calls: [
+                {
+                  id: 'call_terminal',
+                  type: 'function',
+                  function: { name: 'create_note', arguments: '{"content":"Door code"}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'save a note' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note preview.',
+          parameters: { type: 'object' },
+          stopAfterRun: true,
+          run: terminalRun,
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'I prepared the note preview.',
+        toolCallsMade: 1,
+        iterationCount: 1,
+      }),
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: expect.not.objectContaining({ providerCalls: expect.anything() }),
+    });
+    expect(terminalRun).toHaveBeenCalledTimes(1);
+    expect(nock.isDone()).toBe(true);
+  });
+
+  it('never logs or sends to Sentry Matrix tool arguments, results, or thrown errors', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_private',
+                  type: 'function',
+                  function: {
+                    name: 'note',
+                    arguments: JSON.stringify({ content: 'PRIVATE_ARGUMENT_SENTINEL' }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { content: 'Done.' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0.0001 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          stopAfterRun: true,
+          run: vi.fn(async () => {
+            throw new Error('PRIVATE_THROWN_ERROR_SENTINEL');
+          }),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        content: 'Done.',
+        iterationCount: 2,
+        providerCalls: [{ context: { callOrdinal: 1 } }, { context: { callOrdinal: 2 } }],
+      },
+    });
+    expect(nock.isDone()).toBe(true);
+    const logs = JSON.stringify([
+      vi.mocked(mockLogger.info).mock.calls,
+      vi.mocked(mockLogger.warn).mock.calls,
+      vi.mocked(mockLogger.error).mock.calls,
+    ]);
+    expect(logs).not.toMatch(/PRIVATE_ARGUMENT_SENTINEL|PRIVATE_THROWN_ERROR_SENTINEL/u);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'TOOL_CALLBACK_REJECTED', _skipSentry: true }),
+      expect.any(String)
+    );
+  });
+
+  it('persists completed Matrix usage before a later provider failure without exposing its error', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'call_1', type: 'function', function: { name: 'note', arguments: '{}' } },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(500, 'PRIVATE_PROVIDER_ERROR_SENTINEL');
+    const onProviderCall = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+      onMatrixCorpusProviderCall: onProviderCall,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'OVERLOADED', message: 'Matrix provider call failed' },
+    });
+    expect(onProviderCall).toHaveBeenCalledTimes(1);
+    expect(onProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ inputTokens: 10, outputTokens: 2, totalTokens: 12 })
+    );
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ errorMessage: 'MATRIX_PROVIDER_CALL_FAILED' })
+    );
+    expect(
+      JSON.stringify([
+        result,
+        vi.mocked(mockLogger.info).mock.calls,
+        vi.mocked(mockLogger.warn).mock.calls,
+        vi.mocked(mockLogger.error).mock.calls,
+        mockUsageLoggerLog.mock.calls,
+      ])
+    ).not.toContain('PRIVATE_PROVIDER_ERROR_SENTINEL');
+  });
+
+  it('does not log a hallucinated Matrix tool name', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'PRIVATE_TOOL_NAME_SENTINEL', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Recovered.' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0 },
+      });
+
+    await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    const logs = JSON.stringify([
+      vi.mocked(mockLogger.info).mock.calls,
+      vi.mocked(mockLogger.warn).mock.calls,
+      vi.mocked(mockLogger.error).mock.calls,
+    ]);
+    expect(logs).not.toContain('PRIVATE_TOOL_NAME_SENTINEL');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'UNKNOWN_TOOL_SELECTION', _skipSentry: true }),
+      'OpenRouter tool calling: hallucinated tool name'
+    );
+  });
+
+  it('retries required tool choice when the provider returns final text without a tool call', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi
+      .fn()
+      .mockResolvedValue(
+        JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock: '' })
+      );
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        id: 'chatcmpl-required-without-tool',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18, cost: 0.00012 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_required_retry',
+                  type: 'function',
+                  function: {
+                    name: 'add_user_preference',
+                    arguments: JSON.stringify({ text: 'Be concise.', expectedVersion: 0 }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 13, completion_tokens: 5, total_tokens: 18, cost: 0.00013 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({
+                outcome: 'completed',
+                reply: 'Preference prepared.',
+                toolName: 'add_user_preference',
+              }),
+            },
+          },
+        ],
+        usage: { prompt_tokens: 15, completion_tokens: 6, total_tokens: 21, cost: 0.00014 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Use the preference tool for explicit durable additions.',
+      messages: [{ role: 'user', content: 'Add this durable preference.' }],
+      tools: [
+        {
+          name: 'add_user_preference',
+          description: 'Add a durable user preference.',
+          parameters: {
+            type: 'object',
+            properties: {
+              text: { type: 'string' },
+              expectedVersion: { type: 'number' },
+            },
+            required: ['text', 'expectedVersion'],
+          },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      promptType: 'intex-agent-runner',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({
+      toolCallsMade: 1,
+      iterationCount: 3,
+    });
+    expect(capturedBodies[0]?.['tool_choice']).toEqual({
+      type: 'function',
+      function: { name: 'add_user_preference' },
+    });
+    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[2]?.['tool_choice']).toBe('auto');
+    expect(capturedBodies[1]?.['messages']).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'assistant',
+          content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
+        },
+        {
+          role: 'user',
+          content: expect.stringContaining('Call the required add_user_preference tool now'),
+        },
+      ])
+    );
+    expect(runTool).toHaveBeenCalledWith({ text: 'Be concise.', expectedVersion: 0 });
+  });
+
+  it('falls back to validated JSON arguments when MiniMax exhausts a single required terminal tool', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi.fn().mockResolvedValue('{"status":"needs_confirmation"}');
+    const scope = nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .times(2)
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '```json\n{"content":"Garage code is 7241."}\n```',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+    const onProviderCall = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool when the user asks to retain a factual note.',
+      messages: [{ role: 'user', content: 'Remember that the garage code is 7241.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['content'],
+            properties: { content: { type: 'string' } },
+          },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 2,
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_006',
+        sessionId: 'session_6',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+      onMatrixCorpusProviderCall: onProviderCall,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        content: '',
+        toolCallsMade: 1,
+        iterationCount: 3,
+        usage: expect.objectContaining({
+          inputTokens: 40,
+          outputTokens: 8,
+          totalTokens: 48,
+          providerReportedUsd: 0.0004,
+        }),
+        providerCalls: [
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 1 }) }),
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 2 }) }),
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 3 }) }),
+        ],
+      },
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(runTool).toHaveBeenCalledWith({ content: 'Garage code is 7241.' });
+    expect(capturedBodies[2]).not.toHaveProperty('tools');
+    expect(capturedBodies[2]).not.toHaveProperty('tool_choice');
+    expect(capturedBodies[2]?.['messages']).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'user',
+          content: expect.stringMatching(/create_note[\s\S]*"required":\["content"\]/u),
+        },
+      ])
+    );
+    expect(onProviderCall).toHaveBeenCalledTimes(3);
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('keeps requiring a MiniMax tool until its callback accepts one call', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('invalid calendar bounds'))
+      .mockResolvedValueOnce('{"events":[]}');
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_invalid',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments: '{"mode":"list"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Calendar query failed. Please retry.',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 25, completion_tokens: 5, total_tokens: 30, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_valid',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments:
+                      '{"mode":"list","timeMin":"2026-07-17T00:00:00.000+02:00","timeMax":"2026-07-18T00:00:00.000+02:00"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 30, completion_tokens: 8, total_tokens: 38, cost: 0.0003 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'No events tomorrow.' } }],
+        usage: { prompt_tokens: 35, completion_tokens: 5, total_tokens: 40, cost: 0.0003 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the calendar query tool, then answer from its result.',
+      messages: [{ role: 'user', content: 'List my calendar events tomorrow.' }],
+      tools: [
+        {
+          name: 'query_calendar_events',
+          description: 'Query calendar events.',
+          parameters: { type: 'object', required: ['mode', 'timeMin', 'timeMax'] },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'No events tomorrow.',
+        toolCallsMade: 2,
+        iterationCount: 4,
+      }),
+    });
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[2]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[3]).not.toHaveProperty('tools');
+  });
+
+  it.each([
+    { label: 'Matrix', matrix: true },
+    { label: 'ordinary', matrix: false },
+  ])(
+    'falls back to validated MiniMax arguments and renders a non-terminal tool result in $label mode',
+    async ({ matrix }) => {
+      const capturedBodies: Record<string, unknown>[] = [];
+      const runTool = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('invalid calendar bounds'))
+        .mockResolvedValueOnce('{"events":[]}');
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBodies.push(body as Record<string, unknown>);
+          return true;
+        })
+        .reply(200, {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_invalid',
+                    type: 'function',
+                    function: {
+                      name: 'query_calendar_events',
+                      arguments: '{"mode":"list"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0002 },
+        })
+        .post('/chat/completions', (body) => {
+          capturedBodies.push(body as Record<string, unknown>);
+          return true;
+        })
+        .reply(200, {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  '{"mode":"list","timeMin":"2026-07-17T00:00:00.000+02:00","timeMax":"2026-07-18T00:00:00.000+02:00"}',
+              },
+            },
+          ],
+          usage: { prompt_tokens: 30, completion_tokens: 8, total_tokens: 38, cost: 0.0003 },
+        })
+        .post('/chat/completions', (body) => {
+          capturedBodies.push(body as Record<string, unknown>);
+          return true;
+        })
+        .reply(200, {
+          choices: [{ message: { role: 'assistant', content: 'No events tomorrow.' } }],
+          usage: { prompt_tokens: 35, completion_tokens: 5, total_tokens: 40, cost: 0.0003 },
+        });
+
+      const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+        systemPrompt: 'Use the calendar query tool, then answer from its result.',
+        messages: [{ role: 'user', content: 'List my calendar events tomorrow.' }],
+        tools: [
+          {
+            name: 'query_calendar_events',
+            description: 'Query calendar events.',
+            parameters: { type: 'object', required: ['mode', 'timeMin', 'timeMax'] },
+            run: runTool,
+          },
+        ],
+        toolChoice: 'required',
+        maxIterations: 1,
+        ...(matrix
+          ? {
+              matrixCorpusContext: {
+                version: 1 as const,
+                runId: 'run_011',
+                scenarioId: 'intex-eval-011',
+                sessionId: 'session_011',
+                turnIndex: 0,
+                stage: 'agent_generation' as const,
+                callOrdinal: 1,
+              },
+            }
+          : {}),
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        value: expect.objectContaining({
+          content: 'No events tomorrow.',
+          toolCallsMade: 2,
+          iterationCount: 3,
+          ...(matrix
+            ? {
+                providerCalls: [
+                  expect.objectContaining({
+                    context: expect.objectContaining({ callOrdinal: 1 }),
+                  }),
+                  expect.objectContaining({
+                    context: expect.objectContaining({ callOrdinal: 2 }),
+                  }),
+                  expect.objectContaining({
+                    context: expect.objectContaining({ callOrdinal: 3 }),
+                  }),
+                ],
+              }
+            : {}),
+        }),
+      });
+      expect(runTool).toHaveBeenCalledTimes(2);
+      expect(capturedBodies[1]).not.toHaveProperty('tools');
+      expect(capturedBodies[2]).not.toHaveProperty('tools');
+      expect(capturedBodies[2]?.['messages']).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'tool',
+            name: 'query_calendar_events',
+            content: '{"events":[]}',
+          }),
+        ])
+      );
+    }
+  );
+
+  it.each([
+    {
+      label: 'provider failure',
+      completionStatus: 503,
+      completionBody: 'render unavailable',
+      expected: { code: 'OVERLOADED', message: 'Matrix provider call failed' },
+    },
+    {
+      label: 'empty provider response',
+      completionStatus: 200,
+      completionBody: {
+        choices: [{ message: { role: 'assistant', content: null } }],
+        usage: { prompt_tokens: 35, completion_tokens: 0, total_tokens: 35, cost: 0.0003 },
+      },
+      expected: { code: 'API_ERROR', message: 'Tool calling loop exceeded maxIterations' },
+    },
+  ])(
+    'fails closed when MiniMax non-terminal fallback rendering ends in $label',
+    async ({ completionStatus, completionBody, expected }) => {
+      const runTool = vi.fn().mockResolvedValue('{"events":[]}');
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { role: 'assistant', content: 'I should query the calendar.' } }],
+          usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0002 },
+        })
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content:
+                  '{"mode":"list","timeMin":"2026-07-17T00:00:00.000+02:00","timeMax":"2026-07-18T00:00:00.000+02:00"}',
+              },
+            },
+          ],
+          usage: { prompt_tokens: 30, completion_tokens: 8, total_tokens: 38, cost: 0.0003 },
+        })
+        .post('/chat/completions')
+        .reply(completionStatus, completionBody);
+
+      const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+        systemPrompt: 'Use the calendar query tool, then answer from its result.',
+        messages: [{ role: 'user', content: 'List my calendar events tomorrow.' }],
+        tools: [
+          {
+            name: 'query_calendar_events',
+            description: 'Query calendar events.',
+            parameters: { type: 'object', required: ['mode', 'timeMin', 'timeMax'] },
+            run: runTool,
+          },
+        ],
+        toolChoice: 'required',
+        maxIterations: 1,
+        matrixCorpusContext: {
+          version: 1,
+          runId: 'run_011',
+          scenarioId: 'intex-eval-011',
+          sessionId: 'session_011',
+          turnIndex: 0,
+          stage: 'agent_generation',
+          callOrdinal: 1,
+        },
+      });
+
+      expect(result).toEqual({ ok: false, error: expected });
+      expect(runTool).toHaveBeenCalledOnce();
+      expect(nock.isDone()).toBe(true);
+    }
+  );
+
+  it('returns a non-Matrix MiniMax fallback result from bare JSON', async () => {
+    const runTool = vi.fn().mockResolvedValue('{"status":"needs_confirmation"}');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '{"content":"Garage code is 7241."}',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: '',
+        toolCallsMade: 1,
+        iterationCount: 2,
+      }),
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: expect.not.objectContaining({ providerCalls: expect.anything() }),
+    });
+    expect(runTool).toHaveBeenCalledWith({ content: 'Garage code is 7241.' });
+  });
+
+  it('maps a MiniMax fallback provider failure after recording the native iteration', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(503, 'fallback provider unavailable');
+
+    const result = await createClientWithConfig({
+      model: 'minimax/minimax-m3',
+      deadlineAtMs: Date.now() + 60_000,
+    }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: vi.fn(),
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'OVERLOADED', message: 'fallback provider unavailable' },
+    });
+  });
+
+  it('does not override a caller that explicitly declines exhausted-loop repair', async () => {
+    const runTool = vi.fn();
+    const scope = nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+      onExhausted: () => undefined,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Tool calling loop exceeded maxIterations' },
+    });
+    expect(runTool).not.toHaveBeenCalled();
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it.each([
+    ['missing content', [], true],
+    ['invalid JSON', [{ message: { role: 'assistant', content: 'PRIVATE_INVALID_JSON' } }], false],
+    ['a JSON array', [{ message: { role: 'assistant', content: '[]' } }], true],
+  ])('rejects MiniMax fallback arguments with %s', async (_case, fallbackChoices, matrix) => {
+    const runTool = vi.fn();
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: fallbackChoices,
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+      ...(matrix
+        ? {
+            matrixCorpusContext: {
+              version: 1 as const,
+              runId: 'run_1',
+              scenarioId: 'scenario_006',
+              sessionId: 'session_6',
+              turnIndex: 0,
+              stage: 'agent_generation' as const,
+              callOrdinal: 1,
+            },
+          }
+        : {}),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Tool calling loop exceeded maxIterations' },
+    });
+    expect(runTool).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorCode: 'MINIMAX_REQUIRED_TOOL_ARGUMENT_FALLBACK_REJECTED',
+        ...(matrix ? { _skipSentry: true } : {}),
+      }),
+      expect.any(String)
+    );
+    expect(JSON.stringify(vi.mocked(mockLogger.warn).mock.calls)).not.toContain(
+      'PRIVATE_INVALID_JSON'
+    );
+  });
+
+  it('rejects MiniMax fallback arguments when the terminal callback validation throws', async () => {
+    const runTool = vi.fn(async () => {
+      throw new Error('PRIVATE_CALLBACK_REJECTION');
+    });
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '{"content":"Garage code is 7241."}',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_006',
+        sessionId: 'session_6',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Tool calling loop exceeded maxIterations' },
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(
+      JSON.stringify([
+        vi.mocked(mockLogger.warn).mock.calls,
+        vi.mocked(mockLogger.error).mock.calls,
+      ])
+    ).not.toContain('PRIVATE_CALLBACK_REJECTION');
   });
 
   it('logs ownerType and zero usage when OpenRouter omits usage metadata', async () => {
@@ -223,7 +1438,8 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(result.value.toolCallsMade).toBe(1);
     expect(result.value.usage.inputTokens).toBe(55);
     expect(result.value.usage.outputTokens).toBe(13);
-    expect(result.value.usage.costUsd).toBe(0);
+    expect(result.value.usage.costUsd).toBe(0.0005);
+    expect(result.value.usage.providerReportedUsd).toBe(0.0005);
     expect(capturedBodies[0]?.['tools']).toEqual([
       {
         type: 'function',
@@ -234,7 +1450,10 @@ describe('createOpenRouterToolCallingClient', () => {
         },
       },
     ]);
-    expect(capturedBodies[0]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[0]?.['tool_choice']).toEqual({
+      type: 'function',
+      function: { name: 'request_review' },
+    });
     expect(capturedBodies[1]?.['messages']).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ role: 'assistant', tool_calls: expect.any(Array) }),
@@ -251,6 +1470,327 @@ describe('createOpenRouterToolCallingClient', () => {
         promptType: 'github-agent-pr-triage',
         providerReportedUsd: 0.0005,
       })
+    );
+  });
+
+  it('does not expose the same single tool again after MiniMax runs it successfully', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi.fn().mockResolvedValue('{"events":[]}');
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_query',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments: '{"mode":"list","query":"today meetings"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'You have no meetings today.' } }],
+        usage: { prompt_tokens: 25, completion_tokens: 6, total_tokens: 31, cost: 0.0003 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the calendar query tool, then answer from its result.',
+      messages: [{ role: 'user', content: 'What meetings do I have today?' }],
+      tools: [
+        {
+          name: 'query_calendar_events',
+          description: 'Query calendar events.',
+          parameters: {
+            type: 'object',
+            required: ['mode'],
+            properties: {
+              mode: { type: 'string' },
+              query: { type: 'string' },
+            },
+          },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'You have no meetings today.',
+        toolCallsMade: 1,
+        iterationCount: 2,
+      }),
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(capturedBodies[0]).toHaveProperty('tools');
+    expect(capturedBodies[1]).not.toHaveProperty('tools');
+    expect(capturedBodies[1]).not.toHaveProperty('tool_choice');
+  });
+
+  it('runs only the first accepted single MiniMax tool call from one response', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi.fn().mockResolvedValue('{"events":[]}');
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_query_1',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments: '{"mode":"list","query":"today meetings"}',
+                  },
+                },
+                {},
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'You have no meetings today.' } }],
+        usage: { prompt_tokens: 25, completion_tokens: 6, total_tokens: 31, cost: 0.0003 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the calendar query tool, then answer from its result.',
+      messages: [{ role: 'user', content: 'What meetings do I have today?' }],
+      tools: [
+        {
+          name: 'query_calendar_events',
+          description: 'Query calendar events.',
+          parameters: { type: 'object', required: ['mode'] },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'You have no meetings today.',
+        toolCallsMade: 1,
+        iterationCount: 2,
+      }),
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(capturedBodies[1]).not.toHaveProperty('tools');
+    expect(capturedBodies[1]?.['messages']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'tool',
+          tool_call_id: 'call_query_1',
+          content: '{"events":[]}',
+        }),
+        expect.objectContaining({
+          role: 'tool',
+          tool_call_id: 'call_1_1',
+          name: '',
+          content: '{"error":"Tool already completed"}',
+        }),
+      ])
+    );
+  });
+
+  it('keeps the single MiniMax tool available until one callback succeeds', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('invalid query'))
+      .mockResolvedValueOnce('{"events":[]}');
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_invalid',
+                  type: 'function',
+                  function: { name: 'query_calendar_events', arguments: '{"mode":"list"}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_repaired',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments: '{"mode":"list","query":"today meetings"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 25, completion_tokens: 5, total_tokens: 30, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'You have no meetings today.' } }],
+        usage: { prompt_tokens: 30, completion_tokens: 6, total_tokens: 36, cost: 0.0003 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the calendar query tool, then answer from its result.',
+      messages: [{ role: 'user', content: 'What meetings do I have today?' }],
+      tools: [
+        {
+          name: 'query_calendar_events',
+          description: 'Query calendar events.',
+          parameters: { type: 'object', required: ['mode'] },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'You have no meetings today.',
+        toolCallsMade: 2,
+        iterationCount: 3,
+      }),
+    });
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(capturedBodies[1]).toHaveProperty('tools');
+    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[2]).not.toHaveProperty('tools');
+    expect(capturedBodies[2]).not.toHaveProperty('tool_choice');
+  });
+
+  it('keeps generic required tool choice when multiple tools are available', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '{"outcome":"no_action","reply":"No tool selected."}',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.0001 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_create_note',
+                  type: 'function',
+                  function: { name: 'create_note', arguments: '{"content":"test"}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.0001 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use one appropriate tool.',
+      messages: [{ role: 'user', content: 'Store this.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note.',
+          parameters: { type: 'object', properties: { content: { type: 'string' } } },
+          run: async (): Promise<string> => JSON.stringify({ status: 'completed' }),
+          stopAfterRun: true,
+        },
+        {
+          name: 'create_link',
+          description: 'Create link.',
+          parameters: { type: 'object', properties: { url: { type: 'string' } } },
+          run: async (): Promise<string> => JSON.stringify({ status: 'completed' }),
+          stopAfterRun: true,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(capturedBodies[0]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[1]?.['messages']).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'user',
+          content: expect.stringContaining('Call one of the provided tools'),
+        },
+      ])
     );
   });
 
@@ -286,6 +1826,108 @@ describe('createOpenRouterToolCallingClient', () => {
 
     expect(result.ok).toBe(true);
     expect(capturedBody?.['tool_choice']).toBe('auto');
+  });
+
+  it('keeps aggregate provider cost unknown when any tool iteration omits it', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'note', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Done.' } }],
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.usage.costUsd).toBe(0);
+    expect(result.value.usage).not.toHaveProperty('providerReportedUsd');
+    expect(result.value.providerCalls?.[1]).not.toHaveProperty('providerReportedUsd');
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.not.objectContaining({ providerReportedUsd: expect.anything() })
+    );
+  });
+
+  it('keeps aggregate provider cost unknown when a priced tool call is followed by a failed request', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'note', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .replyWithError(new Error('follow-up failed'));
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.not.objectContaining({ providerReportedUsd: expect.anything() })
+    );
   });
 
   it('sends tool error responses for unknown tools and thrown callbacks', async () => {
@@ -372,6 +2014,17 @@ describe('createOpenRouterToolCallingClient', () => {
         content: JSON.stringify({ error: 'boom' }),
       }),
     ]);
+
+    // Sentry INTEXURAOS-HETZNER-3J: hallucinated tool name is a normal
+    // self-correction signal; the warn must carry `_skipSentry` so the Pino
+    // transport does not page on it.
+    const hallucinationWarn = (mockLogger.warn as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([payload, msg]) =>
+        msg === 'OpenRouter tool calling: hallucinated tool name' &&
+        (payload as { toolName?: string } | undefined)?.toolName === 'missing_tool'
+    );
+    expect(hallucinationWarn).toBeDefined();
+    expect(hallucinationWarn?.[0]).toMatchObject({ _skipSentry: true });
   });
 
   it('uses fallback tool call metadata when OpenRouter omits tool id and function', async () => {
@@ -679,8 +2332,9 @@ describe('createOpenRouterToolCallingClient', () => {
   it.each([
     { status: 401, code: 'INVALID_KEY' },
     { status: 429, code: 'RATE_LIMITED' },
+    { status: 400, code: 'API_ERROR' },
     { status: 503, code: 'OVERLOADED' },
-    { status: 500, code: 'API_ERROR' },
+    { status: 500, code: 'OVERLOADED' },
   ] as const)('maps HTTP $status to $code', async ({ status, code }) => {
     nock(API_BASE_URL).post('/chat/completions').reply(status, 'provider error');
 
@@ -739,5 +2393,70 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('TIMEOUT');
+  });
+
+  it('fails before fetch when the shared deadline is already exhausted', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const result = await createClientWithConfig({ deadlineAtMs: Date.now() - 1 }).run({
+        systemPrompt: 'Test',
+        messages: [{ role: 'user', content: 'test' }],
+        tools: [],
+        promptType: 'github-agent-pr-triage',
+      });
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('aborts while a successful response body is still being consumed', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .delayBody(50)
+      .reply(200, {
+        id: 'chatcmpl-delayed-body',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [{ message: { role: 'assistant', content: 'Too late.' } }],
+      });
+
+    const result = await createClientWithConfig({ timeoutMs: 10 }).run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      promptType: 'github-agent-pr-triage',
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } });
+  });
+
+  it('retries a transient provider HTTP 500 up to the configured attempt cap', async () => {
+    nock(API_BASE_URL).post('/chat/completions').reply(500, 'Server error');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        id: 'chatcmpl-recovered',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [{ message: { role: 'assistant', content: 'Recovered.' } }],
+      });
+
+    const client = createClientWithConfig({ maxAttempts: 2 } as Partial<
+      Parameters<typeof createOpenRouterToolCallingClient>[0]
+    >);
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      promptType: 'github-agent-pr-triage',
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { content: 'Recovered.' } });
+    expect(nock.isDone()).toBe(true);
   });
 });

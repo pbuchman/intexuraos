@@ -2,7 +2,7 @@
 
 ## Overview
 
-`fishing-assistant-service` is a Fastify app under `apps/fishing-assistant-service`. It owns Fishing Assistant knowledge folders, pages, chunks, chats, and chat messages in Firestore, and depends on user-service, mobile-notifications-service, llm-usage-service, OpenAI embeddings, and the shared LLM client factory.
+`fishing-assistant-service` is a Fastify app under `apps/fishing-assistant-service`. It owns Fishing Assistant knowledge folders, pages, chunks, chats, and chat messages in Firestore. Chat and embeddings execute through OpenRouter.
 
 ## Architecture
 
@@ -10,9 +10,10 @@
 graph TD
     Web[Web client] --> Service[Fishing Assistant Service]
     Service --> Firestore[(Firestore collections)]
-    Service --> OpenAI[OpenAI embeddings]
-    Service --> UserService[User Service API keys]
-    Service --> MobileNotifications[Mobile Notifications digests and messages]
+    Service --> OpenRouter[OpenRouter chat and embeddings]
+    Service --> UserService[User/platform OpenRouter resolution]
+    Service --> MessageDigest[Message Digest canonical summaries]
+    Service --> WhatsApp[WhatsApp scoped source messages]
     Service --> LlmUsage[LLM Usage Service]
     UserService --> LlmFactory[LLM Factory / OpenRouter]
 ```
@@ -50,7 +51,7 @@ All application routes use bearer authentication through `withAuth`. `/status`, 
 
 | Method | Path | Description | Auth |
 | ------ | ---- | ----------- | ---- |
-| GET | `/digest-groups` | Proxy the user's mobile notification digest subscriptions. | Bearer token |
+| GET | `/digest-groups` | Compatibility view of the user's migrated Fishing definition in message-digest-service. | Bearer token |
 | GET | `/digests` | Query digests by `groupKey`, `dateFrom`, `dateTo`, optional comma-separated `terms`, and optional `limit`. | Bearer token |
 | GET | `/digests/:groupKey/:date` | Load one digest plus digest state when available. | Bearer token |
 
@@ -107,7 +108,7 @@ All application routes use bearer authentication through `withAuth`. `/status`, 
 ## Retrieval and Answer Generation
 
 - Knowledge pages are chunked into text sections, embedded with `text-embedding-3-small`, and stored in `fishing_knowledge_chunks` with 1536-dimensional Firestore vectors.
-- Chat retrieval embeds the question, runs nearest-neighbor search over the user's chunks, and also queries mobile-notifications-service for digest and raw-message evidence.
+- Chat retrieval embeds the question, runs nearest-neighbor search over the user's chunks, queries message-digest-service for canonical summary evidence, and queries whatsapp-service for source messages scoped to the owned Fishing definition.
 - Knowledge evidence is ranked first, then digest/raw-message evidence fills remaining prompt slots.
 - Follow-up prompts asking for the full recipe/page/text can expand recent knowledge-page citations into full-page evidence.
 - Prompt source IDs are short aliases such as `S1`; validated citations are remapped to canonical source IDs before persistence.
@@ -118,11 +119,12 @@ All application routes use bearer authentication through `withAuth`. `/status`, 
 | Dependency | Purpose |
 | ---------- | ------- |
 | Firestore | Persists folders, pages, chunks, chats, and messages. |
-| OpenAI embeddings | Generates `text-embedding-3-small` embeddings for knowledge chunks and questions. |
-| user-service | Loads the authenticated user's OpenRouter API key for chat generation. |
-| mobile-notifications-service | Supplies digest subscriptions, digest pages, digest state, and raw group messages. |
+| OpenRouter embeddings | Generates `openai/text-embedding-3-small` embeddings while preserving the persisted `text-embedding-3-small` alias and 1536 dimensions. |
+| user-service | Resolves the authenticated user's OpenRouter key with platform fallback for chat generation. |
+| message-digest-service | Supplies the migrated Fishing definition and canonical summary history. |
+| whatsapp-service | Supplies source-message evidence through the definition-scoped private WhatsApp contract. |
 | llm-usage-service | Receives LLM usage through `HttpInternalAuthUsageSink`. |
-| llm-factory | Builds the fixed chat model client for `or:google/gemini-3-flash-preview`. |
+| llm-factory | Builds the fixed chat model client for `or:google/gemini-3.6-flash`. |
 
 ## Configuration
 
@@ -134,9 +136,10 @@ All application routes use bearer authentication through `withAuth`. `/status`, 
 | `INTEXURAOS_AUTH_AUDIENCE` | Yes | Auth audience. |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes | Internal service auth token. |
 | `INTEXURAOS_USER_SERVICE_URL` | Yes | user-service base URL. |
-| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes | mobile-notifications-service base URL. |
+| `INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL` | Yes | message-digest-service base URL. |
+| `INTEXURAOS_WHATSAPP_SERVICE_URL` | Yes | whatsapp-service base URL for scoped source evidence. |
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL` | Yes | llm-usage-service base URL. |
-| `INTEXURAOS_OPENAI_APP_API_KEY` | Yes | OpenAI app key for embeddings. |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY` | Yes | Platform OpenRouter fallback and embedding credential. |
 | `INTEXURAOS_SENTRY_DSN` | No | Sentry DSN. |
 | `INTEXURAOS_ENVIRONMENT` | No | Runtime environment label. |
 | `PORT` | No | HTTP port, default `8080`. |
@@ -147,13 +150,13 @@ The service owns `fishing_knowledge_folders`, `fishing_knowledge_pages`, `fishin
 
 ## Gotchas
 
-**Chat generation requires a user key** - The fixed chat client loads `openrouter` from user-service and returns `NO_API_KEY` when missing.
+**Chat generation requires resolved access** - The fixed chat client uses the user OpenRouter key or platform fallback and returns `NO_API_KEY` only when both are unavailable.
 
 **Embedding failure stores failed pages** - Create/update paths can persist pages with `indexingStatus: failed`, `indexingError`, and `chunkCount: 0`.
 
 **Folder deletes are strict** - `DELETE /folders/:folderId` fails with `FOLDER_NOT_EMPTY` if the folder still has pages.
 
-**Digest retrieval is best effort for chat evidence** - Retrieval skips failed digest/raw-message pages and still answers from any remaining evidence.
+**Digest retrieval is best effort for chat evidence** - Retrieval skips failed canonical-summary or scoped source-message pages and still answers from any remaining evidence. Compatibility routes remain intentionally limited to the migrated Fishing group key.
 
 ## File Structure
 

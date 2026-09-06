@@ -145,6 +145,48 @@ describe('webhookRoutes — POST /internal/webhooks/task-complete', () => {
     expect(handleTaskCompletionModule.handleTaskCompletion).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    {
+      name: 'not-required rebase evidence',
+      rebaseResult: { attempted: false, reason: 'not_required' },
+    },
+    {
+      name: 'successful attempted rebase evidence',
+      rebaseResult: { attempted: true, success: true },
+    },
+    {
+      name: 'conflicted attempted rebase evidence',
+      rebaseResult: { attempted: true, success: false, conflictFiles: ['apps/code-agent/src/routes/webhookRoutes.ts'] },
+    },
+  ])('accepts structured result.rebaseResult for $name', async ({ rebaseResult }) => {
+    vi.mocked(handleTaskCompletionModule.handleTaskCompletion).mockResolvedValue({ kind: 'received' });
+
+    const payload = {
+      taskId: 't-rebase-result',
+      status: 'completed' as const,
+      result: { rebaseResult },
+    };
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = signPayload(payload, WEBHOOK_SECRET, timestamp);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        'x-request-timestamp': String(timestamp),
+        'x-request-signature': signature,
+        'content-type': 'application/json',
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(handleTaskCompletionModule.handleTaskCompletion).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(handleTaskCompletionModule.handleTaskCompletion).mock.calls[0];
+    expect(call?.[1].body.result?.rebaseResult).toStrictEqual(rebaseResult);
+  });
+
   it('returns 401 WITHOUT calling the use case when the signature is invalid', async () => {
     const payload = { taskId: 't-1', status: 'completed' as const };
     const timestamp = Math.floor(Date.now() / 1000);

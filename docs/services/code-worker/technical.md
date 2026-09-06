@@ -12,7 +12,7 @@ graph TB
         Orchestrator[Orchestrator Process]
 
         subgraph "Docker Engine"
-            Network[code-worker-net<br/>172.28.0.0/16]
+            Network[code-worker-net<br/>172.28.0.0/16<br/>fd00:172:28::/64]
 
             subgraph "Container: code-worker-{taskId}"
                 Entrypoint[entrypoint.sh]
@@ -139,12 +139,12 @@ Added timeout enforcement for the Linear MCP server integration to prevent hung 
 
 | Target                                    | Access  | Enforcement                 |
 | ----------------------------------------- | ------- | --------------------------- |
-| Public internet                           | Allowed | Default Docker bridge       |
+| Public internet                           | Allowed | User-defined worker bridge  |
 | Cloud metadata                            | Blocked | iptables on production host |
 | Localhost (127.0.0.0/8)                   | Blocked | iptables on production host |
 | Private IPs (10/8, 172.16/12, 192.168/16) | Blocked | iptables on production host |
 
-Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade enabled).
+Network: `code-worker-net` (dual-stack bridge driver, fixed Linux bridge `code-worker-br`, IPv4 subnet `172.28.0.0/16`, IPv6 subnet `fd00:172:28::/64`, IP masquerade enabled).
 
 ## Mount Points
 
@@ -184,7 +184,7 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 | `CODEX_THREAD_ID`                     | Orchestrator     | Thread ID for resumed Codex attempts (required when `WORKER_CONTINUE=1`)                 |
 | `CODEX_REASONING_EFFORT`              | Orchestrator     | Reasoning effort level for Codex runtime (e.g., `xhigh`)                                 |
 | `LINEAR_API_KEY`                      | Orchestrator env | Linear integration key                                                                   |
-| `SENTRY_AUTH_TOKEN`                   | Orchestrator env | Sentry error tracking token                                                              |
+| `ERROR_HUB_HOST`                      | Orchestrator env | Private SentryBox host for the `error_hub` MCP entry                                      |
 | `GOOGLE_APPLICATION_CREDENTIALS`      | Fixed            | `/secrets/gcp-sa.json`                                                                   |
 | `CLAUDE_PROJECT_DIR`                  | Fixed            | `/repo`                                                                                  |
 | `CODE_WORKER_MODE`                    | Fixed            | `1` — identifies this as an automated worker process                                     |
@@ -202,20 +202,14 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 
 ## Worker Types
 
-| Type              | Runtime  | API Base URL                                                | API Key Env Var       | Model Override           | Effort  |
-| ----------------- | -------- | ----------------------------------------------------------- | --------------------- | ------------------------ | ------- |
-| `auto`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | None                     | —       |
-| `opus`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `opus`                   | high    |
-| `sonnet`          | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `sonnet`                 | —       |
-| `minimax`         | claude   | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`     | `MiniMax-M2.7`           | —       |
-| `glm`             | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `glm-5`                  | —       |
-| `qwen`            | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `qwen3.5-plus`           | —       |
-| `kimi`            | claude   | `https://api.kimi.com/coding`                               | `KIMI_API_KEY`        | `kimi-for-coding`        | high    |
-| `codex`           | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | —       |
-| `codex-xhigh`     | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | xhigh   |
-| `openrouter-free` | claude   | `https://openrouter.ai/api`                                 | `OPENROUTER_API_KEY`  | `qwen/qwen3.6-plus:free` | high    |
-
-GLM-5 and Qwen are accessed via Alibaba Cloud Model Studio (DashScope) and share `DASHSCOPE_API_KEY`. Kimi uses the native Kimi Code API with `KIMI_API_KEY` and the stable `kimi-for-coding` model ID.
+| Type              | Runtime | Authentication           | Model override           | Effort |
+| ----------------- | ------- | ------------------------ | ------------------------ | ------ |
+| `auto`            | claude  | Claude subscription      | runtime default          | —      |
+| `opus`            | claude  | Claude subscription      | `opus`                   | high   |
+| `sonnet`          | claude  | Claude subscription      | `sonnet`                 | —      |
+| `codex`           | codex   | Codex subscription       | runtime default          | —      |
+| `codex-xhigh`     | codex   | Codex subscription       | runtime default          | xhigh  |
+| `openrouter-free` | claude  | `OPENROUTER_API_KEY`     | `qwen/qwen3.6-plus:free` | high   |
 
 The `openrouter-free` type routes through OpenRouter's free tier with experimental betas disabled.
 
@@ -271,9 +265,9 @@ The `run-attempt` handler:
 10. If forensics enabled: tees runtime output to `claude-stream.log` or `codex-stream.log` in the forensics directory
 11. Terminates lingering child processes (SIGTERM, wait 0.5s, SIGKILL) to prevent Docker exec file descriptor leaks
 
-### Codex Automation Parity Evidence
+### Codex Runtime Evidence
 
-Codex does not run `.claude/hooks/*.sh` inside the worker. The retained non-interactive parity is instead surfaced through stable log evidence:
+Codex runtime setup is surfaced through stable log evidence:
 
 - `[entrypoint] Bootstrap evidence: ...`
   Shows whether Codex skill discovery, GitHub token setup, GCP auth, secret sync, and `.envrc` loading all executed during worker startup.
@@ -394,7 +388,7 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 | strace / gdb          | Alpine package         | Crash forensics debugging                                  |
 | file                  | Alpine package         | File type identification                                   |
 | @upstash/context7-mcp | npm global             | Context7 MCP server                                        |
-| @sentry/mcp-server    | npm global             | Sentry MCP server                                          |
+| @sentry/mcp-server    | npm global             | Pinned MCP client for the private SentryBox compatibility API |
 | @playwright/mcp       | npm global             | Playwright MCP server (uses system Chromium)               |
 | @openai/codex         | npm global             | Codex CLI (AI coding agent runtime)                        |
 | claude                | Anthropic installer    | Claude Code CLI (AI coding agent runtime)                  |

@@ -62,11 +62,9 @@ log "Source uploaded to: ${DEST_PATH}"
 log "Redeploying Cloud Functions for worker: ${WORKER}"
 
 case "${WORKER}" in
-  vm-lifecycle)
-    FUNCTIONS=("intexuraos-vm-start-${ENVIRONMENT}" "intexuraos-vm-stop-${ENVIRONMENT}")
-    ;;
   transcription)
     FUNCTIONS=("intexuraos-transcription-${ENVIRONMENT}")
+    FUNCTION_SECRETS="INTEXURAOS_INTERNAL_AUTH_TOKEN=INTEXURAOS_INTERNAL_AUTH_TOKEN:3,INTEXURAOS_SPEECHMATICS_APP_API_KEY=INTEXURAOS_SPEECHMATICS_APP_API_KEY:2"
     ;;
   *)
     log "WARNING: No function mapping found for worker: ${WORKER}"
@@ -80,6 +78,7 @@ for FUNC in "${FUNCTIONS[@]}"; do
   gcloud functions deploy "${FUNC}" \
     --region="${REGION}" \
     --source="${DEST_PATH}" \
+    --set-secrets="${FUNCTION_SECRETS}" \
     --gen2 \
     --quiet &
 done

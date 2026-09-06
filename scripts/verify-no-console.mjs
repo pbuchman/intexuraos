@@ -12,7 +12,6 @@ const ALLOWED_PATHS = [
   'scripts/',
   'tools/',
   // TODO: Migrate these packages to use logger parameter (tech debt)
-  'packages/infra-gemini/',
   'packages/infra-claude/',
   'packages/infra-gpt/',
   'packages/infra-perplexity/',

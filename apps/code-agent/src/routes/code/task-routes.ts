@@ -17,7 +17,7 @@ import {
   MIN_TIMEOUT_HOURS,
   MAX_TIMEOUT_HOURS,
 } from '@intexuraos/code-task-domain';
-import { createAppLogger } from '@intexuraos/infra-sentry';
+import { createAppLogger, SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { submitDirectCodeTask } from '../../domain/usecases/submitDirectCodeTask.js';
 import { cancelTask, type CancelTaskErrorCode } from '../../domain/usecases/cancelTask.js';
@@ -25,8 +25,12 @@ import { cancelTaskWithNonce } from '../../domain/usecases/cancelTaskWithNonce.j
 import { retryTask } from '../../domain/usecases/retryTask.js';
 import { submitToExecutionAgent } from '../../domain/usecases/submitToExecutionAgent.js';
 import { backLinkPlanningTask } from '../../domain/usecases/backLinkPlanningTask.js';
-import { deletePRTaskLock } from '../../domain/utils/prTaskLock.js';
-import { hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import {
+  deletePRTaskLock,
+  deletePRTaskLockIfOwned,
+} from '../../domain/utils/prTaskLock.js';
+import { getWorkerTypeFromLabels, hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
+import { resolveDefaultWorkerType } from '../../domain/utils/defaultWorkerTypeResolution.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret } from '../../domain/utils/secrets.js';
 import { loadConfig } from '../../config.js';
@@ -47,10 +51,12 @@ import {
   callbackStateSchema,
   dispatchStatusSchema,
   linearIssueForDisplaySchema,
+  nullableRebaseResultSchema,
   workerTypeSchema,
   executionMemoryContextSchema,
   executionMemoryPostRunSchema,
 } from './schemas.js';
+import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 import type { CodeRoutesOptions } from './types.js';
 
 /** Terminal task statuses eligible for archival, rate-limit recording, etc. */
@@ -346,7 +352,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const processRequest: {
         userId: string;
         prompt: string;
-        workerType: WorkerType;
+        workerType?: WorkerType;
         taskMode?: 'planning' | 'execution';
         linearIssueId?: string;
         traceId?: string;
@@ -354,11 +360,13 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       } = {
         userId: body.userId,
         prompt: body.prompt,
-        workerType: body.workerType ?? 'auto',
         traceId,
         source: 'web',
       };
 
+      if (body.workerType !== undefined) {
+        processRequest.workerType = body.workerType;
+      }
       if (body.taskMode !== undefined) {
         processRequest.taskMode = body.taskMode;
       }
@@ -453,7 +461,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prUrl?: string;
         ciFailed?: boolean;
         partialWork?: boolean;
-        rebaseResult?: 'success' | 'conflict' | 'skipped';
+        rebaseResult?: CodeTaskRebaseResult;
       };
       error?: {
         code: string;
@@ -502,7 +510,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                 prUrl: { type: 'string', nullable: true },
                 ciFailed: { type: 'boolean', nullable: true },
                 partialWork: { type: 'boolean', nullable: true },
-                rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
+                rebaseResult: nullableRebaseResultSchema,
               },
               required: [],
             },
@@ -600,7 +608,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             prUrl?: string;
             ciFailed?: boolean;
             partialWork?: boolean;
-            rebaseResult?: 'success' | 'conflict' | 'skipped';
+            rebaseResult?: CodeTaskRebaseResult;
           };
           error?: {
             code: string;
@@ -976,7 +984,13 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (result.ok) {
         for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by result.ok check
-          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+          await deletePRTaskLockIfOwned(
+            services.firestore,
+            lock.repository,
+            lock.prNumber,
+            taskId,
+            request.log,
+          );
         }
       }
 
@@ -1049,7 +1063,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   resourceUrl: { type: 'string' },
                   workerLocation: { type: 'string' },
                   implementationOf: { type: 'string' },
-                  childTaskIds: { type: 'array', items: { type: 'string' } },
                 },
               },
             },
@@ -1110,8 +1123,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           case 'no_linear_issue':
           case 'label_not_ready':
             return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
-          case 'complex_task_no_qualifying_children':
-            return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
           case 'worker_not_configured':
             return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
           case 'already_implemented':
@@ -1376,6 +1387,22 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           scheduleNotBeforeAt = parsed;
         }
 
+        const settingsResult = await workerSettingsRepo.getSettings(userId);
+        const settingsForResolution = settingsResult.ok ? settingsResult.value : null;
+        const workerResolution = resolveDefaultWorkerType({
+          agentType,
+          labelWorkerType: getWorkerTypeFromLabels(issueResult.linearIssueLabels),
+          requestWorkerType: body.workerType,
+          settings: settingsForResolution,
+        });
+
+        if (workerResolution.source === 'default' && workerResolution.defaultField !== undefined) {
+          request.log.info(
+            { userId, [workerResolution.defaultField]: workerResolution.workerType },
+            'Using user default worker type'
+          );
+        }
+
         // Pre-generate task ID and derive deterministic webhook secret
         const config = loadConfig();
         const taskId = `task_${randomUUID()}`;
@@ -1404,7 +1431,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           prompt: body.prompt,
           sanitizedPrompt: sanitizedPromptText,
           systemPromptHash: 'default', // TODO: Use actual system prompt hash
-          workerType: body.workerType ?? 'auto',
+          workerType: workerResolution.workerType,
           workerLocation: 'pending', // Updated after dispatch with actual worker location
           repository: 'pbuchman/intexuraos',
           baseBranch: 'development',
@@ -1457,7 +1484,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         await backLinkPlanningTask(codeTaskRepo, request.log, task);
 
         // Fetch user's worker settings to validate workers are configured
-        const settingsResult = await workerSettingsRepo.getSettings(userId);
         if (!settingsResult.ok) {
           request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
           const problem = dispatchFailureProblem({
@@ -1497,7 +1523,18 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         // Fail if no workers configured
         if (enabledWorkers.length === 0) {
-          request.log.warn({ userId }, 'User has no workers configured');
+          serviceLogger.warn(
+            {
+              userId,
+              taskId: task.id,
+              workerType: task.workerType,
+              reason: 'no_enabled_workers',
+              terminal: true,
+              affectedTaskCount: 1,
+              [SKIP_SENTRY_KEY]: true,
+            },
+            'User has no workers configured',
+          );
           const dispatchability = classifyCodeTaskDispatchability({
             workerType: task.workerType,
             workers: enabledWorkers,
@@ -1801,7 +1838,21 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     repository: { type: 'string' },
                     baseBranch: { type: 'string' },
                     traceId: { type: 'string' },
-                    status: { type: 'string' },
+                    status: {
+                      type: 'string',
+                      enum: [
+                        'dispatched',
+                        'running',
+                        'queued',
+                        'planned',
+                        'implemented',
+                        'reviewed',
+                        'failed',
+                        'interrupted',
+                        'cancelled',
+                        'archived',
+                      ],
+                    },
                     dedupKey: { type: 'string' },
                     callbackReceived: { type: 'boolean' },
                     linearIssueId: { type: 'string' },
@@ -1810,11 +1861,12 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                       nullable: true,
                     },
                     prNumber: { type: 'number', nullable: true },
-                    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'] },
+                    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry'] },
                     implementationTaskId: { type: 'string' },
                     parentTaskId: { type: 'string' },
                     followUpReason: { type: 'string' },
                     createdAt: { type: 'string', format: 'date-time' },
+                    statusChangedAt: { type: 'string', format: 'date-time' },
                     updatedAt: { type: 'string', format: 'date-time' },
                     dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
                     completedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -1828,11 +1880,22 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                         summary: { type: 'string' },
                         ciFailed: { type: 'boolean', nullable: true },
                         partialWork: { type: 'boolean', nullable: true },
-                        rebaseResult: { type: 'string', nullable: true },
+                        rebaseResult: nullableRebaseResultSchema,
+                        pull_request_outcome_label: { type: 'string', enum: ['commits_pushed', 'no_changes_needed'], nullable: true },
+                        merge_ready: { type: 'string', enum: ['1'], nullable: true },
+                        merge_ready_reason: {
+                          type: 'string',
+                          enum: ['review_no_remediation', 'pull_request_no_changes_rebase_clean', 'remediation_already_completed', 'review_skipped'],
+                          nullable: true,
+                        },
                         review_comments_posted: { type: 'string', nullable: true },
                         review_types: { type: 'string', nullable: true },
                         requirements_tracker_updated: { type: 'string', nullable: true },
                         needs_remediation: { type: 'string', nullable: true },
+                        sentry_issue_url: { type: 'string', nullable: true },
+                        sentry_linear_issue: { type: 'string', nullable: true },
+                        sentry_outcome: { type: 'string', enum: ['fixed', 'suppressed'], nullable: true },
+                        sentry_verification: { type: 'string', nullable: true },
                       },
                     },
                     error: {
@@ -1859,6 +1922,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     executionMemoryPostRun: executionMemoryPostRunSchema,
                     statusSummary: { type: 'object', nullable: true },
                   },
+                  required: ['statusChangedAt'],
                 },
               },
             },
@@ -2046,6 +2110,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (!deleteResult.ok) {
           if (deleteResult.error.code === 'NOT_FOUND') {
             return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
+          }
+          if (deleteResult.error.code === 'ACTIVE_TASK_EXISTS') {
+            return await reply.fail('CONFLICT', deleteResult.error.message);
           }
           logger.error({ error: deleteResult.error, taskId }, 'Failed to delete code task');
           return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
@@ -2261,6 +2328,16 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (!result.ok) {
           const errorCode = CANCEL_TASK_ERROR_CODE_MAP[result.error.code];
           return await reply.fail(errorCode, result.error.message);
+        }
+
+        for (const lock of result.value.locksToCleanup) {
+          await deletePRTaskLockIfOwned(
+            getServices().firestore,
+            lock.repository,
+            lock.prNumber,
+            taskId,
+            request.log,
+          );
         }
 
         return await reply.ok({ status: 'cancelled' });
@@ -2822,7 +2899,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     resourceUrl: { type: 'string' },
                     workerLocation: { type: 'string' },
                     implementationOf: { type: 'string' },
-                    childTaskIds: { type: 'array', items: { type: 'string' } },
                   },
                 },
               },
@@ -2952,8 +3028,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             case 'no_linear_issue':
             case 'label_not_ready':
               return await reply.fail('INVALID_REQUEST', error.message, undefined, { serverCode: error.code });
-            case 'complex_task_no_qualifying_children':
-              return await reply.fail('CONFLICT', error.message, undefined, { serverCode: error.code });
             case 'worker_not_configured':
               return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
             case 'already_implemented':

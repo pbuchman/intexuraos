@@ -7,7 +7,7 @@
  * The endpoints are implemented across three resource-specific sub-plugins:
  * - `settingCrudRoutes` — GET/POST/PATCH/DELETE on worker configurations
  * - `workerOpsRoutes` — per-worker operations (connectivity test, reorder)
- * - `configRoutes` — the five default-worker-type PATCH endpoints
+ * - `configRoutes` — the six default-worker-type PATCH endpoints
  *
  * This module preserves the `workerSettingsRoutes` export so callers like
  * `apps/code-agent/src/routes/index.ts` do not need to change.

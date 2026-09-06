@@ -151,20 +151,20 @@ describe('executeWebhookDispatch', () => {
   });
 
   it('forwards workerType when issue_comment carries an @worker mention', async () => {
-    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-issue-glm' } as never));
+    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-issue-openrouter-free' } as never));
 
     const workerCommentEvent: GitHubPREvent = {
       ...baseEvent,
       eventType: 'issue_comment',
       action: 'created',
-      body: '@worker glm please retry',
+      body: '@worker openrouter-free please retry',
     };
     const result = await executeWebhookDispatch(deps, { event: workerCommentEvent, decision, logger: mockLogger });
 
-    expect(result).toEqual({ success: true, dispatched: true, taskId: 'task-issue-glm' });
+    expect(result).toEqual({ success: true, dispatched: true, taskId: 'task-issue-openrouter-free' });
     expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ workerType: 'glm' }),
+      expect.objectContaining({ workerType: 'openrouter-free' }),
     );
   });
 

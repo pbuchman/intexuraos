@@ -17,15 +17,14 @@ import type {
   TitleGenerateResult,
 } from '../../domain/research/index.js';
 
-export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
+export class GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GptClient;
   private readonly model: string;
   private readonly logger: Logger;
   /**
-   * Optional research correlation token baked at construction time. See
-   * GeminiAdapter for the rationale: synthesis/title-generation must carry
-   * `correlation.researchId` so usage events are attributable to the
-   * originating research.
+   * Optional research correlation token baked at construction time.
+   * Synthesis and title generation must carry `correlation.researchId` so
+   * usage events are attributable to the originating research.
    */
   private readonly researchId?: string;
 
@@ -68,8 +67,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   ): Promise<Result<LlmResearchResult, LlmError>> {
     const builtPrompt = researchPrompt.build({ userPrompt: prompt, ctx });
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'GPT research started');
-    // Per-call researchId wins over the constructor-baked one (see
-    // GeminiAdapter for rationale).
+    // A per-call researchId takes precedence over the constructor value.
     const callResearchId = options?.researchId ?? this.researchId;
     const researchOptions = {
       promptType: options?.promptType ?? 'research-web-search',

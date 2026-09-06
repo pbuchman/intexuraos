@@ -1,17 +1,21 @@
+// Firebase constructors assign Error.name, so install the host compatibility guard
+// before any application dependency can evaluate Firebase Auth or Firestore.
+import './services/firebaseErrorCompatibility.js';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import { App } from './App.js';
 import { config } from './config.js';
+import { buildWebSentryConfig } from './sentryConfig.js';
 import './styles/index.css';
 
 // Initialize Sentry for error tracking
-Sentry.init({
+Sentry.init(buildWebSentryConfig({
   dsn: config.sentryDsn,
   environment: import.meta.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-  tracesSampleRate: 1.0,
-  sendDefaultPii: true,
-});
+  commitSha: import.meta.env.INTEXURAOS_COMMIT_SHA,
+}));
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

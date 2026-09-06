@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink
 import type { ActioningType, IssueGroup, StepState } from '@/types/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
+import { TaskLifecycleTime } from '@/components/code-tasks/TaskLifecycleTime';
 
 function getPrBadgeClasses(status: 'open' | 'merged' | 'closed' | 'mergeable'): string {
   switch (status) {
@@ -340,6 +341,7 @@ function ImportantToggle({
 
 const IssueGroupRow = memo(function IssueGroupRow({
   group,
+  timeTick,
   onAction,
   onArchiveGroup,
   onDeleteGroup,
@@ -429,8 +431,6 @@ const IssueGroupRow = memo(function IssueGroupRow({
     if (aggregateStatus === 'active') return <WaveLoader compact={compact} />;
     return null;
   }
-  const updatedRelative = formatRelative(latestTask.updatedAt);
-
   const handleRowClick = (): void => {
     setExpanded((prev) => !prev);
   };
@@ -504,10 +504,13 @@ const IssueGroupRow = memo(function IssueGroupRow({
           </div>
 
           {/* Time column */}
-          <div className="text-xs">
-            <p className="text-slate-400 dark:text-slate-500">
-              <span className="text-slate-500 dark:text-slate-600">Updated</span>{' '}
-              {updatedRelative}
+          <div className="min-w-0 text-xs">
+            <p className="text-slate-500 dark:text-slate-400">
+              <TaskLifecycleTime
+                status={group.lastActivityStatus}
+                at={group.lastActivityAt}
+                timeTick={timeTick}
+              />
             </p>
             <p className="text-slate-400 dark:text-slate-500">
               <span className="text-slate-500 dark:text-slate-600">Dispatched</span>{' '}
@@ -593,7 +596,12 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   />
                   <ActionStateTag actionType={effectiveActionType} />
                   <span className="text-slate-400"> · </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{updatedRelative}</span>
+                  <TaskLifecycleTime
+                    status={group.lastActivityStatus}
+                    at={group.lastActivityAt}
+                    timeTick={timeTick}
+                    className="text-xs text-slate-500 dark:text-slate-400"
+                  />
                 </span>
               ) : (
                 <span className="text-sm">
@@ -602,7 +610,12 @@ const IssueGroupRow = memo(function IssueGroupRow({
                   </span>
                   <ActionStateTag actionType={effectiveActionType} />
                   <span className="text-slate-400"> · </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{updatedRelative}</span>
+                  <TaskLifecycleTime
+                    status={group.lastActivityStatus}
+                    at={group.lastActivityAt}
+                    timeTick={timeTick}
+                    className="text-xs text-slate-500 dark:text-slate-400"
+                  />
                 </span>
               )}
             </div>
@@ -723,39 +736,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
       ) : null}
     </div>
   );
-}, (prev, next) =>
-  prev.timeTick === next.timeTick &&
-  prev.group.linearIssueId === next.group.linearIssueId &&
-  prev.group.linearIssue?.identifier === next.group.linearIssue?.identifier &&
-  prev.group.linearIssue?.parentIdentifier === next.group.linearIssue?.parentIdentifier &&
-  prev.group.linearIssue?.title === next.group.linearIssue?.title &&
-  prev.group.linearIssue?.url === next.group.linearIssue?.url &&
-  prev.group.aggregateStatus === next.group.aggregateStatus &&
-  prev.group.latestTask.updatedAt === next.group.latestTask.updatedAt &&
-  prev.group.tasks.length === next.group.tasks.length &&
-  prev.group.pipeline.steps.length === next.group.pipeline.steps.length &&
-  prev.group.pipeline.steps.every((s, i) => {
-    const n = next.group.pipeline.steps[i];
-    return s.state === n?.state && s.agentType === n.agentType;
-  }) &&
-  prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
-  prev.group.pipeline.pr?.status === next.group.pipeline.pr?.status &&
-  prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
-  prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
-  prev.group.isImportant === next.group.isImportant &&
-  prev.actioningTaskId === next.actioningTaskId &&
-  prev.actioningType === next.actioningType &&
-  prev.isSelected === next.isSelected &&
-  prev.isSelectable === next.isSelectable &&
-  prev.isBatchActioning === next.isBatchActioning &&
-  prev.groupKey === next.groupKey &&
-  prev.onDeleteGroup === next.onDeleteGroup &&
-  prev.onAction === next.onAction &&
-  prev.onArchiveGroup === next.onArchiveGroup &&
-  prev.onOpenLogs === next.onOpenLogs &&
-  prev.onToggleSelection === next.onToggleSelection &&
-  prev.onToggleImportant === next.onToggleImportant,
-);
+});
 
 export { IssueGroupRow };
 export type { IssueGroupRowProps };

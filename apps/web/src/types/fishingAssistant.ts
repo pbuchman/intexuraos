@@ -12,61 +12,6 @@ export type FishingEvidenceSourceType = 'knowledge_page' | 'digest' | 'raw_messa
 export type FishingChatRole = 'user' | 'assistant';
 export type FishingAnswerConfidence = 'high' | 'medium' | 'low';
 
-export interface FishingDigestGroup {
-  readonly groupKey: string;
-  readonly displayName: string;
-}
-
-export interface FishingDigestItem {
-  readonly groupKey: string;
-  readonly date: string;
-  readonly title: string;
-  readonly summaryMarkdown: string;
-  readonly messageCount: number;
-}
-
-export interface FishingDigestListResponse {
-  readonly items: readonly FishingDigestItem[];
-  readonly truncated: boolean;
-}
-
-export interface FishingIdentityLedgerEntry {
-  readonly sender: string;
-  readonly firstSeen: string;
-  readonly totalMessages: number;
-  readonly activeDays: number;
-  readonly role?: 'member' | 'moderator' | 'newcomer';
-  readonly notes?: string;
-}
-
-export interface FishingModeratorEvent {
-  readonly date: string;
-  readonly topic: string;
-  readonly summary: string;
-}
-
-export interface FishingOpenThread {
-  readonly topic: string;
-  readonly openedOn: string;
-  readonly lastSignal: string;
-  readonly lastSignalDate: string;
-}
-
-export interface FishingDigestState {
-  readonly userId: string;
-  readonly groupKey: string;
-  readonly updatedAt: string;
-  readonly identityLedger: readonly FishingIdentityLedgerEntry[];
-  readonly moderatorEvents: readonly FishingModeratorEvent[];
-  readonly openThreads: readonly FishingOpenThread[];
-  readonly recentSummaryDates: readonly string[];
-}
-
-export interface FishingDigestDetail {
-  readonly digest: FishingDigestItem;
-  readonly state: FishingDigestState | null;
-}
-
 export interface FishingKnowledgeFolder {
   readonly id: string;
   readonly userId: string;
@@ -123,14 +68,6 @@ export interface FishingChatMessage {
   readonly citations: readonly FishingMessageCitation[];
   readonly confidence?: FishingAnswerConfidence;
   readonly createdAt: string;
-}
-
-export interface ListFishingDigestsOptions {
-  readonly groupKey: string;
-  readonly dateFrom: string;
-  readonly dateTo: string;
-  readonly terms?: readonly string[];
-  readonly limit?: number;
 }
 
 export interface CreateFishingKnowledgeFolderInput {

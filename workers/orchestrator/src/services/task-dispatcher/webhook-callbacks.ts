@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { Task, TaskResult } from '../../types/task.js';
 import type { CreateTaskRequest } from '../../types/api.js';
 import type { WebhookClient } from '../webhook-client.js';
@@ -100,7 +101,8 @@ type BuildResultAgentType =
   | 'pull_request'
   | 'review'
   | 'remediation'
-  | 'ask_agent';
+  | 'ask_agent'
+  | 'sentry';
 
 export function buildResultFromVerification(
   task: Task,
@@ -149,11 +151,13 @@ export function buildResultFromVerification(
       ? 'planning'
       : 'tracking_comment_id' in data
         ? 'pull_request'
-        : 'review_id' in data
-          ? 'review'
-          : 'requires_re_review' in data
-            ? 'remediation'
-            : 'execution');
+        : 'sentry_issue' in data
+          ? 'sentry'
+          : 'review_id' in data
+            ? 'review'
+            : 'requires_re_review' in data
+              ? 'remediation'
+              : 'execution');
 
   if (inferredType === 'planning') {
     const outcome = toStringOr(data['outcome']);
@@ -163,9 +167,7 @@ export function buildResultFromVerification(
     base.planning_superpowers_writing_plans_used =
       boolToBoolZeroOne(data['superpowers_writing_plans_used']) ?? '0';
     base.planning_linear_url = toStringOr(data['linear_issue']);
-    base.planning_is_complex = boolToBoolZeroOne(data['complex_task']) ?? '0';
     base.planning_has_plan_doc = boolToBoolZeroOne(data['plan_doc']) ?? '0';
-    base.planning_subtask_urls = arrayToCsv(data['subtask_urls']);
     const planPr = toStringOr(data['plan_pr']);
     if (planPr !== '') {
       base.planning_pr_url = planPr;
@@ -227,8 +229,24 @@ export function buildResultFromVerification(
     if (prUrl !== '') {
       base.prUrl = prUrl;
     }
+    const pullRequestOutcome = toStringOr(data['pull_request_outcome']);
+    if (pullRequestOutcome === 'commits_pushed' || pullRequestOutcome === 'no_changes_needed') {
+      base.pull_request_outcome_label = pullRequestOutcome;
+    }
     const commentReplied = toStringOr(data['comment_replied']);
     base.comment_replied = commentReplied === 'yes';
+  } else if (inferredType === 'sentry') {
+    const prUrl = toStringOr(data['pr']);
+    if (prUrl !== '') {
+      base.prUrl = prUrl;
+    }
+    const outcome = toStringOr(data['outcome']);
+    if (outcome === 'fixed' || outcome === 'suppressed') {
+      base.sentry_outcome = outcome;
+    }
+    base.sentry_issue_url = toStringOr(data['sentry_issue']);
+    base.sentry_linear_issue = toStringOr(data['linear_issue']);
+    base.sentry_verification = toStringOr(data['verification']);
   }
 
   return base;
@@ -443,7 +461,10 @@ export async function checkForResult(
 
     return undefined;
   } catch (error) {
-    logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
+    logger.warn(
+      { taskId: task.taskId, error, [SKIP_SENTRY_KEY]: true },
+      'Failed to check for task result'
+    );
     return undefined;
   }
 }

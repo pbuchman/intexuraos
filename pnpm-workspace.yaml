@@ -6,6 +6,7 @@ packages:
   - 'tools/log-server'
   - 'tools/whatsapp-private-matrix-sync'
   - 'tools/sample-data'
+  - 'tools/intex-agent-evals'
   - 'e2e'
   - 'e2e/mock-claude'
 

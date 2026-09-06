@@ -8,7 +8,7 @@
  * Algorithm:
  * 1. Load collection registry from firestore-collections.json
  * 2. Scan apps/<svc>/src/infra/firestore/, plus any registry-row scanPaths,
- *    plus workers/<owner>/src/, for TypeScript files.
+ *    plus workers/<owner>/src/, for production JavaScript and TypeScript files.
  * 3. Extract collection references via regex patterns.
  * 4. Validate each reference against registry ownership (with subcollection +
  *    indexCollectionGroups aliases).
@@ -36,7 +36,7 @@ const PATTERNS = [
   },
 
   // Pattern 2: .collection('collection_name')
-  { regex: /\.collection\(['"`]([a-zA-Z0-9_-]+)['"`]\)/, group: 1 },
+  { regex: /\.collection\(\s*['"`]([a-zA-Z0-9_-]+)['"`]\s*\)/, group: 1 },
 
   // Pattern 3: constructor(collectionName = 'collection_name')
   { regex: /constructor\([^)]*collectionName\s*=\s*['"`]([a-zA-Z0-9_-]+)['"`]/, group: 1 },
@@ -44,6 +44,11 @@ const PATTERNS = [
   // Pattern 4: this.collectionName = 'collection_name'
   { regex: /this\.collectionName\s*=\s*['"`]([a-zA-Z0-9_-]+)['"`]/, group: 1 },
 ];
+const KNOWN_LITERAL_PATTERN = /(['"`])([a-zA-Z0-9_-]+)\1/g;
+const COLLECTION_MAP_PATTERN =
+  /\b(?:const|let|var)\s+(?=[\w$]*collection)[A-Za-z_$][\w$]*\s*=\s*(?:Object\.(?:freeze|seal)\(\s*)?\{[\s\S]*?\}\s*\)?/giu;
+const PRODUCTION_SOURCE_PATTERN = /\.(?:[cm]?js|ts)$/u;
+const TEST_SOURCE_PATTERN = /\.(?:test|spec)\.(?:[cm]?js|ts)$/u;
 
 function loadRegistry(registryPath) {
   if (!existsSync(registryPath)) {
@@ -73,7 +78,7 @@ function loadIndexes(indexesPath) {
   };
 }
 
-function getTypeScriptFiles(dir, options = {}) {
+function getProductionSourceFiles(dir, options = {}) {
   const files = [];
 
   if (!existsSync(dir)) {
@@ -99,11 +104,11 @@ function getTypeScriptFiles(dir, options = {}) {
         if (skipScripts && entry === 'scripts') {
           continue;
         }
-        files.push(...getTypeScriptFiles(fullPath, options));
+        files.push(...getProductionSourceFiles(fullPath, options));
       } else if (
-        entry.endsWith('.ts') &&
-        !entry.endsWith('.test.ts') &&
-        !entry.endsWith('.spec.ts')
+        PRODUCTION_SOURCE_PATTERN.test(entry) &&
+        !TEST_SOURCE_PATTERN.test(entry) &&
+        !entry.endsWith('.d.ts')
       ) {
         files.push(fullPath);
       }
@@ -115,27 +120,51 @@ function getTypeScriptFiles(dir, options = {}) {
   return files;
 }
 
-function extractCollections(filePath) {
+function extractCollections(filePath, aliasIndex) {
   const content = readFileSync(filePath, 'utf8');
-  const lines = content.split('\n');
   const collections = [];
+  const seen = new Set();
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  const addReference = (collection, offset) => {
+    const key = `${collection}:${offset}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const lineStart = content.lastIndexOf('\n', Math.max(0, offset - 1)) + 1;
+    const nextLineBreak = content.indexOf('\n', offset);
+    const lineEnd = nextLineBreak === -1 ? content.length : nextLineBreak;
+    collections.push({
+      collection,
+      line: content.slice(lineStart, lineEnd).trim(),
+      lineNumber: content.slice(0, offset).split('\n').length,
+      offset,
+    });
+  };
 
-    for (const { regex, group } of PATTERNS) {
-      const match = line.match(regex);
-      if (match && match[group]) {
-        collections.push({
-          collection: match[group],
-          line: line.trim(),
-          lineNumber: i + 1,
-        });
+  for (const mapMatch of content.matchAll(COLLECTION_MAP_PATTERN)) {
+    const mapSource = mapMatch[0];
+    const mapOffset = mapMatch.index ?? 0;
+    for (const match of mapSource.matchAll(KNOWN_LITERAL_PATTERN)) {
+      const collection = match[2];
+      if (collection !== undefined && aliasIndex.has(collection)) {
+        addReference(collection, mapOffset + (match.index ?? 0) + 1);
       }
     }
   }
 
-  return collections;
+  for (const { regex, group } of PATTERNS) {
+    const globalRegex = new RegExp(regex.source, `${regex.flags}g`);
+    for (const match of content.matchAll(globalRegex)) {
+      const collection = match[group];
+      if (collection !== undefined) {
+        const collectionOffset = (match.index ?? 0) + Math.max(0, match[0].lastIndexOf(collection));
+        addReference(collection, collectionOffset);
+      }
+    }
+  }
+
+  return collections
+    .sort((left, right) => left.offset - right.offset)
+    .map(({ collection, line, lineNumber }) => ({ collection, line, lineNumber }));
 }
 
 /**
@@ -233,21 +262,23 @@ export function runOwnershipCheck({ repoRoot }) {
   for (const service of services) {
     const extras = extraPathsByOwner.get(service.name);
 
-    const files = [];
-    files.push(
-      ...getTypeScriptFiles(service.defaultDir, {
-        skipScripts: service.skipScriptsInDefault,
-      })
-    );
+    const files = new Set();
+    for (const file of getProductionSourceFiles(service.defaultDir, {
+      skipScripts: service.skipScriptsInDefault,
+    })) {
+      files.add(file);
+    }
     if (extras) {
       for (const dir of extras) {
-        files.push(...getTypeScriptFiles(dir));
+        for (const file of getProductionSourceFiles(dir)) {
+          files.add(file);
+        }
       }
     }
-    totalFiles += files.length;
+    totalFiles += files.size;
 
     for (const file of files) {
-      const collections = extractCollections(file);
+      const collections = extractCollections(file, aliasIndex);
       totalReferences += collections.length;
 
       for (const { collection, line, lineNumber } of collections) {
@@ -428,7 +459,6 @@ function printReport({
 
   console.error('═══════════════════════════════════════\n');
   console.error('RULE: Each Firestore collection MUST be owned by exactly ONE service.\n');
-  console.error('See: .claude/CLAUDE.md (Firestore Collections section)');
   console.error('See: docs/architecture/firestore-ownership.md\n');
 }
 

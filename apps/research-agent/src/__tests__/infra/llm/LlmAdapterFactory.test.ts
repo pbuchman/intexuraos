@@ -1,11 +1,16 @@
 /**
- * Tests for LlmAdapterFactory.
+ * Tests for the OpenRouter-only research adapter factory.
  */
 
 import { describe, expect, it, vi } from 'vitest';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
-import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  LegacyGoogleModels,
+  LlmModels,
+  type ResearchModel,
+} from '@intexuraos/llm-contract';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -15,263 +20,231 @@ const mockLogger: Logger = {
 };
 const fakeUsageSink = new FakeUsageSink();
 
-vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
-  GeminiAdapter: class MockGeminiAdapter {
-    apiKey: string;
-    model: string;
-    userId: string;
-    logger: Logger;
-    constructor(
-      apiKey: string,
-      model: string,
-      userId: string,
-      _logger: Logger,
-      _usageSink: unknown
-    ) {
-      this.apiKey = apiKey;
-      this.model = model;
-      this.userId = userId;
-      this.logger = _logger;
-    }
-  },
-}));
-
-vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
-  ClaudeAdapter: class MockClaudeAdapter {
-    apiKey: string;
-    model: string;
-    userId: string;
-    logger: Logger;
-    constructor(
-      apiKey: string,
-      model: string,
-      userId: string,
-      _logger: Logger,
-      _usageSink: unknown
-    ) {
-      this.apiKey = apiKey;
-      this.model = model;
-      this.userId = userId;
-      this.logger = _logger;
-    }
-  },
-}));
-
-vi.mock('../../../infra/llm/GptAdapter.js', () => ({
-  GptAdapter: class MockGptAdapter {
-    apiKey: string;
-    model: string;
-    userId: string;
-    logger: Logger;
-    constructor(
-      apiKey: string,
-      model: string,
-      userId: string,
-      _logger: Logger,
-      _usageSink: unknown
-    ) {
-      this.apiKey = apiKey;
-      this.model = model;
-      this.userId = userId;
-      this.logger = _logger;
-    }
-  },
-}));
-
-vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
-  PerplexityAdapter: class MockPerplexityAdapter {
-    apiKey: string;
-    model: string;
-    userId: string;
-    logger: Logger;
-    constructor(
-      apiKey: string,
-      model: string,
-      userId: string,
-      _logger: Logger,
-      _usageSink: unknown
-    ) {
-      this.apiKey = apiKey;
-      this.model = model;
-      this.userId = userId;
-      this.logger = _logger;
-    }
-  },
-}));
-
 vi.mock('../../../infra/llm/OpenRouterAdapter.js', () => ({
   OpenRouterAdapter: class MockOpenRouterAdapter {
     apiKey: string;
     model: string;
     userId: string;
-    logger: Logger;
+    researchId: string | undefined;
+
     constructor(
       apiKey: string,
       model: string,
       userId: string,
       _logger: Logger,
-      _usageSink: unknown
+      _usageSink: unknown,
+      researchId?: string
     ) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
-      this.logger = _logger;
+      this.researchId = researchId;
     }
   },
 }));
 
-const { createSynthesizer, createTitleGenerator, createResearchProvider } =
-  await import('../../../infra/llm/LlmAdapterFactory.js');
+vi.mock('../../../infra/llm/ContextInferenceAdapter.js', () => ({
+  ContextInferenceAdapter: class MockContextInferenceAdapter {
+    constructor(
+      public readonly apiKey: string,
+      public readonly model: string,
+      public readonly userId: string
+    ) {}
+  },
+}));
+
+vi.mock('../../../infra/llm/InputValidationAdapter.js', () => ({
+  InputValidationAdapter: class MockInputValidationAdapter {
+    constructor(
+      public readonly apiKey: string,
+      public readonly model: string,
+      public readonly userId: string
+    ) {}
+  },
+}));
+
+const {
+  createContextInferrer,
+  createInputValidator,
+  createSynthesizer,
+  createTitleGenerator,
+  createResearchProvider,
+} = await import('../../../infra/llm/LlmAdapterFactory.js');
+
+const ALLOWED_RESEARCH_MODEL = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
 
 describe('LlmAdapterFactory', () => {
   describe('createResearchProvider', () => {
-    it('creates GeminiAdapter for gemini model', () => {
-      const provider = createResearchProvider(
-        LlmModels.Gemini25Pro,
-        'google-key',
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
+    it.each([
+      LegacyGoogleModels.Gemini25Pro,
+      LlmModels.GPT54,
+      LlmModels.ClaudeOpus46,
+      LlmModels.SonarPro,
+    ])('rejects direct model %s', (model) => {
+      expect(() =>
+        createResearchProvider(
+          model as unknown as ResearchModel,
+          'direct-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Only allowlisted OpenRouter research models are executable');
     });
 
-    it('creates ClaudeAdapter for claude model', () => {
-      const provider = createResearchProvider(
-        LlmModels.ClaudeOpus46,
-        'anthropic-key',
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.ClaudeOpus46);
+    it('rejects a non-allowlisted OpenRouter model', () => {
+      expect(() =>
+        createResearchProvider(
+          'or:unknown/not-allowed' as ResearchModel,
+          'openrouter-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Only allowlisted OpenRouter research models are executable');
     });
 
-    it('creates GptAdapter for openai model', () => {
+    it('creates OpenRouterAdapter for an allowlisted model', () => {
       const provider = createResearchProvider(
-        LlmModels.O4MiniDeepResearch,
-        'openai-key',
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('openai-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.O4MiniDeepResearch);
-    });
-
-    it('creates PerplexityAdapter for perplexity model', () => {
-      const provider = createResearchProvider(
-        LlmModels.SonarPro,
-        'perplexity-key',
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
-    });
-
-    it('creates OpenRouterAdapter for openrouter model', () => {
-      const openRouterModel = 'or:deepseek/deepseek-v3-0324';
-      const provider = createResearchProvider(
-        openRouterModel as ResearchModel,
+        ALLOWED_RESEARCH_MODEL,
         'openrouter-key',
         'test-user-id',
         mockLogger,
         fakeUsageSink
       );
 
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('openrouter-key');
-      expect((provider as unknown as { model: string }).model).toBe(openRouterModel);
+      expect(provider).toMatchObject({
+        apiKey: 'openrouter-key',
+        model: ALLOWED_RESEARCH_MODEL,
+        userId: 'test-user-id',
+      });
     });
   });
 
   describe('createSynthesizer', () => {
-    it('creates GeminiAdapter for gemini model', () => {
-      const synthesizer = createSynthesizer(
-        LlmModels.Gemini25Pro,
-        'google-key',
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
-    });
-
-    it('throws error for claude model (synthesis not supported)', () => {
+    it('rejects a direct-provider synthesis model', () => {
       expect(() =>
         createSynthesizer(
-          LlmModels.ClaudeOpus46,
-          'anthropic-key',
+          LlmModels.GPT54 as unknown as ResearchModel,
+          'direct-key',
           'test-user-id',
           mockLogger,
           fakeUsageSink
         )
-      ).toThrow('Anthropic does not support synthesis');
+      ).toThrow('Only allowlisted OpenRouter synthesis models are executable');
     });
 
-    it('creates GptAdapter for openai model', () => {
+    it('creates OpenRouterAdapter and threads researchId', () => {
       const synthesizer = createSynthesizer(
-        LlmModels.O4MiniDeepResearch,
-        'openai-key',
+        DEFAULT_PLATFORM_LLM_MODEL,
+        'openrouter-key',
         'test-user-id',
         mockLogger,
-        fakeUsageSink
+        fakeUsageSink,
+        'research-123'
       );
 
-      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openai-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe(
-        LlmModels.O4MiniDeepResearch
-      );
+      expect(synthesizer).toMatchObject({
+        apiKey: 'openrouter-key',
+        model: DEFAULT_PLATFORM_LLM_MODEL,
+        researchId: 'research-123',
+      });
     });
 
-    it('throws error for perplexity model (synthesis not supported)', () => {
+    it('rejects an allowlisted research model outside the synthesis catalog', () => {
       expect(() =>
         createSynthesizer(
-          LlmModels.SonarPro,
-          'perplexity-key',
+          ALLOWED_RESEARCH_MODEL,
+          'openrouter-key',
           'test-user-id',
           mockLogger,
           fakeUsageSink
         )
-      ).toThrow('Perplexity does not support synthesis');
+      ).toThrow('Only allowlisted OpenRouter synthesis models are executable');
+    });
+  });
+
+  describe('createTitleGenerator', () => {
+    it('rejects a direct-provider title model', () => {
+      expect(() =>
+        createTitleGenerator(
+          LlmModels.GPT54 as unknown as ResearchModel,
+          'direct-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Only allowlisted OpenRouter title models are executable');
     });
 
-    it('creates OpenRouterAdapter for openrouter model', () => {
-      const openRouterModel = 'or:deepseek/deepseek-v3-0324';
-      const synthesizer = createSynthesizer(
-        openRouterModel as ResearchModel,
+    it('creates OpenRouterAdapter for title generation', () => {
+      const generator = createTitleGenerator(
+        ALLOWED_RESEARCH_MODEL,
         'openrouter-key',
         'test-user-id',
         mockLogger,
         fakeUsageSink
       );
 
-      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openrouter-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe(openRouterModel);
+      expect(generator).toMatchObject({ model: ALLOWED_RESEARCH_MODEL });
     });
   });
 
-  describe('createTitleGenerator', () => {
-    it('creates GeminiAdapter for title generation', () => {
-      const generator = createTitleGenerator(
-        LlmModels.Gemini20Flash,
-        'google-key',
+  describe('createContextInferrer', () => {
+    it('rejects direct-provider context models', () => {
+      expect(() =>
+        createContextInferrer(
+          LlmModels.GPT54 as unknown as ResearchModel,
+          'direct-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Only allowlisted OpenRouter context models are executable');
+    });
+
+    it('creates the OpenRouter-only context adapter', () => {
+      const adapter = createContextInferrer(
+        DEFAULT_PLATFORM_LLM_MODEL,
+        'openrouter-key',
         'test-user-id',
         mockLogger,
         fakeUsageSink
       );
 
-      expect((generator as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((generator as unknown as { model: string }).model).toBe(LlmModels.Gemini20Flash);
+      expect(adapter).toMatchObject({
+        apiKey: 'openrouter-key',
+        model: DEFAULT_PLATFORM_LLM_MODEL,
+      });
+    });
+  });
+
+  describe('createInputValidator', () => {
+    it('rejects direct-provider validation models', () => {
+      expect(() =>
+        createInputValidator(
+          LlmModels.GPT54 as unknown as ResearchModel,
+          'direct-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Only allowlisted OpenRouter validation models are executable');
+    });
+
+    it('creates the OpenRouter-only validation adapter', () => {
+      const adapter = createInputValidator(
+        DEFAULT_PLATFORM_LLM_MODEL,
+        'openrouter-key',
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink
+      );
+
+      expect(adapter).toMatchObject({
+        apiKey: 'openrouter-key',
+        model: DEFAULT_PLATFORM_LLM_MODEL,
+      });
     });
   });
 });

@@ -192,7 +192,7 @@ interface LogIncomingRequestOptions {
 function logIncomingRequest(request: FastifyRequest, options?: LogIncomingRequestOptions): void;
 ```
 
-`registerQuietHealthCheckLogging` suppresses log output for `/health` requests (Cloud Run probes). `logIncomingRequest` automatically redacts sensitive headers before logging. Required by CLAUDE.md on all endpoints.
+`registerQuietHealthCheckLogging` suppresses log output for `/health` requests (Cloud Run probes). `logIncomingRequest` automatically redacts sensitive headers before logging. Endpoint coverage is enforced by `scripts/verify-incoming-request-logging.mjs`.
 
 ### Validation Helper (`http/validation.ts`)
 

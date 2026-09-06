@@ -5,7 +5,7 @@ import {
   formatSessionRelative,
   getSessionTitle,
   parseSessionTimestamp,
-  sortSessionEventsForTimeline,
+  projectSessionEventsForTimeline,
 } from '../sessionPresentation.js';
 
 function session(overrides: Partial<IntexAgentSession> = {}): IntexAgentSession {
@@ -64,7 +64,7 @@ describe('Intex session presentation', () => {
   });
 
   it('sorts equal-timestamp events in chronological conversation order', () => {
-    const sorted = sortSessionEventsForTimeline([
+    const sorted = projectSessionEventsForTimeline([
       event('assistant', 'assistant_message'),
       event('unsupported', 'unsupported_request'),
       event('user', 'user_message'),
@@ -78,6 +78,57 @@ describe('Intex session presentation', () => {
       'unsupported',
       'assistant',
       'closed',
+    ]);
+  });
+
+  it('hides only an immediately repeated clarification reply without mutating source events', () => {
+    const events = [
+      event('clarification', 'clarification_requested', {
+        payload: { message: '  Which day\nshould I use?  ' },
+        createdAt: '2026-06-24T16:10:20.000Z',
+      }),
+      event('duplicate-assistant', 'assistant_message', {
+        payload: { text: 'Which day should I use?' },
+        createdAt: '2026-06-24T16:10:21.000Z',
+      }),
+    ];
+
+    const projected = projectSessionEventsForTimeline(events);
+
+    expect(projected.map((item) => item.id)).toEqual(['clarification']);
+    expect(events.map((item) => item.id)).toEqual(['clarification', 'duplicate-assistant']);
+  });
+
+  it('preserves distinct adjacent messages and matching replies separated by another event', () => {
+    const projected = projectSessionEventsForTimeline([
+      event('first-clarification', 'clarification_requested', {
+        payload: { message: 'Which day?' },
+        createdAt: '2026-06-24T16:10:20.000Z',
+      }),
+      event('distinct-assistant', 'assistant_message', {
+        payload: { text: 'Which time?' },
+        createdAt: '2026-06-24T16:10:21.000Z',
+      }),
+      event('second-clarification', 'clarification_requested', {
+        payload: { message: 'Which location?' },
+        createdAt: '2026-06-24T16:10:22.000Z',
+      }),
+      event('intervening-tool', 'tool_call_started', {
+        payload: { toolName: 'create_calendar_event' },
+        createdAt: '2026-06-24T16:10:23.000Z',
+      }),
+      event('non-adjacent-assistant', 'assistant_message', {
+        payload: { text: 'Which location?' },
+        createdAt: '2026-06-24T16:10:24.000Z',
+      }),
+    ]);
+
+    expect(projected.map((item) => item.id)).toEqual([
+      'first-clarification',
+      'distinct-assistant',
+      'second-clarification',
+      'intervening-tool',
+      'non-adjacent-assistant',
     ]);
   });
 });

@@ -23,9 +23,10 @@ RUN apk add --no-cache \
     py3-pip \
     && rm -rf /var/cache/apk/*
 
-# Install ripgrep, fd, bat from edge/community (not in main repos)
+# Use one Alpine repository set: edge/community Chromium requires an unavailable
+# edge/main libFLAC.so.14 when mixed with this stable base image.
 # chromium: required for @playwright/mcp (can't download browsers at runtime)
-RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
+RUN apk add --no-cache \
     ripgrep \
     fd \
     bat \
@@ -83,7 +84,7 @@ RUN npm install -g @openai/codex
 # home fragment and copy it into the runtime tmpfs during container startup.
 RUN git clone --depth 1 https://github.com/obra/superpowers.git /opt/codex-superpowers \
     && rm -rf /opt/codex-superpowers/.git \
-    && mkdir -p /opt/codex-home/.agents/skills \
+    && mkdir -p /opt/codex-home/.agents/skills /opt/codex-home/.codex \
     && ln -s /opt/codex-superpowers/skills /opt/codex-home/.agents/skills/superpowers
 
 # Pre-install MCP server packages globally.
@@ -93,7 +94,7 @@ RUN git clone --depth 1 https://github.com/obra/superpowers.git /opt/codex-super
 # npx finds the global install and skips the download entirely.
 RUN npm install -g \
     @upstash/context7-mcp \
-    @sentry/mcp-server \
+    @sentry/mcp-server@0.37.0 \
     @playwright/mcp
 
 # Pre-install Claude Code plugins into staging directory.
@@ -122,6 +123,7 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gclou
 # /home/claude is tmpfs so image contents are wiped — entrypoint.sh copies these at startup
 # NOTE: Build context is workspace root (.), so paths are root-relative
 COPY --chown=claude:claude docker/code-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude docker/code-worker/config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml
 
 # Bake forced pnpm/npm defaults so lifecycle scripts cannot run from a tampered
 # lockfile. /opt/claude-defaults is copied into /home/claude at entrypoint
@@ -143,7 +145,6 @@ RUN rm -f /usr/bin/wget /usr/bin/nc 2>/dev/null || true
 # Set environment
 ENV HOME=/home/claude
 ENV NODE_ENV=production
-ENV GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # Playwright: use system Chromium installed via apk, skip browser download
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1

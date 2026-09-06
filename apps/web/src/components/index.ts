@@ -16,10 +16,17 @@ export { LinkPreviewList } from './LinkPreviewList.js';
 export { MarkdownContent, type MarkdownContentProps } from './MarkdownContent.js';
 export { GitHubEventLogTableRow, type GitHubEventLogTableRowProps } from './GitHubEventLogTableRow.js';
 export { PREventsGroup, type PREventsGroupProps } from './PREventsGroup.js';
-export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS, MAX_TOTAL_MODELS } from './ModelSelector.js';
+export {
+  ModelSelector,
+  getActiveSelectedModelsList,
+  getSelectedModelsList,
+  MAX_TOTAL_MODELS,
+} from './ModelSelector.js';
 export { VersionInfoModal } from './VersionInfoModal.js';
 export { WhatsAppPreferencesCard } from './WhatsAppPreferencesCard.js';
 export { PrivateWhatsAppMirrorCard } from './PrivateWhatsAppMirrorCard.js';
 export { LinearIssueCombobox } from './LinearIssueCombobox.js';
 export { LinearIssueSelectorModal } from './LinearIssueSelectorModal.js';
+export { IntexAgentModelCard, type IntexAgentModelCardProps } from './IntexAgentModelCard.js';
+export { OpenRouterKeyCard, type OpenRouterKeyCardProps } from './OpenRouterKeyCard.js';
 export * from './ui/index.js';

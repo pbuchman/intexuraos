@@ -16,7 +16,7 @@ interface ProcessedActionDocument {
   actionId: string;
   userId: string;
   eventId: string;
-  resourceUrl: string;
+  resourceUrl?: string;
   createdAt: string;
 }
 
@@ -25,7 +25,7 @@ function toProcessedAction(doc: ProcessedActionDocument): ProcessedAction {
     actionId: doc.actionId,
     userId: doc.userId,
     eventId: doc.eventId,
-    resourceUrl: doc.resourceUrl,
+    ...(doc.resourceUrl !== undefined ? { resourceUrl: doc.resourceUrl } : {}),
     createdAt: doc.createdAt,
   };
 }
@@ -62,7 +62,7 @@ export async function createProcessedAction(input: {
   actionId: string;
   userId: string;
   eventId: string;
-  resourceUrl: string;
+  resourceUrl?: string;
 }): Promise<Result<ProcessedAction, CalendarError>> {
   try {
     const db = getFirestore();
@@ -73,7 +73,7 @@ export async function createProcessedAction(input: {
       actionId: input.actionId,
       userId: input.userId,
       eventId: input.eventId,
-      resourceUrl: input.resourceUrl,
+      ...(input.resourceUrl !== undefined ? { resourceUrl: input.resourceUrl } : {}),
       createdAt: now,
     };
 

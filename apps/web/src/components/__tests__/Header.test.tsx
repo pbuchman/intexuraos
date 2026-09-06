@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Header } from '../Header.js';
 
+const buildEnv = import.meta.env as Record<string, string>;
+const originalEnv = { ...import.meta.env };
+
 // Mock useAuth context
 const mockGetAccessToken = vi.fn();
 const mockIsAuthenticated = true;
@@ -104,9 +107,14 @@ describe('Header', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAccessToken.mockResolvedValue('test-token');
+    buildEnv['INTEXURAOS_BUILD_VERSION'] = '3.8.0-test123';
+    buildEnv['INTEXURAOS_COMMIT_SHA'] = 'test1234567890abcdef';
+    buildEnv['INTEXURAOS_COMMIT_MESSAGE'] = 'Test build metadata';
+    buildEnv['INTEXURAOS_BUILD_DATE'] = '2026-06-26T12:00:00.000Z';
   });
 
   afterEach(() => {
+    Object.assign(import.meta.env, originalEnv);
     cleanup();
   });
 
@@ -199,6 +207,23 @@ describe('Header', () => {
       expect(screen.getByTestId('workers-status-menu')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Workers' }));
       expect(screen.getByText('No workers configured')).toBeInTheDocument();
+    });
+
+    it('opens version information above the overlay from the logo in mobile PWA mode', () => {
+      mockUsePWA.mockReturnValue({
+        ...defaultPWAValue,
+        isInstalled: true,
+      });
+      mockUseWorkersStatus.mockReturnValue(defaultWorkersStatusValue);
+
+      render(<Header />);
+
+      fireEvent.click(screen.getByRole('button', { name: /IntexuraOS/i }));
+
+      const dialog = screen.getByRole('dialog', { name: /Version Information/i });
+      expect(dialog).toBeInTheDocument();
+      expect(dialog).toHaveClass('z-[60]');
+      expect(screen.getByText('3.8.0-test123')).toBeVisible();
     });
   });
 
@@ -336,6 +361,26 @@ describe('Header', () => {
 
       fireEvent.click(screen.getByTitle('Worker status'));
       expect(screen.getByText('Health contract mismatch: providerApiKeys')).toBeInTheDocument();
+    });
+
+    it('opens readable version information from the logo on desktop web', () => {
+      mockUsePWA.mockReturnValue({
+        ...defaultPWAValue,
+        isInstalled: false,
+      });
+      mockUseWorkersStatus.mockReturnValue(defaultWorkersStatusValue);
+
+      render(<Header />);
+
+      fireEvent.click(screen.getByRole('button', { name: /IntexuraOS/i }));
+
+      expect(screen.getByRole('dialog', { name: /Version Information/i })).toBeInTheDocument();
+      expect(screen.getByText('3.8.0-test123')).toBeInTheDocument();
+      expect(screen.getByText('Test build metadata')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /test123/i })).toHaveAttribute(
+        'href',
+        'https://github.com/pbuchman/intexuraos/commit/test1234567890abcdef'
+      );
     });
   });
 });

@@ -23,8 +23,27 @@ function daysAgo(days: number): Date {
   return new Date(NOW.getTime() - days * 24 * 60 * 60 * 1000);
 }
 
-function makeTask(overrides: Omit<Partial<CodeTask>, 'updatedAt' | 'createdAt'> & { id: string; updatedAt: Date }): CodeTask {
-  return {
+type TaskOverrides = Omit<
+  Partial<CodeTask>,
+  'updatedAt' | 'createdAt' | 'statusChangedAt' | 'completedAt'
+> & {
+  id: string;
+  updatedAt: Date;
+  createdAt?: Date;
+  statusChangedAt?: Date | null;
+  completedAt?: Date | null;
+};
+
+function makeTask(overrides: TaskOverrides): CodeTask {
+  const {
+    updatedAt,
+    createdAt,
+    statusChangedAt,
+    completedAt,
+    ...taskOverrides
+  } = overrides;
+  const status = overrides.status ?? 'implemented';
+  const task: CodeTask = {
     userId: 'user-1',
     prompt: 'test prompt',
     sanitizedPrompt: 'test prompt',
@@ -34,13 +53,29 @@ function makeTask(overrides: Omit<Partial<CodeTask>, 'updatedAt' | 'createdAt'> 
     repository: 'test/repo',
     baseBranch: 'main',
     traceId: 'trace-1',
-    status: 'implemented',
+    status,
     dedupKey: `dedup-${overrides.id}`,
     callbackReceived: false,
-    createdAt: Timestamp.fromDate(overrides.updatedAt),
-    ...overrides,
-    updatedAt: Timestamp.fromDate(overrides.updatedAt),
+    createdAt: Timestamp.fromDate(createdAt ?? updatedAt),
+    ...taskOverrides,
+    updatedAt: Timestamp.fromDate(updatedAt),
   } as CodeTask;
+
+  if (statusChangedAt !== null) {
+    task.statusChangedAt = Timestamp.fromDate(
+      statusChangedAt ?? updatedAt,
+    );
+  }
+  if (
+    completedAt !== null &&
+    status !== 'queued' &&
+    status !== 'dispatched' &&
+    status !== 'running'
+  ) {
+    task.completedAt = Timestamp.fromDate(completedAt ?? updatedAt);
+  }
+
+  return task;
 }
 
 describe('archiveStaleGroups', () => {
@@ -325,6 +360,148 @@ describe('archiveStaleGroups', () => {
     // maxUpdatedAt is 2 days ago (fresh) → group retained
     expect(updateMock).not.toHaveBeenCalled();
     if (result.ok) {
+      expect(result.value.groupsRetained).toBe(1);
+    }
+  });
+
+  it('archives by lifecycle activity when a later metadata write advanced updatedAt', async () => {
+    const lifecycleAt = daysAgo(10);
+    const task = makeTask({
+      id: 'task-metadata-newer',
+      linearIssueId: 'INT-1000',
+      status: 'failed',
+      statusChangedAt: lifecycleAt,
+      completedAt: lifecycleAt,
+      updatedAt: daysAgo(1),
+    });
+    listAllNonArchivedGlobalMock.mockResolvedValue(ok([task]));
+    updateMock.mockResolvedValue(ok(task));
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith(task.id, { status: 'archived' });
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groupKey: 'INT-1000',
+        maxLifecycleAt: lifecycleAt.toISOString(),
+        daysSinceLifecycleActivity: 10,
+      }),
+      'Archiving stale issue group',
+    );
+  });
+
+  it('retains a group whose lifecycle activity is fresh even when updatedAt is old', async () => {
+    const task = makeTask({
+      id: 'task-lifecycle-newer',
+      linearIssueId: 'INT-1001',
+      statusChangedAt: daysAgo(2),
+      completedAt: daysAgo(2),
+      updatedAt: daysAgo(10),
+    });
+    listAllNonArchivedGlobalMock.mockResolvedValue(ok([task]));
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groupKey: 'INT-1001',
+        maxLifecycleAt: daysAgo(2).toISOString(),
+        reason: 'not_stale',
+      }),
+      'Retaining issue group',
+    );
+  });
+
+  it('uses terminal dispatch fallback for retention and backfills completion while archiving', async () => {
+    const failedAt = daysAgo(10);
+    const dispatchAt = Timestamp.fromDate(failedAt);
+    const task = makeTask({
+      id: 'task-terminal-fallback',
+      linearIssueId: 'INT-1002',
+      status: 'failed',
+      statusChangedAt: null,
+      completedAt: null,
+      updatedAt: daysAgo(1),
+      dispatchStatus: {
+        state: 'terminal',
+        reason: 'codex_auth_unavailable',
+        terminal: true,
+        severity: 'warning',
+        message: 'Codex auth unavailable',
+        remediation: 'Use an authorized worker',
+        workerNames: ['home-dev'],
+        firstSeenAt: dispatchAt,
+        lastSeenAt: dispatchAt,
+        terminalCause: {
+          reason: 'codex_auth_unavailable',
+          message: 'Codex auth unavailable',
+          remediation: 'Use an authorized worker',
+          workerNames: ['home-dev'],
+          lastSeenAt: dispatchAt,
+        },
+        nextAction: 'retry_after_fix',
+      },
+    });
+    listAllNonArchivedGlobalMock.mockResolvedValue(ok([task]));
+    updateMock.mockResolvedValue(ok(task));
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith(task.id, {
+      status: 'archived',
+      completedAt: failedAt,
+    });
+  });
+
+  it('retains lifecycle activity exactly at the seven-day boundary', async () => {
+    const boundaryAt = daysAgo(7);
+    const task = makeTask({
+      id: 'task-boundary',
+      linearIssueId: 'INT-1003',
+      statusChangedAt: boundaryAt,
+      completedAt: boundaryAt,
+      updatedAt: daysAgo(20),
+    });
+    listAllNonArchivedGlobalMock.mockResolvedValue(ok([task]));
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('evaluates the same Linear issue independently for each user', async () => {
+    const staleTask = makeTask({
+      id: 'task-user-1',
+      userId: 'user-1',
+      linearIssueId: 'INT-SHARED',
+      statusChangedAt: daysAgo(10),
+      completedAt: daysAgo(10),
+      updatedAt: daysAgo(1),
+    });
+    const freshTask = makeTask({
+      id: 'task-user-2',
+      userId: 'user-2',
+      linearIssueId: 'INT-SHARED',
+      statusChangedAt: daysAgo(2),
+      completedAt: daysAgo(2),
+      updatedAt: daysAgo(20),
+    });
+    listAllNonArchivedGlobalMock.mockResolvedValue(ok([staleTask, freshTask]));
+    updateMock.mockResolvedValue(ok(staleTask));
+
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledWith(staleTask.id, { status: 'archived' });
+    if (result.ok) {
+      expect(result.value.totalGroupsEvaluated).toBe(2);
+      expect(result.value.groupsArchived).toBe(1);
       expect(result.value.groupsRetained).toBe(1);
     }
   });

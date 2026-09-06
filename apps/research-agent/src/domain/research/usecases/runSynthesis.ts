@@ -6,6 +6,7 @@
 
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
   buildSourceMap,
   validateSynthesisAttributions,
@@ -39,11 +40,6 @@ export interface ShareConfig {
   staticAssetsUrl: string;
 }
 
-export interface ImageApiKeys {
-  google?: string;
-  openai?: string;
-}
-
 export interface RunSynthesisDeps {
   researchRepo: ResearchRepository;
   synthesizer: LlmSynthesisProvider;
@@ -56,7 +52,6 @@ export interface RunSynthesisDeps {
   webAppUrl: string;
   reportLlmSuccess?: () => void;
   logger: Logger;
-  imageApiKeys?: ImageApiKeys;
   // NotionServiceClient is from infra layer, typed as unknown to avoid import restriction
   // Use `as NotionServiceClient` when consuming (e.g., in synthesis export)
   notionServiceClient?: unknown;
@@ -87,7 +82,6 @@ export async function runSynthesis(
     webAppUrl,
     reportLlmSuccess,
     logger,
-    imageApiKeys,
     notionServiceClient,
     researchExportSettings,
     researchCostSummaryClient,
@@ -311,8 +305,6 @@ export async function runSynthesis(
       imageServiceClient,
       processedContent,
       userId,
-      imageApiKeys,
-      research.synthesisModel,
       researchId,
       logger
     );
@@ -390,7 +382,13 @@ export async function runSynthesis(
       };
       logger.info({}, `[4.5.3] HTML uploaded successfully (path: ${uploadResult.value.gcsPath})`);
     } else {
-      logger.error({}, '[4.5.3] HTML upload failed');
+      logger.error(
+        {
+          errorCode: uploadResult.error.code,
+          errorMessage: uploadResult.error.message,
+        },
+        '[4.5.3] HTML upload failed'
+      );
     }
   }
 
@@ -459,58 +457,27 @@ interface ProviderPipeline {
 }
 
 /**
- * Returns an ordered list of available provider pipelines (preferred first).
- * When synthesis uses OpenAI (gpt-*), prefer OpenAI pipeline for consistency.
- * Otherwise, prefer Google (gemini) as default.
+ * Image-service owns OpenRouter credential resolution. Research keeps using the
+ * stable public aliases while delegating every configured cover request.
  */
-function getAvailableProviderPipelines(
-  imageApiKeys: ImageApiKeys | undefined,
-  synthesisModel?: string
-): ProviderPipeline[] {
-  const hasGoogleKey = imageApiKeys?.google !== undefined;
-  const hasOpenAiKey = imageApiKeys?.openai !== undefined;
-
-  const googlePipeline: ProviderPipeline = {
-    name: 'Google',
-    promptModel: LlmModels.Gemini25Pro,
-    imageModel: LlmModels.Gemini25FlashImage,
-  };
-
-  const openAiPipeline: ProviderPipeline = {
-    name: 'OpenAI',
+function getAvailableProviderPipelines(): ProviderPipeline[] {
+  const openRouterPipeline: ProviderPipeline = {
+    name: 'OpenRouter',
     promptModel: 'gpt-4.1',
     imageModel: LlmModels.GPTImage1,
   };
 
-  const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
-  const pipelines: ProviderPipeline[] = [];
-
-  if (preferOpenAi) {
-    if (hasOpenAiKey) pipelines.push(openAiPipeline);
-    if (hasGoogleKey) pipelines.push(googlePipeline);
-  } else {
-    if (hasGoogleKey) pipelines.push(googlePipeline);
-    if (hasOpenAiKey) pipelines.push(openAiPipeline);
-  }
-
-  return pipelines;
+  return [openRouterPipeline];
 }
 
 async function generateCoverImage(
   client: ImageServiceClient,
   synthesizedResult: string,
   userId: string,
-  imageApiKeys: ImageApiKeys | undefined,
-  synthesisModel: string | undefined,
   researchId: string,
   logger: Logger
 ): Promise<GeneratedImageData | null> {
-  const pipelines = getAvailableProviderPipelines(imageApiKeys, synthesisModel);
-
-  if (pipelines.length === 0) {
-    logger.info({}, '[4.4.1a] No API keys available for image generation');
-    return null;
-  }
+  const pipelines = getAvailableProviderPipelines();
 
   logger.info(
     { providers: pipelines.map((p) => p.name) },
@@ -603,8 +570,8 @@ async function generateCoverImage(
   }
 
   // All providers failed
-  logger.error(
-    { errors },
+  logger.warn(
+    { errors, [SKIP_SENTRY_KEY]: true },
     `[4.4.4] Cover image generation failed — all ${String(pipelines.length)} provider(s) exhausted. HTML will be generated without a cover image.`
   );
   return null;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Layout } from '@/components';
+import { CalendarDailyNotificationCard } from '@/components/calendar/CalendarDailyNotificationCard.js';
 import { useAuth } from '@/context';
 import {
   ApiError,
@@ -8,6 +9,7 @@ import {
   getGoogleCalendarStatus,
   initiateGoogleCalendarOAuth,
 } from '@/services';
+import { updateCalendarDailyNotificationSettings } from '@/services/calendarApi.js';
 import type { GoogleCalendarStatus } from '@/types';
 
 export function GoogleCalendarConnectionPage(): React.JSX.Element {
@@ -70,6 +72,11 @@ export function GoogleCalendarConnectionPage(): React.JSX.Element {
     try {
       setIsDisconnecting(true);
       const token = await getAccessToken();
+      await updateCalendarDailyNotificationSettings(token, {
+        enabled: false,
+        localTime: '08:00',
+        timeZone: 'UTC',
+      });
       await disconnectGoogleCalendar(token);
       setSuccessMessage('Google Calendar disconnected successfully');
       await fetchStatus();
@@ -109,42 +116,45 @@ export function GoogleCalendarConnectionPage(): React.JSX.Element {
         ) : null}
 
         {status?.connected === true ? (
-          <Card title="Connected Account" variant="success">
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-slate-600 dark:text-slate-400">Status</dt>
-                <dd className="font-medium text-green-700 dark:text-green-400">Connected</dd>
-              </div>
-              {status.email !== undefined ? (
+          <>
+            <Card title="Connected Account" variant="success">
+              <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-slate-600 dark:text-slate-400">Account</dt>
-                  <dd className="text-slate-900 dark:text-slate-100">{status.email}</dd>
+                  <dt className="text-slate-600 dark:text-slate-400">Status</dt>
+                  <dd className="font-medium text-green-700 dark:text-green-400">Connected</dd>
                 </div>
-              ) : null}
-              {status.scopes !== undefined && status.scopes.length > 0 ? (
-                <div className="flex justify-between">
-                  <dt className="text-slate-600 dark:text-slate-400">Permissions</dt>
-                  <dd className="text-slate-900 dark:text-slate-100">{status.scopes.length} granted</dd>
-                </div>
-              ) : null}
-              {status.updatedAt !== null ? (
-                <div className="flex justify-between">
-                  <dt className="text-slate-600 dark:text-slate-400">Connected At</dt>
-                  <dd className="text-slate-900 dark:text-slate-100">{new Date(status.updatedAt).toLocaleString()}</dd>
-                </div>
-              ) : null}
-            </dl>
+                {status.email !== undefined ? (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-600 dark:text-slate-400">Account</dt>
+                    <dd className="text-slate-900 dark:text-slate-100">{status.email}</dd>
+                  </div>
+                ) : null}
+                {status.scopes !== undefined && status.scopes.length > 0 ? (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-600 dark:text-slate-400">Permissions</dt>
+                    <dd className="text-slate-900 dark:text-slate-100">{status.scopes.length} granted</dd>
+                  </div>
+                ) : null}
+                {status.updatedAt !== null ? (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-600 dark:text-slate-400">Connected At</dt>
+                    <dd className="text-slate-900 dark:text-slate-100">{new Date(status.updatedAt).toLocaleString()}</dd>
+                  </div>
+                ) : null}
+              </dl>
 
-            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Button
-                variant="danger"
-                isLoading={isDisconnecting}
-                onClick={() => void handleDisconnect()}
-              >
-                Disconnect
-              </Button>
-            </div>
-          </Card>
+              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <Button
+                  variant="danger"
+                  isLoading={isDisconnecting}
+                  onClick={() => void handleDisconnect()}
+                >
+                  Disconnect
+                </Button>
+              </div>
+            </Card>
+            <CalendarDailyNotificationCard getAccessToken={getAccessToken} />
+          </>
         ) : (
           <Card title="Connect Google Calendar">
             <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">

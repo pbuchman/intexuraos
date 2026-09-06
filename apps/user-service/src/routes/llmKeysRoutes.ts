@@ -8,11 +8,69 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
-import { getProviderForModel } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_INTEX_AGENT_MODEL,
+  EXECUTABLE_LLM_PROVIDERS,
+  INTEX_AGENT_MODEL_OPTIONS,
+  normalizeLlmModelPreferenceForRead,
+  type ExecutableLlmProvider,
+} from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../infra/encryption.js';
 import { getServices } from '../services.js';
-import { type LlmProvider, type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
+import { type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
 import { formatLlmError } from '../domain/settings/formatLlmError.js';
+
+const INTEG_AGENT_MODEL_IDS = INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => id);
+
+function normalizeLegacyPreference(model: string | undefined): string | null {
+  if (model === undefined) return null;
+  return normalizeLlmModelPreferenceForRead(model);
+}
+const INTEG_AGENT_SELECTOR_OPTIONS_SCHEMA = {
+  type: 'array',
+  minItems: INTEX_AGENT_MODEL_OPTIONS.length,
+  maxItems: INTEX_AGENT_MODEL_OPTIONS.length,
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { id: { type: 'string' }, label: { type: 'string' } },
+    required: ['id', 'label'],
+  },
+  allOf: [
+    {
+      type: 'array',
+      minItems: INTEX_AGENT_MODEL_OPTIONS.length,
+      maxItems: INTEX_AGENT_MODEL_OPTIONS.length,
+      items: INTEX_AGENT_MODEL_OPTIONS.map(({ id, label }) => ({ const: { id, label } })),
+      additionalItems: false,
+    },
+  ],
+} as const;
+
+function intexAgentProjectionConsistencySchema(): Readonly<Record<string, unknown>> {
+  return {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          explicitModel: { const: null },
+          effectiveModel: { const: DEFAULT_INTEX_AGENT_MODEL },
+          source: { const: 'default_absent' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      },
+      ...INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => ({
+        type: 'object',
+        properties: {
+          explicitModel: { const: id },
+          effectiveModel: { const: id },
+          source: { const: 'explicit' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      })),
+    ],
+  };
+}
 
 export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /users/:uid/settings/llm-keys
@@ -43,54 +101,14 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 properties: {
                   defaultModel: { type: 'string', nullable: true },
                   fallbackModel: { type: 'string', nullable: true },
-                  google: { type: 'string', nullable: true },
-                  openai: { type: 'string', nullable: true },
-                  anthropic: { type: 'string', nullable: true },
-                  perplexity: { type: 'string', nullable: true },
+                  accessSource: {
+                    type: 'string',
+                    enum: ['user', 'platform', 'unavailable'],
+                  },
                   openrouter: { type: 'string', nullable: true },
                   testResults: {
                     type: 'object',
                     properties: {
-                      google: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          status: { type: 'string', enum: ['success', 'failure'] },
-                          message: { type: 'string' },
-                          testedAt: { type: 'string' },
-                        },
-                        required: ['status', 'message', 'testedAt'],
-                      },
-                      openai: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          status: { type: 'string', enum: ['success', 'failure'] },
-                          message: { type: 'string' },
-                          testedAt: { type: 'string' },
-                        },
-                        required: ['status', 'message', 'testedAt'],
-                      },
-                      anthropic: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          status: { type: 'string', enum: ['success', 'failure'] },
-                          message: { type: 'string' },
-                          testedAt: { type: 'string' },
-                        },
-                        required: ['status', 'message', 'testedAt'],
-                      },
-                      perplexity: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          status: { type: 'string', enum: ['success', 'failure'] },
-                          message: { type: 'string' },
-                          testedAt: { type: 'string' },
-                        },
-                        required: ['status', 'message', 'testedAt'],
-                      },
                       openrouter: {
                         type: 'object',
                         nullable: true,
@@ -103,7 +121,45 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       },
                     },
                   },
+                  intexAgentModelSelector: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          status: { const: 'available' },
+                          explicitModel: {
+                            type: ['string', 'null'],
+                            enum: [...INTEG_AGENT_MODEL_IDS, null],
+                          },
+                          effectiveModel: {
+                            type: 'string',
+                            enum: INTEG_AGENT_MODEL_IDS,
+                          },
+                          source: { type: 'string', enum: ['explicit', 'default_absent'] },
+                          revision: { type: 'integer', minimum: 0 },
+                          options: INTEG_AGENT_SELECTOR_OPTIONS_SCHEMA,
+                        },
+                        allOf: [intexAgentProjectionConsistencySchema()],
+                        required: ['status', 'explicitModel', 'effectiveModel', 'source', 'revision', 'options'],
+                      },
+                      {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: { status: { const: 'unavailable' } },
+                        required: ['status'],
+                      },
+                    ],
+                  },
                 },
+                required: [
+                  'defaultModel',
+                  'fallbackModel',
+                  'accessSource',
+                  'openrouter',
+                  'testResults',
+                  'intexAgentModelSelector',
+                ],
               },
               diagnostics: { $ref: 'Diagnostics#' },
             },
@@ -129,11 +185,26 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             required: ['success', 'error'],
           },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
         },
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      logIncomingRequest(request, { message: 'GET /users/:uid/settings/llm-keys' });
+      logIncomingRequest(request, {
+        message: 'GET /users/:uid/settings/llm-keys',
+        bodyPreviewLength: 0,
+        includeParams: false,
+        includeHeaders: false,
+      });
 
       try {
         const user = await requireAuth(request, reply);
@@ -147,11 +218,25 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.fail('FORBIDDEN', 'Cannot access other user settings');
         }
 
-        const { userSettingsRepository } = getServices();
+        const {
+          userSettingsRepository,
+          intexAgentModelAvailability,
+          platformOpenRouterApiKeyAvailable,
+        } = getServices();
+        const available = await intexAgentModelAvailability.isAvailableForUser(params.uid);
+        const selectorResult = await userSettingsRepository.getIntexAgentModelState(params.uid);
+
+        if (!selectorResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to load Intex Agent model selector');
+        }
+        if (selectorResult.value.status === 'invalid_stored_value') {
+          return await reply.fail('INTERNAL_ERROR', 'Intex Agent model selector state is invalid');
+        }
+
         const result = await userSettingsRepository.getSettings(params.uid);
 
         if (!result.ok) {
-          return await reply.fail('INTERNAL_ERROR', result.error.message);
+          return await reply.fail('INTERNAL_ERROR', 'Failed to get LLM keys');
         }
 
         const settings = result.value;
@@ -164,27 +249,39 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           if (encryptedKey === undefined || encryptor === null) return null;
           const decrypted = encryptor.decrypt(encryptedKey);
           if (!decrypted.ok) return null;
-          return maskApiKey(decrypted.value);
+          const apiKey = decrypted.value.trim();
+          return apiKey === '' ? null : maskApiKey(apiKey);
         };
 
+        const maskedOpenRouterKey = getMaskedKey(llmApiKeys?.openrouter);
+        const accessSource =
+          maskedOpenRouterKey !== null
+            ? ('user' as const)
+            : platformOpenRouterApiKeyAvailable
+              ? ('platform' as const)
+              : ('unavailable' as const);
+
         return await reply.ok({
-          defaultModel: settings?.llmPreferences?.defaultModel ?? null,
-          fallbackModel: settings?.llmPreferences?.fallbackModel ?? null,
-          google: getMaskedKey(llmApiKeys?.google),
-          openai: getMaskedKey(llmApiKeys?.openai),
-          anthropic: getMaskedKey(llmApiKeys?.anthropic),
-          perplexity: getMaskedKey(llmApiKeys?.perplexity),
-          openrouter: getMaskedKey(llmApiKeys?.openrouter),
+          defaultModel: normalizeLegacyPreference(settings?.llmPreferences?.defaultModel),
+          fallbackModel: normalizeLegacyPreference(settings?.llmPreferences?.fallbackModel),
+          accessSource,
+          openrouter: maskedOpenRouterKey,
           testResults: {
-            google: llmTestResults?.google ?? null,
-            openai: llmTestResults?.openai ?? null,
-            anthropic: llmTestResults?.anthropic ?? null,
-            perplexity: llmTestResults?.perplexity ?? null,
             openrouter: llmTestResults?.openrouter ?? null,
           },
+          intexAgentModelSelector: available
+            ? {
+                status: 'available' as const,
+                explicitModel: selectorResult.value.explicitModel,
+                effectiveModel: selectorResult.value.explicitModel ?? DEFAULT_INTEX_AGENT_MODEL,
+                source: selectorResult.value.explicitModel === null ? ('default_absent' as const) : ('explicit' as const),
+                revision: selectorResult.value.revision,
+                options: INTEX_AGENT_MODEL_OPTIONS.map(({ id, label }) => ({ id, label })),
+              }
+            : { status: 'unavailable' as const },
         });
-      } catch (error) {
-        request.log.error({ err: error }, 'Unhandled error in getLlmApiKeys');
+      } catch (_error) {
+        request.log.error('Unhandled error in getLlmApiKeys');
         reply.status(500);
         return await reply.fail('INTERNAL_ERROR', 'Failed to get LLM keys');
       }
@@ -213,7 +310,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           properties: {
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
+              enum: EXECUTABLE_LLM_PROVIDERS,
               description: 'LLM provider name',
             },
             apiKey: {
@@ -295,7 +392,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as { uid: string };
-      const body = request.body as { provider: LlmProvider; apiKey: string };
+      const body = request.body as { provider: ExecutableLlmProvider; apiKey: string };
 
       if (params.uid !== user.userId) {
         return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
@@ -356,7 +453,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
+              enum: EXECUTABLE_LLM_PROVIDERS,
               description: 'LLM provider name',
             },
           },
@@ -415,7 +512,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const params = request.params as { uid: string; provider: LlmProvider };
+      const params = request.params as { uid: string; provider: ExecutableLlmProvider };
 
       if (params.uid !== user.userId) {
         return await reply.fail('FORBIDDEN', 'Cannot test other user settings');
@@ -448,11 +545,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', 'Failed to decrypt API key');
       }
 
-      const providerNameMap: Record<LlmProvider, string> = {
-        google: 'Gemini',
-        openai: 'GPT',
-        anthropic: 'Claude',
-        perplexity: 'Perplexity',
+      const providerNameMap: Record<ExecutableLlmProvider, string> = {
         openrouter: 'OpenRouter',
       };
       const providerName = providerNameMap[params.provider];
@@ -514,7 +607,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
+              enum: EXECUTABLE_LLM_PROVIDERS,
               description: 'LLM provider name',
             },
           },
@@ -561,7 +654,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const params = request.params as { uid: string; provider: LlmProvider };
+      const params = request.params as { uid: string; provider: ExecutableLlmProvider };
 
       if (params.uid !== user.userId) {
         return await reply.fail('FORBIDDEN', 'Cannot delete other user settings');
@@ -576,42 +669,6 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!deleteResult.ok) {
         return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
-      }
-
-      // Cascade: clear defaultModel/fallbackModel if they belong to the deleted provider
-      const settingsResult = await userSettingsRepository.getSettings(params.uid);
-      if (settingsResult.ok) {
-        const prefs = settingsResult.value?.llmPreferences;
-        const currentDefault = prefs?.defaultModel;
-        const currentFallback = prefs?.fallbackModel;
-
-        let shouldClearAll = false;
-        if (currentDefault !== undefined) {
-          const defaultProvider = getProviderForModel(currentDefault);
-          if (defaultProvider === params.provider) {
-            shouldClearAll = true;
-          }
-        }
-
-        let shouldClearFallback = false;
-        if (currentFallback !== undefined) {
-          const fallbackProvider = getProviderForModel(currentFallback);
-          if (fallbackProvider === params.provider) {
-            shouldClearFallback = true;
-          }
-        }
-
-        if (shouldClearAll) {
-          const clearResult = await userSettingsRepository.clearLlmPreferences(params.uid);
-          if (!clearResult.ok) {
-            request.log.warn({ userId: params.uid }, 'Failed to cascade-clear LLM preferences after key deletion');
-          }
-        } else if (shouldClearFallback && currentDefault !== undefined) {
-          const clearResult = await userSettingsRepository.updateLlmPreferences(params.uid, currentDefault, null);
-          if (!clearResult.ok) {
-            request.log.warn({ userId: params.uid }, 'Failed to cascade-clear fallback model after key deletion');
-          }
-        }
       }
 
       return await reply.ok({});

@@ -79,6 +79,7 @@ export const usageEventInputSchema = {
             'research',
             'generate',
             'image_generation',
+            'embedding',
             'tool_calling',
             'other',
           ],

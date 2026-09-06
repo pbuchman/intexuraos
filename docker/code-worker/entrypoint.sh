@@ -400,7 +400,7 @@ verify_network_restrictions &
 # ------------------------------------------------------------------------------
 # Create required directories (tmpfs on /home/claude wipes image dirs)
 # ------------------------------------------------------------------------------
-mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.agents/skills
+mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.codex /home/claude/.agents/skills
 
 # ------------------------------------------------------------------------------
 # Restore Claude config defaults (skips onboarding on fresh tmpfs)
@@ -438,6 +438,11 @@ if [ -d "/opt/codex-home/.agents/skills" ]; then
     echo "[entrypoint] Codex skill discovery restored"
 fi
 
+if [ -d "/opt/codex-home/.codex" ]; then
+    cp -a /opt/codex-home/.codex/. /home/claude/.codex/
+    echo "[entrypoint] Codex MCP config restored"
+fi
+
 # ------------------------------------------------------------------------------
 # Verify mounts
 # ------------------------------------------------------------------------------
@@ -453,41 +458,8 @@ else
     echo "[entrypoint] WARNING: /repo is not a git repository"
 fi
 
-if [ ! -f "/secrets/gcp-sa.json" ]; then
-    echo "[entrypoint] WARNING: GCP SA not mounted at /secrets/gcp-sa.json"
-fi
-
 # ------------------------------------------------------------------------------
-# Activate GCP credentials
-# ------------------------------------------------------------------------------
-if [ -f "/secrets/gcp-sa.json" ]; then
-    echo "[entrypoint] Activating GCP service account..."
-    if gcloud auth activate-service-account --key-file=/secrets/gcp-sa.json 2>&1; then
-        BOOTSTRAP_GCP_AUTH="active"
-        echo "[entrypoint] GCP auth successful"
-    else
-        BOOTSTRAP_GCP_AUTH="failed"
-        echo "[entrypoint] GCP auth failed (non-fatal)"
-    fi
-fi
-
-# ------------------------------------------------------------------------------
-# Sync secrets from GCP Secret Manager (writes /repo/.envrc)
-# ------------------------------------------------------------------------------
-if [ -f "/secrets/gcp-sa.json" ] && [ -f "/repo/scripts/sync-secrets.sh" ]; then
-    SYNC_PROJECT_ID="$(jq -r .project_id /secrets/gcp-sa.json)"
-    echo "[entrypoint] Syncing secrets from GCP Secret Manager (project: ${SYNC_PROJECT_ID})..."
-    if bash /repo/scripts/sync-secrets.sh dev --project-id "${SYNC_PROJECT_ID}"; then
-        BOOTSTRAP_SECRET_SYNC="synced"
-        echo "[entrypoint] Secret sync complete"
-    else
-        BOOTSTRAP_SECRET_SYNC="failed"
-        echo "[entrypoint] Secret sync failed (non-fatal, will use existing .envrc if available)"
-    fi
-fi
-
-# ------------------------------------------------------------------------------
-# Load environment variables from .envrc (synced from GCP Secret Manager)
+# Load the host-rendered, task-filtered environment projection.
 # ------------------------------------------------------------------------------
 if [ -f "/repo/.envrc" ]; then
     source /repo/.envrc

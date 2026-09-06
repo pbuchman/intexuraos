@@ -18,8 +18,11 @@ import type {
   PartialFailureDecision,
   Research,
 } from '@/services/researchAgentApi.types';
-import { isSelectableModel } from '@/services/researchAgentApi.types';
 import { getModelDisplayName } from './shared.js';
+import {
+  isStoredResearchModelAvailable,
+  isStoredResearchSynthesisModelExecutable,
+} from '@/utils/researchModelAvailability.js';
 
 export interface ActionState {
   loading: boolean;
@@ -37,8 +40,13 @@ export interface ExportState extends ActionState {
   onExport: () => void;
 }
 
+export type ModelCatalogState = 'loading' | 'error' | 'access_unavailable' | 'ready';
+
 interface ResearchActionsProps {
   research: Research;
+  availableModelIds: string[];
+  modelCatalogState: ModelCatalogState;
+  onRetryModelCatalog: () => void;
   approve: ActionState & { onApprove: () => void };
   retry: ActionState & { onRetry: () => void };
   deleteAction: ConfirmableAction;
@@ -52,6 +60,9 @@ interface ResearchActionsProps {
 
 export function ResearchActions({
   research,
+  availableModelIds,
+  modelCatalogState,
+  onRetryModelCatalog,
   approve,
   retry,
   deleteAction,
@@ -62,34 +73,90 @@ export function ResearchActions({
   onEditDraft,
   partialFailure: partialFailureState,
 }: ResearchActionsProps): React.JSX.Element {
+  const draftBlockMessage = useMemo(() => {
+    if (research.status !== 'draft') return null;
+    if (modelCatalogState === 'loading') {
+      return 'Start unavailable while the OpenRouter model catalog loads.';
+    }
+    if (modelCatalogState === 'error') {
+      return 'Start unavailable because the OpenRouter model catalog could not be loaded.';
+    }
+    if (modelCatalogState === 'access_unavailable') {
+      return 'Start unavailable because OpenRouter access is unavailable.';
+    }
+    const unsupportedModels = research.selectedModels.filter(
+      (model) => !isStoredResearchModelAvailable(model, availableModelIds),
+    );
+    if (unsupportedModels.length > 0) {
+      return `Start unavailable because these models are no longer supported: ${unsupportedModels.map((model) => getModelDisplayName(model)).join(', ')}. Edit the draft to select active OpenRouter models.`;
+    }
+    const hasInputContext =
+      research.inputContexts?.some((context) => context.content.trim().length > 0) ?? false;
+    if (research.selectedModels.length === 0 && !hasInputContext) {
+      return 'Start unavailable until the draft has an active OpenRouter model or input context.';
+    }
+    if (!isStoredResearchSynthesisModelExecutable(research.synthesisModel, availableModelIds)) {
+      return `Start unavailable because the synthesis model ${getModelDisplayName(research.synthesisModel)} is no longer supported. Edit the draft to select an active synthesis model.`;
+    }
+    return null;
+  }, [availableModelIds, modelCatalogState, research]);
+
   const retryBlockMessage = useMemo(() => {
+    if (modelCatalogState === 'loading') {
+      return 'Retry unavailable while the OpenRouter model catalog loads.';
+    }
+    if (modelCatalogState === 'error') {
+      return 'Retry unavailable because the OpenRouter model catalog could not be loaded.';
+    }
+    if (modelCatalogState === 'access_unavailable') {
+      return 'Retry unavailable because OpenRouter access is unavailable.';
+    }
     const failedRetryModels = research.llmResults
       .filter((result) => result.status === 'failed')
       .map((result) => result.model);
-    const unsupportedRetryModels = failedRetryModels.filter((model) => !isSelectableModel(model));
+    const unsupportedRetryModels = failedRetryModels.filter(
+      (model) => !isStoredResearchModelAvailable(model, availableModelIds),
+    );
     const retryBlockedByUnsupportedSynthesis =
       failedRetryModels.length === 0 &&
       research.synthesisError !== undefined &&
       research.synthesisError !== '' &&
       research.llmResults.some((result) => result.status === 'completed') &&
-      !isSelectableModel(research.synthesisModel);
+      !isStoredResearchSynthesisModelExecutable(research.synthesisModel, availableModelIds);
     return unsupportedRetryModels.length > 0
       ? `Retry unavailable because these historical models are no longer supported: ${unsupportedRetryModels.map((model) => getModelDisplayName(model)).join(', ')}`
       : retryBlockedByUnsupportedSynthesis
         ? `Retry unavailable because the synthesis model ${getModelDisplayName(research.synthesisModel)} is no longer supported.`
         : null;
-  }, [research.llmResults, research.synthesisError, research.synthesisModel]);
+  }, [availableModelIds, modelCatalogState, research.llmResults, research.synthesisError, research.synthesisModel]);
 
   return (
     <>
       <ErrorBanner message={unshare.error} className="mt-2" />
+
+      {modelCatalogState === 'error' ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          <span>The OpenRouter model catalog could not be loaded.</span>
+          <Button type="button" variant="secondary" size="sm" onClick={onRetryModelCatalog}>
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            Retry model catalog
+          </Button>
+        </div>
+      ) : modelCatalogState === 'access_unavailable' ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          OpenRouter access is unavailable. Configure access before starting, retrying, or
+          enhancing research.
+        </div>
+      ) : null}
 
       {research.status === 'draft' ? (
         <>
           <div className="mt-4 flex flex-wrap gap-3">
             <Button
               onClick={approve.onApprove}
-              disabled={approve.loading || deleteAction.loading}
+              disabled={
+                approve.loading || deleteAction.loading || draftBlockMessage !== null
+              }
               isLoading={approve.loading}
             >
               <Play className="h-4 w-4 sm:mr-2" />
@@ -115,6 +182,12 @@ export function ResearchActions({
               <span className="hidden sm:inline">Discard</span>
             </Button>
           </div>
+          {draftBlockMessage !== null &&
+          (modelCatalogState === 'ready' || modelCatalogState === 'loading') ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              {draftBlockMessage}
+            </div>
+          ) : null}
           {deleteAction.showConfirm ? (
             <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
               <p className="mb-3 text-sm text-red-800 dark:text-red-300">
@@ -225,7 +298,9 @@ export function ResearchActions({
               <span className="hidden sm:inline">Delete</span>
             </Button>
           </div>
-          {research.status === 'failed' && retryBlockMessage !== null ? (
+          {research.status === 'failed' &&
+          retryBlockMessage !== null &&
+          (modelCatalogState === 'ready' || modelCatalogState === 'loading') ? (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
               {retryBlockMessage}
             </div>
@@ -315,6 +390,8 @@ export function ResearchActions({
         <PartialFailureConfirmation
           partialFailure={research.partialFailure}
           synthesisModel={research.synthesisModel}
+          availableModelIds={availableModelIds}
+          modelCatalogState={modelCatalogState}
           onConfirm={partialFailureState.onConfirm}
           confirming={partialFailureState.loading}
           error={partialFailureState.error}
@@ -327,6 +404,8 @@ export function ResearchActions({
 interface PartialFailureConfirmationProps {
   partialFailure: PartialFailure;
   synthesisModel: string;
+  availableModelIds: string[];
+  modelCatalogState: ModelCatalogState;
   onConfirm: (action: PartialFailureDecision) => void;
   confirming: boolean;
   error: string | null;
@@ -335,6 +414,8 @@ interface PartialFailureConfirmationProps {
 function PartialFailureConfirmation({
   partialFailure,
   synthesisModel,
+  availableModelIds,
+  modelCatalogState,
   onConfirm,
   confirming,
   error,
@@ -345,13 +426,20 @@ function PartialFailureConfirmation({
   const failedModelsText = failedModelsArr
     .map((model) => getModelDisplayName(model))
     .join(', ');
-  const unsupportedFailedModels = failedModelsArr.filter((model) => !isSelectableModel(model));
+  const unsupportedFailedModels = failedModelsArr.filter(
+    (model) => !isStoredResearchModelAvailable(model, availableModelIds),
+  );
   const unsupportedFailedModelsText = unsupportedFailedModels
     .map((model) => getModelDisplayName(model))
     .join(', ');
 
-  const canRetry = partialFailure.retryCount < 2 && unsupportedFailedModels.length === 0;
-  const canProceed = isSelectableModel(synthesisModel);
+  const canRetry =
+    modelCatalogState === 'ready' &&
+    partialFailure.retryCount < 2 &&
+    unsupportedFailedModels.length === 0;
+  const canProceed =
+    modelCatalogState === 'ready' &&
+    isStoredResearchSynthesisModelExecutable(synthesisModel, availableModelIds);
 
   return (
     <Card className="mb-6 border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-900/30">
@@ -372,14 +460,14 @@ function PartialFailureConfirmation({
             </p>
           ) : null}
 
-          {unsupportedFailedModels.length > 0 ? (
+          {modelCatalogState === 'ready' && unsupportedFailedModels.length > 0 ? (
             <p className="mt-2 text-sm text-orange-700 dark:text-orange-300">
               Retry unavailable because these historical models are no longer supported:{' '}
               {unsupportedFailedModelsText}
             </p>
           ) : null}
 
-          {!canProceed ? (
+          {modelCatalogState === 'ready' && !canProceed ? (
             <p className="mt-2 text-sm text-orange-700 dark:text-orange-300">
               Proceed unavailable because the synthesis model{' '}
               {getModelDisplayName(synthesisModel)} is no longer supported.

@@ -46,18 +46,10 @@ import type { ServiceContainer } from '../../services.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
+import { orchestratorHealthV2 } from '../helpers/orchestratorHealth.js';
 
 function dispatchCompatibleHealth(): Record<string, unknown> {
-  return {
-    status: 'ready',
-    capacity: 2,
-    running: 0,
-    available: 2,
-    workerAuths: {},
-    providerApiKeys: {},
-    dockerHealthy: true,
-    diskHealthy: true,
-  };
+  return orchestratorHealthV2();
 }
 
 describe('Worker Settings Routes', () => {
@@ -873,7 +865,7 @@ describe('Worker Settings Routes', () => {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
         },
-        payload: { workerType: 'glm' },
+        payload: { workerType: 'openrouter-free' },
       });
 
       expect(patchResponse.statusCode).toBe(200);
@@ -898,7 +890,7 @@ describe('Worker Settings Routes', () => {
         data: { workers: unknown[]; defaultReviewWorkerType?: string };
       };
       expect(getBody.data.workers).toEqual([]);
-      expect(getBody.data.defaultReviewWorkerType).toBe('glm');
+      expect(getBody.data.defaultReviewWorkerType).toBe('openrouter-free');
     });
 
     it('should return 404 for non-existent worker', async () => {
@@ -1275,7 +1267,7 @@ describe('Worker Settings Routes', () => {
         method: 'PATCH',
         url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
-        payload: { workerType: 'glm' },
+        payload: { workerType: 'openrouter-free' },
       });
 
       expect(response.statusCode).toBe(200);
@@ -1291,7 +1283,7 @@ describe('Worker Settings Routes', () => {
       });
 
       const getBody = JSON.parse(getResponse.body) as { success: boolean; data: { defaultReviewWorkerType?: string } };
-      expect(getBody.data.defaultReviewWorkerType).toBe('glm');
+      expect(getBody.data.defaultReviewWorkerType).toBe('openrouter-free');
     });
 
     it('should reject invalid worker type', async () => {
@@ -1325,12 +1317,13 @@ describe('Worker Settings Routes', () => {
       expect(body.error.message).toContain('Firestore write failed');
     });
 
-    it('should save and return all 4 new default worker type fields via GET', async () => {
+    it('should save and return all 5 newer default worker type fields via GET', async () => {
       const fields = [
         { endpoint: 'default-remediation-worker-type', field: 'defaultRemediationWorkerType', value: 'opus' },
-        { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'glm' },
+        { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'openrouter-free' },
         { endpoint: 'default-planning-worker-type', field: 'defaultPlanningWorkerType', value: 'sonnet' },
         { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'codex' },
+        { endpoint: 'default-sentry-worker-type', field: 'defaultSentryWorkerType', value: 'codex-xhigh' },
       ] as const;
 
       for (const { endpoint, value } of fields) {
@@ -1374,7 +1367,7 @@ describe('Worker Settings Routes', () => {
         method: 'PATCH',
         url: '/worker-settings/default-review-worker-type',
         headers: { Authorization: 'Bearer valid-token' },
-        payload: { workerType: 'glm' },
+        payload: { workerType: 'openrouter-free' },
       });
 
       // Verify it was set
@@ -1384,7 +1377,7 @@ describe('Worker Settings Routes', () => {
         headers: { Authorization: 'Bearer valid-token' },
       });
       const body1 = JSON.parse(getResponse1.body) as { success: boolean; data: { defaultReviewWorkerType?: string } };
-      expect(body1.data.defaultReviewWorkerType).toBe('glm');
+      expect(body1.data.defaultReviewWorkerType).toBe('openrouter-free');
 
       // Now clear it by sending "auto"
       const clearResponse = await app.inject({
@@ -1408,9 +1401,10 @@ describe('Worker Settings Routes', () => {
     it('should clear each default worker type field independently via auto', async () => {
       const fields = [
         { endpoint: 'default-remediation-worker-type', field: 'defaultRemediationWorkerType', value: 'opus' },
-        { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'glm' },
+        { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'openrouter-free' },
         { endpoint: 'default-planning-worker-type', field: 'defaultPlanningWorkerType', value: 'sonnet' },
         { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'codex' },
+        { endpoint: 'default-sentry-worker-type', field: 'defaultSentryWorkerType', value: 'codex-xhigh' },
       ] as const;
 
       // Set all fields
@@ -1444,12 +1438,14 @@ describe('Worker Settings Routes', () => {
           defaultExecutionWorkerType?: string;
           defaultPlanningWorkerType?: string;
           defaultPullRequestWorkerType?: string;
+          defaultSentryWorkerType?: string;
         };
       };
       expect(body.data.defaultRemediationWorkerType).toBeUndefined();
-      expect(body.data.defaultExecutionWorkerType).toBe('glm');
+      expect(body.data.defaultExecutionWorkerType).toBe('openrouter-free');
       expect(body.data.defaultPlanningWorkerType).toBe('sonnet');
       expect(body.data.defaultPullRequestWorkerType).toBe('codex');
+      expect(body.data.defaultSentryWorkerType).toBe('codex-xhigh');
     });
 
     it('should return 500 when clearDefaultWorkerType fails', async () => {

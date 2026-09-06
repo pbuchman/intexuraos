@@ -262,7 +262,7 @@ The summarization pipeline classifies errors as transient or permanent to enable
 | ---------------------------------- | ----------------------------- |
 | Firestore (`bookmarks` collection) | Bookmark persistence          |
 | Pub/Sub (3 topics)                 | Event-driven async processing |
-| Sentry                             | Error reporting               |
+| SentryBox                          | Error reporting               |
 
 ### Decoupled WhatsApp Delivery
 

@@ -30,6 +30,10 @@ import { generateWebhookSecret } from '../utils/secrets.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import {
+  buildGitHubEventTaskId,
+  reserveGitHubEventTask,
+} from '../services/gitHubDispatch/eventTaskReservation.js';
 
 const DEFAULT_LINEAR_FALLBACK_ERROR = 'Linear unavailable';
 
@@ -56,6 +60,7 @@ export interface CreateTaskForPRRequest {
 export type CreateTaskForPRErrorCode =
   | 'user_not_found'
   | 'no_workers_configured'
+  | 'pr_not_open'
   | 'task_creation_failed'
   | 'linear_issue_failed'
   | 'queue_full'
@@ -184,23 +189,55 @@ export async function createTaskForPR(
     }
   }
 
+  const [owner, repo] = repository.split('/');
+  const hasValidRepositoryParts = owner !== undefined && repo !== undefined;
+  const githubToken = hasValidRepositoryParts
+    ? await fetchGitHubToken(deps.userServiceClient, userId, logger)
+    : null;
+
+  if (hasValidRepositoryParts && githubToken !== null) {
+    const statusResult = await deps.gitHubPRClient.getPullRequestStatus(
+      githubToken, owner, repo, prNumber
+    );
+    if (statusResult.ok) {
+      const status = statusResult.value; // @allow-result-access -- narrowed by statusResult.ok
+      if (status.state !== 'open' || status.mergedAt !== null) {
+        logger.info(
+          { repository, prNumber, state: status.state, mergedAt: status.mergedAt },
+          'Skipping PR comment task because PR is not open'
+        );
+        return err({
+          code: 'pr_not_open',
+          message: `Pull request #${String(prNumber)} is ${status.state}${status.mergedAt !== null ? ' and already merged' : ''}`,
+        });
+      }
+    } else if (statusResult.error.code === 'NOT_FOUND') {
+      logger.info({ repository, prNumber }, 'Skipping PR comment task because PR was not found');
+      return err({
+        code: 'pr_not_open',
+        message: `Pull request #${String(prNumber)} was not found`,
+      });
+    } else {
+      logger.warn(
+        { repository, prNumber, error: statusResult.error },
+        'Failed to verify PR status before creating PR comment task'
+      );
+    }
+  }
+
   // Fetch baseBranch from GitHub API when not provided (e.g. issue_comment events
   // where no prior pull_request event was stored)
   let resolvedBaseBranch = request.baseBranch;
   if (resolvedBaseBranch === undefined) {
-    const [owner, repo] = repository.split('/');
-    if (owner !== undefined && repo !== undefined) {
-      const githubToken = await fetchGitHubToken(deps.userServiceClient, userId, logger);
-      if (githubToken !== null) {
-        const branchResult = await deps.gitHubPRClient.getPullRequestBaseBranch(
-          githubToken, owner, repo, prNumber
-        );
-        if (branchResult.ok) {
-          resolvedBaseBranch = branchResult.value; // @allow-result-access -- narrowed by branchResult.ok
-          logger.info({ baseBranch: resolvedBaseBranch, prNumber }, 'Fetched baseBranch from GitHub API');
-        } else {
-          logger.warn({ error: branchResult.error, prNumber }, 'Failed to fetch baseBranch from GitHub API'); // @allow-result-access -- narrowed by !branchResult.ok
-        }
+    if (hasValidRepositoryParts && githubToken !== null) {
+      const branchResult = await deps.gitHubPRClient.getPullRequestBaseBranch(
+        githubToken, owner, repo, prNumber
+      );
+      if (branchResult.ok) {
+        resolvedBaseBranch = branchResult.value; // @allow-result-access -- narrowed by branchResult.ok
+        logger.info({ baseBranch: resolvedBaseBranch, prNumber }, 'Fetched baseBranch from GitHub API');
+      } else {
+        logger.warn({ error: branchResult.error, prNumber }, 'Failed to fetch baseBranch from GitHub API'); // @allow-result-access -- narrowed by !branchResult.ok
       }
     }
   }
@@ -281,8 +318,10 @@ export async function createTaskForPR(
         return ok({ taskId: existingTaskId, isNew: false });
       }
 
-      // Step 4: Create the task
-      const taskId = `task_${crypto.randomUUID()}`;
+      // Step 4: Create the task using a stable event-derived ID. If triage is
+      // replayed after its lease expires, the transaction returns the original
+      // task instead of overwriting it or creating another code task.
+      const taskId = buildGitHubEventTaskId('pr-dispatch', eventId);
       const webhookSecret = generateWebhookSecret(orchestratorSecret, taskId);
       const taskPrompt = buildTaskPrompt(request);
 
@@ -305,7 +344,11 @@ export async function createTaskForPR(
       };
 
       // Pass the outer transaction to avoid nested transactions
-      const createResult = await codeTaskRepo.create(createInput, { transaction });
+      const createResult = await reserveGitHubEventTask({
+        codeTaskRepo,
+        transaction,
+        taskInput: { ...createInput, id: taskId },
+      });
 
       if (!createResult.ok) {
         logger.error(
@@ -317,6 +360,14 @@ export async function createTaskForPR(
           message: createResult.error.message,
           ...('existingTaskId' in createResult.error && { existingTaskId: createResult.error.existingTaskId }),
         });
+      }
+
+      if (!createResult.value.created) {
+        logger.info(
+          { repository, prNumber, taskId, eventId },
+          'GitHub event task already exists; skipping duplicate enqueue',
+        );
+        return ok({ taskId, isNew: false });
       }
 
       // Write lock document within the transaction

@@ -80,6 +80,31 @@ describe('WorkerSettingsPage', () => {
     );
   });
 
+  it('shows the saved Sentry worker type setting', () => {
+    mockUseWorkerSettings.mockReturnValue({
+      settings: { workers: [], defaultSentryWorkerType: 'codex-xhigh' },
+      loading: false,
+      error: null,
+      addWorker: vi.fn(),
+      updateWorker: vi.fn(),
+      deleteWorker: vi.fn(),
+      testConnectivity: vi.fn(),
+      reorderWorkers: vi.fn(),
+      updateDefaultWorkerType: vi.fn(),
+    });
+
+    renderToStaticMarkup(<WorkerSettingsPage />);
+
+    expect(mockDefaultWorkerTypeCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Default SentryBox Model',
+        description: 'Model used for automatic SentryBox issue fixes.',
+        successMessage: 'Default SentryBox model saved',
+        currentType: 'codex-xhigh',
+      })
+    );
+  });
+
   it('passes worker enabled updates through Code Settings row handlers', async () => {
     const updateWorker = vi.fn().mockResolvedValue(undefined);
     mockUseWorkerSettings.mockReturnValue({

@@ -87,34 +87,12 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
         required: true,
       },
       { name: 'linear_issue', alias: ['Linear issue'], kind: 'url', required: true },
-      { name: 'complex_task', alias: ['Complex task'], kind: 'bool01', required: true },
       { name: 'plan_doc', alias: ['Plan doc'], kind: 'bool01', required: true },
-      // `subtask_urls` is conditionally required: empty is valid per the prompt
-      // text "comma-separated full Linear URLs, or empty". Most non-complex
-      // planning tasks emit empty. Keeping this `required: true` would fail every
-      // simple/plan-doc planning task. Treat as optional with empty-alias coercion.
-      {
-        name: 'subtask_urls',
-        alias: ['Subtask URLs'],
-        kind: 'csv',
-        required: false,
-        emptyAliases: DEFAULT_EMPTY_ALIASES,
-      },
       {
         name: 'plan_pr',
         alias: ['Plan PR'],
         kind: 'url',
         required: true,
-        emptyAliases: DEFAULT_EMPTY_ALIASES,
-      },
-      // `parallel_breakdown_proof` is required only when Complex task=1; the live
-      // prompt says "empty otherwise". Enforcing required: true would reject
-      // every simple/plan-doc planning fixture in prod.
-      {
-        name: 'parallel_breakdown_proof',
-        alias: ['Parallel breakdown proof'],
-        kind: 'string',
-        required: false,
         emptyAliases: DEFAULT_EMPTY_ALIASES,
       },
       ...MEMORY_FIELDS_STANDARD,
@@ -232,6 +210,64 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
       { name: 'summary', alias: ['Summary'], kind: 'string', required: true },
     ],
   },
+  sentry: {
+    marker: 'SENTRY_AGENT_FINAL:',
+    fields: [
+      {
+        name: 'outcome',
+        alias: ['Outcome'],
+        kind: 'enum',
+        required: true,
+        enumValues: ['fixed', 'suppressed', 'failed'],
+      },
+      {
+        name: 'pr',
+        alias: ['PR', 'gh_pr_url'],
+        kind: 'url',
+        required: true,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
+      {
+        name: 'sentry_issue',
+        alias: ['Sentry issue'],
+        kind: 'url',
+        required: true,
+      },
+      {
+        name: 'linear_issue',
+        alias: ['Linear issue'],
+        kind: 'url',
+        required: true,
+      },
+      {
+        name: 'verification',
+        alias: ['Verification'],
+        kind: 'string',
+        required: true,
+      },
+      {
+        name: 'reproduction',
+        alias: ['Reproduction'],
+        kind: 'string',
+        required: true,
+      },
+      {
+        name: 'suppression_rationale',
+        alias: ['Suppression rationale'],
+        kind: 'string',
+        required: false,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
+      {
+        name: 'failure_reason',
+        alias: ['Failure reason'],
+        kind: 'string',
+        required: false,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
+      { name: 'summary', alias: ['Summary'], kind: 'string', required: true },
+    ],
+  },
   pull_request: {
     marker: 'PULL_REQUEST_AGENT_FINAL:',
     fields: [
@@ -243,6 +279,13 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
         kind: 'url',
         required: false,
         emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
+      {
+        name: 'pull_request_outcome',
+        alias: ['Pull request outcome', 'Outcome'],
+        kind: 'enum',
+        required: true,
+        enumValues: ['commits_pushed', 'no_changes_needed'],
       },
       {
         name: 'comment_replied',
@@ -287,12 +330,7 @@ export const TIER_BY_WORKER: Record<WorkerType, TelemetryExpectation> = {
   opus: 'required',
   sonnet: 'required',
   auto: 'required',
-  glm: 'optional',
-  minimax: 'optional',
   codex: 'optional',
   'codex-xhigh': 'optional',
-  kimi: 'optional',
-  qwen: 'optional',
-  'mimo-pro': 'optional',
   'openrouter-free': 'optional',
 };

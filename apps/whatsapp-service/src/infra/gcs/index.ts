@@ -1,4 +1,9 @@
 /**
  * GCS infrastructure exports.
  */
-export { GcsMediaStorageAdapter } from './mediaStorageAdapter.js';
+export {
+  classifyGcsFailure,
+  GcsMediaStorageAdapter,
+  type GcsFailureReason,
+  type GcsMediaStorageOptions,
+} from './mediaStorageAdapter.js';

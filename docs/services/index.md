@@ -12,6 +12,7 @@ Catalog for IntexuraOS services, workers, and packages.
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **intex-agent**                  | Unified action workflow for code tasks, research drafts, bookmarks, notes, and calendar actions, with explicit intent gates and WhatsApp session continuity                     |
 | **whatsapp-service**             | Private WhatsApp workspace with private ingest, read-only conversations, sender/day views, Matrix sync, outgoing/group event sync, and preserved group classification           |
+| **message-digest-service**       | WhatsApp group and direct-chat summaries with user-defined schedules and prompts, source-fenced private reads, run history, and delivery through the user's primary WhatsApp mapping |
 | **code-agent**                   | Documentation review dispatch reliability and unified Intex Agent code-task creation path                                                                                        |
 | **orchestrator**                 | More reliable completion finalization when Docker hangs, with reduced handled Sentry noise for code-task reliability paths                                                       |
 | **web**                          | Homepage and README showcase now lead with the current Intex Agent unified actions and private WhatsApp workspace capabilities                                                   |
@@ -21,11 +22,11 @@ Catalog for IntexuraOS services, workers, and packages.
 | Component                         | Key Changes                                                                                                                                                                                                                   |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **fishing-assistant-service**     | New Fishing Assistant RAG foundation with knowledge folders/pages, embedding-backed retrieval, persisted chat history, digest/raw-message evidence, citation validation, ISO response timestamps, and web/mobile chat support |
-| **llm-usage-service**             | Richer cost visibility with prompt-type grouping, research-run cost summaries, image generation metadata, and OpenRouter/MiMo Pro 2.5 model reporting                                                                         |
-| **code-agent**                    | Scheduled execution dispatch, custom per-task timeout overrides, and OpenRouter Gemini 3 Flash Preview for GitHub Agent tool-calling triage                                                                                   |
+| **llm-usage-service**             | Richer cost visibility with prompt-type grouping, research-run cost summaries, image generation metadata, and OpenRouter model reporting                                                                                      |
+| **code-agent**                    | Scheduled execution dispatch, custom per-task timeout overrides, and OpenRouter Gemini 3.6 Flash for GitHub Agent tool-calling triage                                                                                   |
 | **mobile-notifications-service**  | Internal digest evidence routes for Fishing Assistant, cleaned group-message retrieval, digest state lookup, subscription-scoped access, and digest output-language preservation                                               |
 | **whatsapp-service/bookmarks**    | Reliable async recovery paths for WhatsApp bookmark saves and duplicate-safe bookmark replay; bookmark rows remain scannable on mobile                                                                                         |
-| **orchestrator / model catalog**  | Worker presets and usage reporting include Xiaomi MiMo Pro 2.5, OpenRouter catalog support includes Gemini 3 Flash Preview for tool-calling flows, and Grafana Cloud PM2 log dashboards improve ops visibility               |
+| **orchestrator / model catalog**  | Claude, Codex, and OpenRouter worker presets with usage reporting; Grafana Cloud PM2 log dashboards improve operations                                                                                                 |
 
 ## v3.6.0 Highlights (Previous)
 
@@ -34,7 +35,7 @@ Catalog for IntexuraOS services, workers, and packages.
 | **code-worker**                  | Claude resume fix — `--resume <sessionId>` replaces `--continue` for reliable session resumption, `CLAUDE_SESSION_ID` now required for Claude resumes                                                                                                                         |
 | **mobile-notifications-service** | WhatsApp Group Digest pipeline — end-to-end AI-generated daily digests from WhatsApp group messages with headline/bullets summaries, persistent group state, backfill, and WhatsApp delivery via Pub/Sub                                                                      |
 | **hellscript-agent**             | Per-user LLM client resolution via user-service (INT-1369), centralized LLM pricing removal (INT-1387), usage tracking via `HttpInternalAuthUsageSink`                                                                                                                        |
-| **orchestrator**                 | Execution memory pipeline simplification (soft-warning for memory_acknowledgment), log cap raised to 8MB, task timeout default extended to 5h, StatusUpdateClient for redundant status delivery, mimo-pro worker type, test_quality review scope, configurable validation chain for LLM-backed resume/compliance paths |
+| **orchestrator**                 | Execution memory pipeline simplification, 8MB log cap, five-hour default timeout, redundant status delivery, `test_quality` review scope, and an OpenRouter validation chain                                                     |
 | **code-agent**                   | Robust task finalization via dedicated status endpoint, PR triage through Pub/Sub push, important flag for issue groups, GitHub Agent inherits user LLM settings, task mode selector (planning/execution), self-healing failure triage, draft PR blocking                     |
 
 ## v3.5.0 Highlights (Previous)
@@ -66,16 +67,16 @@ Catalog for IntexuraOS services, workers, and packages.
 | Component        | Key Changes                                                                                                                                                                                     |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **code-agent**   | GitHub Agent with tool calling, unified PR automation log, structured output triage with auto-repair                                                                                            |
-| **orchestrator** | Review Agent, Execution Deep Validator, Kimi worker type, Docker health gate, fatal exit codes, PR branch inheritance, mandatory /simplify, already-completed outcome, reliability improvements |
+| **orchestrator** | Review Agent, Execution Deep Validator, Docker health gate, fatal exit codes, PR branch inheritance, mandatory /simplify, already-completed outcome, reliability improvements                   |
 | **web**          | Code Task Detail Page V2 (issue-centric grouped view), workers status in user menu                                                                                                              |
-| **Platform**     | Alibaba Cloud Model Studio integration replacing ZAI (GLM-5, Qwen, Kimi), Gemini tool-call mode                                                                                                 |
+| **Platform**     | Expanded model routing and tool-call support                                                                                                                                                     |
 
 ## v3.2.0 Highlights (Previous)
 
 | Component            | Key Changes                                                                          |
 | -------------------- | ------------------------------------------------------------------------------------ |
 | **code-agent**       | Agent-based routing, implement button lifecycle, task queueing, PR comment tasks     |
-| **orchestrator**     | Label-based dispatch, Qwen/Sonnet/MiniMax worker types, automatic container cleanup  |
+| **orchestrator**     | Label-based dispatch and automatic container cleanup                              |
 | **whatsapp-service** | CTA buttons with deep links, task progress notifications                             |
 | **transcription**    | Event-driven audio processing, user-level language preferences                       |
 | **linear-agent**     | Live data hydration                                                                  |
@@ -110,16 +111,12 @@ Catalog for IntexuraOS services, workers, and packages.
 
 ## AI Capabilities Overview
 
-IntexuraOS integrates **5 core LLM providers** with **15 LLM contract models** across active app services:
+Active app services execute LLM, Research, image, and embedding calls through **OpenRouter**. Historical model/provider types remain readable, and Claude/Codex code-task runtimes remain a separate orchestrator boundary.
 
 ```mermaid
 graph TB
     subgraph "AI Providers"
-        G[Google<br>Gemini 2.5 / 2.0]
-        O[OpenAI<br>GPT-5.4 / GPT Image]
-        A[Anthropic<br>Claude 4.6 / 4.7]
-        P[Perplexity<br>Sonar Pro]
-        OR[OpenRouter<br>Curated model catalog]
+        OR[OpenRouter<br>Text, tools, Research, images, embeddings]
     end
 
     subgraph "Primary AI Agents"
@@ -130,15 +127,10 @@ graph TB
         F[fishing-assistant-service]
     end
 
-    R --> G
-    R --> O
-    R --> A
-    R --> P
     R --> OR
     X --> OR
-    I --> O
-    I --> G
-    B --> G
+    I --> OR
+    B --> OR
     F --> OR
 ```
 
@@ -150,44 +142,45 @@ graph TB
 
 | Service                                      | AI Models              | Capability                                      |
 | -------------------------------------------- | ---------------------- | ----------------------------------------------- |
-| [research-agent](research-agent/features.md) | 10 static research models + OpenRouter | Parallel queries, synthesis, confidence scoring |
+| [research-agent](research-agent/features.md) | 16 curated OpenRouter models; maximum 6 per run | Parallel queries, synthesis, confidence scoring |
 
 ### Direct Tool Conversations
 
 | Service                                | AI Models                        | Capability                                    |
 | -------------------------------------- | -------------------------------- | --------------------------------------------- |
-| [intex-agent](intex-agent/features.md) | OpenRouter Gemini 3 Flash Preview | WhatsApp text conversations with direct tools |
+| [intex-agent](intex-agent/features.md) | OpenRouter Gemini 3.6 Flash | WhatsApp text conversations with direct tools |
 
 ### Image Generation
 
 | Service                                    | AI Models                       | Capability                       |
 | ------------------------------------------ | ------------------------------- | -------------------------------- |
-| [image-service](image-service/features.md) | GPT Image 1, Gemini Flash Image | Cover images, prompt enhancement |
+| [image-service](image-service/features.md) | `gpt-image-1` and `gpt-4.1` aliases via OpenRouter | Cover images, prompt enhancement |
 
 ### Content Intelligence
 
 | Service                                        | AI Models          | Capability                            |
 | ---------------------------------------------- | ------------------ | ------------------------------------- |
 | [bookmarks-agent](bookmarks-agent/features.md) | Via web-agent      | Link summarization                    |
-| [web-agent](web-agent/features.md)             | Gemini 2.5 Flash   | Content extraction, summarization     |
+| [web-agent](web-agent/features.md)             | OpenRouter         | Content extraction, summarization     |
+| [message-digest-service](message-digest-service/features.md) | OpenRouter configured model | WhatsApp group and direct-chat summaries |
 
 ### Conversational AI
 
 | Service                              | AI Models                        | Capability                                        |
 | ------------------------------------ | -------------------------------- | ------------------------------------------------- |
-| [fishing-assistant-service](fishing-assistant-service/features.md) | OpenRouter Gemini 3 Flash Preview | Grounded fishing chat over knowledge, digests, and raw-message evidence |
+| [fishing-assistant-service](fishing-assistant-service/features.md) | OpenRouter Gemini 3.6 Flash | Grounded fishing chat over knowledge, digests, and raw-message evidence |
 
 ### Autonomous Code Execution
 
 | Service                              | AI Models                                        | Capability                                                                                    |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [code-agent](code-agent/features.md) | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | GitHub Agent with tool calling, unified PR log, task queueing, PR creation via worker presets |
+| [code-agent](code-agent/features.md) | Claude, Codex, OpenRouter | GitHub Agent with tool calling, unified PR log, task queueing, PR creation via worker presets |
 
 ### Writing Assistance
 
 | Service                                                  | AI Models        | Capability                                                                                  |
 | -------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- |
-| [hellscript-agent](hellscript-agent/features.md)         | Gemini 2.5 Flash | Intent interpretation, thought accumulation, categorized writing config, draft generation   |
+| [hellscript-agent](hellscript-agent/features.md)         | OpenRouter       | Intent interpretation, thought accumulation, categorized writing config, draft generation   |
 
 ### Messaging & Transcription
 
@@ -206,14 +199,15 @@ Services that directly invoke AI models for their core functionality.
 
 | Service                                                | Purpose                            | AI                                               | Docs                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | ---------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [intex-agent](intex-agent/features.md)                 | WhatsApp text direct tools         | OpenRouter Gemini 3 Flash Preview                | [features](intex-agent/features.md) / [technical](intex-agent/technical.md) / [tutorial](intex-agent/tutorial.md) / [debt](intex-agent/technical-debt.md) / [agent](intex-agent/agent.md)                                        |
-| [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Gemini, Claude, GPT, Sonar                       | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
-| [image-service](image-service/features.md)             | AI image generation                | GPT Image 1, Gemini Flash Image                  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
+| [intex-agent](intex-agent/features.md)                 | WhatsApp text direct tools         | OpenRouter Gemini 3.6 Flash                | [features](intex-agent/features.md) / [technical](intex-agent/technical.md) / [tutorial](intex-agent/tutorial.md) / [debt](intex-agent/technical-debt.md) / [agent](intex-agent/agent.md)                                        |
+| [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Curated OpenRouter catalog, maximum 6 models     | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
+| [image-service](image-service/features.md)             | AI image generation                | GPT aliases executed through OpenRouter          | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
 | [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries  | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
-| [web-agent](web-agent/features.md)                     | Web scraping with AI               | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
-| [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3 Flash Preview + OpenAI embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
-| [code-agent](code-agent/features.md)                   | Autonomous code execution          | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
-| [hellscript-agent](hellscript-agent/features.md)       | Voice-to-draft writing assistant   | Gemini 2.5 Flash                                 | [features](hellscript-agent/features.md) / [technical](hellscript-agent/technical.md) / [tutorial](hellscript-agent/tutorial.md) / [debt](hellscript-agent/technical-debt.md) / [agent](hellscript-agent/agent.md)                |
+| [web-agent](web-agent/features.md)                     | Web scraping with AI               | OpenRouter                                       | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
+| [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3.6 Flash + OpenRouter embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
+| [message-digest-service](message-digest-service/features.md) | Scheduled private WhatsApp summaries | Configured OpenRouter model | [features](message-digest-service/features.md) / [technical](message-digest-service/technical.md) / [tutorial](message-digest-service/tutorial.md) / [debt](message-digest-service/technical-debt.md) / [agent](message-digest-service/agent.md) |
+| [code-agent](code-agent/features.md)                   | Autonomous code execution          | Claude, Codex, OpenRouter                        | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
+| [hellscript-agent](hellscript-agent/features.md)       | Voice-to-draft writing assistant   | OpenRouter                                       | [features](hellscript-agent/features.md) / [technical](hellscript-agent/technical.md) / [tutorial](hellscript-agent/tutorial.md) / [debt](hellscript-agent/technical-debt.md) / [agent](hellscript-agent/agent.md)                |
 
 ### Content Management Agents
 
@@ -223,7 +217,7 @@ Services that manage user content with AI-enhanced features.
 | -------------------------------------------- | --------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [notes-agent](notes-agent/features.md)       | Note-taking                 | -              | [features](notes-agent/features.md) / [technical](notes-agent/technical.md) / [tutorial](notes-agent/tutorial.md) / [debt](notes-agent/technical-debt.md) / [agent](notes-agent/agent.md)                |
 | [calendar-agent](calendar-agent/features.md) | Google Calendar integration | Date parsing   | [features](calendar-agent/features.md) / [technical](calendar-agent/technical.md) / [tutorial](calendar-agent/tutorial.md) / [debt](calendar-agent/technical-debt.md) / [agent](calendar-agent/agent.md) |
-| [linear-agent](linear-agent/features.md)     | Linear issue management     | Gemini, GLM    | [features](linear-agent/features.md) / [technical](linear-agent/technical.md) / [tutorial](linear-agent/tutorial.md) / [debt](linear-agent/technical-debt.md) / [agent](linear-agent/agent.md)           |
+| [linear-agent](linear-agent/features.md)     | Linear issue management     | OpenRouter     | [features](linear-agent/features.md) / [technical](linear-agent/technical.md) / [tutorial](linear-agent/tutorial.md) / [debt](linear-agent/technical-debt.md) / [agent](linear-agent/agent.md)           |
 
 ### Infrastructure Services
 
@@ -231,9 +225,9 @@ Core platform services that support the AI agents.
 
 | Service                                                                  | Purpose                                             | AI              | Docs                                                                                                                                                                                                                                                                           |
 | ------------------------------------------------------------------------ | --------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [whatsapp-service](whatsapp-service/features.md)                         | WhatsApp text messaging and notification filter      | Intex route     | [features](whatsapp-service/features.md) / [technical](whatsapp-service/technical.md) / [tutorial](whatsapp-service/tutorial.md) / [debt](whatsapp-service/technical-debt.md) / [agent](whatsapp-service/agent.md)                                                             |
+| [whatsapp-service](whatsapp-service/features.md)                         | WhatsApp messaging, private source, and delivery      | Intex route     | [features](whatsapp-service/features.md) / [technical](whatsapp-service/technical.md) / [tutorial](whatsapp-service/tutorial.md) / [debt](whatsapp-service/technical-debt.md) / [agent](whatsapp-service/agent.md)                                                             |
 | [user-service](user-service/features.md)                                 | Auth, API keys, model prefs                         | LLM validation  | [features](user-service/features.md) / [technical](user-service/technical.md) / [tutorial](user-service/tutorial.md) / [debt](user-service/technical-debt.md) / [agent](user-service/agent.md)                                                                                 |
-| [mobile-notifications-service](mobile-notifications-service/features.md) | Notification capture + WhatsApp digest              | OpenRouter LLM  | [features](mobile-notifications-service/features.md) / [technical](mobile-notifications-service/technical.md) / [tutorial](mobile-notifications-service/tutorial.md) / [debt](mobile-notifications-service/technical-debt.md) / [agent](mobile-notifications-service/agent.md) |
+| [mobile-notifications-service](mobile-notifications-service/features.md) | Android notification capture and query               | -               | [features](mobile-notifications-service/features.md) / [technical](mobile-notifications-service/technical.md) / [tutorial](mobile-notifications-service/tutorial.md) / [debt](mobile-notifications-service/technical-debt.md) / [agent](mobile-notifications-service/agent.md) |
 | [notion-service](notion-service/features.md)                             | Notion integration                                  | -               | [features](notion-service/features.md) / [technical](notion-service/technical.md) / [tutorial](notion-service/tutorial.md) / [debt](notion-service/technical-debt.md) / [agent](notion-service/agent.md)                                                                       |
 | [app-settings-service](app-settings-service/features.md)                 | Platform config and health anchor                   | -               | [features](app-settings-service/features.md) / [technical](app-settings-service/technical.md) / [tutorial](app-settings-service/tutorial.md) / [debt](app-settings-service/technical-debt.md) / [agent](app-settings-service/agent.md)                                         |
 | [llm-usage-service](llm-usage-service/features.md)                       | LLM usage tracking and cost                         | -               | [features](llm-usage-service/features.md) / [technical](llm-usage-service/technical.md) / [tutorial](llm-usage-service/tutorial.md) / [debt](llm-usage-service/technical-debt.md) / [agent](llm-usage-service/agent.md)                                                        |
@@ -264,7 +258,7 @@ Cloud Functions and local services that run outside Cloud Run.
 
 ### Worker Details
 
-**orchestrator** — Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated execution environments, spawns code-worker sessions in Docker containers via Claude or Codex runtimes, and reports results via webhooks. Supports worker type presets across Anthropic (opus, auto, sonnet), MiniMax (minimax/M2.7), Xiaomi MiMo Pro 2.5 (mimo-pro), Alibaba Cloud Model Studio (glm/glm-5, qwen/qwen3.5-plus), Kimi Code (kimi/kimi-for-coding), Codex (`codex`, `codex-xhigh`), and OpenRouter (`openrouter-free`). Features 6 agent types (planning, execution, pull_request, review, remediation, ask_agent), Gemini-based completion verification with agent-specific Zod schemas, Agent Compliance Validator (OpenRouter-based transcript audit), Execution Memory Graph for cross-task learning, Remediation Agent for autonomous review finding fixes, Ask Agent for interactive Q&A sessions, selective container preservation by agent type, a five-hour default task timeout, versioned system prompts via PromptBuilder, forensics mode, and mid-task messaging.
+**orchestrator** — Runs on local machines behind Cloudflare Tunnel. It receives signed tasks, creates isolated Docker workspaces, and reports results through signed callbacks. Worker types are limited to subscription-authenticated Claude (`auto`, `opus`, `sonnet`), subscription-authenticated Codex (`codex`, `codex-xhigh`), and OpenRouter (`openrouter-free`). Completion contracts are deterministic; transcript compliance validation uses OpenRouter.
 
 **code-worker** is a Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, Codex CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
 
@@ -305,18 +299,17 @@ Shared libraries used across apps and workers.
 
 | Package                                                    | Provider                   | Capabilities                                    |
 | ---------------------------------------------------------- | -------------------------- | ----------------------------------------------- |
-| [infra-claude](../packages/infra-claude/README.md)         | Anthropic                  | Text generation, web search, prompt caching     |
-| [infra-gemini](../packages/infra-gemini/README.md)         | Google                     | Text generation, web search, image gen          |
-| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI                     | Text generation, web search, DALL-E             |
-| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity                 | SSE-streamed research with citations            |
-| [infra-openrouter](../packages/infra-openrouter/README.md) | OpenRouter                 | OpenRouter API client for dynamic model routing |
+| [infra-claude](../packages/infra-claude/README.md)         | Anthropic (retained)       | Inactive direct adapter kept for compatibility  |
+| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI (retained)          | Inactive direct adapter kept for compatibility  |
+| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity (retained)      | Inactive direct adapter kept for compatibility  |
+| [infra-openrouter](../packages/infra-openrouter/README.md) | OpenRouter                 | Text, chat, tools, Research, images, embeddings |
 
 ### LLM Stack
 
 | Package                                            | Purpose                                                    |
 | -------------------------------------------------- | ---------------------------------------------------------- |
 | [llm-contract](../packages/llm-contract/README.md) | Model/provider types, LLMClient interface, pricing types   |
-| [llm-factory](../packages/llm-factory/README.md)   | Unified factory for creating provider-specific LLM clients |
+| [llm-factory](../packages/llm-factory/README.md)   | OpenRouter-only executable text, chat, and tool factory     |
 | [llm-prompts](../packages/llm-prompts/README.md)   | Centralized prompt templates and Zod response schemas      |
 | [llm-pricing](../packages/llm-pricing/README.md)   | Runtime pricing lookups, usage logging to Firestore        |
 | [llm-utils](../packages/llm-utils/README.md)       | Token redaction, LLM parse error handling, Zod formatting  |
@@ -336,23 +329,9 @@ Shared libraries used across apps and workers.
 
 ## AI Models Used
 
-### Research Models (10 static + OpenRouter)
+### Research Models (OpenRouter)
 
-Used for deep research queries with parallel execution. **v2.0.0:** Users can specify models in natural language ("research with Claude and GPT").
-
-| Model                 | Provider   | Specialty            |
-| --------------------- | ---------- | -------------------- |
-| Gemini 2.5 Pro        | Google     | Reasoning, analysis  |
-| Gemini 2.5 Flash      | Google     | Fast responses       |
-| GPT-5.4               | OpenAI     | Creative synthesis   |
-| o4-mini-deep-research | OpenAI     | Deep research        |
-| Claude Opus 4.6       | Anthropic  | Nuanced analysis     |
-| Claude Sonnet 4.6     | Anthropic  | Balanced performance |
-| Claude Sonnet 4.7     | Anthropic  | Balanced performance |
-| Sonar                 | Perplexity | Real-time web search |
-| Sonar Pro             | Perplexity | Enhanced search      |
-| Sonar Deep Research   | Perplexity | Comprehensive search |
-| OpenRouter model IDs  | OpenRouter | Curated dynamic model routing |
+Used for deep research queries with parallel execution. The UI lists the curated OpenRouter catalog first, and new requests accept at most six unique `or:` model IDs. Stored reports retain exact retired model IDs and provider labels for historical display without writeback.
 
 ### Fast Conversation Models (1)
 
@@ -360,27 +339,20 @@ Used for direct WhatsApp text conversations and fast tool-call decisions.
 
 | Model                  | Provider   | Use Case                                |
 | ---------------------- | ---------- | --------------------------------------- |
-| Gemini 3 Flash Preview | OpenRouter | Intex tool selection and concise replies |
+| Gemini 3.6 Flash | OpenRouter | Intex tool selection and concise replies |
 
-### Image Models (2)
+### Image Models
 
 Used for image generation:
 
-| Model                     | Provider | Capability            |
-| ------------------------- | -------- | --------------------- |
-| GPT-Image-1 (GPT Image 1) | OpenAI   | High-quality images   |
-| Gemini 2.5 Flash Image    | Google   | Fast image generation |
+| Public alias | Provider   | Capability          |
+| ------------ | ---------- | ------------------- |
+| `gpt-image-1` | OpenRouter | Image generation    |
+| `gpt-4.1`     | OpenRouter | Prompt enhancement  |
 
-### Validation Models (4)
+### LLM Key Validation
 
-Used for API key validation (cheap, fast):
-
-| Model            | Provider   |
-| ---------------- | ---------- |
-| Claude Haiku 3.5 | Anthropic  |
-| Gemini 2.0 Flash | Google     |
-| GPT-4o Mini      | OpenAI     |
-| Sonar            | Perplexity |
+The only configurable LLM credential is OpenRouter. User-service validates it through the zero-cost `/api/v1/key` endpoint; active settings expose `user`, `platform`, or `unavailable` access.
 
 ---
 

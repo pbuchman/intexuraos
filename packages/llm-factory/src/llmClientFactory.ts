@@ -2,7 +2,7 @@
  * LLM Client Factory
  *
  * Provides a unified interface for creating LLM clients
- * across different providers (Google, Anthropic, OpenAI, Perplexity, OpenRouter).
+ * across different providers (Anthropic, OpenAI, Perplexity, OpenRouter).
  *
  * @packageDocumentation
  *
@@ -16,7 +16,7 @@
  *
  * const client = createLlmClient({
  *   apiKey: 'sk-...',
- *   model: 'gemini-2.5-flash',
+ *   model: 'or:google/gemini-3.6-flash',
  *   userId: 'user-123',
  *   logger: pinoLogger,
  *   usageSink: myUsageSink,
@@ -29,38 +29,36 @@
  * ```
  */
 
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { createGeminiToolCallingClient } from '@intexuraos/infra-gemini';
 import { createOpenRouterToolCallingClient } from '@intexuraos/infra-openrouter';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   getOpenRouterRawId,
-  getProviderForModel,
   isOpenRouterModel,
   isToolCallingModel,
-  isValidModel,
   LlmProviders,
-  type Gemini25Flash,
+  type GenerateChatOptions,
+  type GenerateChatResult,
+  type GenerateChatStreamEvent,
+  type MatrixCorpusLlmCallContextV1,
+  type MatrixCorpusProviderCallUsageV1,
   type LLMError,
   type LLMModel,
+  type LlmChatMessage,
+  type LlmResponseFormat,
+  type OpenRouterModelId,
   type ToolCallingClient,
   type ToolCallingModel,
   type OwnerType,
 } from '@intexuraos/llm-contract';
 import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
-import { createClaudeGenerateClient } from './claudeGenerateClient.js';
-import { createGptGenerateClient } from './gptGenerateClient.js';
-import { createPerplexityGenerateClient } from './perplexityGenerateClient.js';
 import { IntexuraOSError, type Logger, type Result } from '@intexuraos/common-core';
 
 /**
- * Configuration for creating an LLM client.
+ * Shared configuration retained by executable and rollback-only adapters.
  */
-export interface LlmClientConfig {
+export interface LlmClientBaseConfig {
   /** API key for the LLM provider */
   apiKey: string;
-  /** Model identifier (e.g., 'gemini-2.5-flash') */
-  model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
   /** Logger for structured LLM usage logging */
@@ -73,6 +71,22 @@ export interface LlmClientConfig {
    * Pass 'user' for calls initiated directly by a human (e.g. chat, code tasks).
    */
   ownerType?: OwnerType;
+  /** Optional provider request timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Optional transient provider attempt cap. */
+  maxAttempts?: number;
+  /** Optional absolute wall-clock deadline shared by provider calls. */
+  deadlineAtMs?: number;
+}
+
+/** Configuration for creating a new application LLM client. */
+export interface LlmClientConfig extends LlmClientBaseConfig {
+  model: OpenRouterModelId;
+}
+
+/** Internal rollback-only configuration for direct-provider adapter tests. */
+export interface LegacyDirectLlmClientConfig extends LlmClientBaseConfig {
+  model: LLMModel;
 }
 
 export interface ToolCallingClientConfig {
@@ -82,6 +96,12 @@ export interface ToolCallingClientConfig {
   logger: Logger;
   usageSink: UsageSink;
   ownerType?: OwnerType;
+  /** Optional provider request timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Optional transient provider attempt cap. */
+  maxAttempts?: number;
+  /** Optional absolute wall-clock deadline shared by provider calls. */
+  deadlineAtMs?: number;
 }
 
 /**
@@ -96,7 +116,9 @@ export interface GenerateResult {
     outputTokens: number;
     totalTokens: number;
     costUsd: number;
+    providerReportedUsd?: number;
   };
+  providerCall?: MatrixCorpusProviderCallUsageV1;
 }
 
 /**
@@ -105,6 +127,8 @@ export interface GenerateResult {
 export interface GenerateOptions {
   /** Semantic identifier for the prompt type (e.g., 'linear-issue-title', 'code-worker-validation') */
   promptType: string;
+  /** Optional provider-enforced response shape. */
+  responseFormat?: LlmResponseFormat;
   /**
    * Optional per-call correlation overrides. Threaded through to the
    * usage event's `correlation` block so attribution to a specific
@@ -117,6 +141,7 @@ export interface GenerateOptions {
     taskId?: string | null;
     requestId?: string | null;
   };
+  matrixCorpusContext?: MatrixCorpusLlmCallContextV1;
 }
 
 /**
@@ -131,18 +156,23 @@ export interface LlmGenerateClient {
    * @returns Result with content and usage, or error
    */
   generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
+
+  generateChat?(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ): Promise<Result<GenerateChatResult, LLMError>>;
+
+  generateChatStream?(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions,
+    onEvent: (event: GenerateChatStreamEvent) => void
+  ): Promise<Result<GenerateChatResult, LLMError>>;
 }
 
 /**
- * Supported providers for the factory.
- * App-side: Google, Anthropic, OpenAI, Perplexity, and OpenRouter are supported.
+ * Supported provider for new application calls.
  */
-type SupportedProvider =
-  | typeof LlmProviders.Google
-  | typeof LlmProviders.Anthropic
-  | typeof LlmProviders.OpenAI
-  | typeof LlmProviders.Perplexity
-  | typeof LlmProviders.OpenRouter;
+type SupportedProvider = typeof LlmProviders.OpenRouter;
 
 /**
  * Maps model to provider and creates the appropriate client.
@@ -153,10 +183,10 @@ type SupportedProvider =
  *
  * @example
  * ```ts
- * // Create Gemini client
- * const geminiClient = createLlmClient({
+ * // Create a Gemini client routed through OpenRouter
+ * const geminiViaOpenRouter = createLlmClient({
  *   apiKey: 'sk-...',
- *   model: 'gemini-2.5-flash',
+ *   model: 'or:google/gemini-3.6-flash',
  *   userId: 'user-123',
  *   logger: pinoLogger,
  *   usageSink: myUsageSink,
@@ -166,54 +196,28 @@ type SupportedProvider =
 export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
   const model = config.model as string;
 
-  // OpenRouter models (or: prefix) are routed to the OpenRouter client
-  if (isOpenRouterModel(model)) {
-    return createOpenRouterGenerateClient(config);
+  if (!isOpenRouterModel(model)) {
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
+      `Direct LLM model '${model}' is disabled; use an or: OpenRouter model`
+    );
   }
 
-  // Validate model is a known static model
-  if (!isValidModel(config.model)) {
-    throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
-  }
-
-  // Static models: dispatch on provider
-  const providerForModel = getProviderForModel(config.model);
-  switch (providerForModel) {
-    case LlmProviders.Google:
-      return createGeminiClient(config);
-    case LlmProviders.Anthropic:
-      return createClaudeGenerateClient(config);
-    case LlmProviders.OpenAI:
-      return createGptGenerateClient(config);
-    case LlmProviders.Perplexity:
-      return createPerplexityGenerateClient(config);
-    default:
-      // OpenRouter (or any future provider not in the switch) lands here. Static
-      // OpenRouter models don't exist in MODEL_PROVIDER_MAP — the `or:` prefix
-      // path above handles every OpenRouter call. Throwing keeps the factory
-      // closed under unknown providers.
-      throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM provider: ${providerForModel}`);
-  }
+  return createOpenRouterGenerateClient(config);
 }
 
 /**
  * Type guard to check if a provider is supported by the factory.
  */
 export function isSupportedProvider(provider: string): provider is SupportedProvider {
-  return (
-    provider === LlmProviders.Google ||
-    provider === LlmProviders.Anthropic ||
-    provider === LlmProviders.OpenAI ||
-    provider === LlmProviders.Perplexity ||
-    provider === LlmProviders.OpenRouter
-  );
+  return provider === LlmProviders.OpenRouter;
 }
 
 /**
  * Create a tool calling client for LLM agent loops.
  *
  * Routes to the appropriate provider-specific tool calling implementation.
- * Currently supports Google (Gemini) and OpenRouter.
+ * Direct Google calls are disabled; tool calling is routed through OpenRouter.
  *
  * @param config - Tool calling client configuration
  * @returns ToolCallingClient instance
@@ -221,32 +225,10 @@ export function isSupportedProvider(provider: string): provider is SupportedProv
 export function createToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const model = config.model as string;
 
-  if (isOpenRouterModel(model)) {
-    if (!isToolCallingModel(model)) {
-      throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
-    }
-
-    return createOpenRouterToolCallingClient({
-      apiKey: config.apiKey,
-      model: getOpenRouterRawId(model),
-      userId: config.userId,
-      logger: config.logger,
-      usageSink: config.usageSink,
-      ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
-    });
-  }
-
-  // Validate model is supported
-  if (!isValidModel(model)) {
-    throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
-  }
-
-  // Verify provider is Google (only supported provider for tool calling)
-  const providerForModel = getProviderForModel(model);
-  if (providerForModel !== LlmProviders.Google) {
+  if (!isOpenRouterModel(model)) {
     throw new IntexuraOSError(
       'INVALID_REQUEST',
-      `Tool calling not supported for provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
+      `Direct LLM model '${model}' is disabled; use an or: OpenRouter model`
     );
   }
 
@@ -254,12 +236,17 @@ export function createToolCallingClient(config: ToolCallingClientConfig): ToolCa
     throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
   }
 
-  return createGeminiToolCallingClient({
+  return createOpenRouterToolCallingClient({
     apiKey: config.apiKey,
-    model: model as Gemini25Flash,
+    model: getOpenRouterRawId(model),
     userId: config.userId,
     logger: config.logger,
     usageSink: config.usageSink,
+    ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
+    ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
+    ...(config.maxAttempts !== undefined && { maxAttempts: config.maxAttempts }),
+    ...(config.deadlineAtMs !== undefined && { deadlineAtMs: config.deadlineAtMs }),
+    evidenceModelId: model,
   });
 }
 

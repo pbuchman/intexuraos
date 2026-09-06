@@ -56,7 +56,6 @@ The monorepo contains 29 packages:
 | ------------------------------ | ------------------------------------------------------ |
 | `@intexuraos/infra-claude`     | Anthropic Claude API client                            |
 | `@intexuraos/infra-firestore`  | Firestore client initialization                        |
-| `@intexuraos/infra-gemini`     | Google Gemini API client                               |
 | `@intexuraos/infra-gpt`        | OpenAI GPT API client                                  |
 | `@intexuraos/infra-notion`     | Notion API client wrapper                              |
 | `@intexuraos/infra-openrouter` | OpenAI-compatible client for the OpenRouter aggregator |

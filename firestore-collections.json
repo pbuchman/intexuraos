@@ -34,6 +34,34 @@
       "owner": "whatsapp-service",
       "description": "Tracking of outbound WhatsApp messages with wamid and correlationId for reply matching"
     },
+    "whatsapp_outbound_delivery_receipts": {
+      "owner": "whatsapp-service",
+      "description": "Hashed idempotency receipts that suppress duplicate Matrix-corpus WhatsApp sends without storing raw delivery keys or message bodies"
+    },
+    "message_digest_definitions": {
+      "owner": "message-digest-service",
+      "description": "Owner-scoped WhatsApp Message Digest definitions with source-generation fences, schedules, lifecycle/readiness state, and no stored recipient phone number"
+    },
+    "message_digest_runs": {
+      "owner": "message-digest-service",
+      "description": "Immutable lifecycle-fenced Message Digest history containing sanitized summaries and opaque evidence references, never raw source messages or phone numbers"
+    },
+    "message_digest_states": {
+      "owner": "message-digest-service",
+      "description": "Per-definition durable checkpoint, bounded sanitized continuity memory, predecessor hash, and single pending-window reservation retained with its definition"
+    },
+    "message_digest_dispatch_outbox": {
+      "owner": "message-digest-service",
+      "description": "Exact-byte durable run and WhatsApp-delivery publication intents retained until terminal recovery and removed with definition erasure"
+    },
+    "message_digest_erasure_requests": {
+      "owner": "message-digest-service",
+      "description": "Bounded idempotent Message Digest erasure progress; completed content-free tombstones expire through Firestore TTL after 30 days"
+    },
+    "message_digest_migration_activations": {
+      "owner": "message-digest-service",
+      "description": "Durable staged Fishing migration and coordinated cutover state containing only owner/definition identifiers, safe counts, hashes, lease, and checkpoints"
+    },
     "whatsapp_phone_verifications": {
       "owner": "whatsapp-service",
       "description": "Phone number verification codes with TTL-based expiry for WhatsApp connection"
@@ -50,6 +78,14 @@
       "owner": "whatsapp-service",
       "description": "Read-only private WhatsApp messages synchronized from Matrix/mautrix bridge events. Separate from WhatsApp Business API messages and mobile notifications."
     },
+    "whatsapp_private_context_changes": {
+      "owner": "whatsapp-service",
+      "description": "Immutable sanitized before/after projection journal for exact private WhatsApp conversation context reconstruction."
+    },
+    "whatsapp_private_erasure_requests": {
+      "owner": "whatsapp-service",
+      "description": "Content-free, generation-fenced progress records for idempotent private WhatsApp privacy erasure."
+    },
     "whatsapp_private_senders": {
       "owner": "whatsapp-service",
       "description": "Per-private-WhatsApp-sender profile aggregate keyed by source account and sender identity."
@@ -57,6 +93,51 @@
     "whatsapp_private_sender_days": {
       "owner": "whatsapp-service",
       "description": "Per-private-WhatsApp-sender daily aggregates for time-range reads and future daily summaries."
+    },
+    "whatsapp_conversation_assistant_sessions": {
+      "owner": "whatsapp-service",
+      "description": "Private WhatsApp Conversation Assistant sessions with frozen transcript snapshots and public metadata."
+    },
+    "whatsapp_conversation_assistant_transcript_chunks": {
+      "owner": "whatsapp-service",
+      "description": "Chunked frozen transcript text for private WhatsApp Conversation Assistant sessions."
+    },
+    "whatsapp_conversation_assistant_context_chunks": {
+      "owner": "whatsapp-service",
+      "description": "Versioned structured message snapshots used to audit included and omitted private WhatsApp Conversation Assistant context."
+    },
+    "whatsapp_conversation_assistant_context_attachments": {
+      "owner": "whatsapp-service",
+      "description": "Immutable pending and committed WhatsApp context update metadata linked to one Conversation Assistant question."
+    },
+    "whatsapp_conversation_assistant_turn_requests": {
+      "owner": "whatsapp-service",
+      "description": "Durable idempotency, lease, and recovery state for Conversation Assistant turn requests."
+    },
+    "whatsapp_conversation_assistant_turns": {
+      "owner": "whatsapp-service",
+      "description": "Autosaved user and assistant turns for private WhatsApp Conversation Assistant sessions."
+    },
+    "matrix_corpus_run_leases": {
+      "owner": "whatsapp-service",
+      "description": "Home Dev Matrix corpus run leases and lifecycle fences.",
+      "subcollections": ["runs", "renew_receipts", "capability_issuance_receipts"]
+    },
+    "matrix_corpus_capabilities": {
+      "owner": "whatsapp-service",
+      "description": "Single-use Home Dev Matrix corpus transport capabilities."
+    },
+    "matrix_corpus_ingest_outbox": {
+      "owner": "whatsapp-service",
+      "description": "Durable signed Matrix corpus ingest delivery outbox."
+    },
+    "matrix_corpus_terminal_control_outbox": {
+      "owner": "whatsapp-service",
+      "description": "Durable signed Matrix corpus terminal-control delivery outbox."
+    },
+    "matrix_corpus_transport_receipts": {
+      "owner": "whatsapp-service",
+      "description": "Matrix corpus transport acknowledgements correlated to current run fences."
     },
     "mobile_notifications": {
       "owner": "mobile-notifications-service",
@@ -94,6 +175,50 @@
       "owner": "intex-agent",
       "description": "Chronological timeline events for intex-agent WhatsApp Assistant sessions, including user messages, assistant replies, clarifications, tool calls, and close events."
     },
+    "intex_agent_matrix_corpus_ingest_receipts": {
+      "owner": "intex-agent",
+      "description": "Replay-safe receipts for verified Matrix corpus ingest envelopes."
+    },
+    "intex_agent_matrix_corpus_test_confirmations": {
+      "owner": "intex-agent",
+      "description": "Isolated Matrix corpus confirmation records."
+    },
+    "intex_agent_matrix_corpus_run_manifests": {
+      "owner": "intex-agent",
+      "description": "Immutable owner and fence manifests for Matrix corpus runs."
+    },
+    "intex_agent_matrix_corpus_run_contexts": {
+      "owner": "intex-agent",
+      "description": "Private encrypted context for Matrix corpus runs."
+    },
+    "intex_agent_matrix_corpus_recovery_receipts": {
+      "owner": "intex-agent",
+      "description": "Durable first-wins acknowledgements for Matrix corpus abandoned-run recovery."
+    },
+    "intex_agent_matrix_corpus_scenario_contexts": {
+      "owner": "intex-agent",
+      "description": "Private encrypted context for Matrix corpus scenarios."
+    },
+    "intex_agent_test_runs": {
+      "owner": "intex-agent",
+      "description": "Safe evaluator-visible projections of Intex Agent test runs."
+    },
+    "intex_agent_test_run_scenarios": {
+      "owner": "intex-agent",
+      "description": "Safe evaluator-visible per-scenario projections for Intex Agent test runs."
+    },
+    "intex_agent_user_preferences": {
+      "owner": "intex-agent",
+      "description": "Legacy INTEX Agent per-user configuration used for External Save settings. Prompt instructions are stored in dedicated prompt-preference collections. Document id == userId."
+    },
+    "intex_agent_prompt_preferences": {
+      "owner": "intex-agent",
+      "description": "Current itemized INTEX Agent prompt preferences per user with rendered prompt block and current version. Document id == userId."
+    },
+    "intex_agent_prompt_preference_versions": {
+      "owner": "intex-agent",
+      "description": "Immutable INTEX Agent prompt preference version snapshots. Document id format: {userId}_{version}."
+    },
     "generated_images": {
       "owner": "image-service",
       "description": "Generated thumbnail images and their metadata"
@@ -121,6 +246,14 @@
     "calendar_previews": {
       "owner": "calendar-agent",
       "description": "Calendar event previews generated async before user approval"
+    },
+    "calendar_schedules": {
+      "owner": "calendar-agent",
+      "description": "Per-user reusable calendar schedules, including daily lookahead notifications."
+    },
+    "calendar_schedule_runs": {
+      "owner": "calendar-agent",
+      "description": "Per-local-date audit records for claimed and completed calendar schedule executions."
     },
     "linear_connections": {
       "owner": "linear-agent",
@@ -152,6 +285,22 @@
       "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"],
       "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
+    "code_review_task_slots": {
+      "owner": "code-agent",
+      "description": "Atomic per-user pull-request slot that coalesces concurrent automated review requests into one active code task",
+      "subcollections": ["code_review_events"],
+      "scanPaths": ["apps/code-agent/src/domain/usecases"]
+    },
+    "code_task_user_leases": {
+      "owner": "code-agent",
+      "description": "Deterministic per-user single-flight leases fencing code task dispatch and rollback",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
+    },
+    "code_task_lifecycle_maintenance_locks": {
+      "owner": "code-agent",
+      "description": "Owner-fenced, release-bound maintenance lease for reversible code task lifecycle backfill batches",
+      "scanPaths": ["apps/code-agent/src/scripts"]
+    },
     "user_spend": {
       "owner": "code-agent",
       "description": "User cost tracking for rate limiting"
@@ -167,6 +316,11 @@
     "github-webhook-audit-events": {
       "owner": "code-agent",
       "description": "Auth-passed GitHub webhook deliveries persisted before normalization so every saved delivery can be linked to a decision"
+    },
+    "sentry-issue-events": {
+      "owner": "code-agent",
+      "description": "Atomic leased Sentry webhook transition, stable-issue alias, and trusted occurrence reservations with task and Linear linkage",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
     },
     "github-event-log-entries": {
       "owner": "code-agent",
@@ -250,20 +404,24 @@
       "description": "LLM pricing per provider (one doc per provider, keyed by provider ID)"
     },
     "notification_daily_digests": {
-      "owner": "mobile-notifications-service",
-      "description": "Daily WhatsApp digest summaries per user and group. Doc ID format: {userId}_{groupKey}_{YYYY-MM-DD}. Immutable after write."
+      "owner": "message-digest-service",
+      "description": "Read-only legacy Mobile digest archive used only for verified Message Digest migration, continuity audit, and owner-scoped erasure; no new runtime writes",
+      "scanPaths": ["scripts/message-digests"]
     },
     "notification_group_states": {
-      "owner": "mobile-notifications-service",
-      "description": "Per-date snapshots of WhatsApp group state. Doc ID format: {userId}_{groupKey}_{YYYY-MM-DD}. Each daily run writes its own snapshot; 'current latest' = orderBy(date desc) limit 1."
+      "owner": "message-digest-service",
+      "description": "Read-only legacy Mobile digest continuity-state archive used only for verified migration and owner-scoped erasure; no new runtime writes",
+      "scanPaths": ["scripts/message-digests"]
     },
     "notification_digest_locks": {
-      "owner": "mobile-notifications-service",
-      "description": "Advisory locks serializing concurrent digest runs per (userId, groupKey). 5-minute TTL. Doc ID format: {userId}_{groupKey}."
+      "owner": "message-digest-service",
+      "description": "Read-only legacy Mobile digest lock archive inspected as a cutover safety fence and removed only during owner-scoped migrated-definition erasure",
+      "scanPaths": ["scripts/message-digests"]
     },
     "notification_digest_backfill_runs": {
-      "owner": "mobile-notifications-service",
-      "description": "Progress tracking for digest backfill runs. One doc per run; mutated as the HTTP-chain processes each day."
+      "owner": "message-digest-service",
+      "description": "Read-only legacy Mobile digest backfill archive inspected as a cutover safety fence and removed only during owner-scoped migrated-definition erasure",
+      "scanPaths": ["scripts/message-digests"]
     },
     "fishing_knowledge_folders": {
       "owner": "fishing-assistant-service",

@@ -248,13 +248,12 @@ export async function sanitizeRepoConfig(
       cwd: path,
     });
     const currentUrl = stdout.trim();
-    // Same repo but different text = embedded credentials or format difference.
-    // Wrong-repo URLs are already caught by validateRepository() before this runs.
     if (normalizeUrl(currentUrl) === normalizeUrl(expectedUrl) && currentUrl !== expectedUrl) {
-      logger.warn(
-        { currentUrl, expectedUrl, path },
-        'Remote origin URL differs from expected, resetting'
-      );
+      // Same repo but different text = embedded credentials or format difference.
+      // Wrong-repo URLs are already caught by validateRepository() before this runs.
+      // This self-heals on every start when the URL was previously fetched with
+      // embedded credentials, so it is informational, not a warning condition.
+      logger.info({ expectedUrl, path }, 'Sanitized embedded credentials from remote.origin.url');
       await execFileAsync('git', ['remote', 'set-url', 'origin', expectedUrl], { cwd: path });
     }
   } catch {

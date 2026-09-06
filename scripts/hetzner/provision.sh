@@ -10,14 +10,17 @@ DOMAIN="${DOMAIN:-intexuraos.cloud}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/intexuraos}"
 WEB_ROOT="${WEB_ROOT:-/var/www/intexuraos/web/dist}"
+WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-$(dirname "${WEB_ROOT}")/releases}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 SWAP_FILE="${SWAP_FILE:-/swapfile}"
 SWAP_SIZE="${SWAP_SIZE:-4G}"
 SKIP_CERTBOT=0
 SKIP_SECRETS=0
+SECRET_PACKAGE_VERSION="${SECRET_PACKAGE_VERSION:-}"
+INTEXURAOS_COMMIT_SHA="${INTEXURAOS_COMMIT_SHA:-}"
 
 usage() {
-  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod %s --email ops@example.com [--deploy-dir path] [--skip-certbot] [--skip-secrets]\n' "$(basename "$0")"
+  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod INTEXURAOS_COMMIT_SHA=<40-character-lowercase-sha> %s --version N --email ops@example.com [--deploy-dir path] [--skip-certbot] [--skip-secrets]\n' "$(basename "$0")"
 }
 
 fail() {
@@ -60,6 +63,16 @@ parse_args() {
         DEPLOY_DIR="${1#*=}"
         shift
         ;;
+      --version|--secret-package-version)
+        shift
+        [[ $# -gt 0 ]] || fail "--version requires a value"
+        SECRET_PACKAGE_VERSION="$1"
+        shift
+        ;;
+      --version=*|--secret-package-version=*)
+        SECRET_PACKAGE_VERSION="${1#*=}"
+        shift
+        ;;
       --skip-certbot)
         SKIP_CERTBOT=1
         shift
@@ -79,6 +92,15 @@ parse_args() {
   done
 }
 
+validate_secret_package_version() {
+  if [[ "${SKIP_SECRETS}" -ne 1 && ! "${SECRET_PACKAGE_VERSION}" =~ ^[1-9][0-9]*$ ]]; then
+    fail "SECRET_PACKAGE_VERSION or --version must be an exact positive numeric version"
+  fi
+  if [[ "${SKIP_SECRETS}" -ne 1 && ! "${INTEXURAOS_COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "INTEXURAOS_COMMIT_SHA must be a 40-character lowercase hexadecimal SHA"
+  fi
+}
+
 install_base_packages() {
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -89,6 +111,7 @@ install_base_packages() {
     gnupg \
     jq \
     libnginx-mod-http-lua \
+    logrotate \
     lua5.1 \
     lua-cjson \
     nginx-extras \
@@ -196,9 +219,19 @@ prepare_user_and_directories() {
   printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${DEPLOY_USER}" > "/etc/sudoers.d/90-intexuraos-${DEPLOY_USER}"
   chmod 0440 "/etc/sudoers.d/90-intexuraos-${DEPLOY_USER}"
 
-  install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 "${DEPLOY_DIR}"
-  install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 "${WEB_ROOT}"
+  install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 \
+    "${DEPLOY_DIR}" \
+    "$(dirname "${WEB_ROOT}")" \
+    "${WEB_ROOT}" \
+    "${WEB_RELEASES_ROOT}"
   install -d -o root -g root -m 755 /etc/intexuraos
+}
+
+install_workspace_dependencies() {
+  [[ -f "${DEPLOY_DIR}/package.json" ]] || fail "${DEPLOY_DIR}/package.json is required"
+  [[ -f "${DEPLOY_DIR}/pnpm-lock.yaml" ]] || fail "${DEPLOY_DIR}/pnpm-lock.yaml is required"
+  sudo -H -u "${DEPLOY_USER}" env CI=true \
+    bash -c 'cd -- "$1" && pnpm install --frozen-lockfile' _ "${DEPLOY_DIR}"
 }
 
 configure_firewall() {
@@ -245,9 +278,15 @@ install_grafana_alloy_collector() {
   INTEXURAOS_ENVIRONMENT=prod "${SCRIPT_DIR}/../observability/install-grafana-alloy.sh"
 }
 
+install_pm2_logrotate() {
+  printf 'Installing bounded PM2 log rotation\n'
+  INTEXURAOS_ENVIRONMENT=prod "${SCRIPT_DIR}/install-pm2-logrotate.sh"
+}
+
 main() {
   parse_args "$@"
   require_prod
+  validate_secret_package_version
   require_root
 
   install_base_packages
@@ -255,11 +294,13 @@ main() {
   ensure_swap
   install_node_22
   prepare_user_and_directories
+  install_workspace_dependencies
+  install_pm2_logrotate
   configure_firewall
   write_pm2_systemd_unit
 
   if [[ "${SKIP_SECRETS}" -ne 1 ]]; then
-    "${SCRIPT_DIR}/load-secrets.sh" --project-id "${PROJECT_ID}"
+    INTEXURAOS_COMMIT_SHA="${INTEXURAOS_COMMIT_SHA}" "${SCRIPT_DIR}/load-secrets.sh" --version "${SECRET_PACKAGE_VERSION}" --project-id "${PROJECT_ID}"
     install_grafana_alloy_collector
   fi
 

@@ -15,7 +15,14 @@ export {
   type LLMError,
   isSupportedProvider,
 } from './llmClientFactory.js';
+export type {
+  GenerateChatOptions,
+  GenerateChatReasoningEffort,
+  GenerateChatReasoningOptions,
+  GenerateChatResult,
+  GenerateChatStreamEvent,
+  LlmChatMessage,
+  LlmChatRole,
+  LlmChatTextBlock,
+} from '@intexuraos/llm-contract';
 export { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
-export { createClaudeGenerateClient } from './claudeGenerateClient.js';
-export { createGptGenerateClient } from './gptGenerateClient.js';
-export { createPerplexityGenerateClient } from './perplexityGenerateClient.js';

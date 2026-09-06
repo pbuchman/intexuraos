@@ -15,7 +15,7 @@
  *   });
  */
 
-import { FieldPath, FieldValue } from '@google-cloud/firestore';
+import { FieldPath, FieldValue, Timestamp } from '@google-cloud/firestore';
 import type { CollectionReference, DocumentData, WriteResult } from '@google-cloud/firestore';
 import { IntexuraOSError } from '@intexuraos/common-core';
 
@@ -42,6 +42,10 @@ function isFieldValueDelete(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
   if (!(value instanceof FieldValue)) return false;
   return value.constructor.name === 'DeleteTransform';
+}
+
+function isServerTimestamp(value: unknown): boolean {
+  return value instanceof FieldValue && value.constructor.name === 'ServerTimestampTransform';
 }
 
 /**
@@ -71,6 +75,7 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
       !Array.isArray(sourceVal) &&
       extractArrayUnionElements(sourceVal) === null &&
       !isFieldValueDelete(sourceVal) &&
+      !isServerTimestamp(sourceVal) &&
       targetVal !== null &&
       typeof targetVal === 'object' &&
       !Array.isArray(targetVal)
@@ -116,6 +121,11 @@ function processFieldValues(
     // Handle delete
     if (isFieldValueDelete(value)) {
       Reflect.deleteProperty(data, key);
+      continue;
+    }
+
+    if (isServerTimestamp(value)) {
+      data[key] = Timestamp.now();
       continue;
     }
 
@@ -380,7 +390,7 @@ class FakeQuery {
       docs = docs.filter((doc) => {
         const data = doc.data();
         if (data === undefined) return false;
-        const fieldValue: unknown = data[filter.field];
+        const fieldValue: unknown = readFieldPath(data, filter.field);
         // For ordinal comparisons, normalize Timestamp/Date to millis so the
         // fake matches real Firestore semantics for time-based queries.
         const fieldMillis = getTimestampValue(fieldValue);
@@ -412,6 +422,12 @@ class FakeQuery {
 
     // Apply ordering
     if (this.ordering.length > 0) {
+      docs = docs.filter((doc) =>
+        this.ordering.every(
+          (order) =>
+            isDocumentIdField(order.field) || this.getOrderedValue(doc, order.field) !== undefined
+        )
+      );
       docs.sort((a, b) => {
         for (const order of this.ordering) {
           const aVal = this.getOrderedValue(a, order.field);
@@ -501,7 +517,7 @@ class FakeQuery {
     }
 
     const data = doc.data();
-    return data?.[field];
+    return typeof field === 'string' ? readFieldPath(data, field) : data?.[field];
   }
 
   private resolveStartAfterValues(): unknown[] | undefined {
@@ -524,12 +540,54 @@ class FakeQuery {
         if (isDocumentIdField(order.field)) {
           return snapshotLike.id;
         }
-        return data[order.field];
+        return typeof order.field === 'string'
+          ? readFieldPath(data, order.field)
+          : data[order.field];
       });
     }
 
     return this.startAfterValues ?? undefined;
   }
+}
+
+function readFieldPath(data: DocumentData | undefined, field: string): unknown {
+  if (data === undefined) {
+    return undefined;
+  }
+  if (Object.prototype.hasOwnProperty.call(data, field)) {
+    return data[field];
+  }
+  return splitFieldPath(field).reduce<unknown>((current, segment) => {
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !Object.prototype.hasOwnProperty.call(current, segment)
+    ) {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[segment];
+  }, data);
+}
+
+function splitFieldPath(field: string): string[] {
+  const segments: string[] = [];
+  let current = '';
+  let inEscapedSegment = false;
+  for (const char of field) {
+    if (char === '`') {
+      inEscapedSegment = !inEscapedSegment;
+      continue;
+    }
+    if (char === '.' && !inEscapedSegment) {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  segments.push(current);
+  return segments;
 }
 
 /**
@@ -641,6 +699,16 @@ class FakeDocumentReference {
           deleteNestedField(updated, key);
         } else {
           Reflect.deleteProperty(updated, key);
+        }
+        continue;
+      }
+
+      if (isServerTimestamp(value)) {
+        const timestamp = Timestamp.now();
+        if (key.includes('.')) {
+          setNestedField(updated, key, timestamp);
+        } else {
+          updated[key] = timestamp;
         }
         continue;
       }
@@ -811,6 +879,16 @@ class FakeTransaction {
         continue;
       }
 
+      if (isServerTimestamp(value)) {
+        const timestamp = Timestamp.now();
+        if (key.includes('.')) {
+          setNestedField(updated, key, timestamp);
+        } else {
+          updated[key] = timestamp;
+        }
+        continue;
+      }
+
       if (key.includes('.')) {
         setNestedField(updated, key, value);
       } else {
@@ -826,12 +904,18 @@ class FakeTransaction {
    */
   set(docRef: FakeDocumentReference, data: DocumentData, options?: { merge?: boolean }): void {
     const key = `${docRef._collectionName}/${docRef.id}`;
-    const existing = this.pendingWrites.get(key)?.data;
+    const existing =
+      this.pendingWrites.get(key)?.data ?? this.store.get(docRef._collectionName)?.get(docRef.id);
 
-    let finalData = data;
+    const nextData = { ...data } as Record<string, unknown>;
+    processFieldValues(
+      nextData,
+      existing === undefined ? undefined : (existing as Record<string, unknown>)
+    );
+    let finalData: DocumentData = nextData;
     if (options?.merge === true && existing !== undefined) {
       const merged = { ...existing } as Record<string, unknown>;
-      deepMerge(merged, data as Record<string, unknown>);
+      deepMerge(merged, nextData);
       finalData = merged as DocumentData;
     }
 
@@ -866,6 +950,14 @@ class FakeFirestoreImpl {
       throw this.config.errorToThrow;
     }
     return new FakeCollectionReference(name, this.store, this.docCounter);
+  }
+
+  /** Match Firestore's exact-reference bulk read semantics in input order. */
+  async getAll(...documentRefs: FakeDocumentReference[]): Promise<FakeDocumentSnapshot[]> {
+    if (this.config.errorToThrow !== undefined) {
+      throw this.config.errorToThrow;
+    }
+    return await Promise.all(documentRefs.map(async (documentRef) => await documentRef.get()));
   }
 
   /**
@@ -930,34 +1022,46 @@ class FakeFirestoreImpl {
    */
   async runTransaction<T>(updateFn: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
     // Enqueue this transaction to run after all previous transactions complete
-    transactionQueue = transactionQueue.then(async (): Promise<T> => {
-      const pendingWrites = new Map<string, { data: DocumentData; deleted: boolean }>();
-      const transaction = new FakeTransaction(this.store, pendingWrites);
+    const transactionRun = transactionQueue
+      .catch(() => undefined)
+      .then(async (): Promise<T> => {
+        const pendingWrites = new Map<string, { data: DocumentData; deleted: boolean }>();
+        const transaction = new FakeTransaction(this.store, pendingWrites);
 
-      const result = await updateFn(transaction);
-      // Commit: apply all pending writes to the store
-      for (const [key, value] of pendingWrites.entries()) {
-        const [collectionName, docId] = key.split('/');
-        if (collectionName === undefined || docId === undefined) {
-          continue; // Skip malformed keys
+        const result = await updateFn(transaction);
+        // Commit: apply all pending writes to the store
+        for (const [key, value] of pendingWrites.entries()) {
+          const separator = key.lastIndexOf('/');
+          if (separator <= 0 || separator === key.length - 1) {
+            continue; // Skip malformed keys
+          }
+          const collectionName = key.slice(0, separator);
+          const docId = key.slice(separator + 1);
+          let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
+          if (collection === undefined) {
+            const newCollection = new Map<string, DocumentData>();
+            this.store.set(collectionName, newCollection);
+            collection = newCollection;
+          }
+          if (value.deleted) {
+            collection.delete(docId);
+          } else {
+            collection.set(docId, value.data);
+          }
         }
-        let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
-        if (collection === undefined) {
-          const newCollection = new Map<string, DocumentData>();
-          this.store.set(collectionName, newCollection);
-          collection = newCollection;
-        }
-        if (value.deleted) {
-          collection.delete(docId);
-        } else {
-          collection.set(docId, value.data);
-        }
-      }
-      return result;
-    });
+        return result;
+      });
+
+    // A deliberately rejected transaction must not poison unrelated future
+    // transactions. Keep only a settled serialization tail while returning the
+    // original result (including its rejection) to the caller.
+    transactionQueue = transactionRun.then(
+      () => undefined,
+      () => undefined
+    );
 
     // eslint-disable-next-line @typescript-eslint/return-await
-    return transactionQueue as Promise<T>;
+    return transactionRun;
   }
 }
 

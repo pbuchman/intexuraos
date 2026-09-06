@@ -138,7 +138,15 @@ describe('reporting/recordDecision', () => {
       } as unknown as EventDecisionRepository,
     });
     await recordDecision(deps, createFakeEvent(), { decidedBy: 'hard_rules', decision: 'skip', reason: 'X' }, 0, logger);
-    expect(logger.error).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'evt-1',
+        auditEventId: 'audit-evt-1',
+        error: { code: 'FIRESTORE', message: 'fail' },
+        _skipSentry: true,
+      }),
+      'Failed to save event decision audit record',
+    );
     expect(deps.gitHubEventLogEntryRepo?.complete).not.toHaveBeenCalled();
   });
 
@@ -221,12 +229,36 @@ describe('reporting/dispatchAndRecord', () => {
       } as unknown as WebhookDispatchService,
     });
     await dispatchAndRecord(deps, createFakeEvent(), { action: 'dispatch', reason: 'ALL_RULES_PASSED' }, 0, logger);
+    const warnContext = (logger.warn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(warnContext).not.toHaveProperty('_skipSentry');
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'fetch_failed' }),
       'Dispatch failed for hard-rule decision',
     );
     expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ dispatchSuccess: false, dispatchError: 'fetch_failed' }),
+    );
+  });
+
+  it('suppresses expected active-task dedup dispatch failures from Sentry', async () => {
+    const deps = createDeps({
+      dispatchService: {
+        dispatch: vi.fn().mockResolvedValue({ success: false, error: 'Active task exists for Linear issue' }),
+      } as unknown as WebhookDispatchService,
+    });
+    await dispatchAndRecord(deps, createFakeEvent(), { action: 'dispatch', reason: 'ALL_RULES_PASSED' }, 0, logger);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'Active task exists for Linear issue',
+        _skipSentry: true,
+      }),
+      'Dispatch failed for hard-rule decision',
+    );
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatchSuccess: false,
+        dispatchError: 'Active task exists for Linear issue',
+      }),
     );
   });
 });

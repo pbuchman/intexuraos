@@ -222,6 +222,18 @@ jobs:
       - name: Validate Terraform Secrets
         run: node scripts/verify-terraform-secrets.mjs
 
+      - name: Validate Secret Packages
+        run: node scripts/verify-secret-packages.mjs
+
+      - name: Reject Credential Files
+        run: node scripts/verify-credential-files.mjs
+
+      - name: Validate DEV Edge Profiles
+        run: node scripts/validate-dev-caddy-profiles.mjs
+
+      - name: Validate Production-to-DEV Dependencies
+        run: node scripts/verify-production-dev-dependencies.mjs
+
       - name: Validate PubSub
         run: node scripts/verify-pubsub.mjs
 
@@ -353,15 +365,12 @@ jobs:
             -f docker/code-worker/Dockerfile.test \
             docker/code-worker/
 
-      - name: Create worker network
+      - name: Create and revalidate worker network
         run: |
-          docker network create \
-            --driver bridge \
-            --subnet 172.28.0.0/16 \
-            code-worker-net
+          ./scripts/setup-worker-network.sh
+          ./scripts/setup-worker-network.sh
 
       - name: Run E2E isolation tests
         run: pnpm --filter orchestrator test:e2e
         env:
           WORKER_IMAGE: code-worker:test
-          WORKER_NETWORK: code-worker-net

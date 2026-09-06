@@ -1,11 +1,11 @@
 ---
 name: debug-code-task
-description: Investigate IntexuraOS code-task executions when the user shares a `dev.intexuraos.cloud` or `intexuraos.cloud` code-task URL, or provides a `task_*` ID and asks to debug, investigate, or understand what happened.
+description: Investigate IntexuraOS code-task executions only when the user shares a `dev.intexuraos.cloud` or `intexuraos.cloud` `/#/code-tasks/task_*` URL, or provides a direct `task_*` ID and asks to debug, investigate, or understand what happened.
 ---
 
 # Debug Code Task
 
-Use this skill for code-task investigations backed by Firestore data.
+Use this skill for code-task URL investigations backed by Firestore data.
 
 ## Trigger patterns
 
@@ -13,12 +13,23 @@ Use this skill for code-task investigations backed by Firestore data.
 - `https://intexuraos.cloud/#/code-tasks/task_*`
 - `task_*` plus intent such as `debug`, `investigate`, or `what went wrong`
 
+## Non-triggers
+
+Do not use this skill for WhatsApp Assistant session investigations.
+
+- Do not use this skill for `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`.
+- Do not use this skill for `https://intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`.
+- Do not use this skill for direct `intex_session_*` inputs.
+- Use `$debug-intex-session` for those session investigations instead.
+
 ## Workflow
 
 1. Extract the task ID from the URL hash or direct `task_*` input.
-2. Detect the environment from the URL.
-   - `dev.intexuraos.cloud` = dev
-   - `intexuraos.cloud` without `dev.` = prod
+2. Record link provenance without treating it as runtime routing.
+   - `dev.intexuraos.cloud` is accepted only for historical investigations.
+   - `intexuraos.cloud` is the live production UI.
+   - Home Dev is a production-owned worker host, not a live DEV application runtime.
+   - Never infer data ownership, credential mode, or callback ownership from the link hostname.
 3. Never fetch the SPA URL. The page is hash-routed; the task data lives in Firestore.
 4. Confirm the current machine with `uname -n`.
 5. Use the bundled wrapper `.codex/skills/debug-code-task/scripts/fetch-task.sh`, which resolves the local repo and runs the Firestore fetcher from the checked-out repo.
@@ -59,7 +70,9 @@ Present log evidence directly. Do not infer a root cause unless the logs or task
 
 Only do this when Firestore logs are not enough or the user asks.
 
-- Read `workerLocation` from the task document first.
+- Read `workerLocation` from the task document first. It identifies execution placement only and
+  never determines callback ownership. When ownership matters, use the persisted task callback
+  contract; public production callbacks use `https://intexuraos.cloud/api/code`.
 - If the task ran on `home-dev` and you are elsewhere, use `ssh home-dev`.
 - Orchestrator logs on `home-dev`:
 

@@ -33,6 +33,10 @@ describe('Error utilities', () => {
       expect(ERROR_HTTP_STATUS.CONFLICT).toBe(409);
     });
 
+    it('maps VERSION_CONFLICT to 409', () => {
+      expect(ERROR_HTTP_STATUS.VERSION_CONFLICT).toBe(409);
+    });
+
     it('maps DOWNSTREAM_ERROR to 502', () => {
       expect(ERROR_HTTP_STATUS.DOWNSTREAM_ERROR).toBe(502);
     });
@@ -45,18 +49,38 @@ describe('Error utilities', () => {
       expect(ERROR_HTTP_STATUS.MISCONFIGURED).toBe(503);
     });
 
+    it('maps SERVICE_UNAVAILABLE to 503', () => {
+      expect(ERROR_HTTP_STATUS.SERVICE_UNAVAILABLE).toBe(503);
+    });
+
+    it.each([
+      ['REQUEST_BODY_CONFLICT', 409],
+      ['TURN_IN_PROGRESS', 409],
+      ['CONTEXT_STALE', 409],
+      ['ATTACHMENT_NOT_READY', 409],
+      ['CONFIRMATION_REQUIRED', 409],
+      ['ANSWER_RETRY_UNAVAILABLE', 409],
+      ['REQUEST_STALE', 409],
+      ['CONTEXT_WINDOW_EXCEEDED', 422],
+    ] as const)('maps durable Conversation Assistant error %s to %i', (code, status) => {
+      expect(ERROR_HTTP_STATUS[code]).toBe(status);
+    });
+
     it('has mapping for all error codes', () => {
       const allCodes: ErrorCode[] = [
         'INVALID_REQUEST',
+        'EMPTY_TRANSCRIPT',
         'UNAUTHORIZED',
         'FORBIDDEN',
         'NOT_FOUND',
         'CONFLICT',
+        'VERSION_CONFLICT',
         'GONE',
         'PRECONDITION_FAILED',
         'UNPROCESSABLE_ENTITY',
         'RATE_LIMITED',
         'LOCKED',
+        'SERVICE_UNAVAILABLE',
         'DOWNSTREAM_ERROR',
         'INTERNAL_ERROR',
         'MISCONFIGURED',
@@ -102,10 +126,13 @@ describe('Error utilities', () => {
     it('sets correct HTTP status for each error code', () => {
       const testCases: { code: ErrorCode; expectedStatus: number }[] = [
         { code: 'INVALID_REQUEST', expectedStatus: 400 },
+        { code: 'EMPTY_TRANSCRIPT', expectedStatus: 400 },
         { code: 'UNAUTHORIZED', expectedStatus: 401 },
         { code: 'FORBIDDEN', expectedStatus: 403 },
         { code: 'NOT_FOUND', expectedStatus: 404 },
         { code: 'CONFLICT', expectedStatus: 409 },
+        { code: 'VERSION_CONFLICT', expectedStatus: 409 },
+        { code: 'SERVICE_UNAVAILABLE', expectedStatus: 503 },
         { code: 'DOWNSTREAM_ERROR', expectedStatus: 502 },
         { code: 'INTERNAL_ERROR', expectedStatus: 500 },
         { code: 'MISCONFIGURED', expectedStatus: 503 },

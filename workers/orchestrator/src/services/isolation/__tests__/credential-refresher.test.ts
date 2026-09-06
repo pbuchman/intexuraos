@@ -119,7 +119,7 @@ describe('CredentialRefresher', () => {
 
     expect(result).toBe(false);
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ exitCode: 1 }),
+      expect.objectContaining({ exitCode: 1, _skipSentry: true }),
       expect.stringContaining('refresh failed')
     );
   });
@@ -131,7 +131,7 @@ describe('CredentialRefresher', () => {
 
     expect(result).toBe(false);
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.any(Error) }),
+      expect.objectContaining({ error: expect.any(Error), _skipSentry: true }),
       expect.stringContaining('refresh container failed')
     );
   });
@@ -151,7 +151,10 @@ describe('CredentialRefresher', () => {
 
     expect(mockContainer.logs).toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ output: expect.stringContaining('Claude replied') }),
+      expect.objectContaining({
+        output: expect.stringContaining('Claude replied'),
+        _skipSentry: true,
+      }),
       expect.stringContaining('refresh failed')
     );
   });
@@ -198,7 +201,7 @@ describe('CredentialRefresher', () => {
 
     expect(result).toBe(false);
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ error: expect.any(Error) }),
+      expect.objectContaining({ error: expect.any(Error), _skipSentry: true }),
       expect.stringContaining('refresh container failed')
     );
     // Verify the wrapped error contains the string

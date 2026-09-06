@@ -14,7 +14,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
 import { transcribeAudio } from './main.js';
 import type { PollingConfig } from './polling.js';
-import type { AudioStoredEvent, TranscriptionCompletedEvent } from './types.js';
+import type { TranscriptionCompletedEvent, TranscriptionRequestEvent } from './types.js';
 import { extractCorrelation } from './extractCorrelation.js';
 import { runWithRequestContext } from './requestContextShim.js';
 import {
@@ -66,22 +66,39 @@ export interface AudioStoredHandlerDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
+export type IdentityTokenProvider = (audience: string) => Promise<string>;
+
+const HETZNER_PUBLIC_ORIGIN = 'https://intexuraos.cloud';
+const HETZNER_PUBLIC_USER_SERVICE_BASE = `${HETZNER_PUBLIC_ORIGIN}/api/user`;
+const GCP_METADATA_IDENTITY_ENDPOINT =
+  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity';
+
 /**
- * Validate a parsed Pub/Sub payload has every required `AudioStoredEvent`
+ * Validate a parsed Pub/Sub payload has every required transcription request
  * field. Guards against schema drift between whatsapp-service (the producer)
  * and this worker.
  */
-function isAudioStoredEvent(event: { type?: string }): event is AudioStoredEvent {
+function isSupportedTranscriptionEventType(type: unknown): boolean {
+  return type === 'whatsapp.audio.stored' || type === 'whatsapp.media.transcription.requested';
+}
+
+function isTranscriptionRequestEvent(event: { type?: string }): event is TranscriptionRequestEvent {
   const obj = event as Record<string, unknown>;
-  return (
-    obj['type'] === 'whatsapp.audio.stored' &&
-    typeof obj['userId'] === 'string' &&
-    typeof obj['messageId'] === 'string' &&
-    typeof obj['mediaId'] === 'string' &&
-    typeof obj['gcsPath'] === 'string' &&
-    typeof obj['mimeType'] === 'string' &&
-    typeof obj['timestamp'] === 'string'
-  );
+  if (
+    typeof obj['userId'] !== 'string' ||
+    typeof obj['messageId'] !== 'string' ||
+    typeof obj['mediaId'] !== 'string' ||
+    typeof obj['gcsPath'] !== 'string' ||
+    typeof obj['mimeType'] !== 'string' ||
+    typeof obj['timestamp'] !== 'string'
+  ) {
+    return false;
+  }
+  if (obj['type'] === 'whatsapp.media.transcription.requested') {
+    return obj['mediaKind'] === 'audio' || obj['mediaKind'] === 'video';
+  }
+  // The caller rejects unsupported type literals before this structural guard.
+  return true;
 }
 
 /**
@@ -118,10 +135,10 @@ export function createAudioStoredHandler(
         return { decision: AckDecision.DeadLetter, reason: 'missing_message_data' };
       }
 
-      let audioEvent: { type?: string };
+      let transcriptionEvent: { type?: string };
       try {
         const decoded = Buffer.from(messageData, 'base64').toString('utf-8');
-        audioEvent = JSON.parse(decoded) as { type?: string };
+        transcriptionEvent = JSON.parse(decoded) as { type?: string };
       } catch {
         reqLogger.error(
           { event: 'parse_error', eventId: event.id },
@@ -131,11 +148,10 @@ export function createAudioStoredHandler(
       }
 
       // Explicit type guard before structural validation so we can log the
-      // wrong type value for triage; `isAudioStoredEvent` re-checks the same
-      // literal but doesn't surface the unexpected value in its log line.
-      if (audioEvent.type !== 'whatsapp.audio.stored') {
+      // wrong type value for triage before structural validation.
+      if (!isSupportedTranscriptionEventType(transcriptionEvent.type)) {
         reqLogger.warn(
-          { event: 'unexpected_event_type', type: audioEvent.type, eventId: event.id },
+          { event: 'unexpected_event_type', type: transcriptionEvent.type, eventId: event.id },
           'Unexpected event type, dead-lettering'
         );
         return { decision: AckDecision.DeadLetter, reason: 'unexpected_event_type' };
@@ -143,17 +159,17 @@ export function createAudioStoredHandler(
 
       // Structural validation of the remaining required fields. After the
       // type-literal guard above, this branch only fails on missing
-      // userId / messageId / mediaId / gcsPath / mimeType / timestamp.
-      if (!isAudioStoredEvent(audioEvent)) {
+      // userId / messageId / mediaId / gcsPath / mimeType / timestamp / mediaKind.
+      if (!isTranscriptionRequestEvent(transcriptionEvent)) {
         reqLogger.warn(
           { event: 'invalid_event_schema', eventId: event.id },
-          'Audio stored event is missing required fields, dead-lettering'
+          'Transcription request event is missing required fields, dead-lettering'
         );
         return { decision: AckDecision.DeadLetter, reason: 'invalid_event_schema' };
       }
 
       await transcribeAudio(
-        audioEvent,
+        transcriptionEvent,
         {
           fetchUserProvider: (userId: string) => deps.fetchUserProvider(userId, reqLogger),
           generateSignedUrl: deps.generateSignedUrl,
@@ -185,15 +201,17 @@ export async function fetchUserProvider(
   userId: string,
   userServiceUrl: string,
   internalAuthToken: string,
-  reqLogger: WorkerLogger
+  reqLogger: WorkerLogger,
+  identityTokenProvider: IdentityTokenProvider = fetchGoogleIdentityToken
 ): Promise<string> {
   try {
-    const response = await fetch(
-      `${userServiceUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
-      {
-        headers: { 'X-Internal-Auth': internalAuthToken },
-      }
+    const request = await buildUserSettingsRequest(
+      userId,
+      userServiceUrl,
+      internalAuthToken,
+      identityTokenProvider
     );
+    const response = await fetch(request.url, { headers: request.headers });
 
     if (!response.ok) {
       reqLogger.warn(
@@ -220,6 +238,40 @@ export async function fetchUserProvider(
     );
     return 'speechmatics';
   }
+}
+
+async function buildUserSettingsRequest(
+  userId: string,
+  userServiceUrl: string,
+  internalAuthToken: string,
+  identityTokenProvider: IdentityTokenProvider
+): Promise<{ url: string; headers: Record<string, string> }> {
+  const encodedUserId = encodeURIComponent(userId);
+  const normalizedUserServiceUrl = userServiceUrl.replace(/\/+$/, '');
+
+  if (normalizedUserServiceUrl === HETZNER_PUBLIC_USER_SERVICE_BASE) {
+    const token = await identityTokenProvider(HETZNER_PUBLIC_ORIGIN);
+    return {
+      url: `${HETZNER_PUBLIC_ORIGIN}/internal/users/${encodedUserId}/settings`,
+      headers: { Authorization: `Bearer ${token}` },
+    };
+  }
+
+  return {
+    url: `${normalizedUserServiceUrl}/internal/users/${encodedUserId}/settings`,
+    headers: { 'X-Internal-Auth': internalAuthToken },
+  };
+}
+
+async function fetchGoogleIdentityToken(audience: string): Promise<string> {
+  const params = new URLSearchParams({ audience, format: 'full' });
+  const response = await fetch(`${GCP_METADATA_IDENTITY_ENDPOINT}?${params.toString()}`, {
+    headers: { 'Metadata-Flavor': 'Google' },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Google identity token: HTTP ${String(response.status)}`);
+  }
+  return await response.text();
 }
 
 /**

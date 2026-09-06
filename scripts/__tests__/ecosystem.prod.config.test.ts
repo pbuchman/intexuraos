@@ -28,6 +28,7 @@ const EXPECTED_SERVICES = [
   ['hellscript-agent', '8131'],
   ['llm-usage-service', '8132'],
   ['intex-agent', '8134'],
+  ['message-digest-service', '8135'],
   ['user-service', '8110'],
   ['research-agent', '8116'],
   ['image-service', '8120'],
@@ -65,6 +66,22 @@ const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
 
 const WAIT_SCRIPT = resolve(process.cwd(), 'scripts/pm2-wait-start.mjs');
 const REMOVED_OBSERVABILITY_PREFIX = ['INTEXURAOS', `DA${'SH0'}`].join('_');
+const MATRIX_CORPUS_ENV_NAMES = [
+  'INTEXURAOS_MATRIX_CORPUS_ENABLED',
+  'INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME',
+  'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',
+  'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+  'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
+] as const;
+const TEST_RUNS_READ_FLAG = 'INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED' as const;
 
 function loadProdConfig(env: Record<string, string | undefined> = PROD_ENV): ProdConfigSummary {
   const stdout = execFileSync(
@@ -117,6 +134,43 @@ function loadProdConfigFailureMessage(env: Record<string, string | undefined>): 
 }
 
 describe('ecosystem.config.prod.cjs', () => {
+  it('enables the production Matrix corpus with exact per-service secret isolation', () => {
+    const ambient = Object.fromEntries(
+      MATRIX_CORPUS_ENV_NAMES.map((name, index) => [name, `ambient-${String(index)}`])
+    );
+    ambient['INTEXURAOS_MATRIX_CORPUS_ENABLED'] = 'true';
+    ambient['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'home-dev';
+    const config = loadProdConfig({ ...PROD_ENV, ...ambient });
+
+    const whatsapp = config.apps.find((app) => app.name === 'whatsapp-service');
+    const intex = config.apps.find((app) => app.name === 'intex-agent');
+    const user = config.apps.find((app) => app.name === 'user-service');
+    for (const app of [whatsapp, intex]) {
+      expect(app?.env.INTEXURAOS_MATRIX_CORPUS_ENABLED).toBe('true');
+      expect(app?.env.INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME).toBe('hetzner-prod');
+      expect(app?.env.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE).toBe('hetzner-prod');
+    }
+    expect(whatsapp?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY).toBe('ambient-9');
+    expect(whatsapp?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY).toBeUndefined();
+    expect(intex?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY).toBe('ambient-10');
+    expect(intex?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY).toBeUndefined();
+    expect(user?.env.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID).toBe('ambient-3');
+  });
+
+  it('enables owner-gated Test Runs and the Intex model selector in production', () => {
+    const config = loadProdConfig({
+      ...PROD_ENV,
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'auth0|evaluator',
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'platform-key',
+    });
+
+    const user = config.apps.find((app) => app.name === 'user-service');
+    const intex = config.apps.find((app) => app.name === 'intex-agent');
+    expect(user?.env[TEST_RUNS_READ_FLAG]).toBe('true');
+    expect(intex?.env[TEST_RUNS_READ_FLAG]).toBe('true');
+    expect(user?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe('auth0|evaluator');
+  });
+
   it('refuses to load unless INTEXURAOS_ENVIRONMENT is prod', () => {
     expect(
       loadProdConfigFailureMessage({ HOME: '/home/deploy', PATH: process.env.PATH ?? '' })
@@ -164,8 +218,10 @@ describe('ecosystem.config.prod.cjs', () => {
       expect(app.env.GOOGLE_APPLICATION_CREDENTIALS, app.name).toBe(
         '/home/deploy/runtime-sa-key.json'
       );
+      expect(app.env.GOOGLE_CLOUD_QUOTA_PROJECT, app.name).toBe('intexuraos-dev-pbuchman');
       expect(app.filter_env, app.name).toContain('INTEXURAOS_');
       expect(app.filter_env, app.name).toContain('GOOGLE_APPLICATION_CREDENTIALS');
+      expect(app.filter_env, app.name).toContain('GOOGLE_CLOUD_QUOTA_PROJECT');
       expect(app.filter_env, app.name).toContain(
         'HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS'
       );
@@ -179,6 +235,47 @@ describe('ecosystem.config.prod.cjs', () => {
       expect(app.env[`${REMOVED_OBSERVABILITY_PREFIX}_AUTH_TOKEN`], app.name).toBeUndefined();
       expect(app.env[`${REMOVED_OBSERVABILITY_PREFIX}_OTLP_ENDPOINT`], app.name).toBeUndefined();
       expect(app.env.NODE_OPTIONS, app.name).toBeUndefined();
+    }
+  });
+
+  it('propagates one validated exact release SHA to every PM2 app', () => {
+    const releaseSha = '1234567890abcdef1234567890abcdef12345678';
+    const config = loadProdConfig({
+      ...PROD_ENV,
+      INTEXURAOS_COMMIT_SHA: releaseSha,
+    });
+
+    expect(config.apps).not.toHaveLength(0);
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_COMMIT_SHA, app.name).toBe(releaseSha);
+    }
+  });
+
+  it('keeps the explicitly deployed release SHA when the prod env file contains a stale SHA', () => {
+    const tempDir = mkdtempSync(resolve(tmpdir(), 'intexuraos-prod-release-'));
+    const envFile = resolve(tempDir, '.env.prod');
+    const deployedSha = '1234567890abcdef1234567890abcdef12345678';
+
+    try {
+      writeFileSync(
+        envFile,
+        [
+          'INTEXURAOS_ENVIRONMENT="prod"',
+          'INTEXURAOS_COMMIT_SHA="abcdef1234567890abcdef1234567890abcdef12"',
+        ].join('\n')
+      );
+
+      const config = loadProdConfig({
+        ...PROD_ENV,
+        INTEXURAOS_PROD_ENV_FILE: envFile,
+        INTEXURAOS_COMMIT_SHA: deployedSha,
+      });
+
+      for (const app of config.apps) {
+        expect(app.env.INTEXURAOS_COMMIT_SHA, app.name).toBe(deployedSha);
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -276,13 +373,20 @@ describe('ecosystem.config.prod.cjs', () => {
     const config = loadProdConfig({
       ...PROD_ENV,
       INTEXURAOS_AUTH0_CLIENT_ID: 'auth0-client',
-      INTEXURAOS_GEMINI_APP_API_KEY: 'gemini-key',
+      INTEXURAOS_GEMINI_APP_API_KEY: 'retired-key-must-not-leak',
       INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET: 'github-oauth-secret',
       INTEXURAOS_GUEST_SESSION_SECRET: 'guest-session-secret',
       INTEXURAOS_INTERNAL_AUTH_TOKEN: 'internal-token',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'evaluator-user',
+      INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN: 'matrix-auth-token',
+      INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL: 'https://matrix-adapter.example.test',
+      INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID: 'cf-client-id',
+      INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET: 'cf-client-secret',
       INTEXURAOS_OPENAI_APP_API_KEY: 'openai-key',
       INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-key',
       INTEXURAOS_ORCHESTRATOR_SECRET: 'orchestrator-secret',
+      INTEXURAOS_SENTRY_WEBHOOK_SECRET: 'sentry-webhook-secret',
+      INTEXURAOS_SENTRY_AUTOMATION_USER_ID: 'sentry-automation-user',
       INTEXURAOS_WHATSAPP_ACCESS_TOKEN: 'whatsapp-token',
     });
     const byName = new Map(config.apps.map((app) => [app.name, app]));
@@ -290,16 +394,82 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBe(
       'whatsapp-token'
     );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN).toBe(
+      'matrix-auth-token'
+    );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL).toBe(
+      'https://matrix-adapter.example.test'
+    );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID).toBe(
+      'cf-client-id'
+    );
+    expect(
+      byName.get('whatsapp-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET
+    ).toBe('cf-client-secret');
     expect(byName.get('user-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
+    expect(
+      byName.get('user-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN
+    ).toBeUndefined();
+    expect(byName.get('user-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL).toBeUndefined();
+    expect(
+      byName.get('user-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID
+    ).toBeUndefined();
+    expect(
+      byName.get('user-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET
+    ).toBeUndefined();
     expect(byName.get('notion-service')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('notion-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBeUndefined();
+    expect(
+      byName.get('notion-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN
+    ).toBeUndefined();
+    expect(
+      byName.get('notion-service')?.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL
+    ).toBeUndefined();
     expect(byName.get('code-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_WEBHOOK_SECRET).toBe(
+      'sentry-webhook-secret'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_AUTOMATION_USER_ID).toBe(
+      'sentry-automation-user'
+    );
+    expect(byName.get('user-service')?.env.INTEXURAOS_SENTRY_WEBHOOK_SECRET).toBeUndefined();
+    expect(byName.get('user-service')?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe(
+      'evaluator-user'
+    );
+    expect(byName.get('user-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
     expect(byName.get('intex-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
     expect(byName.get('intex-agent')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
-    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+    expect(byName.get('message-digest-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('message-digest-service')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe(
+      'internal-token'
+    );
+    expect(byName.get('web-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
+    expect(
+      byName.get('mobile-notifications-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY
+    ).toBeUndefined();
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('fishing-assistant-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('image-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_OPENAI_APP_API_KEY).toBeUndefined();
+    expect(
+      byName.get('fishing-assistant-service')?.env.INTEXURAOS_OPENAI_APP_API_KEY
+    ).toBeUndefined();
     expect(byName.get('user-service')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBe(
       'github-oauth-secret'
     );
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_GEMINI_APP_API_KEY, app.name).toBeUndefined();
+    }
     for (const removed of REMOVED_AGENT_NAMES) {
       expect(byName.has(removed)).toBe(false);
     }
@@ -333,11 +503,23 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('code-agent')?.env.INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL).toBe(
       'https://intexuraos.cloud/api/code'
     );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY).toBe(
+      'pbuchman/intexuraos'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH).toBe(
+      'development'
+    );
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'
     );
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC).toBe(
       'intexuraos-intex-message-ingest-dev'
+    );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC).toBe(
+      'intexuraos-audio-stored-dev'
+    );
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL).toBe(
+      'or:minimax/minimax-m3'
     );
     expect(byName.get('intex-agent')?.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC).toBe(
       'intexuraos-whatsapp-send-dev'
@@ -352,5 +534,22 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('research-agent')?.env.INTEXURAOS_PUBSUB_LLM_CALL_TOPIC).toBe(
       'intexuraos-llm-call-dev'
     );
+    expect(byName.get('message-digest-service')?.env).toMatchObject({
+      INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://127.0.0.1:8113',
+      INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://127.0.0.1:8132',
+      INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL: 'http://127.0.0.1:8135',
+      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3.6-flash',
+      INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC: 'intexuraos-message-digest-runs-dev',
+      INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: 'intexuraos-whatsapp-send-dev',
+      INTEXURAOS_WEB_APP_URL: 'https://intexuraos.cloud',
+    });
+    expect(byName.get('api-docs-hub')?.env.INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL).toBe(
+      'http://127.0.0.1:8135/openapi.json'
+    );
+    const names = config.apps.map((app) => app.name);
+    expect(names.indexOf('message-digest-service')).toBeGreaterThan(
+      names.indexOf('llm-usage-service')
+    );
+    expect(names.indexOf('message-digest-service')).toBeLessThan(names.indexOf('api-docs-hub'));
   });
 });

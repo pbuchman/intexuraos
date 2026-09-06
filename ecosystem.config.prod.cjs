@@ -12,7 +12,13 @@ const ENV_FILE = process.env.INTEXURAOS_PROD_ENV_FILE ?? '/etc/intexuraos/.env.p
 const ENV_FILE_VALUES = fs.existsSync(ENV_FILE)
   ? dotenv.parse(fs.readFileSync(ENV_FILE, 'utf8'))
   : {};
-const RUNTIME_ENV = { ...process.env, ...ENV_FILE_VALUES };
+const RUNTIME_ENV = {
+  ...process.env,
+  ...ENV_FILE_VALUES,
+  ...(process.env.INTEXURAOS_COMMIT_SHA === undefined
+    ? {}
+    : { INTEXURAOS_COMMIT_SHA: process.env.INTEXURAOS_COMMIT_SHA }),
+};
 
 function envValue(key) {
   return RUNTIME_ENV[key];
@@ -20,6 +26,12 @@ function envValue(key) {
 
 if (envValue('INTEXURAOS_ENVIRONMENT') !== 'prod') {
   throw new Error('Refusing to start PM2 without INTEXURAOS_ENVIRONMENT=prod');
+}
+if (
+  envValue('INTEXURAOS_COMMIT_SHA') !== undefined &&
+  !/^[0-9a-f]{40}$/.test(envValue('INTEXURAOS_COMMIT_SHA'))
+) {
+  throw new Error('INTEXURAOS_COMMIT_SHA must be a 40-character lowercase hexadecimal SHA');
 }
 
 const REPO_ROOT = __dirname;
@@ -50,6 +62,7 @@ const SERVICE_PORTS = {
   'llm-usage-service': 8132,
   'api-docs-hub': 8133,
   'intex-agent': 8134,
+  'message-digest-service': 8135,
 };
 
 const SERVICE_URL_ENV = {
@@ -71,6 +84,7 @@ const SERVICE_URL_ENV = {
   'llm-usage-service': 'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'api-docs-hub': 'INTEXURAOS_API_DOCS_HUB_URL',
   'intex-agent': 'INTEXURAOS_INTEX_AGENT_URL',
+  'message-digest-service': 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL',
 };
 
 const PUBLIC_API_PATHS = {
@@ -91,6 +105,7 @@ const PUBLIC_API_PATHS = {
   'hellscript-agent': '/api/hellscript-agent',
   'llm-usage-service': '/api/llm-usage',
   'intex-agent': '/api/intex-agent',
+  'message-digest-service': '/api/message-digests',
 };
 
 const API_DOCS_HUB_OPENAPI_URLS = {
@@ -110,6 +125,7 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://127.0.0.1:8127/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://127.0.0.1:8131/openapi.json',
   INTEXURAOS_INTEX_AGENT_OPENAPI_URL: 'http://127.0.0.1:8134/openapi.json',
+  INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8135/openapi.json',
 };
 
 const PROD_SERVICE_ORDER = [
@@ -124,6 +140,7 @@ const PROD_SERVICE_ORDER = [
   'hellscript-agent',
   'llm-usage-service',
   'intex-agent',
+  'message-digest-service',
   'user-service',
   'research-agent',
   'image-service',
@@ -179,36 +196,59 @@ const COMMON_ENV_KEYS = [
   'INTEXURAOS_SENTRY_DSN',
 ];
 
-const SERVICE_SECRET_KEYS = {
+// Source-agnostic runtime names: /etc/intexuraos/.env.prod already contains the
+// validated merge of tracked configuration and actual Secret Manager values.
+const SERVICE_RUNTIME_ENV_KEYS = {
   'app-settings-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'notion-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'whatsapp-service': [
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+    'INTEXURAOS_OPENROUTER_APP_API_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+    'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
+    'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN',
+    'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID',
+    'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET',
+    'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
     'INTEXURAOS_WHATSAPP_ACCESS_TOKEN',
     'INTEXURAOS_WHATSAPP_APP_SECRET',
     'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
     'INTEXURAOS_WHATSAPP_VERIFY_TOKEN',
     'INTEXURAOS_WHATSAPP_WABA_ID',
   ],
-  'mobile-notifications-service': [
+  'mobile-notifications-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+  'fishing-assistant-service': [
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_OPENROUTER_APP_API_KEY',
   ],
-  'fishing-assistant-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENAI_APP_API_KEY'],
   'notes-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'bookmarks-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'code-agent': [
     'INTEXURAOS_GITHUB_WEBHOOK_SECRET',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-    'INTEXURAOS_OPENAI_APP_API_KEY',
     'INTEXURAOS_OPENROUTER_APP_API_KEY',
     'INTEXURAOS_ORCHESTRATOR_SECRET',
+    'INTEXURAOS_SENTRY_WEBHOOK_SECRET',
+    'INTEXURAOS_SENTRY_AUTOMATION_USER_ID',
     'INTEXURAOS_TOKEN_ENCRYPTION_KEY',
-    'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   ],
-  'hellscript-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+  'hellscript-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
   'llm-usage-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_ORCHESTRATOR_SECRET'],
-  'intex-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
+  'intex-agent': [
+    'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+    'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+    'INTEXURAOS_OPENROUTER_APP_API_KEY',
+  ],
+  'message-digest-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
   'user-service': [
     'INTEXURAOS_AUTH0_CLIENT_ID',
     'INTEXURAOS_AUTH0_DOMAIN',
@@ -217,18 +257,20 @@ const SERVICE_SECRET_KEYS = {
     'INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET',
     'INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID',
     'INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET',
-    'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+    'INTEXURAOS_OPENROUTER_APP_API_KEY',
     'INTEXURAOS_TOKEN_ENCRYPTION_KEY',
   ],
-  'research-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-  'image-service': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-  'calendar-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-  'linear-agent': ['INTEXURAOS_GEMINI_APP_API_KEY', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+  'research-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
+  'image-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
+  'calendar-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
+  'linear-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
   'web-agent': [
     'INTEXURAOS_CLOUDFLARE_ACCOUNT_ID',
     'INTEXURAOS_CLOUDFLARE_API_TOKEN',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+    'INTEXURAOS_OPENROUTER_APP_API_KEY',
   ],
 };
 
@@ -237,22 +279,34 @@ const COMMON_SERVICE_ENV = {
   PATH: envValue('PATH'),
   ...pickEnv(COMMON_ENV_KEYS),
   GOOGLE_APPLICATION_CREDENTIALS,
+  GOOGLE_CLOUD_QUOTA_PROJECT: PROJECT_ID,
   INTEXURAOS_GCP_PROJECT_ID: PROJECT_ID,
   INTEXURAOS_ENVIRONMENT: 'prod',
   INTEXURAOS_RUNTIME: 'prod',
+  ...(envValue('INTEXURAOS_COMMIT_SHA') === undefined
+    ? {}
+    : { INTEXURAOS_COMMIT_SHA: envValue('INTEXURAOS_COMMIT_SHA') }),
   INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   INTEXURAOS_WEB_URL: envValue('INTEXURAOS_WEB_URL') ?? PUBLIC_ORIGIN,
   INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS:
     envValue('INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS') ??
-    'or:google/gemma-4-31b-it,gemini-2.5-flash',
+    'or:google/gemma-4-31b-it,or:minimax/minimax-m3',
   ...localServiceUrls(),
 };
 
 const SERVICE_ENV_MAPPINGS = {
   'user-service': {
+    INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID: envValue(
+      'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'
+    ),
+    INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED: 'true',
+    INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'hetzner-prod',
     INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   },
   'whatsapp-service': {
+    INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
+    INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'hetzner-prod',
+    INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'hetzner-prod',
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET:
       envValue('INTEXURAOS_WHATSAPP_MEDIA_BUCKET') ??
       `intexuraos-whatsapp-media-${RETAINED_GCP_ENVIRONMENT}`,
@@ -261,19 +315,16 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION:
       envValue('INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION') ??
       `${topic('whatsapp-media-cleanup')}-push`,
+    INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC:
+      envValue('INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC') ?? topic('audio-stored'),
     INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC:
       envValue('INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC') ?? topic('intex-message-ingest'),
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC') ?? topic('whatsapp-webhook-process'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
-  },
-  'mobile-notifications-service': {
-    INTEXURAOS_DIGEST_LLM_MODEL:
-      envValue('INTEXURAOS_DIGEST_LLM_MODEL') ?? 'or:google/gemini-3-flash-preview',
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
-    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
+    INTEXURAOS_CONVERSATION_ASSISTANT_MODEL:
+      envValue('INTEXURAOS_CONVERSATION_ASSISTANT_MODEL') ?? 'or:minimax/minimax-m3',
   },
   'research-agent': {
     INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC:
@@ -309,6 +360,10 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_SERVICE_URL: envValue('INTEXURAOS_SERVICE_URL') ?? publicServiceUrl('code-agent'),
     INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL:
       envValue('INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL') ?? `${PUBLIC_ORIGIN}/api/code`,
+    INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY:
+      envValue('INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY') ?? 'pbuchman/intexuraos',
+    INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH:
+      envValue('INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH') ?? 'development',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
     INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC:
@@ -329,10 +384,23 @@ const SERVICE_ENV_MAPPINGS = {
       envValue('INTEXURAOS_LLM_USAGE_PUBLIC_URL') ?? publicServiceUrl('llm-usage-service'),
   },
   'intex-agent': {
+    INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED: 'true',
+    INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
+    INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'hetzner-prod',
+    INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'hetzner-prod',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
     INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS:
       envValue('INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS') ?? '1800000',
+  },
+  'message-digest-service': {
+    INTEXURAOS_DIGEST_LLM_MODEL:
+      envValue('INTEXURAOS_DIGEST_LLM_MODEL') ?? 'or:google/gemini-3.6-flash',
+    INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC:
+      envValue('INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC') ?? topic('message-digest-runs'),
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
+    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   },
   'api-docs-hub': {
     ...API_DOCS_HUB_OPENAPI_URLS,
@@ -352,7 +420,7 @@ function createServiceConfig(name) {
     interpreter: 'node',
     env: {
       ...COMMON_SERVICE_ENV,
-      ...pickEnv(SERVICE_SECRET_KEYS[name] ?? []),
+      ...pickEnv(SERVICE_RUNTIME_ENV_KEYS[name] ?? []),
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       ...(waitForService === undefined ? {} : { WAIT_FOR_SERVICE: waitForService }),
       PORT: String(SERVICE_PORTS[name]),
@@ -365,6 +433,7 @@ function createServiceConfig(name) {
     filter_env: [
       'INTEXURAOS_',
       'GOOGLE_APPLICATION_CREDENTIALS',
+      'GOOGLE_CLOUD_QUOTA_PROJECT',
       'HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS',
       'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE',
       'GOOGLE_CLOUD_PROJECT',

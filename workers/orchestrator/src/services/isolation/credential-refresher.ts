@@ -82,13 +82,21 @@ export class CredentialRefresher {
       }
 
       this.logger.error(
-        { exitCode: waitResult.StatusCode, containerId: container.id, output: containerOutput },
+        {
+          exitCode: waitResult.StatusCode,
+          containerId: container.id,
+          output: containerOutput,
+          _skipSentry: true,
+        },
         'Claude credential refresh failed with non-zero exit code'
       );
       return false;
     } catch (error) {
       this.logger.error(
-        { error: error instanceof Error ? error : new Error(String(error)) },
+        {
+          error: error instanceof Error ? error : new Error(String(error)),
+          _skipSentry: true,
+        },
         'Claude credential refresh container failed'
       );
       return false;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
-import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
+import { LlmProviders, LegacyGoogleModels, LlmModels } from '@intexuraos/llm-contract';
 import type { ProviderPricing } from '@intexuraos/llm-contract';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../server.js';
@@ -50,7 +50,7 @@ function makeTestToken(userId: string): string {
 const mockGooglePricing: ProviderPricing = {
   provider: LlmProviders.Google,
   models: {
-    [LlmModels.Gemini25Pro]: {
+    [LegacyGoogleModels.Gemini25Pro]: {
       inputPricePerMillion: 1.25,
       outputPricePerMillion: 10.0,
       groundingCostPerRequest: 0.035,
@@ -222,7 +222,7 @@ describe('pricingRoutes', () => {
         payload: {
           provider: LlmProviders.Google,
           models: {
-            [LlmModels.Gemini25Pro]: {
+            [LegacyGoogleModels.Gemini25Pro]: {
               outputPricePerMillion: 10.0,
               // missing inputPricePerMillion
             },

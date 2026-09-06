@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ProtectedLayout } from '../ProtectedLayout.js';
+import { AUTH_RETURN_PATH_KEY } from '../authReturnPath.js';
 
 interface MockAuthValue {
   isAuthenticated: boolean;
@@ -22,12 +23,16 @@ vi.mock('@/context', () => ({
   useAuth: (): MockAuthValue => mockAuth,
 }));
 
-function renderAtProtectedRoute(): void {
+function renderAtProtectedRoute(initialPath = '/x'): void {
   render(
-    <MemoryRouter initialEntries={['/x']}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route element={<ProtectedLayout />}>
           <Route path="/x" element={<div>protected-child</div>} />
+          <Route
+            path="/notifications/digests/:groupKey/:date"
+            element={<div>legacy-child</div>}
+          />
         </Route>
         <Route path="/login" element={<div>login-page</div>} />
       </Routes>
@@ -43,6 +48,7 @@ describe('ProtectedLayout', () => {
   beforeEach(() => {
     mockAuth.isAuthenticated = false;
     mockAuth.isLoading = false;
+    sessionStorage.clear();
   });
 
   it('renders FullPageSpinner while auth is loading', () => {
@@ -59,6 +65,17 @@ describe('ProtectedLayout', () => {
     renderAtProtectedRoute();
     expect(screen.getByText('login-page')).toBeInTheDocument();
     expect(screen.queryByText('protected-child')).not.toBeInTheDocument();
+  });
+
+  it('remembers the exact legacy URL before redirecting through login', () => {
+    renderAtProtectedRoute(
+      '/notifications/digests/grupa-wedkarska-skool/2026-07-27?source=legacy'
+    );
+
+    expect(screen.getByText('login-page')).toBeInTheDocument();
+    expect(sessionStorage.getItem(AUTH_RETURN_PATH_KEY)).toBe(
+      '/notifications/digests/grupa-wedkarska-skool/2026-07-27?source=legacy'
+    );
   });
 
   it('renders the child outlet when authenticated', () => {

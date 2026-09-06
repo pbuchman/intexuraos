@@ -8,6 +8,7 @@ import {
   __testables as processExecutionMemoryBacklogTestables,
   processExecutionMemoryBacklog,
 } from '../../../domain/usecases/processExecutionMemoryBacklog.js';
+import { DistillationSchema } from '../../../domain/usecases/executionMemory/shared.js';
 
 describe('processExecutionMemoryBacklog', () => {
   type TaskOverrides = Omit<Partial<CodeTask>, 'linearIssueId' | 'result' | 'executionMemoryPostRun'> & {
@@ -564,6 +565,57 @@ describe('processExecutionMemoryBacklog', () => {
         status: 'error',
         attempts: 3,
         errorMessage: 'Gemini unavailable',
+      }),
+    }));
+  });
+
+  it('skips task with no_reusable_lesson default when LLM returns empty skipReason', async () => {
+    // Regression test for INTEXURAOS-HETZNER-3Q: LLM returning
+    // `"skipReason": ""` previously caused the backlog processor to log
+    // "Execution memory backlog processing failed" and mark the task as errored.
+    const task = createTask({
+      executionMemoryContext: { status: 'none' },
+    });
+    codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
+    codeTaskRepo.update.mockResolvedValue(ok(task));
+    mockLlmClient.generate.mockResolvedValue(ok({
+      content: JSON.stringify({
+        decision: 'skip',
+        skipReason: '',
+        evidenceSummary: 'Nothing reusable to extract.',
+        memories: [],
+      }),
+    }));
+
+    const result = await processExecutionMemoryBacklog({
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      userServiceClient: userServiceClient as never,
+      embeddingClient: embeddingClient as never,
+      limit: 10,
+    });
+
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
+    expect(result.value).toEqual({
+      claimed: 1,
+      completed: 0,
+      skipped: 1,
+      errored: 0,
+      taskIds: ['task-1'],
+    });
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: task.id }),
+      'Execution memory backlog processing failed'
+    );
+    expect(codeTaskRepo.update).toHaveBeenLastCalledWith('task-1', expect.objectContaining({
+      executionMemoryPostRun: expect.objectContaining({
+        status: 'skipped',
+        skipReason: 'no_reusable_lesson',
       }),
     }));
   });
@@ -1788,7 +1840,7 @@ describe('processExecutionMemoryBacklog', () => {
       expect(callCount).toBe(2);
       expect(result.decision).toBe('skip');
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ err: expect.any(Error) }),
+        expect.objectContaining({ err: expect.any(Error), _skipSentry: true }),
         'Distiller response failed Zod parse, retrying with refinement prompt'
       );
     });
@@ -1896,6 +1948,45 @@ describe('processExecutionMemoryBacklog', () => {
       expect(retryPrompt).toContain('Fix the JSON schema violation and return valid JSON');
       expect(retryPrompt).toContain('Your previous response was invalid JSON');
     });
+
+    it('treats empty-string skipReason from LLM as undefined instead of failing Zod parse', async () => {
+      // Regression test for INTEXURAOS-HETZNER-3Q: LLM occasionally returns
+      // `"skipReason": ""` for decision=skip. Zod enum rejects "" and the
+      // resulting parse failure surfaced as "Execution memory backlog processing failed".
+      const emptySkipReasonResponse = JSON.stringify({
+        decision: 'skip',
+        skipReason: '',
+        evidenceSummary: 'Nothing reusable to extract.',
+        memories: [],
+      });
+      mockLlmClient.generate.mockResolvedValue(ok({ content: emptySkipReasonResponse }));
+
+      const result = await processExecutionMemoryBacklogTestables.distillTask(
+        createTask(),
+        [{ text: 'log line' }],
+        [],
+        { description: null, comments: [] },
+        {
+          logger,
+          codeTaskRepo: codeTaskRepo as never,
+          logLineRepo: logLineRepo as never,
+          turnMetricsRepo: turnMetricsRepo as never,
+          linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
+          executionMemoryRepo: executionMemoryRepo as never,
+          executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+          distillerClient: mockLlmClient as never,
+          limit: 10,
+        }
+      );
+
+      expect(result.decision).toBe('skip');
+      expect(mockLlmClient.generate).toHaveBeenCalledTimes(1);
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        'Distiller response failed Zod parse, retrying with refinement prompt'
+      );
+    });
   });
 
   it('uses planning distillation version and sourceAgentType when creating memories for planning tasks', async () => {
@@ -1953,7 +2044,7 @@ describe('processExecutionMemoryBacklog', () => {
     expect(result.generatedMemoryIds).toEqual(['mem-plan']);
     expect(executionMemoryRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       sourceAgentType: 'planning',
-      distillationVersion: 'planning-memory-distiller@1.1.0',
+      distillationVersion: 'planning-memory-distiller@2.0.0',
       memoryType: 'decomposition_pattern',
     }));
   });
@@ -2069,7 +2160,7 @@ describe('processExecutionMemoryBacklog', () => {
     expect(result.generatedMemoryIds).toEqual(['mem-exact-plan']);
     expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-exact-plan', expect.objectContaining({
       sourceAgentType: 'planning',
-      distillationVersion: 'planning-memory-distiller@1.1.0',
+      distillationVersion: 'planning-memory-distiller@2.0.0',
     }));
   });
 
@@ -2159,8 +2250,8 @@ describe('processExecutionMemoryBacklog', () => {
   });
 
   describe('DistillationSchema extended types', () => {
-    it('accepts decomposition_pattern, planning_decision, and review_finding as memory types', () => {
-      const newTypes = ['decomposition_pattern', 'planning_decision', 'review_finding'] as const;
+    it('accepts single-artifact planning and historical planning memory types', () => {
+      const newTypes = ['single_artifact_planning', 'decomposition_pattern', 'planning_decision', 'review_finding'] as const;
       for (const memoryType of newTypes) {
         const input = {
           decision: 'create' as const,
@@ -2179,8 +2270,7 @@ describe('processExecutionMemoryBacklog', () => {
             confidence: 0.8,
           }],
         };
-        // Should not throw
-        expect(() => processExecutionMemoryBacklogTestables.parseJsonObject(JSON.stringify(input))).not.toThrow();
+        expect(DistillationSchema.parse(input).memories[0]?.memoryType).toBe(memoryType);
       }
     });
 
@@ -2205,7 +2295,7 @@ describe('processExecutionMemoryBacklog', () => {
       );
     });
 
-    it('routes planning agent type to planning-memory-distiller@1.1.0', () => {
+    it('routes planning agent type to planning-memory-distiller@2.0.0', () => {
       const task = createTask({
         agentType: 'planning',
         status: 'planned',
@@ -2217,7 +2307,7 @@ describe('processExecutionMemoryBacklog', () => {
         turnMetrics: [],
         issueContext: { description: 'issue', comments: [] },
       });
-      expect(prompt).toContain('planning-memory-distiller@1.1.0');
+      expect(prompt).toContain('planning-memory-distiller@2.0.0');
     });
 
     it('routes review agent type to review-memory-distiller@1.1.0', () => {
@@ -2285,6 +2375,7 @@ describe('processExecutionMemoryBacklog', () => {
           planning_outcome_label: 'planned',
           planning_is_complex: '1',
           planning_subtask_urls: 'url1,url2,url3',
+          planning_has_plan_doc: '1',
           planning_superpowers_writing_plans_used: '1',
           planning_pr_url: 'https://github.com/pr/1',
         },
@@ -2296,14 +2387,20 @@ describe('processExecutionMemoryBacklog', () => {
         issueContext: { description: 'Linear issue', comments: [{ body: 'comment', createdAt: '2026-01-01' }] },
       });
       expect(prompt).toContain('Planning outcome:');
-      expect(prompt).toContain('Complexity classification:');
-      expect(prompt).toContain('COMPLEX');
-      expect(prompt).toContain('Subtask count: 3');
+      expect(prompt).toContain('Planning execution model: single issue, single execution task');
+      expect(prompt).toContain('Plan document present: yes');
+      expect(prompt).not.toContain('Planning subtask count:');
+      expect(prompt).not.toContain('Subtask count:');
+      expect(prompt).not.toContain('Complexity classification: COMPLEX');
       expect(prompt).toContain('Used writing-plans skill:');
       expect(prompt).toContain('Planning PR URL:');
       expect(prompt).toContain('planning memory distiller');
-      expect(prompt).toContain('DECOMPOSITION PATTERNS');
-      expect(prompt).toContain('decomposition_pattern');
+      expect(prompt).toContain('SINGLE-ARTIFACT PLANNING PATTERNS');
+      expect(prompt).toContain('How was the original issue prepared for one execution task?');
+      expect(prompt).toContain('single_artifact_planning');
+      expect(prompt).not.toContain('DECOMPOSITION PATTERNS');
+      expect(prompt).not.toContain('How was the issue broken into subtasks?');
+      expect(prompt).not.toContain('- "decomposition_pattern": How complex issues should be broken into subtasks');
       expect(prompt).toContain('planning_decision');
     });
 
@@ -2320,10 +2417,33 @@ describe('processExecutionMemoryBacklog', () => {
         issueContext: { description: null, comments: [] },
       });
       expect(prompt).toContain('Planning outcome: ');
-      expect(prompt).toContain('SIMPLE_OR_PLAN_DOC');
-      expect(prompt).toContain('Subtask count: 0');
+      expect(prompt).toContain('Planning execution model: single issue, single execution task');
+      expect(prompt).toContain('Plan document present: no');
+      expect(prompt).not.toContain('SIMPLE_OR_PLAN_DOC');
+      expect(prompt).not.toContain('Subtask count: 0');
       expect(prompt).toContain('Used writing-plans skill: ');
       expect(prompt).toContain('Planning PR URL: ');
+    });
+
+    it('includes plan document presence from planning task results', () => {
+      const planningTask = createTask({
+        agentType: 'planning',
+        status: 'planned',
+        result: {
+          summary: 'planned single artifact',
+          planning_outcome_label: 'planned',
+          planning_has_plan_doc: '1',
+        },
+      });
+
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task: planningTask,
+        logs: [{ text: 'log line' }],
+        turnMetrics: [],
+        issueContext: { description: 'Linear issue', comments: [] },
+      });
+
+      expect(prompt).toContain('Plan document present: yes');
     });
   });
 
@@ -2630,7 +2750,7 @@ describe('processExecutionMemoryBacklog', () => {
       expect(summary).toBe('Memory was applied successfully.');
       expect(mockLlmClient.generate).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ err: expect.anything() }),
+        expect.objectContaining({ err: expect.anything(), _skipSentry: true }),
         'Evaluator response failed Zod parse, retrying with refinement prompt',
       );
     });

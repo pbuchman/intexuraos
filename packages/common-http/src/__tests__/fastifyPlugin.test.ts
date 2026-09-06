@@ -204,6 +204,7 @@ describe('Intexura Fastify Plugin', () => {
         { code: 'FORBIDDEN', expectedStatus: 403 },
         { code: 'NOT_FOUND', expectedStatus: 404 },
         { code: 'CONFLICT', expectedStatus: 409 },
+        { code: 'SERVICE_UNAVAILABLE', expectedStatus: 503 },
         { code: 'DOWNSTREAM_ERROR', expectedStatus: 502 },
         { code: 'INTERNAL_ERROR', expectedStatus: 500 },
         { code: 'MISCONFIGURED', expectedStatus: 503 },

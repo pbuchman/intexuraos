@@ -24,15 +24,18 @@ function makeValidEnv(overrides: Partial<Record<string, string>> = {}): EnvReade
     INTEXURAOS_USAGE_WEBHOOK_URL: 'https://usage.test',
     INTEXURAOS_GITHUB_APP_ID: '12345',
     INTEXURAOS_GITHUB_INSTALLATION_ID: '67890',
+    INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH:
+      '/run/intexuraos/dev/current/github-app-private-key.pem',
     INTEXURAOS_PROJECT_ID: 'proj-id',
     GOOGLE_APPLICATION_CREDENTIALS: '/path/to/sa.json',
     INTEXURAOS_LINEAR_API_KEY: 'lin-key',
     INTEXURAOS_SENTRY_AUTH_TOKEN: 'sentry-token',
+    INTEXURAOS_ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     INTEXURAOS_MINIMAX_APP_API_KEY: 'minimax-key',
     INTEXURAOS_MIMO_APP_API_KEY: 'mimo-key',
     INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-key',
     INTEXURAOS_KIMI_APP_API_KEY: 'ABCDEFG',
-    INTEXURAOS_GEMINI_APP_API_KEY: 'gemini-key',
+    INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-key',
     ...overrides,
   };
 }
@@ -80,10 +83,38 @@ describe('getOptionalEnv', () => {
 });
 
 describe('loadEnvConfig', () => {
+  it('starts without a Gemini API key', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_GEMINI_APP_API_KEY'];
+
+    expect(loadEnvConfig(env).openRouterApiKey).toBe('openrouter-key');
+  });
+
+  it('requires the OpenRouter platform key used by validation models', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+
+    expect(() => loadEnvConfig(env)).toThrow(/INTEXURAOS_OPENROUTER_APP_API_KEY/);
+  });
+
+  it('starts without the removed Legacy Sentry worker auth token', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
+
+    expect(loadEnvConfig(env)).toEqual(expect.objectContaining({ linearApiKey: 'lin-key' }));
+  });
+
   it('throws naming the missing variable when a required var is absent', () => {
     const env = makeValidEnv();
     delete env['INTEXURAOS_REPOSITORY_URL'];
     expect(() => loadEnvConfig(env)).toThrow(/INTEXURAOS_REPOSITORY_URL/);
+  });
+
+  it('throws naming INTEXURAOS_ERROR_HUB_HOST when the sole evidence provider is missing', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_ERROR_HUB_HOST'];
+
+    expect(() => loadEnvConfig(env)).toThrow(/INTEXURAOS_ERROR_HUB_HOST/);
   });
 
   it('returns a typed config object when all required vars are set', () => {
@@ -92,15 +123,18 @@ describe('loadEnvConfig', () => {
     expect(config.codeAgentUrl).toBe('https://code-agent.test');
     expect(config.gcpSaKeyPath).toBe('/path/to/sa.json');
     expect(config.projectId).toBe('proj-id');
+    expect(config.githubPrivateKeyPath).toBe(
+      '/run/intexuraos/dev/current/github-app-private-key.pem'
+    );
     expect(config.linearApiKey).toBe('lin-key');
-    expect(config.kimiApiKey).toBe('ABCDEFG');
     expect(config.port).toBe(DEFAULT_PORT);
     expect(config.capacity).toBe(DEFAULT_CAPACITY);
     expect(config.completionMaxAttempts).toBe(DEFAULT_COMPLETION_MAX_ATTEMPTS);
     expect(config.validationModels).toBe(DEFAULT_VALIDATION_MODELS);
     expect(config.workerImage).toBe(DEFAULT_WORKER_IMAGE);
     expect(config.logLevel).toBe('info');
-    expect(config.openRouterApiKey).toBe('');
+    expect(config.openRouterApiKey).toBe('openrouter-key');
+    expect(config.errorHubHost).toBe('home-dev.example.ts.net:8443');
     expect(config.keepContainersAlive).toBe(false);
     expect(config.workerForensicsMode).toBe(false);
     expect(config.preserveWorkerContainers).toBe(true);
@@ -177,7 +211,6 @@ describe('loadEnvConfig', () => {
       makeValidEnv({
         INTEXURAOS_REPOSITORY_PATH: '/custom/repo',
         INTEXURAOS_CODE_WORKER_FORENSICS_PATH: '/custom/forensics',
-        INTEXURAOS_GITHUB_APP_PRIVATE_KEY: 'PEM-KEY',
         INTEXURAOS_GIT_USER_NAME: 'Alice',
         INTEXURAOS_GIT_USER_EMAIL: 'alice@example.com',
         INTEXURAOS_OPENROUTER_APP_API_KEY: 'or-key',
@@ -185,7 +218,6 @@ describe('loadEnvConfig', () => {
     );
     expect(config.repoPath).toBe('/custom/repo');
     expect(config.workerForensicsBasePath).toBe('/custom/forensics');
-    expect(config.githubPrivateKeyOverride).toBe('PEM-KEY');
     expect(config.gitUserNameOverride).toBe('Alice');
     expect(config.gitUserEmailOverride).toBe('alice@example.com');
     expect(config.openRouterApiKey).toBe('or-key');
@@ -202,15 +234,57 @@ describe('loadEnvConfig', () => {
     expect(config.gitUserNameOverride).toBeUndefined();
   });
 
-  it('forwards INTEXURAOS_ENVIRONMENT and falls back to NODE_ENV when unset', () => {
-    const explicit = loadEnvConfig(makeValidEnv({ INTEXURAOS_ENVIRONMENT: 'production' }));
-    expect(explicit.environment).toBe('production');
+  it('accepts the private SentryBox tailnet host on port 8443 without changing it', () => {
+    const host = 'home-dev.example.ts.net:8443';
+    const config = loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: host }));
 
-    const fallback = loadEnvConfig(makeValidEnv({ NODE_ENV: 'staging' }));
-    expect(fallback.environment).toBe('staging');
+    expect(config.errorHubHost).toBe(host);
+  });
 
-    const def = loadEnvConfig(makeValidEnv());
-    expect(def.environment).toBe('development');
+  it.each([
+    'home-dev.example.ts.net',
+    'home-dev.example.ts.net:443',
+    'errors.intexuraos.cloud:8443',
+    'https://home-dev.example.ts.net:8443',
+    'home-dev.example.ts.net/issues/1',
+    'user@home-dev.example.ts.net',
+    'home dev.example.ts.net',
+    '.ts.net:8443',
+    'foo..ts.net:8443',
+    '_x.example.ts.net:8443',
+    '-host.example.ts.net:8443',
+    'host-.example.ts.net:8443',
+    'home-dev.example.ts.net:0',
+    'home-dev.example.ts.net:65536',
+  ])('rejects invalid INTEXURAOS_ERROR_HUB_HOST value %s', (value) => {
+    expect(() => loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: value }))).toThrow(
+      /Invalid INTEXURAOS_ERROR_HUB_HOST/
+    );
+  });
+
+  it.each([
+    ['host with trailing LF', 'home-dev.example.ts.net\n'],
+    ['host and port with trailing LF', 'home-dev.example.ts.net:8443\n'],
+    ['host and port with trailing CRLF', 'home-dev.example.ts.net:8443\r\n'],
+    ['host and port with trailing tab', 'home-dev.example.ts.net:8443\t'],
+  ])('rejects INTEXURAOS_ERROR_HUB_HOST containing whitespace: %s', (_name, value) => {
+    expect(() => loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: value }))).toThrow(
+      /Invalid INTEXURAOS_ERROR_HUB_HOST/
+    );
+  });
+
+  it('does not repeat rejected Error Hub credentials in the startup error', () => {
+    const credentialValue = 'user:password@home-dev.example.ts.net';
+    let thrown: unknown;
+
+    try {
+      loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: credentialValue }));
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IntexuraOSError);
+    expect((thrown as IntexuraOSError).message).not.toContain(credentialValue);
   });
 
   it('surfaces INTEXURAOS_SENTRY_DSN, K_REVISION, and INTEXURAOS_RELEASE overrides', () => {

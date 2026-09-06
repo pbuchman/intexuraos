@@ -84,9 +84,11 @@ describe('drainTaskQueue', () => {
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
     listQueuedByAge: ReturnType<typeof vi.fn>;
+    listQueued: ReturnType<typeof vi.fn>;
     hasDispatchedOrRunningForPR: ReturnType<typeof vi.fn>;
     hasOtherDispatchedOrRunningForLinearIssue: ReturnType<typeof vi.fn>;
     claimForDispatch: ReturnType<typeof vi.fn>;
+    rollbackDispatch: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     countQueued: ReturnType<typeof vi.fn>;
@@ -123,6 +125,10 @@ describe('drainTaskQueue', () => {
     dispatchSigningSecret: 'signing-secret',
     enabled: true,
   };
+  const claimed = (dispatchToken = 'test-dispatch-token'): {
+    kind: 'claimed';
+    dispatchToken: string;
+  } => ({ kind: 'claimed', dispatchToken });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,9 +144,11 @@ describe('drainTaskQueue', () => {
 
     mockCodeTaskRepo = {
       listQueuedByAge: vi.fn(),
+      listQueued: vi.fn().mockResolvedValue(ok([])),
       hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       hasOtherDispatchedOrRunningForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
-      claimForDispatch: vi.fn().mockResolvedValue(ok(true)),
+      claimForDispatch: vi.fn().mockResolvedValue(ok(claimed('dispatch-token'))),
+      rollbackDispatch: vi.fn().mockResolvedValue(ok(true)),
       findById: vi.fn(),
       update: vi.fn().mockResolvedValue(ok(createMockTask())),
       countQueued: vi.fn(),
@@ -303,6 +311,11 @@ describe('drainTaskQueue', () => {
     expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
       reason: 'queue_timeout',
       exampleTaskId: 'task-123',
+    }));
+    expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-456',
+      workerType: 'auto',
+      observedBefore: expect.any(Date),
     }));
   });
 
@@ -998,6 +1011,20 @@ describe('drainTaskQueue', () => {
       affectedTaskCount: 1,
       exampleTaskIds: ['task-123'],
     });
+    expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-456',
+      workerType: 'auto',
+      observedBefore: expect.any(Date),
+    }));
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-456',
+        taskId: 'task-123',
+        reason: 'no_enabled_workers',
+        _skipSentry: true,
+      }),
+      'Drain blocked: user has no enabled workers — task failed immediately',
+    );
   });
 
   it('still fails and notifies when no enabled workers exist and dispatch status service is omitted', async () => {
@@ -1024,7 +1051,7 @@ describe('drainTaskQueue', () => {
   it('does not notify or fail no-worker task when another drain already claimed it', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(false));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ kind: 'task_not_queued' }));
     setupWorkerSettings([{ ...workerConfig, enabled: false }]);
 
     const result = await drainTaskQueue(createDeps());
@@ -1060,7 +1087,7 @@ describe('drainTaskQueue', () => {
   it('returns internal_error when no-worker task failure cannot be persisted', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
     mockCodeTaskRepo.update.mockResolvedValue(
       err({ code: 'FIRESTORE_ERROR', message: 'write failed' }),
     );
@@ -1081,7 +1108,7 @@ describe('drainTaskQueue', () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
     mockTaskDispatcher.dispatch.mockResolvedValue(
@@ -1108,7 +1135,7 @@ describe('drainTaskQueue', () => {
     };
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
     mockTaskDispatcher.dispatch.mockResolvedValue(
       err({ code: 'worker_unavailable', message: blocker.message, blocker })
@@ -1123,6 +1150,21 @@ describe('drainTaskQueue', () => {
       affectedTaskCount: 1,
       exampleTaskIds: ['task-123'],
     });
+    expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-456',
+      workerType: 'codex-xhigh',
+      observedBefore: expect.any(Date),
+    }));
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        workerType: 'codex-xhigh',
+        reason: 'codex_auth_unavailable',
+        terminal: true,
+        _skipSentry: true,
+      }),
+      'Drain dispatch blocked by known worker capability state',
+    );
   });
 
   it('records task-level waiting status and sends one notification for recoverable dispatcher blockers', async () => {
@@ -1137,7 +1179,7 @@ describe('drainTaskQueue', () => {
     };
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
     mockTaskDispatcher.dispatch.mockResolvedValue(
       err({ code: 'at_capacity', message: blocker.message, blocker })
@@ -1149,21 +1191,25 @@ describe('drainTaskQueue', () => {
     if (result.ok) {
       expect(result.value).toEqual({ action: 'still_busy', taskId: 'task-123' });
     }
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
-      status: 'queued',
-      dispatchStatus: expect.objectContaining({
+    expect(mockCodeTaskRepo.rollbackDispatch).toHaveBeenCalledWith(
+      'task-123',
+      'test-dispatch-token',
+      expect.objectContaining({
         state: 'waiting',
         reason: 'workers_at_capacity',
         terminal: false,
         nextAction: 'will_retry_automatically',
       }),
-    }));
+    );
     expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).toHaveBeenCalledWith('user-456', expect.objectContaining({
       workerType: 'codex-xhigh',
       reason: 'workers_at_capacity',
       affectedTaskCount: 1,
       exampleTaskId: 'task-123',
     }));
+    expect(mockCodeTaskRepo.rollbackDispatch.mock.invocationCallOrder[0]).toBeLessThan(
+      (mockDispatchStatusService.recordDispatchBlocked as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
   it('marks all queued tasks affected by a recoverable worker blocker as waiting', async () => {
@@ -1187,10 +1233,13 @@ describe('drainTaskQueue', () => {
     const result = await drainTaskQueue(createDeps());
 
     expect(result.ok).toBe(true);
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-1', expect.objectContaining({
-      status: 'queued',
-      dispatchStatus: expect.objectContaining({ reason: 'workers_at_capacity' }),
-    }));
+    expect(mockCodeTaskRepo.rollbackDispatch).toHaveBeenCalledWith(
+      'task-1',
+      'dispatch-token',
+      expect.objectContaining({
+        reason: 'workers_at_capacity',
+      }),
+    );
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-2', expect.objectContaining({
       status: 'queued',
       dispatchStatus: expect.objectContaining({ reason: 'workers_at_capacity' }),
@@ -1239,7 +1288,7 @@ describe('drainTaskQueue', () => {
     };
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
     mockTaskDispatcher.dispatch.mockResolvedValue(
       err({ code: 'at_capacity', message: blocker.message, blocker })
@@ -1251,20 +1300,21 @@ describe('drainTaskQueue', () => {
       reason: 'workers_at_capacity',
       exampleTaskId: 'task-123',
     }));
-    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
-      status: 'queued',
-      dispatchStatus: expect.objectContaining({
+    expect(mockCodeTaskRepo.rollbackDispatch).toHaveBeenCalledWith(
+      'task-123',
+      'test-dispatch-token',
+      expect.objectContaining({
         reason: 'workers_at_capacity',
         firstSeenAt,
       }),
-    }));
+    );
   });
 
   it('fails task when dispatch returns permanent error', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
 
     mockTaskDispatcher.dispatch.mockResolvedValue(
       err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -1302,7 +1352,7 @@ describe('drainTaskQueue', () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
 
     mockTaskDispatcher.dispatch.mockResolvedValue(
       err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -1368,9 +1418,98 @@ describe('drainTaskQueue', () => {
 
     // Verify notification sent
     expect(mockWhatsappNotifier.notifyTaskStarted).toHaveBeenCalledWith('user-456', updatedTask);
+    expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-456',
+      workerType: 'auto',
+      observedBefore: expect.any(Date),
+    }));
+  });
+
+  it('preserves the aggregate when another matching queued task is still blocked', async () => {
+    const task = createMockTask();
+    const otherBlockedTask = createMockTask({
+      id: 'task-other',
+      dispatchStatus: {
+        state: 'waiting',
+        reason: 'workers_at_capacity',
+        severity: 'warning',
+        message: 'All capable workers are currently at capacity.',
+        remediation: 'Wait for capacity.',
+        workerNames: ['home-mac'],
+        firstSeenAt: Timestamp.now(),
+        lastSeenAt: Timestamp.now(),
+        nextAction: 'will_retry_automatically',
+        terminal: false,
+        notifiedReasons: {},
+      },
+    });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockCodeTaskRepo.listQueued.mockResolvedValue(ok([otherBlockedTask]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(
+      ok(createMockTask({ status: 'dispatched', workerLocation: 'home-mac' }))
+    );
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockDispatchStatusService.resolveDispatchBlockers).not.toHaveBeenCalled();
+  });
+
+  it('preserves the aggregate when the queue reconciliation read fails', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockCodeTaskRepo.listQueued.mockResolvedValue(
+      err({ code: 'FIRESTORE_ERROR', message: 'queue read failed' })
+    );
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(
+      ok(createMockTask({ status: 'dispatched', workerLocation: 'home-mac' }))
+    );
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockDispatchStatusService.resolveDispatchBlockers).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-123',
+        workerType: 'auto',
+        error: { code: 'FIRESTORE_ERROR', message: 'queue read failed' },
+      }),
+      'Failed to reconcile queued tasks before resolving dispatch blockers'
+    );
+  });
+
+  it('captures the aggregate-resolution cutoff before re-reading the queue', async () => {
+    vi.useFakeTimers();
+    const observedBefore = new Date('2026-07-27T12:00:00.000Z');
+    vi.setSystemTime(observedBefore);
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    mockCodeTaskRepo.listQueued.mockImplementation(async () => {
+      vi.setSystemTime(new Date('2026-07-27T12:00:01.000Z'));
+      return ok([]);
+    });
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(
+      ok(createMockTask({ status: 'dispatched', workerLocation: 'home-mac' }))
+    );
+
+    await drainTaskQueue(createDeps());
+
     expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith({
       userId: 'user-456',
       workerType: 'auto',
+      observedBefore,
     });
   });
 
@@ -1378,7 +1517,7 @@ describe('drainTaskQueue', () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
     mockTaskDispatcher.dispatch.mockResolvedValue(
       ok({ dispatched: true, workerLocation: 'home-mac' })
     );
@@ -1409,6 +1548,7 @@ describe('drainTaskQueue', () => {
 
     expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith({
       taskId: 'task-123',
+      dispatchAttemptId: 'dispatch-token',
       prompt: 'Fix the bug',
       systemPromptHash: 'hash-abc',
       repository: 'pbuchman/intexuraos',
@@ -1483,6 +1623,40 @@ describe('drainTaskQueue', () => {
 
     expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ prNumber: 42 })
+    );
+  });
+
+  it('forwards Sentry issue context in dispatch request for Sentry tasks', async () => {
+    const sentryIssue = {
+      organizationSlug: 'intexura',
+      projectSlug: 'code-agent',
+      projectId: '42',
+      issueId: '123456',
+      issueShortId: 'CODE-AGENT-1',
+      issueUrl: 'https://intexura.sentry.io/issues/123456/',
+      title: 'TypeError: Cannot read properties of undefined',
+      action: 'created',
+      receivedAt: '2026-06-28T12:00:00.000Z',
+      eventId: 'event-1',
+    };
+    const task = createMockTask({
+      agentType: 'sentry',
+      sentryIssue,
+    });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentType: 'sentry',
+        sentryIssue,
+      })
     );
   });
 
@@ -1711,6 +1885,14 @@ describe('drainTaskQueue', () => {
         linearIssueId: 'INT-123',
       })
     );
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        linearIssueId: 'INT-123',
+        error: { code: 'UNAVAILABLE', message: 'Linear down' },
+        _skipSentry: true,
+      }),
+      'Failed to refresh Linear labels during drain'
+    );
   });
 
   it('does not call notifyTaskStarted when update fails', async () => {
@@ -1915,7 +2097,7 @@ describe('drainTaskQueue', () => {
       const task = createMockTask({ prNumber: 42, prBranch: 'fix/some-branch' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -1980,7 +2162,7 @@ describe('drainTaskQueue', () => {
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -1999,6 +2181,57 @@ describe('drainTaskQueue', () => {
   });
 
   describe('per-PR concurrency guard and round-robin', () => {
+    it('dispatches a queued Sentry retry before an older review for the same PR', async () => {
+      const reviewCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:00:00.000Z'));
+      const retryCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:01:14.568Z'));
+      const review = createMockTask({
+        id: 'review-old',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 2520,
+        prBranch: 'codex/int-2119-planning-task-messages',
+        linearIssueId: 'INT-2119',
+        createdAt: reviewCreatedAt,
+        queuedAt: reviewCreatedAt,
+      });
+      const sentryRetry = createMockTask({
+        id: 'sentry-retry-new',
+        agentType: 'sentry',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 2520,
+        prBranch: 'codex/int-2119-planning-task-messages',
+        linearIssueId: 'INT-2119',
+        createdAt: retryCreatedAt,
+        queuedAt: retryCreatedAt,
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([review, sentryRetry]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-2119',
+          title: 'Planning task messages',
+          url: 'https://linear.app/example/INT-2119',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'sentry-retry-new', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'sentry-retry-new' });
+      }
+    });
+
     it('skips task when dispatched/running task exists for same PR', async () => {
       const task = createMockTask({ prNumber: 42, repository: 'pbuchman/intexuraos' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -2299,6 +2532,45 @@ describe('drainTaskQueue', () => {
   });
 
   describe('fan-out check (INT-962)', () => {
+    it('dispatches planning execution follow-up as one task even when the issue has children', async () => {
+      const task = createMockTask({
+        linearIssueId: 'INT-1841',
+        agentType: 'execution',
+        parentTaskId: 'task_planning',
+        followUpReason: 'execution_implement',
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'parent-uuid',
+          identifier: 'INT-1841',
+          title: 'Parent issue',
+          url: 'https://linear.app/intexura/issue/INT-1841',
+          labels: ['code-task'],
+          childCount: 2,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
+      }
+      expect(mockLinearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-123' }),
+      );
+    });
+
     it('triggers fan-out when parent has code-task children and returns dispatched', async () => {
       const task = createMockTask({ linearIssueId: 'INT-956', agentType: 'execution' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
@@ -2521,6 +2793,47 @@ describe('drainTaskQueue', () => {
   });
 
   describe('queued review merge (INT-1014)', () => {
+    it('keeps queued reviews for different users on the same PR isolated', async () => {
+      const firstUserReview = createMockTask({
+        id: 'review-user-1',
+        userId: 'user-1',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        prBranch: 'fix/review-branch',
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 10 * 60 * 1000)),
+      });
+      const secondUserReview = createMockTask({
+        id: 'review-user-2',
+        userId: 'user-2',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 42,
+        prBranch: 'fix/review-branch',
+        agentType: 'review',
+        createdAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(Date.now() - 5 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([firstUserReview, secondUserReview]));
+      setupWorkerSettings();
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result).toEqual(ok({ action: 'dispatched', taskId: 'review-user-1' }));
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        'review-user-1',
+        expect.objectContaining({ status: 'cancelled' }),
+      );
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        'review-user-2',
+        expect.objectContaining({ status: 'cancelled' }),
+      );
+    });
+
     it('merges 2 duplicate queued reviews for same PR — oldest cancelled, newest dispatched', async () => {
       // Older review (createdAt first)
       const olderReview = createMockTask({
@@ -2918,6 +3231,101 @@ describe('drainTaskQueue', () => {
 
   // Fix A: drainTaskQueue keeps task queued for retryable dispatch errors.
   describe('retryable dispatch errors keep task queued (Fix A)', () => {
+    it('keeps the claim and lease when the worker POST outcome is unknown', async () => {
+      const task = createMockTask();
+      const dispatchError = {
+        code: 'network_error' as const,
+        message: 'Gateway timed out after accepting the POST',
+        outcomeUnknown: true,
+        workerLocation: 'home-mac',
+      };
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err(dispatchError));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result).toEqual(ok({ action: 'still_busy', taskId: 'task-123' }));
+      expect(mockCodeTaskRepo.rollbackDispatch).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'task-123',
+        expect.objectContaining({
+          dispatchStatus: expect.objectContaining({
+            state: 'waiting',
+            reason: 'network_error',
+            terminal: false,
+          }),
+          workerLocation: 'home-mac',
+        }),
+      );
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        'task-123',
+        expect.objectContaining({ status: 'queued' }),
+      );
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        'task-123',
+        expect.objectContaining({ status: 'failed' }),
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: 'task-123',
+          dispatchAttemptId: 'test-dispatch-token',
+          error: dispatchError,
+        },
+        'Worker POST outcome is unknown; retaining the dispatch claim and user lease',
+      );
+    });
+
+    it('keeps the existing worker location when an unknown outcome has no target metadata', async () => {
+      const task = createMockTask({ workerLocation: 'existing-worker' });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({
+        code: 'network_error',
+        message: 'Unknown POST outcome without worker metadata',
+        outcomeUnknown: true,
+      } as never));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result).toEqual(ok({ action: 'still_busy', taskId: 'task-123' }));
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+        'task-123',
+        expect.not.objectContaining({ workerLocation: expect.anything() }),
+      );
+      expect(mockCodeTaskRepo.rollbackDispatch).not.toHaveBeenCalled();
+    });
+
+    it('returns internal_error without releasing the claim when unknown outcome persistence fails', async () => {
+      const task = createMockTask();
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({
+        code: 'network_error',
+        message: 'Unknown POST outcome',
+        outcomeUnknown: true,
+        workerLocation: 'home-mac',
+      } as never));
+      mockCodeTaskRepo.update.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'write failed',
+      }));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result).toEqual(err({
+        code: 'internal_error',
+        message: 'Failed to persist unknown dispatch outcome',
+      }));
+      expect(mockCodeTaskRepo.rollbackDispatch).not.toHaveBeenCalled();
+    });
+
     it.each(['worker_unavailable', 'network_error'])(
       'keeps task queued and rolls back claim without resetting queuedAt for retryable code %s',
       async (code) => {
@@ -2927,7 +3335,7 @@ describe('drainTaskQueue', () => {
         });
         mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
         setupWorkerSettings();
-        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
         mockTaskDispatcher.dispatch.mockResolvedValue(
           err({ code, message: `Transient: ${code}` }),
         );
@@ -2941,15 +3349,16 @@ describe('drainTaskQueue', () => {
         }
 
         // Claim was rolled back to queued so the next drain cycle can retry.
-        expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
-          status: 'queued',
-          dispatchStatus: expect.objectContaining({
+        expect(mockCodeTaskRepo.rollbackDispatch).toHaveBeenCalledWith(
+          'task-123',
+          'test-dispatch-token',
+          expect.objectContaining({
             state: 'waiting',
             reason: code,
             terminal: false,
             nextAction: 'will_retry_automatically',
           }),
-        }));
+        );
 
         // queuedAt MUST NOT be reset — TTL must still bound the queue lifetime.
         const queuedAtResetCall = mockCodeTaskRepo.update.mock.calls.find(
@@ -2975,11 +3384,12 @@ describe('drainTaskQueue', () => {
       'permanent code %s still finalizes as failed',
       async (code) => {
         const task = createMockTask();
+        const dispatchError = { code, message: `Permanent: ${code}` };
         mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
         setupWorkerSettings();
-        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
         mockTaskDispatcher.dispatch.mockResolvedValue(
-          err({ code, message: `Permanent: ${code}` }),
+          err(dispatchError),
         );
         mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
@@ -3008,12 +3418,198 @@ describe('drainTaskQueue', () => {
             nextAction: 'retry_after_fix',
           }),
         }));
+        expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+          expect.objectContaining({ dispatchAttemptId: 'test-dispatch-token' }),
+        );
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          {
+            remediationFamily: 'code-task.dispatch',
+            taskId: 'task-123',
+            dispatchAttemptId: 'test-dispatch-token',
+            error: dispatchError,
+          },
+          'Drain dispatch failed with permanent error',
+        );
       },
     );
   });
 
   // Fix B: Linear-issue concurrency guard for review tasks.
   describe('Linear-issue concurrency guard for reviews (Fix B)', () => {
+    it('dispatches queued non-review work before an older review on another PR for the same Linear issue', async () => {
+      const reviewCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:00:00.000Z'));
+      const retryCreatedAt = Timestamp.fromDate(new Date('2026-09-02T17:01:14.568Z'));
+      const review = createMockTask({
+        id: 'review-pr-100',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 100,
+        prBranch: 'codex/review-pr-100',
+        linearIssueId: 'INT-2119',
+        createdAt: reviewCreatedAt,
+        queuedAt: reviewCreatedAt,
+      });
+      const sentryRetry = createMockTask({
+        id: 'sentry-pr-101',
+        agentType: 'sentry',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 101,
+        prBranch: 'codex/retry-pr-101',
+        linearIssueId: 'INT-2119',
+        createdAt: retryCreatedAt,
+        queuedAt: retryCreatedAt,
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([review, sentryRetry]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-2119',
+          title: 'Planning task messages',
+          url: 'https://linear.app/example/INT-2119',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'sentry-pr-101', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'sentry-pr-101' });
+      }
+    });
+
+    it('does not let a future-scheduled same-issue task block unrelated eligible work', async () => {
+      const now = Date.now();
+      const review = createMockTask({
+        id: 'review-pr-100',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 100,
+        prBranch: 'codex/review-pr-100',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+      });
+      const scheduledRetry = createMockTask({
+        id: 'scheduled-sentry-pr-101',
+        agentType: 'sentry',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 101,
+        prBranch: 'codex/retry-pr-101',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 20 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 20 * 60 * 1000)),
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)),
+          source: 'retry_cooloff',
+          derivedBy: 'fallback',
+        },
+      });
+      const unrelated = createMockTask({
+        id: 'unrelated-eligible-task',
+        agentType: 'execution',
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-3000',
+        createdAt: Timestamp.fromDate(new Date(now - 10 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 10 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([review, scheduledRetry, unrelated]));
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-3000',
+          title: 'Unrelated eligible work',
+          url: 'https://linear.app/example/INT-3000',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'unrelated-eligible-task', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'unrelated-eligible-task' });
+      }
+    });
+
+    it('does not treat queued reviews or merge-conflict work on another PR as Linear-issue blockers', async () => {
+      const now = Date.now();
+      const review = createMockTask({
+        id: 'review-pr-100',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 100,
+        prBranch: 'codex/review-pr-100',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+      });
+      const reviewSibling = createMockTask({
+        id: 'review-pr-102',
+        agentType: 'review',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 102,
+        prBranch: 'codex/review-pr-102',
+        linearIssueId: 'INT-2119',
+        createdAt: Timestamp.fromDate(new Date(now - 20 * 60 * 1000)),
+      });
+      const conflictSibling = createMockTask({
+        id: 'conflict-pr-101',
+        agentType: 'execution',
+        repository: 'pbuchman/intexuraos',
+        prNumber: 101,
+        prBranch: 'codex/conflict-pr-101',
+        linearIssueId: 'INT-2119',
+        followUpReason: 'merge_conflict',
+        createdAt: Timestamp.fromDate(new Date(now - 10 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(
+        ok([review, reviewSibling, conflictSibling]),
+      );
+      setupWorkerSettings();
+      mockLinearAgentClient.validateIssue.mockResolvedValue(
+        ok({
+          id: 'linear-uuid',
+          identifier: 'INT-2119',
+          title: 'Planning task messages',
+          url: 'https://linear.app/example/INT-2119',
+          labels: [],
+          childCount: 0,
+          parentId: null,
+        }),
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-dev' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(
+        ok(createMockTask({ id: 'review-pr-100', status: 'dispatched' })),
+      );
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'review-pr-100' });
+      }
+    });
+
     it('defers review when another task on the same Linear issue is dispatched/running', async () => {
       const initialQueuedAtMs = Date.now() - 10 * 60 * 1000;
       const reviewTask = createMockTask({
@@ -3124,7 +3720,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -3164,7 +3760,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -3198,7 +3794,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -3240,7 +3836,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -3263,7 +3859,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
       mockCodeTaskRepo.claimForDispatch.mockResolvedValue(
-        ok(false),
+        ok({ kind: 'task_not_queued' }),
       );
 
       const result = await drainTaskQueue(createDeps());
@@ -3297,7 +3893,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
       mockCodeTaskRepo.claimForDispatch.mockResolvedValue(
-        ok(false),
+        ok({ kind: 'task_not_queued' }),
       );
 
       const result = await drainTaskQueue(createDeps());
@@ -3313,11 +3909,11 @@ describe('drainTaskQueue', () => {
       const task = createMockTask();
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed('rollback-token')));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'worker_unavailable', message: 'all probes failed' }),
       );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+      mockCodeTaskRepo.rollbackDispatch.mockResolvedValue(ok(true));
 
       const result = await drainTaskQueue(createDeps());
 
@@ -3327,25 +3923,26 @@ describe('drainTaskQueue', () => {
       }
 
       expect(mockCodeTaskRepo.claimForDispatch).toHaveBeenCalledWith('task-123');
-      // Rollback: claim was atomically dispatched; on retryable error we put it back to queued.
-      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
-        status: 'queued',
-        dispatchStatus: expect.objectContaining({
+      // Rollback is fenced by the exact token returned by the atomic claim.
+      expect(mockCodeTaskRepo.rollbackDispatch).toHaveBeenCalledWith(
+        'task-123',
+        'rollback-token',
+        expect.objectContaining({
           state: 'waiting',
           reason: 'worker_unavailable',
         }),
-      }));
+      );
     });
 
     it('returns internal_error when claim rollback fails after retryable dispatch error', async () => {
       const task = createMockTask();
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed('rollback-token')));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'worker_unavailable', message: 'all probes failed' }),
       );
-      mockCodeTaskRepo.update.mockResolvedValue(
+      mockCodeTaskRepo.rollbackDispatch.mockResolvedValue(
         err({ code: 'FIRESTORE_ERROR', message: 'rollback write failed' }),
       );
 
@@ -3369,7 +3966,7 @@ describe('drainTaskQueue', () => {
       const task = createMockTask();
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'dispatch_failed', message: 'bad worker response' }),
       );
@@ -3408,6 +4005,43 @@ describe('drainTaskQueue', () => {
           terminal: true,
         }),
       }));
+    });
+
+    it('skips a busy user without mutating that task and dispatches the next user', async () => {
+      const busyTask = createMockTask({ id: 'task-busy-user', userId: 'user-busy' });
+      const freeTask = createMockTask({
+        id: 'task-free-user',
+        userId: 'user-free',
+        prompt: 'Free user task',
+        sanitizedPrompt: 'Free user task',
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([busyTask, freeTask]));
+      setupWorkerSettings();
+      mockCodeTaskRepo.claimForDispatch.mockImplementation(async (taskId: string) =>
+        taskId === 'task-busy-user'
+          ? ok({ kind: 'user_busy' as const, activeTaskId: 'task-active-for-busy-user' })
+          : ok({ kind: 'claimed' as const, dispatchToken: 'free-user-token' })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok({ ...freeTask, status: 'dispatched' }));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result).toEqual({
+        ok: true,
+        value: { action: 'dispatched', taskId: 'task-free-user' },
+      });
+      expect(mockCodeTaskRepo.claimForDispatch).toHaveBeenNthCalledWith(1, 'task-busy-user');
+      expect(mockCodeTaskRepo.claimForDispatch).toHaveBeenNthCalledWith(2, 'task-free-user');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-free-user' }),
+      );
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        'task-busy-user',
+        expect.anything(),
+      );
     });
   });
 
@@ -3581,7 +4215,7 @@ describe('drainTaskQueue', () => {
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([olderScheduled, newerUnscheduled]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })
@@ -3716,7 +4350,7 @@ describe('drainTaskQueue', () => {
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })
@@ -3747,5 +4381,76 @@ describe('drainTaskQueue', () => {
       expect(mockCodeTaskRepo.listQueuedByAge).toHaveBeenCalledTimes(1);
       expect(mockCodeTaskRepo.listQueuedByAge).toHaveBeenCalledWith(50);
     });
+  });
+
+  it('treats a stale recoverable rollback fence as an inert concurrent transition', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed('stale-token')));
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      err({ code: 'worker_unavailable', message: 'worker unavailable' }),
+    );
+    mockCodeTaskRepo.rollbackDispatch.mockResolvedValue(ok(false));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result).toEqual(ok({ action: 'still_busy', taskId: 'task-123' }));
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      { taskId: 'task-123' },
+      'Skipped stale dispatch rollback because the task or user lease moved on',
+    );
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when an affected unclaimed task cannot persist a recoverable status', async () => {
+    const claimedTask = createMockTask({ id: 'task-claimed' });
+    const siblingTask = createMockTask({ id: 'task-sibling' });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([claimedTask, siblingTask]));
+    setupWorkerSettings();
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed('claim-token')));
+    const blocker = {
+      dispatchable: false as const,
+      reason: 'workers_unreachable' as const,
+      severity: 'warning' as const,
+      message: 'Worker unavailable',
+      remediation: 'Retry automatically',
+      workerNames: ['home-mac'],
+    };
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      err({ code: 'worker_unavailable', message: 'worker unavailable', blocker }),
+    );
+    mockCodeTaskRepo.rollbackDispatch.mockResolvedValue(ok(true));
+    mockCodeTaskRepo.update.mockResolvedValue(
+      err({ code: 'FIRESTORE_ERROR', message: 'sibling update failed' }),
+    );
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result).toEqual(err({
+      code: 'internal_error',
+      message: 'Failed to persist recoverable dispatch status',
+    }));
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith(
+      'task-sibling',
+      expect.objectContaining({ status: 'queued' }),
+    );
+  });
+
+  it('skips a no-worker task when the owner lease is already busy', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings([{ ...workerConfig, enabled: false }]);
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({
+      kind: 'user_busy',
+      activeTaskId: 'task-already-running',
+    }));
+
+    const result = await drainTaskQueue(createDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+    expect(mockWhatsappNotifier.notifyTaskDispatchBlocked).not.toHaveBeenCalled();
+    expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
   });
 });

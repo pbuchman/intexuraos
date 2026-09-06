@@ -34,13 +34,16 @@ export interface Config {
   whatsappSendTopic: string;
   prTriageTopic: string;
   linearAgentUrl: string;
-  webhookVerifySecret: string;
   tokenEncryptionKey: string;
   orchestratorSecret: string;
   serviceUrl: string;
   codeTaskCallbackBaseUrl: string;
   webAppUrl: string;
   githubWebhookSecret: string;
+  sentryWebhookSecret: string;
+  sentryAutomationUserId: string;
+  sentryCodeTaskRepository: string;
+  sentryCodeTaskBaseBranch: string;
   userServiceUrl: string;
   // Auth0 JWT validation
   auth0Audience: string;
@@ -54,7 +57,6 @@ export interface Config {
   // GitHub Agent (INT-743)
   openRouterAppApiKey: string;
   executionMemoryEnabled: boolean;
-  openaiAppApiKey: string;
   llmUsageServiceUrl: string;
 }
 
@@ -67,7 +69,6 @@ export function loadConfig(): Config {
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '';
   const prTriageTopic = process.env['INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC'] ?? '';
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
-  const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? ''; // validated in REQUIRED_ENV
   const codeTaskCallbackBaseUrl = (
@@ -79,11 +80,14 @@ export function loadConfig(): Config {
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
+  const sentryWebhookSecret = process.env['INTEXURAOS_SENTRY_WEBHOOK_SECRET'] ?? '';
+  const sentryAutomationUserId = process.env['INTEXURAOS_SENTRY_AUTOMATION_USER_ID'] ?? '';
+  const sentryCodeTaskRepository = process.env['INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY'] ?? 'pbuchman/intexuraos';
+  const sentryCodeTaskBaseBranch = process.env['INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH'] ?? 'development';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
   const openRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
   const executionMemoryEnabled =
     (process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] ?? '').toLowerCase() === 'true';
-  const openaiAppApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'] ?? '';
   const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
 
   return {
@@ -95,13 +99,16 @@ export function loadConfig(): Config {
     whatsappSendTopic,
     prTriageTopic,
     linearAgentUrl,
-    webhookVerifySecret,
     orchestratorSecret,
     serviceUrl,
     codeTaskCallbackBaseUrl,
     webAppUrl,
     tokenEncryptionKey,
     githubWebhookSecret,
+    sentryWebhookSecret,
+    sentryAutomationUserId,
+    sentryCodeTaskRepository,
+    sentryCodeTaskBaseBranch,
     userServiceUrl,
     auth0Audience,
     auth0Issuer,
@@ -119,7 +126,6 @@ export function loadConfig(): Config {
     },
     openRouterAppApiKey,
     executionMemoryEnabled,
-    openaiAppApiKey,
     llmUsageServiceUrl,
   };
 }

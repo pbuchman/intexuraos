@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const dockerfilePath = fileURLToPath(
@@ -11,8 +11,39 @@ const dockerfileTestPath = fileURLToPath(
 const entrypointPath = fileURLToPath(
   new URL('../../../../../../docker/code-worker/entrypoint.sh', import.meta.url)
 );
+const codexConfigPath = fileURLToPath(
+  new URL('../../../../../../docker/code-worker/config-defaults/codex-config.toml', import.meta.url)
+);
+const claudeMcpConfigPath = fileURLToPath(new URL('../../../../../../.mcp.json', import.meta.url));
+const legacySentrySkillPath = fileURLToPath(
+  new URL('../../../../../../.claude/skills/sentry/SKILL.md', import.meta.url)
+);
+const linearSentryWorkflowPath = fileURLToPath(
+  new URL(
+    '../../../../../../.claude/skills/linear/workflows/sentry-integration.md',
+    import.meta.url
+  )
+);
+const linearCrossLinkingPath = fileURLToPath(
+  new URL('../../../../../../.claude/skills/linear/reference/cross-linking.md', import.meta.url)
+);
+const nitpickNukerSkillPath = fileURLToPath(
+  new URL('../../../../../../.claude/skills/nitpick-nuker/SKILL.md', import.meta.url)
+);
 
 describe('code-worker image Codex skill bootstrap', () => {
+  it('preserves Claude and Codex runtime dispatch with the shared MCP boundary', () => {
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+    const claudeMcpConfig = readFileSync(claudeMcpConfigPath, 'utf8');
+
+    expect(entrypoint).toContain('case "${WORKER_RUNTIME:-claude}" in');
+    expect(entrypoint).toContain('run_claude_attempt');
+    expect(entrypoint).toContain('run_codex_attempt');
+    expect(claudeMcpConfig).toContain('linear');
+    expect(claudeMcpConfig).toContain('error_hub');
+    expect(existsSync(nitpickNukerSkillPath)).toBe(true);
+  });
+
   it('stages Superpowers for Codex native skill discovery at build time', () => {
     const dockerfile = readFileSync(dockerfilePath, 'utf8');
 
@@ -29,10 +60,83 @@ describe('code-worker image Codex skill bootstrap', () => {
     const entrypoint = readFileSync(entrypointPath, 'utf8');
 
     expect(entrypoint).toContain(
-      'mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.agents/skills'
+      'mkdir -p /home/claude/.config/gcloud /home/claude/.claude /home/claude/.codex /home/claude/.agents/skills'
     );
     expect(entrypoint).toContain('cp -a /opt/codex-home/.agents/. /home/claude/.agents/');
     expect(entrypoint).toContain('Codex skill discovery restored');
+  });
+
+  it('pins the Sentry MCP server in the image instead of installing latest at runtime', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf8');
+
+    expect(dockerfile).toContain('@sentry/mcp-server@0.37.0');
+    expect(dockerfile).not.toContain('@sentry/mcp-server@latest');
+  });
+
+  it('keeps the CI worker image capable of exercising the real Error Hub MCP entry', () => {
+    const dockerfile = readFileSync(dockerfileTestPath, 'utf8');
+
+    expect(dockerfile).toContain('@sentry/mcp-server@0.37.0');
+    expect(dockerfile).toContain(
+      'COPY --chown=claude:claude config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml'
+    );
+    expect(dockerfile).not.toContain('@sentry/mcp-server@latest');
+  });
+
+  it('bakes and restores Codex MCP config with Linear and Error Hub access only', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf8');
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+    const codexConfig = readFileSync(codexConfigPath, 'utf8');
+
+    expect(dockerfile).toContain(
+      'COPY --chown=claude:claude docker/code-worker/config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml'
+    );
+    expect(entrypoint).toContain('/home/claude/.codex');
+    expect(entrypoint).toContain('cp -a /opt/codex-home/.codex/. /home/claude/.codex/');
+    expect(codexConfig).toContain('[mcp_servers.linear]');
+    expect(codexConfig).toContain('bearer_token_env_var = "LINEAR_API_KEY"');
+    expect(codexConfig).toContain('command = "sh"');
+    expect(codexConfig).not.toContain('[mcp_servers.sentry]');
+    expect(codexConfig).not.toContain('SENTRY_AUTH_TOKEN');
+    expect(codexConfig).toContain('[mcp_servers.error_hub]');
+    expect(codexConfig).toContain(
+      'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer'
+    );
+    expect(codexConfig).toContain('env_vars = ["ERROR_HUB_HOST"]');
+    expect(codexConfig).not.toContain('npx @sentry/mcp-server');
+    expect(codexConfig).not.toContain('@latest');
+  });
+
+  it('gives Claude the same direct Error Hub MCP contract as Codex', () => {
+    const expectedCommand =
+      'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer';
+    const claudeConfig = JSON.parse(readFileSync(claudeMcpConfigPath, 'utf8')) as {
+      mcpServers: Record<string, { command?: string; args?: string[] }>;
+    };
+    const codexConfig = readFileSync(codexConfigPath, 'utf8');
+
+    expect(Object.keys(claudeConfig.mcpServers)).toEqual(['linear', 'error_hub']);
+    expect(claudeConfig.mcpServers['error_hub']).toEqual({
+      command: 'sh',
+      args: ['-lc', expectedCommand],
+    });
+    expect(codexConfig).toContain(expectedCommand);
+    expect(readFileSync(dockerfilePath, 'utf8')).toContain('@sentry/mcp-server@0.37.0');
+  });
+
+  it('removes active Legacy Sentry skill routing from Claude workers', () => {
+    const linearWorkflow = readFileSync(linearSentryWorkflowPath, 'utf8');
+    const linearCrossLinking = readFileSync(linearCrossLinkingPath, 'utf8');
+
+    expect(existsSync(legacySentrySkillPath)).toBe(false);
+    expect(linearWorkflow).toContain('`execute_sentry_tool`');
+    expect(linearWorkflow).toContain('`get_issue_details`');
+    expect(linearWorkflow).not.toContain('mcp__error_hub__get_issue_details');
+    expect(linearWorkflow).not.toContain('mcp__sentry__');
+    expect(linearWorkflow).not.toContain('sentry.io');
+    expect(linearWorkflow).not.toContain('Seer');
+    expect(linearCrossLinking).toContain('SentryBox');
+    expect(linearCrossLinking).not.toContain('sentry.io');
   });
 
   it('emits explicit bootstrap and runtime evidence lines for Codex runs', () => {

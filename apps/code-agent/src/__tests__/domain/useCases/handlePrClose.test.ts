@@ -223,7 +223,7 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
 
     expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
     expect(vi.mocked(mockLogger.warn)).toHaveBeenCalledWith(
-      expect.objectContaining({ linearIssueId: 'INT-1000' }),
+      expect.objectContaining({ linearIssueId: 'INT-1000', _skipSentry: true }),
       expect.stringContaining('resolve')
     );
   });
@@ -292,7 +292,7 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
 
     expect(mockLinearIssueService.markQa).not.toHaveBeenCalled();
     expect(vi.mocked(mockLogger.warn)).toHaveBeenCalledWith(
-      expect.objectContaining({ linearIssueId: 'INT-1300' }),
+      expect.objectContaining({ linearIssueId: 'INT-1300', _skipSentry: true }),
       expect.stringContaining('resolve')
     );
   });

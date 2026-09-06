@@ -1,9 +1,10 @@
 /**
- * Input validation adapter using Gemini Flash for prompt quality assessment.
- * Usage logging is handled by the client (packages/infra-gemini).
+ * Input validation adapter using the unified LLM factory.
+ * Platform calls use the canonical OpenRouter model.
  */
 
-import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
+import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { OpenRouterModelId } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   improvementRepairPrompt,
@@ -42,20 +43,20 @@ export interface InputValidationProvider {
 }
 
 export class InputValidationAdapter implements InputValidationProvider {
-  private readonly client: GeminiClient;
+  private readonly client: LlmGenerateClient;
   private readonly model: string;
   private readonly logger: Logger;
   private readonly researchId: string | undefined;
 
   constructor(
     apiKey: string,
-    model: string,
+    model: OpenRouterModelId,
     userId: string,
     logger: Logger,
     usageSink: UsageSink,
     researchId?: string
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, logger, usageSink });
+    this.client = createLlmClient({ apiKey, model, userId, logger, usageSink });
     this.model = model;
     this.logger = logger;
     this.researchId = researchId;

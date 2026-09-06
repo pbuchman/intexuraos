@@ -2,13 +2,21 @@
  * Common JSON schema components for research endpoints.
  */
 
-import { ALL_LLM_MODELS } from '@intexuraos/llm-contract';
+import { OPENROUTER_ALLOWED_MODELS } from '@intexuraos/infra-openrouter';
+import { SYNTHESIS_MODELS } from '@intexuraos/llm-prompts';
+
+const EXECUTABLE_OPENROUTER_MODELS = OPENROUTER_ALLOWED_MODELS.map(
+  (model) => `or:${model.id}`
+);
 
 export const supportedModelSchema = {
-  anyOf: [
-    { type: 'string', enum: ALL_LLM_MODELS },
-    { type: 'string', pattern: '^or:[a-z0-9-]+/[a-z0-9._:-]+$' },
-  ],
+  type: 'string',
+  enum: EXECUTABLE_OPENROUTER_MODELS,
+} as const;
+
+export const supportedSynthesisModelSchema = {
+  type: 'string',
+  enum: SYNTHESIS_MODELS,
 } as const;
 
 /**
@@ -24,7 +32,7 @@ export const storedModelSchema = {
 
 export const llmProviderSchema = {
   type: 'string',
-  enum: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
+  enum: ['openai', 'anthropic', 'perplexity', 'openrouter'],
 } as const;
 
 export const storedLlmProviderSchema = {

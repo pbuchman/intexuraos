@@ -55,7 +55,7 @@ Do **not** add any user-scoped public endpoint in this stage.
 
 The implementation must reuse existing repo patterns instead of inventing new ones:
 
-- Service scaffolding: `.claude/commands/create-service.md`
+- Service scaffolding: `scripts/verify-service-scaffolding.sh`
 - Internal auth: `validateInternalAuth(...)` from `@intexuraos/common-http`
 - Orchestrator webhook auth: current `validateOrchestratorSignature(...)` pattern, implemented locally in `llm-usage-service` because apps cannot import from `apps/code-agent`
 - Internal client style: `packages/internal-clients/src/user-service/*`
@@ -64,19 +64,15 @@ The implementation must reuse existing repo patterns instead of inventing new on
 - Service structure: routes + domain + infra with clean architecture boundaries
 - Firestore registry: `firestore-collections.json` ownership registration for every new collection
 
-## Required Service Scaffolding Command
+## Required Service Scaffolding
 
-Use the standard service creation command:
+Create the service skeleton from the nearest current app pattern, then run:
 
-```text
-/create-service llm-usage-service
+```bash
+bash scripts/verify-service-scaffolding.sh llm-usage-service
 ```
 
-The command already includes the scaffold checklist. The implementation worker must only add one mandatory verification step after running it:
-
-- confirm that the generated app structure matches `.claude/commands/create-service.md`
-
-Do not hand-roll the initial service skeleton if the command succeeds.
+Treat this executable verifier as the canonical scaffold checklist.
 
 ## Scope
 
@@ -819,7 +815,7 @@ That keeps provider packages transport-agnostic while still allowing:
 
 The implementation worker must deliver all of the following:
 
-1. New app scaffolded with `/create-service llm-usage-service` and scaffold verified.
+1. New app scaffolded from current repository patterns and verified with `scripts/verify-service-scaffolding.sh`.
 2. Authenticated internal ingest endpoint implemented.
 3. Authenticated orchestrator webhook ingest endpoint implemented.
 4. Internal aggregate query endpoint implemented.

@@ -23,6 +23,7 @@ const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 import { buildServer } from '../../../server.js';
 import { getServices, resetServices } from '../../../services.js';
 import { setupTestServices } from '../../helpers/mockServices.js';
+import { orchestratorHealthV2 } from '../../helpers/orchestratorHealth.js';
 
 describe('workerOpsRoutes (sub-plugin)', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -59,16 +60,7 @@ describe('workerOpsRoutes (sub-plugin)', () => {
       dispatchSigningSecret: 'signing',
     });
 
-    nock('https://mac-worker.example.com').get('/health').reply(200, {
-      status: 'ready',
-      capacity: 2,
-      running: 0,
-      available: 2,
-      workerAuths: {},
-      providerApiKeys: {},
-      dockerHealthy: true,
-      diskHealthy: true,
-    });
+    nock('https://mac-worker.example.com').get('/health').reply(200, orchestratorHealthV2());
 
     const response = await app.inject({
       method: 'POST',
@@ -117,7 +109,7 @@ describe('workerOpsRoutes (sub-plugin)', () => {
     expect(body.success).toBe(true);
     expect(body.data.testStatus).toBe('failure');
     expect(body.data.testMessage).toBe(
-      'Health response missing worker capability details: workerAuths, providerApiKeys, dockerHealthy, diskHealthy'
+      'Health response missing worker capability details: healthContractVersion, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain'
     );
   });
 

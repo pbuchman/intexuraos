@@ -67,6 +67,62 @@ describe('setupSentryErrorHandler', () => {
     expect(Sentry.withScope).toHaveBeenCalled();
   });
 
+  it('uses the normalized route template in Sentry and excludes dynamic ids and query text', async () => {
+    const setTag = vi.fn();
+    const setContext = vi.fn();
+    vi.mocked(Sentry.withScope).mockImplementationOnce(((
+      callback: (scope: { setTag: typeof setTag; setContext: typeof setContext }) => void
+    ) => {
+      callback({ setTag, setContext });
+    }) as never);
+    setupSentryErrorHandler(app);
+    app.get('/sessions/:sessionId/attachments/:attachmentId', async () => {
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/sessions/private-session/attachments/private-attachment?question=private-text',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(setTag).toHaveBeenCalledWith('url', '/sessions/:sessionId/attachments/:attachmentId');
+    expect(setContext).toHaveBeenCalledWith(
+      'request',
+      expect.objectContaining({
+        url: '/sessions/:sessionId/attachments/:attachmentId',
+        method: 'GET',
+      })
+    );
+    const sentryPayload = JSON.stringify([setTag.mock.calls, setContext.mock.calls]);
+    expect(sentryPayload).not.toContain('private-session');
+    expect(sentryPayload).not.toContain('private-attachment');
+    expect(sentryPayload).not.toContain('private-text');
+  });
+
+  it('uses a safe fallback when Fastify provides no route template', async () => {
+    const setTag = vi.fn();
+    const setContext = vi.fn();
+    vi.mocked(Sentry.withScope).mockImplementationOnce(((
+      callback: (scope: { setTag: typeof setTag; setContext: typeof setContext }) => void
+    ) => {
+      callback({ setTag, setContext });
+    }) as never);
+    setupSentryErrorHandler(app);
+    app.setNotFoundHandler(async () => {
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/missing-template' });
+
+    expect(response.statusCode).toBe(500);
+    expect(setTag).toHaveBeenCalledWith('url', 'unmatched_route');
+    expect(setContext).toHaveBeenCalledWith(
+      'request',
+      expect.objectContaining({ url: 'unmatched_route', method: 'GET' })
+    );
+  });
+
   it('handles Sentry failures gracefully', async () => {
     // Make Sentry.withScope throw
     vi.mocked(Sentry.withScope).mockImplementationOnce(() => {
@@ -86,6 +142,107 @@ describe('setupSentryErrorHandler', () => {
 
     // Error handling should still work even if Sentry fails
     expect(response.statusCode).toBe(500);
+  });
+
+  it('captures only sanitized context and error details for configured private routes', async () => {
+    const logChunks: string[] = [];
+    const privateApp = Fastify({
+      logger: {
+        stream: {
+          write(chunk: string): void {
+            logChunks.push(chunk);
+          },
+        },
+      },
+      disableRequestLogging: true,
+    });
+    addMockFailMethod(privateApp);
+    setupSentryErrorHandler(privateApp, {
+      privatePathPrefixes: ['/internal/matrix-corpus/', '/internal/test-runs/'],
+    });
+    privateApp.get('/internal/matrix-corpus/runs/:runId/fail', async () => {
+      throw new Error('RAW_MATRIX_ERROR_SENTINEL');
+    });
+
+    const response = await privateApp.inject({
+      method: 'GET',
+      url: '/internal/matrix-corpus/runs/RUN_SENTRY_SENTINEL/fail?secret=QUERY_SENTRY_SENTINEL',
+      headers: {
+        'x-matrix-corpus-user-id': 'USER_HEADER_SENTINEL',
+        'x-matrix-corpus-session-id': 'SESSION_HEADER_SENTINEL',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const capturedError = vi.mocked(Sentry.captureException).mock.calls[0]?.[0] as Error;
+    expect(capturedError.message).toBe('Private request failed');
+
+    const scopeCallback = vi.mocked(Sentry.withScope).mock.calls[0]?.[0] as unknown as (
+      scope: Readonly<{ setTag: ReturnType<typeof vi.fn>; setContext: ReturnType<typeof vi.fn> }>
+    ) => void;
+    const scope = { setTag: vi.fn(), setContext: vi.fn() };
+    scopeCallback(scope);
+    const serializedSentryContext = JSON.stringify({
+      tags: scope.setTag.mock.calls,
+      contexts: scope.setContext.mock.calls,
+    });
+    const serializedLogs = logChunks.join('');
+
+    expect(serializedSentryContext).toContain('/internal/matrix-corpus/[REDACTED]');
+    expect(serializedSentryContext).toContain('[REDACTED]');
+    for (const sentinel of [
+      'RUN_SENTRY_SENTINEL',
+      'QUERY_SENTRY_SENTINEL',
+      'USER_HEADER_SENTINEL',
+      'SESSION_HEADER_SENTINEL',
+      'RAW_MATRIX_ERROR_SENTINEL',
+    ]) {
+      expect(serializedSentryContext).not.toContain(sentinel);
+      expect(serializedLogs).not.toContain(sentinel);
+    }
+    await privateApp.close();
+  });
+
+  it('keeps private request details redacted when Sentry capture fails', async () => {
+    const logChunks: string[] = [];
+    const privateApp = Fastify({
+      logger: {
+        stream: {
+          write(chunk: string): void {
+            logChunks.push(chunk);
+          },
+        },
+      },
+      disableRequestLogging: true,
+    });
+    addMockFailMethod(privateApp);
+    vi.mocked(Sentry.withScope).mockImplementationOnce(() => {
+      throw new Error('PRIVATE_SENTRY_FAILURE_SENTINEL');
+    });
+    setupSentryErrorHandler(privateApp, {
+      privatePathPrefixes: ['/internal/matrix-corpus/'],
+    });
+    privateApp.get('/internal/matrix-corpus/runs/:runId/fail', async () => {
+      throw new Error('PRIVATE_ROUTE_FAILURE_SENTINEL');
+    });
+
+    const response = await privateApp.inject({
+      method: 'GET',
+      url: '/internal/matrix-corpus/runs/PRIVATE_RUN_SENTINEL/fail',
+    });
+
+    expect(response.statusCode).toBe(500);
+    const serializedLogs = logChunks.join('');
+    expect(serializedLogs).toContain('SENTRY_CAPTURE_FAILED');
+    expect(serializedLogs).toContain('privateRequest');
+    for (const sentinel of [
+      'PRIVATE_SENTRY_FAILURE_SENTINEL',
+      'PRIVATE_ROUTE_FAILURE_SENTINEL',
+      'PRIVATE_RUN_SENTINEL',
+    ]) {
+      expect(serializedLogs).not.toContain(sentinel);
+    }
+    await privateApp.close();
   });
 
   it('responds with RATE_LIMITED for 429 errors without capturing to Sentry', async () => {
@@ -133,6 +290,34 @@ describe('setupSentryErrorHandler', () => {
     expect(body.message).toBe('Rate limit exceeded');
   });
 
+  it('responds with 413 for Fastify body-limit parser errors without capturing to Sentry', async () => {
+    setupSentryErrorHandler(app);
+
+    app.addContentTypeParser(
+      'application/json',
+      { parseAs: 'string', bodyLimit: 8 },
+      (_request, body, done) => {
+        done(null, JSON.parse(body as string));
+      }
+    );
+    app.post('/test', async () => ({ ok: true }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/test',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ value: 'too large' }),
+    });
+
+    expect(response.statusCode).toBe(413);
+    const body = JSON.parse(response.body) as {
+      error: { code: string; message: string };
+    };
+    expect(body.error.code).toBe('INVALID_REQUEST');
+    expect(body.error.message).toBe('Request body too large');
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
   it('handles 404 routes without errors', async () => {
     setupSentryErrorHandler(app);
 
@@ -161,7 +346,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles FST_ERR_CTP_EMPTY_JSON_BODY error', async () => {
@@ -181,7 +366,36 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('handles unsupported media type errors without capturing to Sentry', async () => {
+    setupSentryErrorHandler(app);
+
+    app.post(
+      '/test',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            properties: {
+              value: { type: 'string' },
+            },
+          },
+        },
+      },
+      async () => ({ ok: true })
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/test',
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: '{}',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with non-array validation property', async () => {
@@ -238,7 +452,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with undefined message', async () => {
@@ -258,7 +472,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with empty instancePath triggering required property regex', async () => {
@@ -278,7 +492,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with empty instancePath and undefined message', async () => {
@@ -298,7 +512,7 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('handles validation error with both instancePath and message undefined', async () => {
@@ -318,13 +532,69 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });
 
 describe('sanitizeHeaders (via error handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('serializes only coarse diagnostic headers and fixed authentication markers', async () => {
+    const setContext = vi.fn();
+    vi.mocked(Sentry.withScope).mockImplementationOnce(((
+      callback: (scope: { setTag: ReturnType<typeof vi.fn>; setContext: typeof setContext }) => void
+    ) => {
+      callback({ setTag: vi.fn(), setContext });
+    }) as never);
+    const app = Fastify({ logger: false });
+    addMockFailMethod(app);
+    setupSentryErrorHandler(app);
+    app.get('/test', async () => {
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': '0',
+        authorization: 'Bearer authorization-canary',
+        'x-internal-auth': 'internal-auth-canary',
+        'x-conversation-assistant-deletion-token': 'deletion-token-canary',
+        'x-request-id': 'request-id-canary',
+        'x-custom-header': 'custom-header-canary',
+        referer: 'https://example.test/referer-canary',
+        'user-agent': 'user-agent-canary',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(setContext).toHaveBeenCalledWith('request', {
+      url: '/test',
+      method: 'GET',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': '0',
+        authorization: '[REDACTED]',
+        'x-internal-auth': '[REDACTED]',
+      },
+    });
+    const serializedPayload = JSON.stringify(setContext.mock.calls);
+    expect(serializedPayload).not.toContain('x-conversation-assistant-deletion-token');
+    expect(serializedPayload).not.toContain('deletion-token-canary');
+    expect(serializedPayload).not.toContain('x-request-id');
+    expect(serializedPayload).not.toContain('request-id-canary');
+    expect(serializedPayload).not.toContain('x-custom-header');
+    expect(serializedPayload).not.toContain('custom-header-canary');
+    expect(serializedPayload).not.toContain('referer');
+    expect(serializedPayload).not.toContain('referer-canary');
+    expect(serializedPayload).not.toContain('user-agent');
+    expect(serializedPayload).not.toContain('user-agent-canary');
+    expect(serializedPayload).not.toContain('authorization-canary');
+    expect(serializedPayload).not.toContain('internal-auth-canary');
   });
 
   // We can't directly test sanitizeHeaders since it's not exported,

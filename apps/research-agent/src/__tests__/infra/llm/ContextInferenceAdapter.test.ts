@@ -5,17 +5,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-prompts';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { DEFAULT_PLATFORM_LLM_MODEL } from '@intexuraos/llm-contract';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockGenerate = vi.fn();
 
-const mockCreateGeminiClient = vi.fn().mockReturnValue({
+const mockCreateLlmClient = vi.fn().mockReturnValue({
   generate: mockGenerate,
 });
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: mockCreateGeminiClient,
+vi.mock('@intexuraos/llm-factory', () => ({
+  createLlmClient: mockCreateLlmClient,
 }));
 
 const { ContextInferenceAdapter } = await import('../../../infra/llm/ContextInferenceAdapter.js');
@@ -91,7 +91,7 @@ describe('ContextInferenceAdapter', () => {
     fakeUsageSink = new FakeUsageSink();
     adapter = new ContextInferenceAdapter(
       'test-key',
-      LlmModels.Gemini20Flash,
+      DEFAULT_PLATFORM_LLM_MODEL,
       'test-user',
       mockLogger,
       fakeUsageSink
@@ -100,19 +100,19 @@ describe('ContextInferenceAdapter', () => {
 
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
-      mockCreateGeminiClient.mockClear();
+      mockCreateLlmClient.mockClear();
       const testLogger = createMockLogger();
       new ContextInferenceAdapter(
         'test-key',
-        LlmModels.Gemini20Flash,
+        DEFAULT_PLATFORM_LLM_MODEL,
         'test-user',
         testLogger,
         fakeUsageSink
       );
 
-      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
+      expect(mockCreateLlmClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: LlmModels.Gemini20Flash,
+        model: DEFAULT_PLATFORM_LLM_MODEL,
         userId: 'test-user',
         logger: testLogger,
         usageSink: fakeUsageSink,
@@ -127,7 +127,7 @@ describe('ContextInferenceAdapter', () => {
 
       const adapterWithResearchId = new ContextInferenceAdapter(
         'test-key',
-        LlmModels.Gemini20Flash,
+        DEFAULT_PLATFORM_LLM_MODEL,
         'test-user',
         mockLogger,
         fakeUsageSink,
@@ -152,7 +152,7 @@ describe('ContextInferenceAdapter', () => {
 
       const adapterWithResearchId = new ContextInferenceAdapter(
         'test-key',
-        LlmModels.Gemini20Flash,
+        DEFAULT_PLATFORM_LLM_MODEL,
         'test-user',
         mockLogger,
         fakeUsageSink,
@@ -272,10 +272,24 @@ describe('ContextInferenceAdapter', () => {
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
       expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferResearchContext',
+          errorMessage: expect.stringContaining('Schema validation failed:'),
+          zodErrors: expect.any(Array),
+          llmResponse: JSON.stringify({ invalid: 'schema' }),
+          expectedSchema: expect.any(String),
+          responseLength: JSON.stringify({ invalid: 'schema' }).length,
+          parsedJson: JSON.stringify({ invalid: 'schema' }),
+        },
+        'LLM parse error in inferResearchContext: Schema validation failed'
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         { errorMessage: expect.any(String) },
         'Schema validation failed, attempting repair'
       );
       expect(mockLogger.debug).toHaveBeenCalledWith({}, 'Repair attempt succeeded');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('attempts repair on JSON parse failure and succeeds', async () => {
@@ -296,6 +310,19 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferResearchContext',
+          errorMessage: expect.stringContaining('JSON parse failed:'),
+          parseError: expect.any(String),
+          llmResponse: 'not valid json',
+          expectedSchema: expect.any(String),
+          responseLength: 'not valid json'.length,
+        },
+        'LLM parse error in inferResearchContext: JSON parse failed'
+      );
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('returns error when repair attempt also fails', async () => {
@@ -322,6 +349,7 @@ describe('ContextInferenceAdapter', () => {
         { firstError: expect.any(String), secondError: expect.any(String) },
         'Repair attempt failed'
       );
+      expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     });
 
     it('returns error when repair attempt fails at API level', async () => {
@@ -446,6 +474,20 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferSynthesisContext',
+          errorMessage: expect.stringContaining('Schema validation failed:'),
+          zodErrors: expect.any(Array),
+          llmResponse: JSON.stringify({ wrong: 'structure' }),
+          expectedSchema: expect.any(String),
+          responseLength: JSON.stringify({ wrong: 'structure' }).length,
+          parsedJson: JSON.stringify({ wrong: 'structure' }),
+        },
+        'LLM parse error in inferSynthesisContext: Schema validation failed'
+      );
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('attempts repair on JSON parse failure and succeeds', async () => {
@@ -468,6 +510,19 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferSynthesisContext',
+          errorMessage: expect.stringContaining('JSON parse failed:'),
+          parseError: expect.any(String),
+          llmResponse: '{ malformed json',
+          expectedSchema: expect.any(String),
+          responseLength: '{ malformed json'.length,
+        },
+        'LLM parse error in inferSynthesisContext: JSON parse failed'
+      );
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('returns error when repair attempt also fails', async () => {
@@ -494,6 +549,7 @@ describe('ContextInferenceAdapter', () => {
         { firstError: expect.any(String), secondError: expect.any(String) },
         'Repair attempt failed'
       );
+      expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     });
 
     it('returns error when repair attempt fails at API level', async () => {

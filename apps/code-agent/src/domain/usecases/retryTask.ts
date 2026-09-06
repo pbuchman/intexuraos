@@ -9,6 +9,7 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
@@ -20,6 +21,7 @@ import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { randomUUID } from 'node:crypto';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { resolveTaskAgentType } from '../../domain/utils/taskRouting.js';
+import { buildCodeTaskUrl } from '../../domain/utils/taskUrls.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import {
   bootstrapContinuationPrTaskComment,
@@ -273,6 +275,11 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     agentType,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
+    ...(originalTask.sentryIssue !== undefined && { sentryIssue: originalTask.sentryIssue }),
+    ...(originalTask.reviewTypes !== undefined && { reviewTypes: originalTask.reviewTypes }),
+    ...(originalTask.reviewCommitSha !== undefined && {
+      reviewCommitSha: originalTask.reviewCommitSha,
+    }),
     ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
     ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
   };
@@ -381,7 +388,10 @@ ${additionalContext.trim()}
 
   // Step 11: Record metrics
   await deps.metricsClient.incrementTasksSubmitted(originalTask.workerType, 'web').catch((error: unknown) => {
-    logger.warn({ error, taskId: retryTask.id }, 'Failed to record task submission metric for retry');
+    logger.warn(
+      { [SKIP_SENTRY_KEY]: true, error, taskId: retryTask.id },
+      'Failed to record task submission metric for retry'
+    );
   });
 
   // Step 12: Archive original task (automatic cleanup on retry, INT-711)
@@ -404,7 +414,7 @@ ${additionalContext.trim()}
 
   return ok({
     codeTaskId: retryTask.id,
-    resourceUrl: `/#/code-tasks/${retryTask.id}`,
+    resourceUrl: buildCodeTaskUrl(retryTask.id),
     workerLocation: 'queued' as WorkerLocation,
     retriedFrom: originalTaskId,
   });

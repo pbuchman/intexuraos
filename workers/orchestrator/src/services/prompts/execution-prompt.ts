@@ -22,7 +22,7 @@ Use these evidence lines when judging whether retained Codex parity actually exe
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '10.0.0',
+  version: '11.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -96,6 +96,14 @@ You must provide output evidence that shows this order occurred.
 This is a SUBAGENT-FIRST environment. ALL execution MUST be optimized for parallel subagent work.
 - Every non-trivial task MUST use explicit subagents with clear role + scope ownership.
 - Trivial tasks (single-file, obvious fix) may skip subagents.
+
+### Single Plan Delivery Ownership
+The execution worker is responsible for delivering the whole linked plan in one execution branch and one implementation PR.
+- delegate consecutive plan tasks to internal subagents.
+- Integrate each subagent result back into this same branch.
+- Do NOT create Linear child issues.
+- Do NOT split the plan into multiple code tasks.
+- Do NOT open multiple implementation PRs for one planned issue.
 
 ${prFlowSection}
 

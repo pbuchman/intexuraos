@@ -13,9 +13,11 @@ describe('fishing assistant config', () => {
     delete process.env['INTEXURAOS_AUTH_AUDIENCE'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    delete process.env['INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL'];
+    delete process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'];
     delete process.env['INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'];
     delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
-    delete process.env['INTEXURAOS_OPENAI_APP_API_KEY'];
+    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     delete process.env['INTEXURAOS_SENTRY_DSN'];
     delete process.env['INTEXURAOS_ENVIRONMENT'];
   });
@@ -40,9 +42,10 @@ describe('fishing assistant config', () => {
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'urn:intexuraos:api';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'internal-token';
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8110';
-    process.env['INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'] = 'http://localhost:8114';
+    process.env['INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL'] = 'http://localhost:8135';
+    process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] = 'http://localhost:8117';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://localhost:8132';
-    process.env['INTEXURAOS_OPENAI_APP_API_KEY'] = 'openai-key';
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'openrouter-key';
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://sentry.example.com/1';
     process.env['INTEXURAOS_ENVIRONMENT'] = 'dev';
 
@@ -56,11 +59,24 @@ describe('fishing assistant config', () => {
       authAudience: 'urn:intexuraos:api',
       internalAuthToken: 'internal-token',
       userServiceUrl: 'http://localhost:8110',
-      mobileNotificationsServiceUrl: 'http://localhost:8114',
+      messageDigestServiceUrl: 'http://localhost:8135',
+      whatsappServiceUrl: 'http://localhost:8117',
       llmUsageServiceUrl: 'http://localhost:8132',
-      openAiAppApiKey: 'openai-key',
+      openRouterAppApiKey: 'openrouter-key',
       sentryDsn: 'https://sentry.example.com/1',
       environment: 'dev',
     });
+  });
+
+  it('does not accept the legacy Mobile Notifications URL as a digest dependency', () => {
+    process.env['INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'] = 'http://localhost:8114';
+
+    const config = loadConfig();
+
+    expect(config).toMatchObject({
+      messageDigestServiceUrl: '',
+      whatsappServiceUrl: '',
+    });
+    expect(config).not.toHaveProperty('mobileNotificationsServiceUrl');
   });
 });

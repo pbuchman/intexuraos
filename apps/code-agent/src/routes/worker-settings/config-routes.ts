@@ -1,10 +1,10 @@
 /**
  * Default-worker-type configuration sub-plugin.
  *
- * Registers the five `PATCH /code/worker-settings/default-*-worker-type`
+ * Registers the six `PATCH /code/worker-settings/default-*-worker-type`
  * endpoints. Each endpoint updates or clears (via the sentinel
  * `workerType: "auto"`) a single default worker-type field on the user's
- * settings document. All five share a common request body schema,
+ * settings document. All six share a common request body schema,
  * response schema, and use case.
  */
 
@@ -70,6 +70,15 @@ const DEFAULT_WORKER_TYPE_ROUTES: readonly DefaultWorkerTypeRoute[] = [
     description: 'Set the default worker type for pull request tasks. Requires Auth0 JWT.',
     field: 'defaultPullRequestWorkerType',
     label: 'pull request',
+  },
+  {
+    path: '/worker-settings/default-sentry-worker-type',
+    operationId: 'updateDefaultSentryWorkerType',
+    summary: 'Update default SentryBox worker type',
+    description:
+      'Set the default worker type for automated SentryBox issue fixes. Requires Auth0 JWT.',
+    field: 'defaultSentryWorkerType',
+    label: 'sentry',
   },
 ] as const;
 

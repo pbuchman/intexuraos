@@ -11,11 +11,16 @@ import {
   MessageSquare,
   Mic,
   Trash2,
+  Video,
 } from 'lucide-react';
 
 import { TextWithLinks } from './shared.js';
 
 const TEXT_PREVIEW_LIMIT = 800;
+
+function isTranscriptionMedia(message: WhatsAppMessage): boolean {
+  return message.mediaType === 'audio' || message.mediaType === 'video';
+}
 
 // Extracted helpers to avoid recomputation on every render
 function getDesktopMediaIndicator(
@@ -25,17 +30,27 @@ function getDesktopMediaIndicator(
 ): React.JSX.Element {
   if (message.mediaType === 'image' && message.hasMedia) {
     return (
-      <ImageThumbnail
-        messageId={message.id}
-        accessToken={accessToken}
-        onClick={(): void => {
-          onImageClick(message.id);
+      <div
+        onClick={(event): void => {
+          event.stopPropagation();
         }}
-      />
+      >
+        <ImageThumbnail
+          messageId={message.id}
+          accessToken={accessToken}
+          size="compact"
+          onClick={(): void => {
+            onImageClick(message.id);
+          }}
+        />
+      </div>
     );
   }
   if (message.mediaType === 'audio') {
     return <Mic className="h-4 w-4 text-slate-400" />;
+  }
+  if (message.mediaType === 'video') {
+    return <Video className="h-4 w-4 text-slate-400" />;
   }
   return <MessageSquare className="h-4 w-4 text-slate-400" />;
 }
@@ -47,6 +62,9 @@ function getMobileMediaIndicator(message: WhatsAppMessage): React.JSX.Element {
   if (message.mediaType === 'audio') {
     return <Mic className="h-4 w-4 text-slate-400" />;
   }
+  if (message.mediaType === 'video') {
+    return <Video className="h-4 w-4 text-slate-400" />;
+  }
   return <MessageSquare className="h-4 w-4 text-slate-400" />;
 }
 
@@ -54,7 +72,7 @@ function getContentPreviewForMessage(message: WhatsAppMessage): string {
   if (message.mediaType === 'image' && message.caption) {
     return message.caption;
   }
-  if (message.mediaType === 'audio' && message.transcription) {
+  if (isTranscriptionMedia(message) && message.transcription) {
     return message.transcription;
   }
   if (message.text) {
@@ -134,6 +152,7 @@ export function MessageItem({
 
   const hasTextContent =
     message.text !== '' || (message.caption !== null && message.caption !== '');
+  const isImageWithMedia = message.mediaType === 'image' && message.hasMedia;
 
   const contentPreview = getContentPreviewForMessage(message);
   const truncatedPreview =
@@ -145,7 +164,7 @@ export function MessageItem({
     const statusBaseClass = variant === 'mobile' ? 'mt-1 text-xs' : 'truncate text-xs';
 
     if (
-      message.mediaType === 'audio' &&
+      isTranscriptionMedia(message) &&
       message.transcriptionStatus !== 'completed' &&
       message.transcriptionStatus !== 'failed'
     ) {
@@ -156,7 +175,7 @@ export function MessageItem({
       );
     }
 
-    if (message.mediaType === 'audio' && message.transcriptionStatus === 'failed') {
+    if (isTranscriptionMedia(message) && message.transcriptionStatus === 'failed') {
       return (
         <p className={`${statusBaseClass} text-red-500 dark:text-red-400`}>
           Transcription failed
@@ -177,7 +196,7 @@ export function MessageItem({
 
     return (
       <div className="flex items-center justify-end gap-1">
-        {message.mediaType === 'audio' ? (
+        {isTranscriptionMedia(message) ? (
           message.transcriptionStatus === 'completed' &&
           message.transcription !== undefined &&
           message.transcription !== '' ? (
@@ -240,15 +259,16 @@ export function MessageItem({
   return (
     <div
       data-testid="message-item-row"
-      className={`group relative cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${
+      className={`group relative rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 ${
+        isImageWithMedia ? 'cursor-pointer' : ''
+      } ${
         isDeleting ? 'scale-95 opacity-50' : ''
       }`}
       onClick={(): void => {
-        if (message.mediaType === 'audio') {
-          // Audio rows don't open note modal on row click
+        if (!isImageWithMedia) {
           return;
         }
-        onNoteClick(message);
+        onImageClick(message.id);
       }}
     >
       <div data-testid="message-item-mobile" className="sm:hidden">
@@ -323,8 +343,8 @@ export function MessageItem({
         </div>
       ) : null}
 
-      {/* Expanded content for audio messages (transcription) */}
-      {message.mediaType === 'audio' &&
+      {/* Expanded content for transcribed media messages */}
+      {isTranscriptionMedia(message) &&
         message.transcriptionStatus === 'completed' &&
         message.transcription !== undefined &&
         message.transcription !== '' && (

@@ -162,6 +162,12 @@ interface WebhookValue {
       mime_type?: string;
       sha256?: string;
     };
+    video?: {
+      id?: string;
+      mime_type?: string;
+      sha256?: string;
+      caption?: string;
+    };
     reaction?: {
       message_id?: string;
       emoji?: string;
@@ -376,6 +382,16 @@ export interface AudioMediaInfo {
 }
 
 /**
+ * Video media info from webhook payload.
+ */
+export interface VideoMediaInfo {
+  id: string;
+  mimeType: string;
+  sha256?: string;
+  caption?: string;
+}
+
+/**
  * Extract image media info from webhook payload.
  *
  * Path: entry[0].changes[0].value.messages[0].image
@@ -427,6 +443,36 @@ export function extractAudioMedia(payload: unknown): AudioMediaInfo | null {
 
   if (typeof audio.sha256 === 'string') {
     result.sha256 = audio.sha256;
+  }
+
+  return result;
+}
+
+/**
+ * Extract video media info from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].video
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#media-messages
+ */
+export function extractVideoMedia(payload: unknown): VideoMediaInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const video = message.video;
+  if (video === undefined) return null;
+  if (typeof video.id !== 'string' || typeof video.mime_type !== 'string') return null;
+
+  const result: VideoMediaInfo = {
+    id: video.id,
+    mimeType: video.mime_type,
+  };
+
+  if (typeof video.sha256 === 'string') {
+    result.sha256 = video.sha256;
+  }
+  if (typeof video.caption === 'string') {
+    result.caption = video.caption;
   }
 
   return result;

@@ -153,7 +153,7 @@ const pricingContext = createFakePricingContext();
 
 ## Used By
 
-**Packages (2):** `llm-factory`, `infra-gemini`
+**Packages (7):** `http-server`, `infra-claude`, `infra-gpt`, `infra-openrouter`, `infra-perplexity`, `internal-clients`, `llm-factory`
 
 **Apps (1):** `app-settings-service` (pricing storage and `validateAllModels` at startup)
 

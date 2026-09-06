@@ -5,6 +5,9 @@
 import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from './repositories.js';
 
+/** Maximum time one WhatsApp provider request may remain in flight. */
+export const WHATSAPP_MESSAGE_SEND_TIMEOUT_MS = 30_000;
+
 /**
  * Result of sending a WhatsApp text message.
  */
@@ -23,6 +26,26 @@ export interface WhatsAppInteractiveButton {
     title: string;
   };
 }
+
+export interface WhatsAppMessageDigestV1Template {
+  kind?: 'message_digest_v1';
+  digestName: string;
+  digestExcerpt: string;
+  runUrlSuffix: string;
+}
+
+export interface WhatsAppMessageDigestV2Template {
+  kind: 'message_digest_v2';
+  digestName: string;
+  windowLabel: string;
+  headline: string;
+  digestBody: string;
+  runUrlSuffix: string;
+}
+
+export type WhatsAppMessageDigestTemplate =
+  | WhatsAppMessageDigestV1Template
+  | WhatsAppMessageDigestV2Template;
 
 /**
  * Port for sending WhatsApp messages.
@@ -63,5 +86,11 @@ export interface WhatsAppMessageSender {
     phoneNumber: string,
     message: string,
     ctaUrl: { displayText: string; url: string }
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>>;
+
+  /** Send the fixed approved Message Digest Utility template. */
+  sendMessageDigestTemplate(
+    phoneNumber: string,
+    template: WhatsAppMessageDigestTemplate
   ): Promise<Result<TextMessageSendResult, WhatsAppError>>;
 }

@@ -68,7 +68,7 @@ The `llmKeysRoutes.ts` file is large but all routes are cohesive around the LLM 
 
 ### Acknowledged Pattern: LlmValidatorImpl
 
-The `LlmValidatorImpl.ts` contains similar code blocks for each provider (5 providers x 2 methods = 10 similar blocks). This is intentional for:
+`LlmValidatorImpl.ts` now validates only OpenRouter. Historical provider error parsing remains for readable legacy diagnostics, not active key configuration.
 
 - Clear debugging (each provider's logic is isolated)
 - Easy addition of new providers
@@ -120,7 +120,7 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 | `oauthConnectionRoutes.test.ts`         | Google OAuth connection management                          |
 | `gitHubOAuthConnectionRoutes.test.ts`   | GitHub OAuth connection management                          |
 | `settingsRoutes.test.ts`                | User settings + default/fallback model + transcription + tz |
-| `llmKeysRoutes.test.ts`                 | LLM key CRUD + test (5 providers)                           |
+| `llmKeysRoutes.test.ts`                 | OpenRouter key CRUD, test, access source, legacy guards      |
 | `internalRoutes.test.ts`                | Service-to-service endpoints (6)                            |
 | `formatLlmError.test.ts`                | Provider error parsing                                      |
 | `encryption.test.ts`                    | AES-256-GCM encrypt/decrypt                                 |
@@ -130,7 +130,7 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 | `oauthConnectionRepository.test.ts`     | Firestore OAuth storage                                     |
 | `googleOAuthClient.test.ts`             | Google OAuth client                                         |
 | `gitHubOAuthClient.test.ts`             | GitHub OAuth client                                         |
-| `llmValidator.test.ts`                  | LLM key validation (5 providers incl. OpenRouter)           |
+| `llmValidator.test.ts`                  | OpenRouter key validation                                   |
 | `maskApiKey.test.ts`                    | Key masking utility                                         |
 
 ---

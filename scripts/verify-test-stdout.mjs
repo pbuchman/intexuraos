@@ -37,10 +37,49 @@ const VITEST_PATTERNS = [
   /^\d+:\d+:\d+\s*(AM|PM)\s*\[vite\]/,
   /^\s*Plugin: vite:/,
   /^blob report written to .*\.vitest-reports\/blob-\d+-\d+\.json$/,
+  /^\s*Per blob\s+(?:\d+(?:\.\d+)?(?:ms|s)\s*)+$/,
+  // Vitest 4.0.17 with `pool: 'forks'` has a known race in the v8 coverage
+  // provider: worker `onAfterSuiteRun` RPC messages can arrive after
+  // `pool.runTests` resolves, so the coverage tmp directory is cleaned up
+  // before those late writeFile promises run, throwing ENOENT. The coverage
+  // data for the affected test file is still written via a later retry path,
+  // and the affected tests still pass — only this unhandled rejection is
+  // surfaced to stdout. Ignore it.
+  /^[─⎯]+\s*Unhandled (?:Rejection|Error)\s*[─⎯]+$/,
+  /^Error: ENOENT: no such file or directory, (?:open|read) '.*coverage.*\.tmp-\d+-\d+.*coverage-\d+\.json'$/,
+  /^Error: ENOENT: no such file or directory, lstat '.*coverage.*\.tmp-\d+-\d+'$/,
+  /^\s*❯\s+open node:internal\/fs\/promises:\d+:\d+$/,
+  /^\s*❯\s+Object\.readFile node:internal\/fs\/promises:\d+:\d+$/,
+  /^\s*❯\s+Object\.writeFile node:internal\/fs\/promises:\d+:\d+$/,
+  /^\s*❯\s+.*node_modules.*vitest.*$/,
+  /^\s*❯\s+.*node_modules.*@vitest.*$/,
+  /^Serialized Error: \{ errno: -2, code: 'ENOENT', syscall: 'open', path: '.*coverage.*\.tmp-\d+-\d+.*coverage-\d+\.json' \}$/,
+  /^Serialized Error: \{ errno: -2, code: 'ENOENT', syscall: 'read', path: '.*coverage.*\.tmp-\d+-\d+.*coverage-\d+\.json' \}$/,
+  /^Serialized Error: \{ errno: -2, code: 'ENOENT', syscall: 'lstat', path: '.*coverage.*\.tmp-\d+-\d+' \}$/,
 ];
+
+const SEPARATOR_ONLY_PATTERN = /^[─⎯]+$/;
+const COVERAGE_TMP_RACE_PATTERN =
+  /(?:ENOENT: no such file or directory, (?:(?:open|read) '.*coverage.*\.tmp-\d+-\d+.*coverage-\d+\.json'|lstat '.*coverage.*\.tmp-\d+-\d+')|Serialized Error: \{ errno: -2, code: 'ENOENT', syscall: '(?:open|read|lstat)', path: '.*coverage.*\.tmp-\d+-\d+(?:.*coverage-\d+\.json)?' \})/;
+const UNHANDLED_DIAGNOSTIC_HEADER_PATTERN = /^[─⎯]+\s*Unhandled (?:Rejection|Error)\s*[─⎯]+$/;
 
 function isVitestLine(line) {
   return VITEST_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+function isCoverageTmpRaceSeparator(lines, index) {
+  if (!SEPARATOR_ONLY_PATTERN.test(lines[index])) return false;
+
+  const previousWindow = lines.slice(Math.max(0, index - 16), index);
+  const nextWindow = lines.slice(index + 1, index + 4);
+  const hasNearbyCoverageTmpRace = [...previousWindow, ...nextWindow].some((line) =>
+    COVERAGE_TMP_RACE_PATTERN.test(line)
+  );
+  return (
+    hasNearbyCoverageTmpRace &&
+    (previousWindow.some((line) => UNHANDLED_DIAGNOSTIC_HEADER_PATTERN.test(line)) ||
+      nextWindow.some((line) => COVERAGE_TMP_RACE_PATTERN.test(line)))
+  );
 }
 
 function findNearestTestFile(lines, index) {
@@ -67,7 +106,7 @@ function main() {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!isVitestLine(line)) {
+    if (!isVitestLine(line) && !isCoverageTmpRaceSeparator(lines, i)) {
       violations.push({
         lineNumber: i + 1,
         content: line,

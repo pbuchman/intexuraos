@@ -23,6 +23,17 @@ describe('renderEvent task_dispatched', () => {
     const result = renderEvent(event);
     expect(result).toContain('Ask Agent');
   });
+
+  it('labels sentry task as "Sentry"', () => {
+    const event: AutomationEvent = {
+      type: 'task_dispatched',
+      taskId: 'task_456',
+      workerType: 'codex-xhigh',
+      agentType: 'sentry',
+    };
+    const result = renderEvent(event);
+    expect(result).toContain('Sentry');
+  });
 });
 
 describe('renderEvent webhook_received', () => {

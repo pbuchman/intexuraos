@@ -741,8 +741,8 @@ describe('evaluateEvent', () => {
         async run(params): ReturnType<ToolCallingClient['run']> {
           const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
           if (requestReview !== undefined) {
-            await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
-            await requestReview.run({ review_type: 'security', worker_type: 'qwen' });
+            await requestReview.run({ review_type: 'architecture', worker_type: 'openrouter-free' });
+            await requestReview.run({ review_type: 'security', worker_type: 'openrouter-free' });
           }
           return ok({
             content: 'The user explicitly asked for architecture and security review with qwen.',
@@ -766,7 +766,7 @@ describe('evaluateEvent', () => {
         expect(result.value.triage).toEqual({
           action: 'request_review',
           reviewTypes: ['architecture', 'security'],
-          workerType: 'qwen',
+          workerType: 'openrouter-free',
         });
       }
     });
@@ -1128,7 +1128,7 @@ describe('evaluateEvent', () => {
         async run(params): ReturnType<ToolCallingClient['run']> {
           const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
           if (requestReview !== undefined) {
-            await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
+            await requestReview.run({ review_type: 'architecture', worker_type: 'openrouter-free' });
             await requestReview.run({ review_type: 'security', worker_type: 'opus' });
           }
           return ok({
@@ -1153,12 +1153,12 @@ describe('evaluateEvent', () => {
         expect(result.value.triage).toEqual({
           action: 'request_review',
           reviewTypes: ['architecture'],
-          workerType: 'qwen',
+          workerType: 'openrouter-free',
         });
       }
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          existingWorkerType: 'qwen',
+          existingWorkerType: 'openrouter-free',
           workerType: 'opus',
         }),
         'GitHub Agent requested conflicting review worker types'

@@ -88,6 +88,11 @@ describe('internal route schemas', () => {
     await app.close();
   });
 
+  it('ARCHIVE_STALE_GROUPS_SCHEMA documents lifecycle status activity as the retention clock', () => {
+    expect(ARCHIVE_STALE_GROUPS_SCHEMA.description).toContain('lifecycle status activity');
+    expect(ARCHIVE_STALE_GROUPS_SCHEMA.description).not.toContain('updatedAt');
+  });
+
   it('AUTO_ARCHIVE_MERGED_TASKS_SCHEMA rejects non-numeric mergeDays', async () => {
     const app = Fastify();
     app.post('/t', { schema: { body: AUTO_ARCHIVE_MERGED_TASKS_SCHEMA.body } }, async () => ({ ok: true }));

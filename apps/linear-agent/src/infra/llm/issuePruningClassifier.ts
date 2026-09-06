@@ -1,5 +1,5 @@
 /**
- * Gemini Flash-based issue pruning classifier.
+ * OpenRouter-backed issue pruning classifier.
  * Scores synced Linear issues as deletion candidates using LLM intelligence.
  *
  * NOTE: Tested via fake generate function injection in unit tests.
@@ -11,32 +11,32 @@ import type { Logger } from 'pino';
 import { z } from 'zod';
 import type { IssuePruningClassifier, SyncedLinearIssue, PruneCandidate, LinearError } from '../../domain/index.js';
 
-interface GeminiGenerateResult {
+interface LlmGenerateResult {
   content: string;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number };
 }
 
-interface GeminiGenerateError {
+interface LlmGenerateError {
   code: string;
   message: string;
 }
 
 interface ClassifierDeps {
-  generate: (prompt: string) => Promise<Result<GeminiGenerateResult, GeminiGenerateError>>;
+  generate: (prompt: string) => Promise<Result<LlmGenerateResult, LlmGenerateError>>;
   logger: Logger;
 }
 
-/** Zod schema enforcing the expected Gemini response format for pruning candidates */
-const GeminiCandidateSchema = z.object({
+/** Zod schema enforcing the expected LLM response format for pruning candidates */
+const LlmCandidateSchema = z.object({
   identifier: z.string().regex(/^[A-Z]+-\d+$/, 'Must be a valid issue identifier like INT-123'),
   score: z.number().int().min(0).max(100),
   reason: z.string().min(1),
   category: z.enum(['cancelled', 'duplicate', 'sub-issue', 'simple-fix', 'review-only', 'other']),
 });
 
-const GeminiCandidateArraySchema = z.array(GeminiCandidateSchema);
+const LlmCandidateArraySchema = z.array(LlmCandidateSchema);
 
-type GeminiCandidateResponse = z.infer<typeof GeminiCandidateSchema>;
+type LlmCandidateResponse = z.infer<typeof LlmCandidateSchema>;
 
 const PRUNING_PROMPT_VERSION = '1.1.0';
 
@@ -95,7 +95,7 @@ export function createIssuePruningClassifier(deps: ClassifierDeps): IssuePruning
       targetCount: number,
       logger: Logger
     ): Promise<Result<PruneCandidate[], LinearError>> {
-      // Pre-filter: only send closed/cancelled issues to Gemini
+      // Pre-filter: only send closed/cancelled issues to LLM
       const closedIssues = issues.filter(
         (i) => i.stateType === 'completed' || i.stateType === 'cancelled'
       );
@@ -114,17 +114,17 @@ export function createIssuePruningClassifier(deps: ClassifierDeps): IssuePruning
 
       const result = await deps.generate(prompt);
       if (!result.ok) {
-        logger.error({ error: result.error }, 'Gemini classification failed');
+        logger.error({ error: result.error }, 'LLM classification failed');
         return err({ code: 'INTERNAL_ERROR', message: `Classification failed: ${result.error.message}` });
       }
 
       logger.info(
         { usage: result.value.usage },
-        'Gemini classification completed'
+        'LLM classification completed'
       );
 
       // Parse and validate JSON response with Zod
-      let parsed: GeminiCandidateResponse[];
+      let parsed: LlmCandidateResponse[];
       try {
         const content = result.value.content.trim();
         // Handle potential markdown code block wrapping
@@ -132,18 +132,18 @@ export function createIssuePruningClassifier(deps: ClassifierDeps): IssuePruning
           ? content
           : content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
         const rawParsed: unknown = JSON.parse(jsonContent);
-        const zodResult = GeminiCandidateArraySchema.safeParse(rawParsed);
+        const zodResult = LlmCandidateArraySchema.safeParse(rawParsed);
         if (!zodResult.success) {
           const issues = zodResult.error.issues.map(
             (issue) => `${issue.path.join('.')}: ${issue.message}`
           );
           logger.error(
             { validationErrors: issues, responsePreview: result.value.content.slice(0, 200) },
-            'Gemini response failed schema validation'
+            'LLM response failed schema validation'
           );
           return err({
             code: 'INTERNAL_ERROR',
-            message: `Gemini response failed schema validation: ${issues.join('; ')}`,
+            message: `LLM response failed schema validation: ${issues.join('; ')}`,
           });
         }
         parsed = zodResult.data;

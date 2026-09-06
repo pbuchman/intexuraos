@@ -7,7 +7,7 @@
  * Prerequisites:
  * - Docker daemon running
  * - Test worker image built: docker build -t code-worker:test -f Dockerfile.test .
- * - Worker network created: docker network create code-worker-net
+ * - Dual-stack worker network created: ./scripts/setup-worker-network.sh
  *
  * To run locally:
  *   pnpm --filter orchestrator test:e2e
@@ -21,9 +21,10 @@ import * as os from 'node:os';
 import { execSync } from 'node:child_process';
 import { DockerProvider } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
+import { assertWorkerNetworkContract, WORKER_NETWORK_NAME } from './worker-network-contract.js';
 
 const TEST_IMAGE = process.env['WORKER_IMAGE'] ?? 'code-worker:test';
-const TEST_NETWORK = process.env['WORKER_NETWORK'] ?? 'code-worker-net';
+const TEST_NETWORK = WORKER_NETWORK_NAME;
 const TEST_TIMEOUT = 60_000;
 
 function isDockerAvailable(): boolean {
@@ -84,6 +85,10 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
   let testWorktreePath: string;
   let testSecretsPath: string;
   const createdTaskIds: string[] = [];
+
+  it('requires the exact dual-stack worker network contract', () => {
+    expect(() => assertWorkerNetworkContract()).not.toThrow();
+  });
 
   beforeAll(async () => {
     if (skipIfNoImage) {
@@ -147,11 +152,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
       secrets: {
         ANTHROPIC_API_KEY: 'test-key',
         LINEAR_API_KEY: 'test-linear',
-        SENTRY_AUTH_TOKEN: 'test-sentry',
-        MINIMAX_API_KEY: 'test-minimax',
-        MIMO_API_KEY: 'test-mimo',
-        DASHSCOPE_API_KEY: 'test-dashscope',
-        KIMI_API_KEY: 'test-kimi',
+        ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
         OPENROUTER_API_KEY: 'test-openrouter',
       },
       gcpSaKeyPath: path.join(testSecretsPath, 'gcp-sa.json'),
@@ -238,7 +239,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
     );
 
     it(
-      'mounts secrets at /secrets with read-only access',
+      'mounts only the task allowlist and no GCP credential',
       async () => {
         const taskId = `e2e-mount-secrets-${Date.now()}`;
         const config = createTestConfig(taskId, 'file-test');
@@ -248,6 +249,8 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
 
         const logs = await provider.getWorkerLogs(taskId);
         expect(logs).toContain('[claude-stub] /secrets: READ-ONLY (good)');
+        expect(logs).toContain('[claude-stub] GCP credential env: ABSENT (good)');
+        expect(logs).toContain('[claude-stub] GCP service-account file: ABSENT (good)');
       },
       TEST_TIMEOUT
     );
@@ -366,11 +369,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
           secrets: {
             ANTHROPIC_API_KEY: 'test-key',
             LINEAR_API_KEY: 'test-linear',
-            SENTRY_AUTH_TOKEN: 'test-sentry',
-            MINIMAX_API_KEY: 'test-minimax',
-            MIMO_API_KEY: 'test-mimo',
-            DASHSCOPE_API_KEY: 'test-dashscope',
-            KIMI_API_KEY: 'test-kimi',
+            ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
             OPENROUTER_API_KEY: 'test-openrouter',
           },
           gcpSaKeyPath: '',

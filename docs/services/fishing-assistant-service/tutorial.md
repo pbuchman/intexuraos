@@ -6,8 +6,8 @@ Getting started with the Fishing Assistant service HTTP surface.
 
 - IntexuraOS dev environment running.
 - Bearer token for the user whose fishing data you want to access.
-- `INTEXURAOS_OPENAI_APP_API_KEY` configured for knowledge embeddings.
-- The user has an OpenRouter key in user-service before sending chat messages that require LLM generation.
+- `INTEXURAOS_OPENROUTER_APP_API_KEY` configured for knowledge embeddings and platform fallback.
+- Optional user OpenRouter key in user-service; it takes precedence over the platform key.
 
 ## Part 1: Create Knowledge
 
@@ -85,6 +85,8 @@ Messages are returned in creation order. The same history is used as prompt cont
 
 ## Part 3: Digest Context
 
+These compatibility endpoints retain the existing Fishing Assistant UI contract. They read migrated summaries from Message Digest Service; supporting raw-message evidence used by chat is queried directly from the source-fenced private WhatsApp API.
+
 ### List digest groups
 
 ```bash
@@ -112,6 +114,7 @@ curl -X GET "$FISHING_ASSISTANT_URL/digests/$GROUP_KEY/2026-05-05" \
 | ----- | ------- | ------------- |
 | Missing message body | `INVALID_REQUEST`, `message is required.` | Send non-empty `message` in `POST /chats/:chatId/messages`. |
 | Missing folder/page text | `INVALID_REQUEST` | `POST /pages` needs `folderId` and non-empty `rawText`; `PATCH /pages/:pageId` needs non-empty `rawText`. |
-| No OpenRouter key | `NO_API_KEY` | Add the user's OpenRouter key in user-service. |
+| No OpenRouter access | `NO_API_KEY` | Check the user's key and `INTEXURAOS_OPENROUTER_APP_API_KEY`. |
 | Folder contains pages | `FOLDER_NOT_EMPTY` | Delete or move pages before deleting a folder. |
 | Digest not found | `NOT_FOUND` from `/digests/:groupKey/:date` | Verify the group key and date. |
+| Digest dependency unavailable | `DOWNSTREAM_ERROR` | Check message-digest-service health and the configured internal service URL. |

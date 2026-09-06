@@ -1,0 +1,1193 @@
+{
+  "artifactType": "intexuraos-dev-hibernation-sanitized-gate-map",
+  "runId": "20260828T002847Z-paddc4965d21e-b265702826912",
+  "retentionRootAlias": "/.local/state/intexuraos/dev-hibernation/<RUN_ID>",
+  "ledgerSnapshot": {
+    "relativePath": "m11-closeout/evidence-ledger-m11.1.jsonl",
+    "sha256": "df5130dc3247c3fb86a72a3c2520f376c79b6cf17de054d8798770b757d23f46",
+    "rowCount": 121
+  },
+  "requiredPlanStepBindings": [
+    {
+      "stepId": "M1.2",
+      "result": "PASS",
+      "artifactRelativePath": "m1-pbuchman-preservation/m1-2-gate-summary.json",
+      "artifactSha256": "497a5ec519d4d9ea0d4c8bcf70c78d6a828920047271114f6d8fa6c364ac483f"
+    },
+    {
+      "stepId": "M1.3",
+      "result": "PASS",
+      "artifactRelativePath": "m1-pbuchman-preservation/m1-3-gate-summary.json",
+      "artifactSha256": "035e5c7e4321e40f304c9fcf88b10fe3a4f4999342101349496fa805b665b5f1"
+    },
+    {
+      "stepId": "M2.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M2.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M2.3",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M3.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M3.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M4.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M4.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M5.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M5.2",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M5.3",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M6.1",
+      "result": "PASS",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "stepId": "M8.1",
+      "result": "PASS",
+      "artifactRelativePath": "m8/d2e61f0e4cc71bda224cc5872b34145e706c1f477bf8b81decb94ac8b185d98f/final-signed-zero-work-gate.json",
+      "artifactSha256": "ab39524fa0d100e41ba1c402ebdcc28ef143c593335a20c596b6be7825581da2"
+    },
+    {
+      "stepId": "M8.2",
+      "result": "PASS",
+      "artifactRelativePath": "m8-hibernate/publish-last-good.json",
+      "artifactSha256": "c3570d3db47ad3a5cfcaef0ba11bb4293a84bc838e4bb5d296ce51696aebc9b7"
+    }
+  ],
+  "entries": [
+    {
+      "sequence": 1,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:28:47Z",
+      "artifactRelativePath": "m0-baseline/user-acceptance.json",
+      "artifactSha256": "f1b068c4258f94bbc07f172131456aa8eecd2984ef15002cc8845f93b19b209f"
+    },
+    {
+      "sequence": 2,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:29:31Z",
+      "artifactRelativePath": "m0-baseline/plan.sha256",
+      "artifactSha256": "4868415cb9f84a72df05e50e68b5a15766dcc5b832f8fa84081239ecdf4d678d"
+    },
+    {
+      "sequence": 3,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:29:31Z",
+      "artifactRelativePath": "m0-baseline/amendments.sha256",
+      "artifactSha256": "e9b3301b9c26682147346d3f90b7c6ed908e20b7ecffa807a6bb3482f40c5aa4"
+    },
+    {
+      "sequence": 4,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:31:54.948Z",
+      "artifactRelativePath": "m0-baseline/repositories-prefetch.json",
+      "artifactSha256": "e4f770bb0860417f6bdd644e5d7d43dbf009bcd814759b6c49a9901846862e43"
+    },
+    {
+      "sequence": 5,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:32:49.521Z",
+      "artifactRelativePath": "m0-baseline/repositories.json",
+      "artifactSha256": "7572586fdbf974a3fcc4d0a016da40f29ba60639d24815b08fb28db5e0600353"
+    },
+    {
+      "sequence": 6,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:33:39.598Z",
+      "artifactRelativePath": "m0-baseline/superseded-run-integrity.json",
+      "artifactSha256": "bbe0154f12cbf2139e154ba23329d5b65ce74594534b0bfb0a53cef1eb2d268c"
+    },
+    {
+      "sequence": 7,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:33:47.441Z",
+      "artifactRelativePath": "m0-baseline/run-registry-append.json",
+      "artifactSha256": "2c9386b319d562650ae797f9e740cd872b1b17359508d567c666872706502ef0"
+    },
+    {
+      "sequence": 8,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:34:03Z",
+      "artifactRelativePath": "m0-baseline/accepted-plan/2026-08-27-intexuraos-dev-hibernation.md",
+      "artifactSha256": "addc4965d21e9fdfcf2248a0896eb07e0ed1042be219071a9d5dcbc8bcfefcdb"
+    },
+    {
+      "sequence": 9,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:34:03Z",
+      "artifactRelativePath": "m0-baseline/accepted-plan/2026-08-27-intexuraos-dev-hibernation-amendment-1.md",
+      "artifactSha256": "f1323384166176a8eafa0147f2b4aaed473adabf787bd57dd027ad10345df385"
+    },
+    {
+      "sequence": 10,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:34:03Z",
+      "artifactRelativePath": "m0-baseline/accepted-plan/2026-08-28-intexuraos-dev-hibernation-amendment-2.md",
+      "artifactSha256": "099bc04ae154c3428cdc3c42685c89c392693f97bb21d24fb51f81fa0e72f6f9"
+    },
+    {
+      "sequence": 11,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:34:03Z",
+      "artifactRelativePath": "m0-baseline/accepted-plan/2026-08-28-intexuraos-dev-hibernation-amendment-3.md",
+      "artifactSha256": "014e2b763c448687d15536bf308057eeb0a8ca93e68286ce72ffa69f25a6f8b5"
+    },
+    {
+      "sequence": 12,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:34:36Z",
+      "artifactRelativePath": "m0-baseline/working-tree-safety.json",
+      "artifactSha256": "04c3e1ca83f92411f3fddf98a099f65e0feacb852c8d444476b36aa00900aca0"
+    },
+    {
+      "sequence": 13,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T00:36:20.191Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-red.log",
+      "artifactSha256": "aad0785b3b8b57720822b51c7be88b08fe111905553a33ebed5b9f52df42160e"
+    },
+    {
+      "sequence": 14,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:38:13.146Z",
+      "artifactRelativePath": "m0-baseline/linear-link-pending.json",
+      "artifactSha256": "394849429449ffcb1cd8f88f72c93ff874b2e3af972b3189f4db07ee77774cb3"
+    },
+    {
+      "sequence": 15,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T00:44:58Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-green.log",
+      "artifactSha256": "aee049fb7854786a43a5002848cadf334e5a46cc22abaab0939741917332f070"
+    },
+    {
+      "sequence": 16,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:09:38Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-green-v2.log",
+      "artifactSha256": "76f8e74ed293f73cedc526a69974115b7c99bbe33612697e2c71d45b4d921e56"
+    },
+    {
+      "sequence": 17,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T01:10:05Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-review-fail.json",
+      "artifactSha256": "b3b5ef83192be20c4d6f2ced2a5f1fc6818d5feef4fe0de33a45afdd04879300"
+    },
+    {
+      "sequence": 18,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T01:16:36Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-review-fail-v2.json",
+      "artifactSha256": "7ddf24392fe21da4d7cdd9c9bed589670ca67e6be41c6d50629370f3dc681c58"
+    },
+    {
+      "sequence": 19,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:24:12Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-green-v3.log",
+      "artifactSha256": "8f4bd11dff3aa5af1025fe78d0a973ba49d8bd56ad55e4cf820fba18cde60745"
+    },
+    {
+      "sequence": 20,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T01:27:10Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-review-fail-v3.json",
+      "artifactSha256": "b82fa167307a7e0290b8ff95941a1eb12d96d00f796b2fe48d51776d7611583f"
+    },
+    {
+      "sequence": 21,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:30:27Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-green-v4.log",
+      "artifactSha256": "4aaaa3f74ed2357d3c722d477b207368ccc13c98608b7f344f2771c538da496c"
+    },
+    {
+      "sequence": 22,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:31:15Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-review-pass.json",
+      "artifactSha256": "44338be599a69a1c7fe949a3be852eff7f893afe6590a9ea97ec9408238b423f"
+    },
+    {
+      "sequence": 23,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:43:09Z",
+      "artifactRelativePath": "m0-baseline/commit-gate.log",
+      "artifactSha256": "7a73e36318c7f7f7b3fc9b7ca81857343e5bed5af926ae5aba884fde16ee24c4"
+    },
+    {
+      "sequence": 24,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:43:56Z",
+      "artifactRelativePath": "m0-baseline/bootstrap-commit.json",
+      "artifactSha256": "595467709e0c110ed3f0bd7103800fb79839f871055ac78fd87bbec1a9923d09"
+    },
+    {
+      "sequence": 25,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:48:11Z",
+      "artifactRelativePath": "m0-baseline/bootstrap-commit-review.json",
+      "artifactSha256": "b05061bda8c056a821e1dabfc1e3a9e2cdd0bbd23d0e559790a38f015cab6c4d"
+    },
+    {
+      "sequence": 26,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T01:54:03Z",
+      "artifactRelativePath": "m0-baseline/linear-link-failure.json",
+      "artifactSha256": "1574099cfe36fb16f630b0e1600d8356320b73f8f8a52c8ecd71140946ad0cba"
+    },
+    {
+      "sequence": 27,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T01:56:42Z",
+      "artifactRelativePath": "m0-baseline/linear-connection-ui.json",
+      "artifactSha256": "edcc83ecb8038938206c40bf9b270de2c84d1da41f66f95d0827b58091df5516"
+    },
+    {
+      "sequence": 28,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T02:00:44Z",
+      "artifactRelativePath": "m0-baseline/linear-provider-absence.json",
+      "artifactSha256": "19e22f8d8eaccab84ffd2b75a9a7e124781708acbda638e737c096a5295ca7d6"
+    },
+    {
+      "sequence": 29,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T02:02:01Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-observed-order-red.log",
+      "artifactSha256": "cf38524dfd5ebc37e8a380c948895df35a184ef7ed95f7a5eb6d80b9e55afdb8"
+    },
+    {
+      "sequence": 30,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T02:02:22Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-observed-order-green.log",
+      "artifactSha256": "40c3edd643fe7086a55ae50ea3a8c772134cb046c16d91e0c75f83e1a15b5783"
+    },
+    {
+      "sequence": 31,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T02:04:38Z",
+      "artifactRelativePath": "m0-baseline/linear-connection-ui.json",
+      "artifactSha256": "edcc83ecb8038938206c40bf9b270de2c84d1da41f66f95d0827b58091df5516"
+    },
+    {
+      "sequence": 32,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T02:06:39Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-observed-order-red-v2.log",
+      "artifactSha256": "5dc43001bf716fe666823e170d2e8b1d42e246fa5df0bae99aa8672e3b5c61cc"
+    },
+    {
+      "sequence": 33,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T02:06:58Z",
+      "artifactRelativePath": "m0-baseline/ledger-validator-observed-order-green-v2.log",
+      "artifactSha256": "3145ba47b47d7336ecc93367948a96733c494d2bf9411f289aceccc518193a04"
+    },
+    {
+      "sequence": 34,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T02:20:19Z",
+      "artifactRelativePath": "m0-baseline/observed-order-commit-gate.log",
+      "artifactSha256": "3228239cd64715bf008f1f444bc01d28dd41051cf6fd2a3b8a6080e625c477ab"
+    },
+    {
+      "sequence": 35,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T02:24:11Z",
+      "artifactRelativePath": "m0-baseline/observed-order-shard-3-rerun.log",
+      "artifactSha256": "c405c25ec47e015c6be95af7f7a12ae9ea7afa20c77fc0712f8c2588a5622a7b"
+    },
+    {
+      "sequence": 36,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T02:38:44Z",
+      "artifactRelativePath": "m0-baseline/observed-order-commit-gate-node22.log",
+      "artifactSha256": "4010c326f90a4f2bcdac32b48cd1030069a46af58b712427e4c898400bf3296e"
+    },
+    {
+      "sequence": 37,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T02:39:19.789Z",
+      "artifactRelativePath": "m0-baseline/linear-link-failure-synchronize.json",
+      "artifactSha256": "34dbef980b487b14d969de6f856a0d25828325a235459249f229d06f667d5d0d"
+    },
+    {
+      "sequence": 38,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T06:32:39.000Z",
+      "artifactRelativePath": "m0-baseline/linear-connection-reauth.json",
+      "artifactSha256": "9cecc6236060aa4b64d8f94a492e67c5b61983bfadd260fa62fb5185de5b92aa"
+    },
+    {
+      "sequence": 39,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:00:06.000Z",
+      "artifactRelativePath": "m0-baseline/bootstrap-commit-final.json",
+      "artifactSha256": "01f6b4bbf7a8c74cec2caab461357727aaffdef753b08f10e260bbac48bee3b1"
+    },
+    {
+      "sequence": 40,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:00:06.000Z",
+      "artifactRelativePath": "m0-baseline/bootstrap-commit-final-review.json",
+      "artifactSha256": "50a7f97bec2083a2028bd40167a76a6d60c609239ec4fa5c0e95f13cc760b11e"
+    },
+    {
+      "sequence": 41,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:04:12.667Z",
+      "artifactRelativePath": "m0-baseline/linear-link.json",
+      "artifactSha256": "1c7995287ee31fd9398e0b861d5e48dd7954053000705f0f418455cf3e7dcb57"
+    },
+    {
+      "sequence": 42,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:14:47.000Z",
+      "artifactRelativePath": "m0-baseline/bootstrap-contract-final.json",
+      "artifactSha256": "d44f40541884ced7b12d77cea1a545bb834b5d8d48f43ab990e32348b48cebcd"
+    },
+    {
+      "sequence": 43,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:14:47.000Z",
+      "artifactRelativePath": "m0-baseline/bootstrap-manifest.json",
+      "artifactSha256": "1cc68f7fc9de039a08ecc6e85600da7d8f37bdac13dbd1c2338278de343fdcf9"
+    },
+    {
+      "sequence": 44,
+      "milestone": "M0",
+      "stepId": "M0.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:18:45.000Z",
+      "artifactRelativePath": "m0-baseline/ledger-init.json",
+      "artifactSha256": "11cdc022aed2f29d3c2eba147a5f20618bf25c4ecbfc71569ff85ff3df79b54c"
+    },
+    {
+      "sequence": 45,
+      "milestone": "M0",
+      "stepId": "M0.2.5",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:31:23Z",
+      "artifactRelativePath": "m0-baseline/log-consumer-ownership.json",
+      "artifactSha256": "57b0317e376203a669e151cb67a6914ec7c03694786149687f37732b855b622c"
+    },
+    {
+      "sequence": 46,
+      "milestone": "M0",
+      "stepId": "M0.2.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:37:07.747Z",
+      "artifactRelativePath": "m0-baseline/live-config-hashes.json",
+      "artifactSha256": "13550f270595c0ab807ac9fd3b1ad9def3b41e0f47ad49ab1b7343bb5dd44e64"
+    },
+    {
+      "sequence": 47,
+      "milestone": "M0",
+      "stepId": "M0.2.3",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:39:35.346Z",
+      "artifactRelativePath": "m0-baseline/home-dev-storage.json",
+      "artifactSha256": "c8a950dbe9696d568c85fb24dbda0807682480963607b200ac6d7e121f8d2dfa"
+    },
+    {
+      "sequence": 48,
+      "milestone": "M0",
+      "stepId": "M0.4.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T07:43:42.000Z",
+      "artifactRelativePath": "m0-baseline/code-task-drain.json",
+      "artifactSha256": "8615ab79fabd85b4e47288b048a302486d98d6f4e12fc4febae997726874cf35"
+    },
+    {
+      "sequence": 49,
+      "milestone": "M0",
+      "stepId": "M0.4.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:43:42.000Z",
+      "artifactRelativePath": "m0-baseline/firestore-frozen-read-correction.json",
+      "artifactSha256": "8962a17e92b3ee0ffc7b99d903392b86165c62b1493e6cfa100f734ede89f5ad"
+    },
+    {
+      "sequence": 50,
+      "milestone": "M0",
+      "stepId": "M0.4.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:43:42.000Z",
+      "artifactRelativePath": "m0-baseline/dev-queue-drain.json",
+      "artifactSha256": "1a38c5004c0b5fdf100eb7142609cd2dd014c4ed1b3fcd5e9a7be3ffbf1a7e9c"
+    },
+    {
+      "sequence": 51,
+      "milestone": "M0",
+      "stepId": "M0.2.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:44:17.000Z",
+      "artifactRelativePath": "m0-baseline/home-dev-units.json",
+      "artifactSha256": "bb9fda0e150597e1830f70cc0adabf234621ba58bfb6ff146758438b4786d563"
+    },
+    {
+      "sequence": 52,
+      "milestone": "M0",
+      "stepId": "M0.2.2.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T07:44:17.000Z",
+      "artifactRelativePath": "m0-baseline/home-dev-processes.json",
+      "artifactSha256": "af6ea04b39f00aec92410a963a419bea25ec5d813de95bee33fdeb97db34776f"
+    },
+    {
+      "sequence": 53,
+      "milestone": "M0",
+      "stepId": "M0.2.2.2",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:44:17.000Z",
+      "artifactRelativePath": "m0-baseline/home-dev-containers.json",
+      "artifactSha256": "55315aa49d728582e4c71055ed9bbdd0d56872e428363b0a3ab1768b51e44be3"
+    },
+    {
+      "sequence": 54,
+      "milestone": "M0",
+      "stepId": "M0.2.2.3",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:44:17.000Z",
+      "artifactRelativePath": "m0-baseline/home-dev-ports.json",
+      "artifactSha256": "134acedd8e3c4b069471bba45fa103b77a8d0a08eeb3778ac5cc1d00e9792ef3"
+    },
+    {
+      "sequence": 55,
+      "milestone": "M0",
+      "stepId": "M0.2.2.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T07:44:21.000Z",
+      "artifactRelativePath": "m0-baseline/resource-measurement-method.json",
+      "artifactSha256": "30a8291b7a7e28d43e739955c4883c7b587f0c8c302107b7013301774a8d3bc0"
+    },
+    {
+      "sequence": 56,
+      "milestone": "M0",
+      "stepId": "M0.4.2",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:44:27Z",
+      "artifactRelativePath": "m0-baseline/orchestrator-drain.json",
+      "artifactSha256": "fcffbc3d560638b9c627f176f17eac414b59faa5289a1bd0f713221091128b23"
+    },
+    {
+      "sequence": 57,
+      "milestone": "M0",
+      "stepId": "M0.4.3",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:46:26.528Z",
+      "artifactRelativePath": "m0-baseline/emulator-topology.json",
+      "artifactSha256": "024965634525eadf68809438052f957c5c5f4563d1c0fc29aaa008f4590e14af"
+    },
+    {
+      "sequence": 58,
+      "milestone": "M0",
+      "stepId": "M0.4.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:51:05Z",
+      "artifactRelativePath": "m0-baseline/active-state-definitions.json",
+      "artifactSha256": "a40a6dc3275e529edd82bc17c2e8b3502d619dbcacd01ca286d998f7ea1a1deb"
+    },
+    {
+      "sequence": 59,
+      "milestone": "M0",
+      "stepId": "M0.4.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T07:51:05Z",
+      "artifactRelativePath": "m0-baseline/m0-4-capability-gaps.json",
+      "artifactSha256": "abea09ad1a30bb7bf4615d68f3109d18a71dbd85171444b7374ae513d52e6d88"
+    },
+    {
+      "sequence": 60,
+      "milestone": "M0",
+      "stepId": "M0.4.5",
+      "result": "PASS",
+      "observedAt": "2026-08-28T07:51:05Z",
+      "artifactRelativePath": "m0-baseline/change-freeze.md",
+      "artifactSha256": "4438294a2cda8fcf00febb4dbc4a1cfd79c6132539dd24d56ce3f676b0507912"
+    },
+    {
+      "sequence": 61,
+      "milestone": "M0",
+      "stepId": "M0.3.2",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:00:03.768Z",
+      "artifactRelativePath": "m0-baseline/route-probes.json",
+      "artifactSha256": "7caee8bb9fce8fbec317fb3fa1920586a480a937e7377dfcd8476aeb26b271e0"
+    },
+    {
+      "sequence": 62,
+      "milestone": "M0",
+      "stepId": "M0.3.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:00:03.799Z",
+      "artifactRelativePath": "m0-baseline/caddy-traffic-7d.json",
+      "artifactSha256": "0e979e5a2a1803ff184255721f8deb4a3fab6b4764f90c724faf0f46a657c0df"
+    },
+    {
+      "sequence": 63,
+      "milestone": "M0",
+      "stepId": "M0.3.3",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:08:38.553Z",
+      "artifactRelativePath": "m0-baseline/dev-reference-inventory.csv",
+      "artifactSha256": "eb2f2d59512e7abb5203fa16f967898fe7b70bd9a311226fb15388f8287cd44c"
+    },
+    {
+      "sequence": 64,
+      "milestone": "M0",
+      "stepId": "M0.3.3",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T08:08:38.553Z",
+      "artifactRelativePath": "m0-baseline/dev-reference-scan-sources.json",
+      "artifactSha256": "78fb8ae29b72e9b8e8d8c8faa1895cef56296f2831c1e3a509a16b252f385229"
+    },
+    {
+      "sequence": 65,
+      "milestone": "M0",
+      "stepId": "M0.2.6",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:09:14.182Z",
+      "artifactRelativePath": "m0-baseline/home-dev-process-owner-correction.json",
+      "artifactSha256": "5065720e377eabc653b6141a720675302d0553ec57ecb433d65d39ee8adc2f1d"
+    },
+    {
+      "sequence": 66,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T08:14:26.778Z",
+      "artifactRelativePath": "m0-baseline/provider-nonui-projection.json",
+      "artifactSha256": "931cc507f4467c3a6d334c35b0330d98c109847590d777b6811d4ad5ae2b5c5c"
+    },
+    {
+      "sequence": 67,
+      "milestone": "M0",
+      "stepId": "M0.3.4.1",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T08:15:54.391Z",
+      "artifactRelativePath": "m0-baseline/provider-nonui-google-oauth-callback-validation.json",
+      "artifactSha256": "171246f41bdc20e4e078bae857eeacc6df76233b538560767dcfbd5a9e38a676"
+    },
+    {
+      "sequence": 68,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:29:29.940Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-meta-projection.json",
+      "artifactSha256": "67ca7e6695e00098890b9ddee76910cb8cfb9b58332176446c2882928715fa5c"
+    },
+    {
+      "sequence": 69,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T08:29:29.940Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-tasker-projection.json",
+      "artifactSha256": "42be3d8f69da8c25ddf464e15f6ec3713a8b6da4044bd91f5d66ad29e5fb84ff"
+    },
+    {
+      "sequence": 70,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:31:23.072Z",
+      "artifactRelativePath": "m0-baseline/provider-live-auth0-spa-projection.json",
+      "artifactSha256": "74bef2cbf8be13e349250d5d387c6ed9d24c49f3a2a707feb1532e873de2b29e"
+    },
+    {
+      "sequence": 71,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:32:16.162Z",
+      "artifactRelativePath": "m0-baseline/provider-live-firebase-projection.json",
+      "artifactSha256": "05d9bf40fa8cdb39a90bb9b5b6d4b1ef540cdd95dec6f7b47381fc3bcd68088a"
+    },
+    {
+      "sequence": 72,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:33:25.200Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-github-oauth-projection.json",
+      "artifactSha256": "cdc62d318e44a82f657d3c6ff25285ceb6f3d881bc1fda5cb7b0855b7926718e"
+    },
+    {
+      "sequence": 73,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:38:39.768Z",
+      "artifactRelativePath": "m0-baseline/provider-live-auth0-native-capability-projection.json",
+      "artifactSha256": "688b60bc677c48ca70d754e0dbe5fec84bb0eb96fa731f10c1143bd126764883"
+    },
+    {
+      "sequence": 74,
+      "milestone": "M0",
+      "stepId": "M0.2.5.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:39:17.481Z",
+      "artifactRelativePath": "m0-baseline/raw-fragments/manifest.json",
+      "artifactSha256": "5cedfd0a2f9444fb8230259362d68038bb63663e103f5a2969a273bcfe748ec9"
+    },
+    {
+      "sequence": 75,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:49:09.951Z",
+      "artifactRelativePath": "m0-baseline/provider-tasker-current-state-capability-projection.json",
+      "artifactSha256": "537231b4c12570616b8d21187a7f75ef6d6e8defef271ad57d62ef44aeabe1a5"
+    },
+    {
+      "sequence": 76,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T08:52:26Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-cloudflare-projection.json",
+      "artifactSha256": "a309bd567e4dacb1cc4908e99857f90fee13961798c1343da07ac2a68c2863f5"
+    },
+    {
+      "sequence": 77,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T09:04:43Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-linear-webhook-projection.json",
+      "artifactSha256": "9d85c5a2b6a5acef878b6b6e6873b96783f6758bd4d77a270f177175a10813b0"
+    },
+    {
+      "sequence": 78,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T09:09:05Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-automation-projection.json",
+      "artifactSha256": "ffa1e82d13586c67296e3f86163e57ed20d87b08ff1050a187c964af79253702"
+    },
+    {
+      "sequence": 79,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T09:10:23Z",
+      "artifactRelativePath": "m0-baseline/provider-live-github-operations-projection.json",
+      "artifactSha256": "8c6631df90638c53fae9614bb92c8d8262fa4a25b6c962a80300655b05d75971"
+    },
+    {
+      "sequence": 80,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T09:11:02Z",
+      "artifactRelativePath": "m0-baseline/provider-live-github-automation-projection.json",
+      "artifactSha256": "f8e7a32019d3b49cb38fdbe781685f454b3a34371dc99776cb30166f50a48b92"
+    },
+    {
+      "sequence": 81,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T09:13:29Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-automation-identity-invalidation.json",
+      "artifactSha256": "7137d0326c3bf8ca04e1b2e8a9a52f70c790ddbfe7bd708f80d05c0093a63b52"
+    },
+    {
+      "sequence": 82,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T09:36:57Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-operational-objects-projection.json",
+      "artifactSha256": "ba568238da24ef8acbb04dad7e94727034a05f1aa97f95a774f0424a5f39032f"
+    },
+    {
+      "sequence": 83,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T09:44:02Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-google-oauth-projection.json",
+      "artifactSha256": "528f6548f9d78df153290fd2ccc3ba613bc28d08793a8d85b8cc39723e4b56e2"
+    },
+    {
+      "sequence": 84,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T09:59:41Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-github-oauth-chrome-reobservation.json",
+      "artifactSha256": "4714fa2535b36937e3ad2559d2ca18c901f269fa29ad9176a47723a0873a973c"
+    },
+    {
+      "sequence": 85,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:01:04Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-linear-webhook-chrome-reobservation.json",
+      "artifactSha256": "a6bcd3e2e08fabf6ebb972a789a1544fcfe114842eb11d6abdabf03337fb7682"
+    },
+    {
+      "sequence": 86,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:04:36Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-cloudflare-chrome-reobservation.json",
+      "artifactSha256": "cd09abc54defaf42622e36ea6ee2cf4659763d62adbc51a1fddc3abe282c1cd8"
+    },
+    {
+      "sequence": 87,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:10:34Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-meta-chrome-reobservation.json",
+      "artifactSha256": "f8c71d86dcc5fa7e92032dbf9990392103ddd724809da1af928fa23c0ae0dacc"
+    },
+    {
+      "sequence": 88,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T10:11:55Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-automation-explicit-operator-projection.json",
+      "artifactSha256": "1f63babee348b1639fee734108a078b46c91bbabbd780ea2a6b724194803c07f"
+    },
+    {
+      "sequence": 89,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:11:55Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-automation-capture-window-correction.json",
+      "artifactSha256": "b44b194d3a0d0791424db63482989e6897acb8c6a80f9576dea46901a616f3f0"
+    },
+    {
+      "sequence": 90,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:12:24Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-automation-identity-boundary-correction.json",
+      "artifactSha256": "d524543b43fa3292f441c4827fa5ea2802591dbd3d7e99681460f5f5def4269c"
+    },
+    {
+      "sequence": 91,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "FAIL",
+      "observedAt": "2026-08-28T10:13:54Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-automation-explicit-operator-review.json",
+      "artifactSha256": "cf35bbf7b4a24bb27a7e3e63a51f7adf66e12ddb04da630ef3679fed5e986007"
+    },
+    {
+      "sequence": 92,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:14:32Z",
+      "artifactRelativePath": "m0-baseline/provider-ui-browser-provenance-review.json",
+      "artifactSha256": "cacee12bcaf5d5fd5fd34cb3cf82b6e16bcaa23cef2c629ae98219df8e4e5322"
+    },
+    {
+      "sequence": 93,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:20:06Z",
+      "artifactRelativePath": "m0-baseline/provider-live-gcp-automation-explicit-operator-review-correction.json",
+      "artifactSha256": "82aa2a26e2c608aa70156e1cbbcdb6a17d9a9ee80412ff6791635e85169e99f8"
+    },
+    {
+      "sequence": 94,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:23:30Z",
+      "artifactRelativePath": "m0-baseline/external-object-inventory.json",
+      "artifactSha256": "76a518b387cc448def4ce9e73a2478eaafa53d8bd2c59f834438527bb3010b01"
+    },
+    {
+      "sequence": 95,
+      "milestone": "M0",
+      "stepId": "M0.3.4",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:27:59Z",
+      "artifactRelativePath": "m0-baseline/external-object-inventory-review.json",
+      "artifactSha256": "7b3966064036fdf7b2a37c333da54b9f7b486fb65a3b2945d7242dafb2a33c93"
+    },
+    {
+      "sequence": 96,
+      "milestone": "M0",
+      "stepId": "M0.5",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:31:03Z",
+      "artifactRelativePath": "m0-baseline/baseline-summary.json",
+      "artifactSha256": "194dc7429f63c3f7c93a975c6f165af4157d9ea96628b7024efe2deac481c073"
+    },
+    {
+      "sequence": 97,
+      "milestone": "M0",
+      "stepId": "M0.5",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:32:14Z",
+      "artifactRelativePath": "m0-baseline/baseline-summary-review.json",
+      "artifactSha256": "b77a0c4abac3415462e157e642310f8d8a876317dcb4b3379616ee0572cfe733"
+    },
+    {
+      "sequence": 98,
+      "milestone": "M0",
+      "stepId": "M0.5",
+      "result": "PASS",
+      "observedAt": "2026-08-28T10:40:09.238Z",
+      "artifactRelativePath": "m0-baseline/m0-artifact-adjudication.json",
+      "artifactSha256": "191aea868ac7c69d8e6f720982ed9bf87c21b45477ff7a6866926676850ed5be"
+    },
+    {
+      "sequence": 99,
+      "milestone": "M1",
+      "stepId": "M1.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T12:19:26Z",
+      "artifactRelativePath": "m1-pbuchman-preservation/SHA256SUMS",
+      "artifactSha256": "1b0dc010ee73d4ca15f1c6f96746694532be08d88e82a2fb0d67c9bd1114a4c3"
+    },
+    {
+      "sequence": 100,
+      "milestone": "M1",
+      "stepId": "M1.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T13:29:40Z",
+      "artifactRelativePath": "m1-pbuchman-preservation/restore-external-postverification.json",
+      "artifactSha256": "98d2b21aeb66cdc7a97b539ee5e998287d7e70db98f442621c941535b1358809"
+    },
+    {
+      "sequence": 101,
+      "milestone": "M1",
+      "stepId": "M1.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T14:36:50Z",
+      "artifactRelativePath": "m1-pbuchman-preservation/secret-scan-external-postverification.json",
+      "artifactSha256": "9d3f49fd7597c366d35bb85ce6603e0518c308fab0efb93df5023be51e9715e4"
+    },
+    {
+      "sequence": 102,
+      "milestone": "M1",
+      "stepId": "M1.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T17:57:53Z",
+      "artifactRelativePath": "m1-pbuchman-preservation/recovery.bundle",
+      "artifactSha256": "2aec6e23b2b1233fbf984a65e42221bbb4e77c35a6466dd6ba782e0479e5a790"
+    },
+    {
+      "sequence": 103,
+      "milestone": "M1",
+      "stepId": "M1.1",
+      "result": "PASS",
+      "observedAt": "2026-08-28T17:57:53Z",
+      "artifactRelativePath": "m1-pbuchman-preservation/recovery-import-external-postverification.json",
+      "artifactSha256": "57b7782b737ba443902d97cd5c6d8bd48a5c5d557063b0f682fa1561f638aa32"
+    },
+    {
+      "sequence": 104,
+      "milestone": "M1",
+      "stepId": "M1.4",
+      "result": "PASS",
+      "observedAt": "2026-09-01T10:17:17Z",
+      "artifactRelativePath": "m1-pbuchman-preservation/final-deployed-repo.json",
+      "artifactSha256": "412ae14b15c85b24076b62b59621797b73def5771c60bfd40e6b2a87b71ecabf"
+    },
+    {
+      "sequence": 105,
+      "milestone": "M7",
+      "stepId": "M7.0.1",
+      "result": "PASS",
+      "observedAt": "2026-09-01T11:46:47Z",
+      "artifactRelativePath": "matrix-recovery/20260901T110013Z-41a6b95c/independent-verification.json",
+      "artifactSha256": "64dcf52be9a761a5725afab7861a6af09f3c33fcb8d73871f669c42190020477"
+    },
+    {
+      "sequence": 106,
+      "milestone": "M6",
+      "stepId": "M6.2.3",
+      "result": "PASS",
+      "observedAt": "2026-09-02T12:36:48Z",
+      "artifactRelativePath": "m6-staging/home-merge-df6702f/verification.json",
+      "artifactSha256": "afb19d06571680b4c90aa8f47f349ff62fa77436f6c8cad3976bbd58cea2e75d"
+    },
+    {
+      "sequence": 107,
+      "milestone": "M6",
+      "stepId": "M6.3",
+      "result": "PASS",
+      "observedAt": "2026-09-02T13:08:46Z",
+      "artifactRelativePath": "m6-staging/checkpoint-3-verification.json",
+      "artifactSha256": "d383fe287a89777e5433194f1817cb9749a593651f1a39827262c660fa9d01cc"
+    },
+    {
+      "sequence": 108,
+      "milestone": "M7",
+      "stepId": "M7.0",
+      "result": "PASS",
+      "observedAt": "2026-09-02T14:08:59Z",
+      "artifactRelativePath": "m6-staging/checkpoint-4-verification.json",
+      "artifactSha256": "ffed9065319613b55fbebd7308542984189f9f8f29eb55a513b55189d4a32d75"
+    },
+    {
+      "sequence": 109,
+      "milestone": "M7",
+      "stepId": "M7.1",
+      "result": "PASS",
+      "observedAt": "2026-09-02T14:50:19Z",
+      "artifactRelativePath": "m7-cutover/checkpoint-5-verification.json",
+      "artifactSha256": "4006180aab02cd2611eaf0b78c460cf9563c9be68cb9a183204a1482df07ca62"
+    },
+    {
+      "sequence": 110,
+      "milestone": "M7",
+      "stepId": "M7.2",
+      "result": "PASS",
+      "observedAt": "2026-09-02T15:12:30Z",
+      "artifactRelativePath": "m7-cutover/checkpoint-6-verification.json",
+      "artifactSha256": "5e22ac724aac235d83ab08ded3bb27eb8120c3195a49aafcb0b9f248fa71aacc"
+    },
+    {
+      "sequence": 111,
+      "milestone": "M7",
+      "stepId": "M7.3",
+      "result": "PASS",
+      "observedAt": "2026-09-02T17:29:59Z",
+      "artifactRelativePath": "m7-cutover/checkpoint-7-verification.json",
+      "artifactSha256": "44df5b3aa9496d813e5cdaa1f58c4034bb99df313746e97427cd131eebd11d23"
+    },
+    {
+      "sequence": 112,
+      "milestone": "M6",
+      "stepId": "M6.3",
+      "result": "PASS",
+      "observedAt": "2026-09-02T17:35:52Z",
+      "artifactRelativePath": "m6-staging/pm2-rpc-observer-repair.json",
+      "artifactSha256": "4ffc4ee72d9768cb1cd18819d907d8842df7df0d08607aa2d5c35e51beed5692"
+    },
+    {
+      "sequence": 113,
+      "milestone": "M7",
+      "stepId": "M7.4",
+      "result": "PASS",
+      "observedAt": "2026-09-04T11:38:05Z",
+      "artifactRelativePath": "m7-cutover/checkpoint-8-verification.json",
+      "artifactSha256": "a79a3b7cfc6414fee18890624cedd123a9260aec7d426902455651148f3dd73d"
+    },
+    {
+      "sequence": 114,
+      "milestone": "M8",
+      "stepId": "M8.3",
+      "result": "PASS",
+      "observedAt": "2026-09-05T00:31:51Z",
+      "artifactRelativePath": "m8-hibernate/final-status.json",
+      "artifactSha256": "af0a0e0196a151b5691f6b8abfbd011615aaee3eed7db8b3742d44bc0008f2b2"
+    },
+    {
+      "sequence": 115,
+      "milestone": "M9",
+      "stepId": "M9.1",
+      "result": "PASS",
+      "observedAt": "2026-09-05T01:33:40Z",
+      "artifactRelativePath": "m9-acceptance/immediate-acceptance.json",
+      "artifactSha256": "4f7089f65514162253769ae3efa2f8874c4115e19dcc6df2aee8ef659d3809b8"
+    },
+    {
+      "sequence": 116,
+      "milestone": "M2",
+      "stepId": "M2.4",
+      "result": "PASS",
+      "observedAt": "2026-09-05T01:58:00Z",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "sequence": 117,
+      "milestone": "M3",
+      "stepId": "M3.3",
+      "result": "PASS",
+      "observedAt": "2026-09-05T01:58:00Z",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "sequence": 118,
+      "milestone": "M4",
+      "stepId": "M4.3",
+      "result": "PASS",
+      "observedAt": "2026-09-05T01:58:00Z",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "sequence": 119,
+      "milestone": "M5",
+      "stepId": "M5.4",
+      "result": "PASS",
+      "observedAt": "2026-09-05T01:58:00Z",
+      "artifactRelativePath": "m11-closeout/milestone-matrix-pre-24h.json",
+      "artifactSha256": "881ec16a45e69ea2c692e37c84e7f29a4b17dc42e5a94e440b7964e61cee179f"
+    },
+    {
+      "sequence": 120,
+      "milestone": "M9",
+      "stepId": "M9.2",
+      "result": "PASS",
+      "observedAt": "2026-09-06T01:09:30Z",
+      "artifactRelativePath": "m9-acceptance/24h-acceptance.json",
+      "artifactSha256": "47e3625c31cb3409141e1e768bc0b6b824d8df00e5fdbe557f6eccbea258dc6b"
+    },
+    {
+      "sequence": 121,
+      "milestone": "M11",
+      "stepId": "M11.1",
+      "result": "PASS",
+      "observedAt": "2026-09-06T01:42:47Z",
+      "artifactRelativePath": "m11-closeout/final-closeout.json",
+      "artifactSha256": "ccc21df079a05042b4c39e046bfa2eb75f28630d0d6a0862824284cd89a4ab89"
+    }
+  ]
+}

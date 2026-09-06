@@ -52,12 +52,17 @@
 
 export { initSentry, type SentryConfig } from './init.js';
 export {
+  defaultSentryTracesSampleRate,
+  resolveSentryRelease,
+  type SentryRuntimeEnvironment,
+} from './runtimeDefaults.js';
+export {
   createSentryStream,
   sendToSentry,
   isSentryConfigured,
   SKIP_SENTRY_KEY,
 } from './transport.js';
-export { setupSentryErrorHandler } from './fastify.js';
+export { setupSentryErrorHandler, type SentryErrorHandlerOptions } from './fastify.js';
 export { createAppLogger, type AppLoggerConfig } from './appLogger.js';
 export { createLogStream } from './logStream.js';
 export { initWorker, type WorkerBootstrapConfig, type WorkerBootstrap } from './initWorker.js';

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import type { Logger } from '@intexuraos/common-core';
+import { err, ok, type Logger } from '@intexuraos/common-core';
+import { createHash } from 'node:crypto';
 import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../../../domain/models/codeTask.js';
 import type { CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
@@ -26,6 +27,7 @@ describe('firestoreCodeTaskRepository', () => {
   });
 
   afterEach(() => {
+    fakeFirestore.clear();
     resetFirestore();
   });
 
@@ -61,9 +63,11 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.dedupKey).toMatch(/^[a-f0-9]{16}$/);
       expect(result.value.createdAt).toBeDefined();
       expect(result.value.updatedAt).toBeDefined();
+      expect(result.value.statusChangedAt?.toMillis()).toBe(result.value.createdAt.toMillis());
+      expect(result.value.updatedAt.toMillis()).toBe(result.value.createdAt.toMillis());
 
       const stored = await fakeFirestore.collection('code_tasks').doc(result.value.id).get();
-      expect(stored.get('schemaVersion')).toBe(1);
+      expect(stored.get('schemaVersion')).toBe(2);
       expect(stored.get('schemaUpdatedAt')).toBeInstanceOf(Timestamp);
     });
 
@@ -101,6 +105,48 @@ describe('firestoreCodeTaskRepository', () => {
       if (second.error.code === 'DUPLICATE_PROMPT') {
         expect(second.error.existingTaskId).toBeDefined();
       }
+    });
+
+    it('allows a deterministic caller to bypass generic prompt deduplication', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({
+        id: 'task-review-first',
+        agentType: 'review',
+      }));
+      const second = await repo.create(
+        createTaskInput({
+          id: 'task-review-deterministic-event',
+          agentType: 'review',
+        }),
+        { skipPromptDedup: true },
+      );
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      if (!second.ok) return;
+      expect(second.value.id).toBe('task-review-deterministic-event');
+    });
+
+    it('does not allow non-review tasks to bypass generic prompt deduplication', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const first = await repo.create(createTaskInput({ id: 'task-execution-first' }));
+      const second = await repo.create(
+        createTaskInput({ id: 'task-execution-second' }),
+        { skipPromptDedup: true },
+      );
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(false);
+      if (second.ok) return;
+      expect(second.error.code).toBe('DUPLICATE_PROMPT');
     });
 
     it('Layer 2: skips dedup check for retried tasks', async () => {
@@ -904,6 +950,93 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
+  describe('findByIdsForUser', () => {
+    it('bulk-loads exact ids in stable order, chunks reads, and omits missing or foreign tasks', async () => {
+      const timestamp = Timestamp.fromDate(new Date('2026-07-28T06:00:00.000Z'));
+      const ownedIds = Array.from({ length: 102 }, (_, index) => `task_${String(index).padStart(3, '0')}`);
+      fakeFirestore.seedCollection('code_tasks', [
+        ...ownedIds.map((id) => ({
+          id,
+          data: {
+            id,
+            userId: 'user-123',
+            status: 'failed',
+            agentType: 'execution',
+            createdAt: timestamp,
+            completedAt: timestamp,
+            updatedAt: timestamp,
+          },
+        })),
+        {
+          id: 'task_foreign',
+          data: {
+            id: 'task_foreign',
+            userId: 'user-456',
+            status: 'failed',
+            createdAt: timestamp,
+            completedAt: timestamp,
+            updatedAt: timestamp,
+          },
+        },
+      ]);
+
+      interface ReadableDocumentRef { get: () => Promise<unknown> }
+      const getAll = vi.fn(async (...refs: ReadableDocumentRef[]): Promise<unknown[]> =>
+        await Promise.all(refs.map(async (ref) => await ref.get()))
+      );
+      Object.assign(fakeFirestore, { getAll });
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const exactIds = [...ownedIds].reverse();
+      const bulkRepo = repo as typeof repo & {
+        findByIdsForUser?: (
+          taskIds: readonly string[],
+          userId: string,
+        ) => Promise<{ ok: true; value: { id: string }[] } | { ok: false; error: unknown }>;
+      };
+
+      expect(bulkRepo.findByIdsForUser).toBeDefined();
+      const result = await bulkRepo.findByIdsForUser?.(
+        [...exactIds, 'task_foreign', 'task_missing'],
+        'user-123',
+      );
+
+      expect(result?.ok).toBe(true);
+      if (result?.ok !== true) return;
+      expect(result.value.map((task) => task.id)).toEqual(exactIds);
+      expect(getAll).toHaveBeenCalledTimes(2);
+      expect(getAll.mock.calls.every((call) => call.length <= 100)).toBe(true);
+    });
+
+    it('fails the whole bulk result when any Firestore batch fails', async () => {
+      const getAll = vi.fn().mockRejectedValue(new Error('batch unavailable'));
+      Object.assign(fakeFirestore, { getAll });
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findByIdsForUser(['task_a', 'task_b'], 'user-123');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'FIRESTORE_ERROR',
+        message: 'Firestore error: batch unavailable',
+      });
+      expect(getAll).toHaveBeenCalledOnce();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-123',
+          requestedTaskCount: 2,
+        }),
+        'Failed to find tasks by ids for user',
+      );
+    });
+  });
+
   describe('update', () => {
     it('updates task status', async () => {
       const repo = createFirestoreCodeTaskRepository({
@@ -953,6 +1086,468 @@ describe('firestoreCodeTaskRepository', () => {
         expect(result.value.completedAt.toDate()).toEqual(completedAt);
       }
       expect(result.value.result?.summary).toBe('Done');
+    });
+
+    it('stores explicit completion time as the lifecycle time for running to failed', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2026-07-27T09:15:00.000Z');
+
+      const result = await repo.update(created.value.id, { status: 'failed', completedAt });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBe(completedAt.getTime());
+      expect(result.value.completedAt?.toMillis()).toBe(completedAt.getTime());
+      expect(result.value.updatedAt.toMillis()).toBeGreaterThan(completedAt.getTime());
+    });
+
+    it('uses one repository clock value for inferred terminal lifecycle fields', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+
+      const result = await repo.update(created.value.id, { status: 'reviewed' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBe(result.value.completedAt?.toMillis());
+      expect(result.value.completedAt?.toMillis()).toBe(result.value.updatedAt.toMillis());
+    });
+
+    it('advances only updatedAt for a failed to failed metadata write', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2026-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, { status: 'failed', completedAt });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+      const metadataWriteAt = new Date('2026-07-27T10:45:00.000Z');
+
+      const result = await repo.update(created.value.id, {
+        status: 'failed',
+        prNumber: 42,
+        updatedAt: metadataWriteAt,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBe(failed.value.statusChangedAt?.toMillis());
+      expect(result.value.completedAt?.toMillis()).toBe(completedAt.getTime());
+      expect(result.value.updatedAt.toMillis()).toBe(metadataWriteAt.getTime());
+    });
+
+    it('advances statusChangedAt while preserving completedAt on failed to archived', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2020-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, { status: 'failed', completedAt });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+
+      const result = await repo.update(created.value.id, { status: 'archived' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBeGreaterThan(completedAt.getTime());
+      expect(result.value.completedAt?.toMillis()).toBe(completedAt.getTime());
+    });
+
+    it('restores and rolls back an archived completion without replacing history or backdating clocks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      const historicalCompletion = new Date('2020-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, {
+        status: 'failed',
+        completedAt: historicalCompletion,
+      });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+      const archived = await repo.update(created.value.id, { status: 'archived' });
+      expect(archived.ok).toBe(true);
+      if (!archived.ok) return;
+
+      const restored = await repo.update(created.value.id, {
+        status: 'reviewed',
+        updatedAt: new Date('2019-01-01T00:00:00.000Z'),
+      });
+      expect(restored.ok).toBe(true);
+      if (!restored.ok) return;
+      const rolledBack = await repo.update(created.value.id, {
+        status: 'archived',
+        updatedAt: new Date('2018-01-01T00:00:00.000Z'),
+      });
+      expect(rolledBack.ok).toBe(true);
+      if (!rolledBack.ok) return;
+
+      expect(restored.value.completedAt?.toMillis()).toBe(historicalCompletion.getTime());
+      expect(restored.value.statusChangedAt?.toMillis()).toBe(restored.value.updatedAt.toMillis());
+      expect(restored.value.updatedAt.toMillis()).toBeGreaterThan(
+        new Date('2019-01-01T00:00:00.000Z').getTime(),
+      );
+      expect(rolledBack.value.completedAt?.toMillis()).toBe(historicalCompletion.getTime());
+      expect(rolledBack.value.statusChangedAt?.toMillis()).toBe(rolledBack.value.updatedAt.toMillis());
+      expect(rolledBack.value.updatedAt.toMillis()).toBeGreaterThan(
+        new Date('2018-01-01T00:00:00.000Z').getTime(),
+      );
+    });
+
+    it('advances statusChangedAt and deletes completedAt on failed to running', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2020-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, { status: 'failed', completedAt });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+
+      const result = await repo.update(created.value.id, { status: 'running' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBeGreaterThan(completedAt.getTime());
+      expect(result.value.completedAt).toBeUndefined();
+    });
+
+    it('logs one structured lifecycle transition and no metadata-only write', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      vi.mocked(logger.info).mockClear();
+      const completedAt = new Date('2026-07-27T09:15:00.000Z');
+      const dispatchAt = Timestamp.fromDate(completedAt);
+
+      const transitioned = await repo.update(created.value.id, {
+        status: 'failed',
+        completedAt,
+        error: { code: 'dispatch_blocked_provider_auth_unavailable', message: 'Auth unavailable' },
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'provider_auth_unavailable',
+          terminal: true,
+          severity: 'critical',
+          message: 'No provider authorization is available.',
+          remediation: 'Configure provider authorization.',
+          workerNames: ['vm'],
+          firstSeenAt: dispatchAt,
+          lastSeenAt: dispatchAt,
+          nextAction: 'retry_after_fix',
+        },
+      });
+      expect(transitioned.ok).toBe(true);
+      await repo.update(created.value.id, { prNumber: 42 });
+
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: created.value.id,
+          userId: 'user-123',
+          workerType: 'opus',
+          workerLocation: 'vm',
+          fromStatus: 'running',
+          toStatus: 'failed',
+          statusChangedAt: completedAt.toISOString(),
+          lifecycleTimeSource: 'status_changed',
+          dispatchReason: 'provider_auth_unavailable',
+          errorCode: 'dispatch_blocked_provider_auth_unavailable',
+        }),
+        'Code task lifecycle transitioned'
+      );
+    });
+
+    it('logs a repository-owned transition once after the committed transaction retry', async () => {
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let retryUpdate = false;
+      let callbackAttempts = 0;
+      let committed = false;
+      let loggedAfterCommit = false;
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        if (!retryUpdate) return originalRunTransaction(updateFn);
+        callbackAttempts += 1;
+        await originalRunTransaction(updateFn);
+        await fakeFirestore.collection('code_tasks').doc('task-retry-log').update({
+          status: 'dispatched',
+        });
+        callbackAttempts += 1;
+        const result = await originalRunTransaction(updateFn);
+        committed = true;
+        return result;
+      });
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({
+        id: 'task-retry-log',
+        initialStatus: 'dispatched',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockImplementation(() => {
+        loggedAfterCommit = committed;
+      });
+      retryUpdate = true;
+
+      const result = await repo.update(created.value.id, { status: 'running' });
+
+      expect(result.ok).toBe(true);
+      expect(callbackAttempts).toBe(2);
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(loggedAfterCommit).toBe(true);
+    });
+
+    it('logs a caller-owned transition once after the outer repository transaction commits', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let committed = false;
+      let loggedAfterCommit = false;
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        const result = await originalRunTransaction(updateFn);
+        committed = true;
+        return result;
+      });
+      vi.mocked(logger.info).mockImplementation(() => {
+        loggedAfterCommit = committed;
+      });
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+
+      const result = await repo.runInTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: created.value.id,
+          fromStatus: 'dispatched',
+          toStatus: 'running',
+        }),
+        'Code task lifecycle transitioned'
+      );
+      expect(loggedAfterCommit).toBe(true);
+    });
+
+    it('does not emit a transition log when a caller-owned transaction aborts', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+
+      const snapshot = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      const discardedTransaction = {
+        get: vi.fn().mockResolvedValue(snapshot),
+        update: vi.fn(),
+      } as unknown as FirebaseFirestore.Transaction;
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        await updateFn(discardedTransaction as never);
+        throw new Error('outer transaction aborted');
+      });
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+
+      const result = await repo.runInTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
+      );
+
+      expect(result.ok).toBe(false);
+
+      expect(logger.info).not.toHaveBeenCalled();
+      const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      expect(stored.get('status')).toBe('dispatched');
+    });
+
+    it('rolls back a caller-owned transition when the operation returns a repository error', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+      vi.mocked(logger.error).mockClear();
+      const operationError = {
+        code: 'ACTIVE_TASK_EXISTS' as const,
+        message: 'Another task is active',
+        existingTaskId: 'task-other',
+      };
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+
+      const result = await repo.runInTransaction(async (transaction) => {
+        const updateResult = await repo.update(
+          created.value.id,
+          { status: 'running' },
+          { transaction },
+        );
+        expect(updateResult.ok).toBe(true);
+        return err(operationError);
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe(operationError);
+      const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      expect(stored.get('status')).toBe('dispatched');
+      expect(logger.info).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('logs only the committed caller-owned transition when the outer transaction retries', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({
+        id: 'task-outer-retry-log',
+        initialStatus: 'dispatched',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let callbackAttempts = 0;
+      let committed = false;
+      let loggedAfterCommit = false;
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        callbackAttempts += 1;
+        await originalRunTransaction(updateFn);
+        await fakeFirestore.collection('code_tasks').doc(created.value.id).update({
+          status: 'queued',
+        });
+        callbackAttempts += 1;
+        const result = await originalRunTransaction(updateFn);
+        committed = true;
+        return result;
+      });
+      vi.mocked(logger.info).mockImplementation(() => {
+        loggedAfterCommit = committed;
+      });
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+
+      const result = await repo.runInTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(callbackAttempts).toBe(2);
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: created.value.id,
+          fromStatus: 'queued',
+          toStatus: 'running',
+        }),
+        'Code task lifecycle transitioned'
+      );
+      expect(loggedAfterCommit).toBe(true);
+    });
+
+    it('rejects a transition in an unregistered raw transaction before writing', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('FIRESTORE_ERROR');
+      expect(logger.info).not.toHaveBeenCalled();
+      const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      expect(stored.get('status')).toBe('dispatched');
+    });
+
+    it('logs the transition committed by update without a second-read race', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      const collection = fakeFirestore.collection('code_tasks');
+      const originalDoc = collection.doc.bind(collection);
+      let taskReads = 0;
+      vi.spyOn(collection, 'doc').mockImplementation((id?: string) => {
+        const ref = originalDoc(id);
+        if (id !== created.value.id) return ref;
+        const originalGet = ref.get.bind(ref);
+        vi.spyOn(ref, 'get').mockImplementation(async () => {
+          taskReads += 1;
+          if (taskReads === 2) {
+            await ref.update({ status: 'archived' });
+          }
+          return originalGet();
+        });
+        return ref;
+      });
+      vi.mocked(logger.info).mockClear();
+
+      const result = await repo.update(created.value.id, { status: 'running' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.status).toBe('running');
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ fromStatus: 'dispatched', toStatus: 'running' }),
+        'Code task lifecycle transitioned'
+      );
     });
 
     it('returns NOT_FOUND for non-existent task', async () => {
@@ -1212,6 +1807,93 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.tasks.length).toBe(1);
       expect(result.value.tasks[0]?.status).toBe('planned');
+    });
+
+    it('paginates completed-status compatibility results', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const first = await repo.create(createTaskInput({ id: 'planned-one', prompt: 'planned one' }));
+      const second = await repo.create(createTaskInput({ id: 'planned-two', prompt: 'planned two' }));
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      if (!first.ok || !second.ok) return;
+      await repo.update(first.value.id, { status: 'planned' });
+      await repo.update(second.value.id, { status: 'planned' });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: 1 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toHaveLength(1);
+      expect(result.value.nextCursor).toBeDefined();
+    });
+
+    it('handles an empty compatibility page when a negative repository limit is supplied', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: -1 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toEqual([]);
+      expect(result.value.nextCursor).toBeUndefined();
+    });
+
+    it('continues a full compatibility scan page with a cursor', async () => {
+      const timestamp = Timestamp.fromDate(new Date('2026-07-28T08:00:00.000Z'));
+      fakeFirestore.seedCollection('code_tasks', Array.from({ length: 100 }, (_, index) => ({
+        id: `compat-planning-${String(index).padStart(3, '0')}`,
+        data: {
+          id: `compat-planning-${String(index).padStart(3, '0')}`,
+          userId: 'user-123',
+          status: 'completed',
+          agentType: 'planning',
+          createdAt: Timestamp.fromMillis(timestamp.toMillis() + index),
+          updatedAt: timestamp,
+        },
+      })));
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: 100 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toHaveLength(100);
+      expect(result.value.nextCursor).toBeUndefined();
+    });
+
+    it('returns the final scan cursor after the bounded compatibility window', async () => {
+      const timestamp = Timestamp.fromDate(new Date('2026-07-28T08:00:00.000Z'));
+      fakeFirestore.seedCollection('code_tasks', Array.from({ length: 1_000 }, (_, index) => ({
+        id: `compat-execution-${String(index).padStart(4, '0')}`,
+        data: {
+          id: `compat-execution-${String(index).padStart(4, '0')}`,
+          userId: 'user-123',
+          status: 'completed',
+          agentType: 'execution',
+          createdAt: Timestamp.fromMillis(timestamp.toMillis() + index),
+          updatedAt: timestamp,
+        },
+      })));
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: 100 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toEqual([]);
+      expect(result.value.nextCursor).toBeDefined();
     });
 
     it('returns tasks', async () => {
@@ -2029,7 +2711,8 @@ describe('firestoreCodeTaskRepository', () => {
       const getCallsAfterUpdate: string[] = [];
       let updateCalled = false;
 
-      await fakeFirestore.runTransaction(async (tx) => {
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+      await repo.runInTransaction(async (tx) => {
         // Wrap transaction to spy on get/update ordering
         const originalGet = tx.get.bind(tx);
         const originalUpdate = tx.update.bind(tx);
@@ -2045,7 +2728,7 @@ describe('firestoreCodeTaskRepository', () => {
           return originalGet(...args);
         };
 
-        txAny.update = (...args: Parameters<UpdateFn>): void => {
+        txAny.update = (...args: Parameters<UpdateFn>): ReturnType<UpdateFn> => {
           updateCalled = true;
           return originalUpdate(...args);
         };
@@ -2053,13 +2736,14 @@ describe('firestoreCodeTaskRepository', () => {
         const updateResult = await repo.update(
           taskId,
           { status: 'running' },
-          { transaction: tx as unknown as FirebaseFirestore.Transaction },
+          { transaction: tx },
         );
         expect(updateResult.ok).toBe(true);
         if (!updateResult.ok) throw new Error('Update failed');
 
         // Verify the returned task has the updated status
         expect(updateResult.value.status).toBe('running');
+        return updateResult;
       });
 
       // The key assertion: no get() calls happened after update()
@@ -3246,6 +3930,124 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).toHaveLength(1);
       expect(result.value[0]?.id).toBe('task-b');
     });
+
+    it('scans past newer foreign tasks when an owner scope is requested', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const issueId = 'INT-702';
+      const ownerResult = await repo.create(createTaskInput({
+        id: 'task-owned-older',
+        userId: 'user-123',
+        linearIssueId: issueId,
+        traceId: 'trace-owned-older',
+      }));
+      expect(ownerResult.ok).toBe(true);
+      if (!ownerResult.ok) return;
+      expect((await repo.update(ownerResult.value.id, { status: 'failed' })).ok).toBe(true);
+      await fakeFirestore.collection('code_tasks').doc(ownerResult.value.id).update({
+        createdAt: Timestamp.fromDate(new Date('2026-07-28T00:00:00.000Z')),
+      });
+
+      for (let index = 0; index < 55; index += 1) {
+        const created = await repo.create(createTaskInput({
+          id: `task-foreign-${String(index).padStart(2, '0')}`,
+          userId: 'foreign-user',
+          linearIssueId: issueId,
+          traceId: `trace-foreign-${String(index)}`,
+          prompt: `foreign ${String(index)}`,
+          sanitizedPrompt: `foreign ${String(index)}`,
+        }));
+        expect(created.ok).toBe(true);
+        if (!created.ok) return;
+        expect((await repo.update(created.value.id, { status: 'failed' })).ok).toBe(true);
+        await fakeFirestore.collection('code_tasks').doc(created.value.id).update({
+          createdAt: Timestamp.fromMillis(
+            new Date('2026-07-28T01:00:00.000Z').getTime() + index,
+          ),
+        });
+      }
+
+      const result = await repo.findRecentTasksByLinearIssue(issueId, 1, 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.map((task) => task.id)).toEqual(['task-owned-older']);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId: issueId,
+          userId: 'user-123',
+          requestedLimit: 1,
+          matchedTaskCount: 1,
+          scannedTaskCount: 56,
+        }),
+        'Completed owner-scoped Linear issue task scan',
+      );
+    });
+  });
+
+  describe('aggregate query helpers', () => {
+    it('counts tasks created today and queued tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'today-queued', prompt: 'today queued' }));
+
+      const today = await repo.countByUserToday('user-123');
+      const queued = await repo.countQueued();
+
+      expect(today).toEqual({ ok: true, value: 1 });
+      expect(queued).toEqual({ ok: true, value: 1 });
+    });
+
+    it('lists queued, errored post-run, and owner-scoped non-archived tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const queued = await repo.create(createTaskInput({ id: 'query-queued', prompt: 'query queued' }));
+      const errored = await repo.create(createTaskInput({ id: 'query-errored', prompt: 'query errored' }));
+      expect(queued.ok).toBe(true);
+      expect(errored.ok).toBe(true);
+      if (!errored.ok) return;
+      await repo.update(errored.value.id, {
+        executionMemoryPostRun: {
+          status: 'error',
+          attempts: 1,
+          lastAttemptAt: Timestamp.now(),
+          generatedMemoryIds: [],
+          errorMessage: 'failed',
+        },
+      });
+
+      const byAge = await repo.listQueuedByAge(10);
+      const allQueued = await repo.listQueued();
+      const postRunErrors = await repo.listErroredExecutionMemoryPostRun();
+      const nonArchived = await repo.listAllNonArchived('user-123');
+      const nonArchivedGlobal = await repo.listAllNonArchivedGlobal();
+
+      expect(byAge.ok && byAge.value.map((task) => task.id)).toContain('query-queued');
+      expect(allQueued.ok && allQueued.value.map((task) => task.id)).toContain('query-queued');
+      expect(postRunErrors.ok && postRunErrors.value.map((task) => task.id)).toContain('query-errored');
+      expect(nonArchived.ok && nonArchived.value).toHaveLength(2);
+      expect(nonArchivedGlobal.ok && nonArchivedGlobal.value).toHaveLength(2);
+    });
+
+    it('returns the latest non-archived ask-agent task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'ask-agent', agentType: 'ask_agent' }));
+
+      const result = await repo.findLatestAskAgentTask('user-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value?.id).toBe('ask-agent');
+    });
   });
 
   describe('deleteTask', () => {
@@ -3290,6 +4092,34 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('NOT_FOUND');
+    });
+
+    it('refuses to delete a dispatched task and preserves its user lease', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({
+        id: 'task-active-delete',
+        userId: 'user-abc',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      const claim = await repo.claimForDispatch(created.value.id);
+      expect(claim.ok && claim.value.kind).toBe('claimed');
+
+      const result = await repo.deleteTask(created.value.id, 'user-abc');
+
+      expect(result).toEqual(err({
+        code: 'ACTIVE_TASK_EXISTS',
+        message: 'Cancel active task before deleting it',
+        existingTaskId: created.value.id,
+      }));
+      const leaseId = createHash('sha256').update('user-abc').digest('hex');
+      const lease = await fakeFirestore.collection('code_task_user_leases').doc(leaseId).get();
+      expect(lease.exists).toBe(true);
+      const task = await repo.findById(created.value.id);
+      expect(task.ok && task.value.status).toBe('dispatched');
     });
   });
 
@@ -4059,19 +4889,37 @@ describe('firestoreCodeTaskRepository', () => {
           nextAction: 'will_retry_automatically',
         },
       });
+      await fakeFirestore.collection('code_tasks').doc('task-claim').update({
+        completedAt: Timestamp.fromDate(new Date('2026-07-27T08:00:00.000Z')),
+      });
+      vi.mocked(logger.info).mockClear();
 
       const result = await repo.claimForDispatch('task-claim');
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toBe(true);
+      expect(result.value).toMatchObject({
+        kind: 'claimed',
+        dispatchToken: expect.any(String),
+      });
 
       const after = await repo.findById('task-claim');
       expect(after.ok).toBe(true);
       if (!after.ok) return;
       expect(after.value.status).toBe('dispatched');
+      expect(after.value.dispatchToken).toBe(
+        result.value.kind === 'claimed' ? result.value.dispatchToken : undefined,
+      );
       expect(after.value.dispatchedAt).toBeDefined();
+      expect(after.value.lastHeartbeat).toBeDefined();
+      expect(after.value.lastHeartbeat?.toMillis()).toBe(
+        after.value.dispatchedAt?.toMillis(),
+      );
+      expect(after.value.statusChangedAt?.toMillis()).toBe(after.value.dispatchedAt?.toMillis());
+      expect(after.value.dispatchedAt?.toMillis()).toBe(after.value.updatedAt.toMillis());
+      expect(after.value.completedAt).toBeUndefined();
       expect(after.value.dispatchStatus).toBeUndefined();
+      expect(logger.info).toHaveBeenCalledTimes(1);
     });
 
     it('returns false when task is already dispatched', async () => {
@@ -4089,7 +4937,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toBe(false);
+      expect(result.value).toEqual({ kind: 'task_not_queued' });
     });
 
     it('returns false when task is running', async () => {
@@ -4107,7 +4955,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toBe(false);
+      expect(result.value).toEqual({ kind: 'task_not_queued' });
     });
 
     it('returns false when task does not exist', async () => {
@@ -4120,7 +4968,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toBe(false);
+      expect(result.value).toEqual({ kind: 'task_not_queued' });
     });
 
     it('exactly one of two parallel claim calls wins for the same task', async () => {
@@ -4141,13 +4989,554 @@ describe('firestoreCodeTaskRepository', () => {
       expect(b.ok).toBe(true);
       if (!a.ok || !b.ok) return;
 
-      const claimedCount = [a.value, b.value].filter((r): r is true => r === true).length;
+      const claimedCount = [a.value, b.value].filter((result) => result.kind === 'claimed').length;
       const alreadyClaimedCount = [a.value, b.value].filter(
-        (r): r is false => r === false,
+        (result) => result.kind === 'task_not_queued',
       ).length;
 
       expect(claimedCount).toBe(1);
       expect(alreadyClaimedCount).toBe(1);
+    });
+
+    it('allows exactly one of two queued tasks for the same user to claim the dispatch lease', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const first = await repo.create(createTaskInput({ id: 'task-user-first' }));
+      const second = await repo.create(createTaskInput({
+        id: 'task-user-second',
+        prompt: 'Different queued task',
+        sanitizedPrompt: 'different queued task',
+      }));
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+
+      const results = await Promise.all([
+        repo.claimForDispatch('task-user-first'),
+        repo.claimForDispatch('task-user-second'),
+      ]);
+      expect(results.every((result) => result.ok)).toBe(true);
+      const values = results.flatMap((result) => result.ok ? [result.value] : []);
+      const claimed = values.find((value) => value.kind === 'claimed');
+      const busy = values.find((value) => value.kind === 'user_busy');
+
+      expect(claimed).toMatchObject({ kind: 'claimed', dispatchToken: expect.any(String) });
+      expect(busy).toEqual({
+        kind: 'user_busy',
+        activeTaskId: claimed?.kind === 'claimed'
+          ? (values[0]?.kind === 'claimed' ? 'task-user-first' : 'task-user-second')
+          : '',
+      });
+    });
+
+    it('allows queued tasks for different users to claim independently', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-user-a', userId: 'user-a' }));
+      await repo.create(createTaskInput({
+        id: 'task-user-b',
+        userId: 'user-b',
+        prompt: 'User B task',
+        sanitizedPrompt: 'user b task',
+      }));
+
+      const [first, second] = await Promise.all([
+        repo.claimForDispatch('task-user-a'),
+        repo.claimForDispatch('task-user-b'),
+      ]);
+
+      expect(first.ok && first.value.kind).toBe('claimed');
+      expect(second.ok && second.value.kind).toBe('claimed');
+    });
+
+    it('adopts a pre-existing running task into the user lease before rollout dispatch', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const active = await repo.create(createTaskInput({
+        id: 'task-pre-lease-active',
+        initialStatus: 'dispatched',
+      }));
+      expect(active.ok).toBe(true);
+      if (!active.ok) return;
+      await repo.update(active.value.id, {
+        status: 'running',
+        lastHeartbeat: new Date(),
+      });
+      await repo.create(createTaskInput({
+        id: 'task-post-rollout-queued',
+        prompt: 'Queued after rollout',
+        sanitizedPrompt: 'queued after rollout',
+      }));
+
+      const result = await repo.claimForDispatch('task-post-rollout-queued');
+
+      expect(result).toEqual(ok({
+        kind: 'user_busy',
+        activeTaskId: 'task-pre-lease-active',
+      }));
+      const adopted = await repo.findById('task-pre-lease-active');
+      expect(adopted.ok).toBe(true);
+      if (!adopted.ok) return;
+      expect(adopted.value.dispatchToken).toEqual(expect.any(String));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      const lease = await fakeFirestore.collection('code_task_user_leases').doc(leaseId).get();
+      expect(lease.data()).toMatchObject({
+        taskId: 'task-pre-lease-active',
+        dispatchToken: adopted.value.dispatchToken,
+      });
+    });
+
+    it('adopts a legacy dispatched task with dispatchedAt into the user lease during rollout', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({
+        id: 'task-legacy-dispatched',
+        initialStatus: 'dispatched',
+      }));
+      await fakeFirestore.collection('code_tasks').doc('task-legacy-dispatched').update({
+        dispatchedAt: Timestamp.fromDate(new Date('2026-08-20T08:00:00.000Z')),
+      });
+      await repo.create(createTaskInput({
+        id: 'task-waiting-for-legacy-dispatch',
+        prompt: 'Wait for legacy dispatch',
+        sanitizedPrompt: 'wait for legacy dispatch',
+      }));
+
+      const result = await repo.claimForDispatch('task-waiting-for-legacy-dispatch');
+
+      expect(result).toEqual(ok({
+        kind: 'user_busy',
+        activeTaskId: 'task-legacy-dispatched',
+      }));
+      const adopted = await repo.findById('task-legacy-dispatched');
+      expect(adopted.ok).toBe(true);
+      if (!adopted.ok) return;
+      expect(adopted.value.dispatchToken).toEqual(expect.any(String));
+      expect(adopted.value.lastHeartbeat).toBeDefined();
+    });
+
+    it('replaces a stale lease whose task no longer exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-after-stale-lease' }));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).set({
+        taskId: 'task-that-does-not-exist',
+        dispatchToken: 'stale-token',
+        acquiredAt: Timestamp.now(),
+      });
+
+      const result = await repo.claimForDispatch('task-after-stale-lease');
+
+      expect(result.ok && result.value.kind).toBe('claimed');
+      if (!result.ok || result.value.kind !== 'claimed') return;
+      const lease = await fakeFirestore.collection('code_task_user_leases').doc(leaseId).get();
+      expect(lease.data()).toMatchObject({
+        taskId: 'task-after-stale-lease',
+        dispatchToken: result.value.dispatchToken,
+      });
+    });
+
+    it('replaces a lease whose referenced task was deleted after the lease was written', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-deleted-lease-target', initialStatus: 'dispatched' }));
+      await repo.create(createTaskInput({
+        id: 'task-after-deleted-target',
+        prompt: 'Dispatch after deleted target',
+        sanitizedPrompt: 'dispatch after deleted target',
+      }));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).set({
+        taskId: 'task-deleted-lease-target',
+        dispatchToken: 'deleted-target-token',
+        acquiredAt: Timestamp.now(),
+      });
+      await fakeFirestore.collection('code_tasks').doc('task-deleted-lease-target').delete();
+
+      const result = await repo.claimForDispatch('task-after-deleted-target');
+
+      expect(result.ok && result.value.kind).toBe('claimed');
+    });
+
+    it('repairs a lease for an active task before reporting the user busy', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({
+        id: 'task-active-with-drifted-lease',
+        initialStatus: 'dispatched',
+      }));
+      await fakeFirestore.collection('code_tasks').doc('task-active-with-drifted-lease').update({
+        dispatchToken: 'task-authoritative-token',
+      });
+      await repo.create(createTaskInput({
+        id: 'task-waiting-behind-drifted-lease',
+        prompt: 'Wait for active task',
+        sanitizedPrompt: 'wait for active task',
+      }));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).set({
+        taskId: 'task-active-with-drifted-lease',
+        dispatchToken: 'stale-token',
+        acquiredAt: Timestamp.now(),
+      });
+
+      const result = await repo.claimForDispatch('task-waiting-behind-drifted-lease');
+
+      expect(result).toEqual(ok({
+        kind: 'user_busy',
+        activeTaskId: 'task-active-with-drifted-lease',
+      }));
+      const active = await repo.findById('task-active-with-drifted-lease');
+      expect(active.ok).toBe(true);
+      if (!active.ok) return;
+      expect(active.value.dispatchToken).toBe('task-authoritative-token');
+      expect(active.value.lastHeartbeat).toBeDefined();
+      const lease = await fakeFirestore.collection('code_task_user_leases').doc(leaseId).get();
+      expect(lease.data()).toMatchObject({
+        taskId: 'task-active-with-drifted-lease',
+        dispatchToken: 'task-authoritative-token',
+      });
+    });
+
+    it('treats an existing fenced lease as execution evidence during rollout', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({
+        id: 'task-active-from-lease',
+        initialStatus: 'dispatched',
+      }));
+      await repo.create(createTaskInput({
+        id: 'task-waiting-for-leased-active',
+        prompt: 'Wait for leased active task',
+        sanitizedPrompt: 'wait for leased active task',
+      }));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).set({
+        taskId: 'task-active-from-lease',
+        dispatchToken: 'lease-only-token',
+        acquiredAt: Timestamp.now(),
+      });
+
+      const result = await repo.claimForDispatch('task-waiting-for-leased-active');
+
+      expect(result).toEqual(ok({
+        kind: 'user_busy',
+        activeTaskId: 'task-active-from-lease',
+      }));
+      const active = await repo.findById('task-active-from-lease');
+      expect(active.ok).toBe(true);
+      if (!active.ok) return;
+      expect(active.value.dispatchToken).toBe('lease-only-token');
+      expect(active.value.lastHeartbeat).toBeDefined();
+    });
+
+    it('stores the lease at the deterministic SHA-256 user path', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-hashed-lease', userId: 'user-to-hash' }));
+
+      const claim = await repo.claimForDispatch('task-hashed-lease');
+      expect(claim.ok).toBe(true);
+      if (!claim.ok || claim.value.kind !== 'claimed') return;
+
+      const leaseId = createHash('sha256').update('user-to-hash').digest('hex');
+      const lease = await fakeFirestore.collection('code_task_user_leases').doc(leaseId).get();
+      expect(lease.exists).toBe(true);
+      expect(lease.data()).toMatchObject({
+        taskId: 'task-hashed-lease',
+        dispatchToken: claim.value.dispatchToken,
+      });
+    });
+
+    it('releases the matching lease on terminal transition', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-terminal-first' }));
+      await repo.create(createTaskInput({
+        id: 'task-terminal-second',
+        prompt: 'Second after terminal',
+        sanitizedPrompt: 'second after terminal',
+      }));
+      const firstClaim = await repo.claimForDispatch('task-terminal-first');
+      expect(firstClaim.ok && firstClaim.value.kind).toBe('claimed');
+
+      const terminal = await repo.update('task-terminal-first', { status: 'failed' });
+      expect(terminal.ok).toBe(true);
+      const secondClaim = await repo.claimForDispatch('task-terminal-second');
+
+      expect(secondClaim.ok && secondClaim.value.kind).toBe('claimed');
+    });
+
+    it('rolls back and releases only the matching dispatch token', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-rollback' }));
+      const claim = await repo.claimForDispatch('task-rollback');
+      expect(claim.ok).toBe(true);
+      if (!claim.ok || claim.value.kind !== 'claimed') return;
+
+      const rollback = await repo.rollbackDispatch('task-rollback', claim.value.dispatchToken);
+      expect(rollback).toEqual({ ok: true, value: true });
+      const after = await repo.findById('task-rollback');
+      expect(after.ok).toBe(true);
+      if (!after.ok) return;
+      expect(after.value.status).toBe('queued');
+      expect(after.value.dispatchToken).toBeUndefined();
+    });
+
+    it('does not let a stale rollback token release a newer lease', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-stale-token' }));
+      const firstClaim = await repo.claimForDispatch('task-stale-token');
+      expect(firstClaim.ok).toBe(true);
+      if (!firstClaim.ok || firstClaim.value.kind !== 'claimed') return;
+      const firstRollback = await repo.rollbackDispatch(
+        'task-stale-token',
+        firstClaim.value.dispatchToken,
+      );
+      expect(firstRollback).toEqual({ ok: true, value: true });
+      const secondClaim = await repo.claimForDispatch('task-stale-token');
+      expect(secondClaim.ok).toBe(true);
+      if (!secondClaim.ok || secondClaim.value.kind !== 'claimed') return;
+
+      const staleRollback = await repo.rollbackDispatch(
+        'task-stale-token',
+        firstClaim.value.dispatchToken,
+      );
+
+      expect(staleRollback).toEqual({ ok: true, value: false });
+      const after = await repo.findById('task-stale-token');
+      expect(after.ok).toBe(true);
+      if (!after.ok) return;
+      expect(after.value.status).toBe('dispatched');
+      expect(after.value.dispatchToken).toBe(secondClaim.value.dispatchToken);
+    });
+
+    it('does not release a foreign lease during a stale terminal transition', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-old-owner' }));
+      const claim = await repo.claimForDispatch('task-old-owner');
+      expect(claim.ok).toBe(true);
+      if (!claim.ok || claim.value.kind !== 'claimed') return;
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      const leaseRef = fakeFirestore.collection('code_task_user_leases').doc(leaseId);
+      await leaseRef.set({ taskId: 'task-new-owner', dispatchToken: 'new-owner-token' });
+
+      const terminal = await repo.update('task-old-owner', { status: 'failed' });
+
+      expect(terminal.ok).toBe(true);
+      const lease = await leaseRef.get();
+      expect(lease.data()).toEqual({
+        taskId: 'task-new-owner',
+        dispatchToken: 'new-owner-token',
+      });
+    });
+
+    it('does not acquire a lease for a synthetic initially-dispatched fan-out parent', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({
+        id: 'task-fanout-parent',
+        initialStatus: 'dispatched',
+      }));
+      await repo.create(createTaskInput({
+        id: 'task-real-dispatch',
+        prompt: 'Real dispatch',
+        sanitizedPrompt: 'real dispatch',
+      }));
+
+      const realClaim = await repo.claimForDispatch('task-real-dispatch');
+
+      expect(realClaim.ok && realClaim.value.kind).toBe('claimed');
+    });
+
+    it('replaces a malformed lease whose task id is not a non-empty string', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-malformed-lease' }));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).set({
+        taskId: 123,
+        dispatchToken: 'malformed-token',
+      });
+
+      const result = await repo.claimForDispatch('task-malformed-lease');
+
+      expect(result.ok && result.value.kind).toBe('claimed');
+    });
+
+    it('replaces a self-referential lease for a task that is still queued', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-self-lease' }));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).set({
+        taskId: 'task-self-lease',
+        dispatchToken: 'stale-self-token',
+      });
+
+      const result = await repo.claimForDispatch('task-self-lease');
+
+      expect(result.ok && result.value.kind).toBe('claimed');
+    });
+
+    it('repairs a running leased task when both token and acquisition time are missing', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-running-empty-lease', initialStatus: 'dispatched' }));
+      await fakeFirestore.collection('code_tasks').doc('task-running-empty-lease').update({
+        status: 'running',
+      });
+      await repo.create(createTaskInput({
+        id: 'task-waiting-empty-lease',
+        prompt: 'Wait for running lease repair',
+        sanitizedPrompt: 'wait for running lease repair',
+      }));
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).set({
+        taskId: 'task-running-empty-lease',
+        dispatchToken: '',
+      });
+
+      const result = await repo.claimForDispatch('task-waiting-empty-lease');
+      const active = await repo.findById('task-running-empty-lease');
+      const lease = await fakeFirestore.collection('code_task_user_leases').doc(leaseId).get();
+
+      expect(result).toEqual(ok({
+        kind: 'user_busy',
+        activeTaskId: 'task-running-empty-lease',
+      }));
+      expect(active.ok && active.value.dispatchToken).toEqual(expect.any(String));
+      expect(lease.data()?.['acquiredAt']).toBeInstanceOf(Timestamp);
+    });
+
+    it('adopts an already fenced and heartbeating active task without rewriting it', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const heartbeat = Timestamp.fromDate(new Date('2026-08-20T10:00:00.000Z'));
+      await repo.create(createTaskInput({ id: 'task-active-complete-evidence', initialStatus: 'dispatched' }));
+      await fakeFirestore.collection('code_tasks').doc('task-active-complete-evidence').update({
+        status: 'running',
+        dispatchToken: 'existing-token',
+        lastHeartbeat: heartbeat,
+      });
+      await repo.create(createTaskInput({
+        id: 'task-waiting-complete-evidence',
+        prompt: 'Wait without repair',
+        sanitizedPrompt: 'wait without repair',
+      }));
+
+      const result = await repo.claimForDispatch('task-waiting-complete-evidence');
+      const active = await repo.findById('task-active-complete-evidence');
+
+      expect(result).toEqual(ok({
+        kind: 'user_busy',
+        activeTaskId: 'task-active-complete-evidence',
+      }));
+      expect(active.ok && active.value.dispatchToken).toBe('existing-token');
+      expect(active.ok && active.value.lastHeartbeat?.toMillis()).toBe(heartbeat.toMillis());
+    });
+
+    it('returns false when rollback targets a task that no longer exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await expect(repo.rollbackDispatch('task-missing-rollback', 'token')).resolves.toEqual(
+        ok(false),
+      );
+    });
+
+    it('returns false when the matching task has lost its user lease before rollback', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-rollback-missing-lease' }));
+      const claim = await repo.claimForDispatch('task-rollback-missing-lease');
+      expect(claim.ok && claim.value.kind).toBe('claimed');
+      if (!claim.ok || claim.value.kind !== 'claimed') return;
+      const leaseId = createHash('sha256').update('user-123').digest('hex');
+      await fakeFirestore.collection('code_task_user_leases').doc(leaseId).delete();
+
+      const rollback = await repo.rollbackDispatch(
+        'task-rollback-missing-lease',
+        claim.value.dispatchToken,
+      );
+
+      expect(rollback).toEqual(ok(false));
+    });
+
+    it('persists a supplied dispatch status while rolling a matching claim back', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'task-rollback-status' }));
+      const claim = await repo.claimForDispatch('task-rollback-status');
+      expect(claim.ok && claim.value.kind).toBe('claimed');
+      if (!claim.ok || claim.value.kind !== 'claimed') return;
+      const dispatchStatus = {
+        state: 'waiting' as const,
+        reason: 'worker_unavailable' as const,
+        terminal: false,
+        severity: 'warning' as const,
+        message: 'Worker unavailable',
+        remediation: 'Retry automatically',
+        workerNames: ['home-mac'],
+        firstSeenAt: Timestamp.now(),
+        lastSeenAt: Timestamp.now(),
+        nextAction: 'will_retry_automatically' as const,
+      };
+
+      const rollback = await repo.rollbackDispatch(
+        'task-rollback-status',
+        claim.value.dispatchToken,
+        dispatchStatus,
+      );
+      const after = await repo.findById('task-rollback-status');
+
+      expect(rollback).toEqual(ok(true));
+      expect(after.ok && after.value.dispatchStatus).toEqual(dispatchStatus);
     });
   });
 });

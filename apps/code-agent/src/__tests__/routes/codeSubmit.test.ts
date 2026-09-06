@@ -394,6 +394,86 @@ describe('POST /code/submit', () => {
       );
     });
 
+    it('uses default planning worker type when the resolved task is planning and workerType is omitted', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-126',
+        linearIssueTitle: 'Planning issue',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const workerSettingsRepo = getServices().workerSettingsRepo;
+      await workerSettingsRepo.updateDefaultWorkerType(
+        'test-user-id',
+        'defaultPlanningWorkerType',
+        'sonnet'
+      );
+
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Plan the implementation',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'planning',
+          workerType: 'sonnet',
+        })
+      );
+    });
+
+    it('uses default execution worker type when the resolved task is execution and workerType is omitted', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-125',
+        linearIssueTitle: 'Execution-ready issue',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const workerSettingsRepo = getServices().workerSettingsRepo;
+      await workerSettingsRepo.updateDefaultWorkerType(
+        'test-user-id',
+        'defaultExecutionWorkerType',
+        'codex'
+      );
+
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Implement the execution-ready issue',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+          workerType: 'codex',
+        })
+      );
+    });
+
     it('includes linearIssueId when provided', async () => {
       // Mock linearIssueService.ensureIssueExists to return the provided issue ID
       const linearService = getServices().linearIssueService;
@@ -656,6 +736,7 @@ describe('POST /code/submit', () => {
 
     it('returns a failed task id when the user has no enabled workers', async () => {
       const services = getServices();
+      const warnSpy = vi.spyOn(services.logger, 'warn');
       await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
       vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
@@ -693,6 +774,16 @@ describe('POST /code/submit', () => {
           nextAction: 'retry_after_fix',
         }));
       }
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-id',
+          taskId: body.data.codeTaskId,
+          workerType: expect.any(String),
+          reason: 'no_enabled_workers',
+          _skipSentry: true,
+        }),
+        'User has no workers configured',
+      );
     });
 
     it('returns a failed task id when worker settings fetch fails after task creation', async () => {
@@ -897,7 +988,7 @@ describe('POST /code/submit', () => {
     });
 
     it('accepts valid worker types', async () => {
-      const workerTypes = ['opus', 'auto', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi', 'codex', 'codex-xhigh', 'openrouter-free'] as const;
+      const workerTypes = ['opus', 'auto', 'sonnet', 'codex', 'codex-xhigh', 'openrouter-free'] as const;
 
       const linearService = getServices().linearIssueService;
       // Use fallback mode (no linearIssueId) to avoid ACTIVE_TASK_EXISTS conflicts across iterations

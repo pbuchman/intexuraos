@@ -9,7 +9,7 @@ This service account provides admin access for development workflows:
 - **Terraform operations** - plan, apply, destroy
 - **Firestore access** - queries, document manipulation
 - **GCS access** - bucket operations, signed URLs
-- **Secret Manager** - reading secrets for local development
+- **Secret package publication** - impersonating the resource-scoped DEV or PROD publisher
 - **IAM operations** - service account management
 - **Cloud Build** - trigger management
 - **Cloud Run** - service deployment
@@ -113,7 +113,7 @@ gcloud iam service-accounts keys delete <key-id> \
 | `roles/pubsub.admin`                    | Pub/Sub topics and subscriptions     |
 | `roles/resourcemanager.projectIamAdmin` | Project IAM policy management        |
 | `roles/run.admin`                       | Cloud Run service deployment         |
-| `roles/secretmanager.admin`             | Secret creation and access           |
+| `roles/serviceusage.apiKeysAdmin`       | API key restriction management       |
 | `roles/serviceusage.serviceUsageAdmin`  | API enablement                       |
 | `roles/storage.objectAdmin`             | GCS bucket and object management     |
 
@@ -123,6 +123,11 @@ gcloud iam service-accounts keys delete <key-id> \
 2. **Least privilege**: Uses specific admin roles instead of `roles/owner`
 3. **Audit logging**: All API calls are logged in Cloud Audit Logs
 4. **Key expiration**: GCP keys don't expire automatically; implement manual rotation
+
+The account has no project-level Secret Manager role. The dev environment root
+grants it `roles/iam.serviceAccountTokenCreator` only on the two package
+publisher identities; those publishers hold resource-level access to their own
+package and exact source inventory.
 
 ## Outputs
 

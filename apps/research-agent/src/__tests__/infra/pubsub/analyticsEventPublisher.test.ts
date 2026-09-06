@@ -32,7 +32,7 @@ describe('createAnalyticsEventPublisher', () => {
     type: 'llm.report',
     researchId: 'research-123',
     userId: 'user-456',
-    provider: LlmProviders.Google,
+    provider: LlmProviders.OpenAI,
     model: 'gemini-1.5-pro',
     inputTokens: 1500,
     outputTokens: 3000,

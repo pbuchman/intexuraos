@@ -24,18 +24,17 @@ PUBSUB_ROUTES=(
 )
 
 SCHEDULER_ROUTES=(
-  "mobile-notifications-digest-yesterday|/internal/notifications/digest/run-yesterday"
-  "intexuraos-linear-sync-hourly|/internal/linear/sync-all"
-  "intexuraos-linear-issues-prune-hourly|/internal/linear/prune-issues"
-  "intexuraos-drain-task-queue|/internal/drain-queue"
-  "intexuraos-merge-conflict-reconcile|/internal/merge-conflicts/reconcile"
-  "intexuraos-merge-queue-tick|/internal/merge-queue/tick"
-  "intexuraos-code-tasks-zombie-sweep|/internal/code/detect-zombies"
-  "intexuraos-archive-stale-groups|/internal/archive-stale-groups"
-  "intexuraos-auto-archive-merged-tasks|/internal/auto-archive-merged-tasks"
-  "intexuraos-execution-memory-process|/internal/execution-memory/process"
-  "intexuraos-execution-memory-sweep-errored|/internal/execution-memory/sweep-errored"
-  "intexuraos-execution-memory-prune-stale|/internal/execution-memory/prune-stale"
+  "intexuraos-linear-sync-hourly|/internal/linear/sync-all|"
+  "intexuraos-linear-issues-prune-hourly|/internal/linear/prune-issues|"
+  "intexuraos-drain-task-queue|/internal/drain-queue|"
+  "intexuraos-merge-conflict-reconcile|/internal/merge-conflicts/reconcile|"
+  "intexuraos-merge-queue-tick|/internal/merge-queue/tick|"
+  "intexuraos-code-tasks-zombie-sweep|/internal/code/detect-zombies|{}"
+  "intexuraos-archive-stale-groups|/internal/archive-stale-groups|"
+  "intexuraos-auto-archive-merged-tasks|/internal/auto-archive-merged-tasks|"
+  "intexuraos-execution-memory-process|/internal/execution-memory/process|"
+  "intexuraos-execution-memory-sweep-errored|/internal/execution-memory/sweep-errored|"
+  "intexuraos-execution-memory-prune-stale|/internal/execution-memory/prune-stale|{\"maxAgeDays\":30}"
 )
 
 usage() {
@@ -123,17 +122,27 @@ cutover_scheduler() {
   local route=""
   local job_stem=""
   local path=""
+  local message_body=""
   local job_name=""
 
   for route in "${SCHEDULER_ROUTES[@]}"; do
-    IFS='|' read -r job_stem path <<< "${route}"
+    IFS='|' read -r job_stem path message_body <<< "${route}"
     job_name="${job_stem}-${ENVIRONMENT}"
-    run_or_print gcloud scheduler jobs update http "${job_name}" \
-      --project="${PROJECT_ID}" \
-      --location="${REGION}" \
-      --uri="${PUBLIC_ORIGIN}${path}" \
-      --oidc-service-account-email="${SCHEDULER_SERVICE_ACCOUNT_EMAIL}" \
+    local args=(
+      gcloud scheduler jobs update http "${job_name}"
+      --project="${PROJECT_ID}"
+      --location="${REGION}"
+      --uri="${PUBLIC_ORIGIN}${path}"
+      --oidc-service-account-email="${SCHEDULER_SERVICE_ACCOUNT_EMAIL}"
       --oidc-token-audience="${PUBLIC_ORIGIN}"
+    )
+
+    if [[ -n "${message_body}" ]]; then
+      args+=(--update-headers=Content-Type=application/json)
+      args+=(--message-body="${message_body}")
+    fi
+
+    run_or_print "${args[@]}"
   done
 }
 

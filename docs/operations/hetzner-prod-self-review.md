@@ -11,7 +11,8 @@ Final integration review for the Hetzner migration replacement PR.
 | user-service | app service | migrated | INT-1634 | PM2 port 8110 and nginx `/api/user` route |
 | notion-service | app service | migrated | INT-1634 | PM2 port 8112 and nginx `/api/notion` route |
 | whatsapp-service | app service | migrated | INT-1634, INT-1635 | PM2 port 8113, `/api/whatsapp`, and `/internal/whatsapp/*` routes |
-| mobile-notifications-service | app service | migrated | INT-1634, INT-1635 | PM2 port 8114 and Scheduler route `/internal/notifications/digest/run-yesterday` |
+| mobile-notifications-service | app service | migrated | INT-1634 | PM2 port 8114 and `/api/notifications`; no summary scheduler or LLM dependency |
+| message-digest-service | app service | migrated | WhatsApp Message Digests | PM2 port 8135, `/api/message-digests`, five-minute scheduler, and run Pub/Sub subscription |
 | research-agent | app service | migrated | INT-1634, INT-1635 | PM2 port 8116 and `/internal/llm/*` routes |
 | fishing-assistant-service | app service | migrated | INT-1634 | PM2 port 8119 and nginx `/api/fishing-assistant` route |
 | image-service | app service | migrated | INT-1634, INT-1636 | PM2 port 8120 and nginx `/api/images` route |

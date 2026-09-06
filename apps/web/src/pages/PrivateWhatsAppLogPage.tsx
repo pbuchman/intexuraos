@@ -3,19 +3,25 @@ import {
   CalendarDays,
   FileText,
   Image,
+  Loader2,
   MessageSquare,
+  Mic,
   RefreshCw,
   Search,
   UserRound,
+  Video,
   UsersRound,
 } from 'lucide-react';
 import { Button, ErrorBanner, Layout } from '@/components';
+import { PrivateWhatsAppImagePreview } from '@/components/whatsapp/PrivateWhatsAppImagePreview';
+import { PrivateWhatsAppMediaPlayer } from '@/components/whatsapp/PrivateWhatsAppMediaPlayer';
 import { usePrivateWhatsAppLog } from '@/hooks/usePrivateWhatsAppLog';
 import { formatDateTimeCompact, formatRelative } from '@/utils/dateFormat';
 import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageType,
+  PrivateWhatsAppReaction,
 } from '@/types';
 
 function getChatLabel(chat: PrivateWhatsAppChat | undefined, fallback?: string): string {
@@ -42,6 +48,13 @@ function getMessageSenderLabel(message: PrivateWhatsAppMessage): string {
     message.senderKey ??
     'Unknown sender'
   );
+}
+
+function getReactionSenderLabel(reaction: PrivateWhatsAppReaction): string {
+  if (reaction.direction === 'outgoing') {
+    return 'You';
+  }
+  return reaction.senderDisplayName ?? reaction.senderPhoneNumber ?? reaction.senderKey ?? 'Unknown sender';
 }
 
 function getDayKey(message: PrivateWhatsAppMessage): string {
@@ -94,23 +107,155 @@ function getMessageTypeClass(messageType: PrivateWhatsAppMessageType): string {
   }
 }
 
-function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element {
-  if (message.text !== undefined && message.text.trim() !== '') {
+function hasStoredImage(message: PrivateWhatsAppMessage): boolean {
+  return (
+    message.messageType === 'image' &&
+    message.media?.storageStatus === 'stored' &&
+    message.media.hasMedia === true &&
+    message.media.hasThumbnail === true
+  );
+}
+
+function hasStoredPlayableMedia(message: PrivateWhatsAppMessage): boolean {
+  return (
+    (message.messageType === 'audio' || message.messageType === 'video') &&
+    message.media?.storageStatus === 'stored' &&
+    message.media.hasMedia === true
+  );
+}
+
+function MessageTranscription({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element | null {
+  const transcription =
+    message.messageType === 'audio' || message.messageType === 'video'
+      ? message.transcription
+      : undefined;
+  if (transcription === undefined) {
+    return null;
+  }
+
+  if (transcription.status === 'completed' && transcription.text !== undefined) {
     return (
-      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
-        {message.text}
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/30">
+        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+          <Mic className="h-3.5 w-3.5" />
+          <span>Transcript</span>
+        </div>
+        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
+          {transcription.text}
+        </p>
+      </div>
+    );
+  }
+
+  if (transcription.status === 'failed') {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+        <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
+          <Mic className="h-3.5 w-3.5" />
+          <span>Transcript failed</span>
+        </div>
+        {transcription.error?.message !== undefined ? (
+          <p className="break-words">{transcription.error.message}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span>{transcription.status === 'pending' ? 'Queued' : 'Transcribing'}</span>
+    </div>
+  );
+}
+
+function MessageReactions({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element | null {
+  const reactions = message.reactions ?? [];
+  if (reactions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {reactions.map((reaction) => {
+        const senderLabel = getReactionSenderLabel(reaction);
+        return (
+          <span
+            key={reaction.id}
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            title={`${senderLabel} reacted at ${formatDateTimeCompact(reaction.eventTimestamp)}`}
+          >
+            <span aria-hidden="true">{reaction.emoji}</span>
+            <span className="truncate">{senderLabel}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function MessageBody({ message }: { message: PrivateWhatsAppMessage }): React.JSX.Element {
+  const hasText = message.text !== undefined && message.text.trim() !== '';
+  const transcription = <MessageTranscription message={message} />;
+
+  if (hasStoredImage(message)) {
+    return (
+      <div className="space-y-3">
+        <PrivateWhatsAppImagePreview message={message} />
+        {hasText ? (
+          <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
+            {message.text}
+          </p>
+        ) : null}
+        {transcription}
+      </div>
+    );
+  }
+
+  if (hasStoredPlayableMedia(message)) {
+    return (
+      <div className="space-y-3">
+        <PrivateWhatsAppMediaPlayer message={message} />
+        {hasText ? (
+          <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
+            {message.text}
+          </p>
+        ) : null}
+        {transcription}
+      </div>
+    );
+  }
+
+  if (message.messageType === 'reaction' && message.reaction !== undefined) {
+    return (
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        Reacted {message.reaction.emoji} to an earlier message
       </p>
+    );
+  }
+
+  if (hasText) {
+    return (
+      <div className="space-y-3">
+        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 dark:text-slate-100">
+          {message.text}
+        </p>
+        {transcription}
+      </div>
     );
   }
 
   const mediaName =
     message.media?.fileName ?? message.media?.mimeType ?? `${message.messageType} message`;
-  const Icon = message.messageType === 'image' ? Image : FileText;
+  const Icon = message.messageType === 'image' ? Image : message.messageType === 'video' ? Video : FileText;
 
   return (
-    <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className="truncate">{mediaName}</span>
+    <div className="space-y-3">
+      <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="truncate">{mediaName}</span>
+      </div>
+      {transcription}
     </div>
   );
 }
@@ -305,6 +450,42 @@ export function PrivateWhatsAppLogPage(): React.JSX.Element {
                     </p>
                   ) : null}
                 </div>
+                {log.selectedChat !== undefined ? (
+                  <label className="inline-flex select-none items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    <Mic className="h-4 w-4 text-slate-400" />
+                    <span>Transcripts</span>
+                    <input
+                      role="switch"
+                      type="checkbox"
+                      className="sr-only"
+                      checked={log.selectedChat.transcriptionEnabled === true}
+                      disabled={log.transcriptionToggleChatId === log.selectedChat.id}
+                      aria-label="Transcripts"
+                      onChange={(event): void => {
+                        void log.setChatTranscriptionEnabled(
+                          log.selectedChat?.id ?? '',
+                          event.currentTarget.checked
+                        );
+                      }}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`relative h-5 w-9 rounded-full transition-colors ${
+                        log.selectedChat.transcriptionEnabled === true
+                          ? 'bg-blue-600'
+                          : 'bg-slate-300 dark:bg-slate-600'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                          log.selectedChat.transcriptionEnabled === true
+                            ? 'translate-x-4'
+                            : 'translate-x-0.5'
+                        }`}
+                      />
+                    </span>
+                  </label>
+                ) : null}
               </div>
 
               {log.selectedChatId !== undefined ? (
@@ -416,6 +597,7 @@ export function PrivateWhatsAppLogPage(): React.JSX.Element {
                                 ) : null}
                               </div>
                               <MessageBody message={message} />
+                              <MessageReactions message={message} />
                             </div>
                           </article>
                         );

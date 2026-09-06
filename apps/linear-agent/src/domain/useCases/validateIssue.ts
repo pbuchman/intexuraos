@@ -6,6 +6,7 @@
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { LinearApiClient, LinearConnectionRepository, LinearLabel } from '../index.js';
 
 export interface ValidateIssueDeps {
@@ -70,7 +71,10 @@ export async function validateIssue(
   const issueResult = await linearApiClient.getIssueByIdentifier(connection.apiKey, identifier);
 
   if (!issueResult.ok) {
-    logger.warn({ identifier, error: issueResult.error }, 'Failed to fetch issue');
+    logger.warn(
+      { identifier, error: issueResult.error, [SKIP_SENTRY_KEY]: true },
+      'Failed to fetch issue'
+    );
     return err({
       code: 'API_ERROR',
       message: issueResult.error.message,

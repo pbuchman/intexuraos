@@ -18,6 +18,9 @@ export interface BasePubSubPublisherConfig {
 
 /**
  * Context for logging during publish operations.
+ *
+ * Values are accepted for source compatibility but deliberately excluded from
+ * application logs. Event payloads and identifiers may be private.
  */
 export type PublishContext = Record<string, unknown>;
 
@@ -45,7 +48,7 @@ export abstract class BasePubSubPublisher {
    *
    * @param topicName - The topic to publish to (required, non-null)
    * @param event - The event payload (will be JSON serialized)
-   * @param context - Additional context for logging (e.g., { messageId, userId })
+   * @param context - Opaque caller context; deliberately excluded from logs
    * @param eventDescription - Human-readable description for logs (e.g., "media cleanup")
    * @returns Result indicating success or failure
    */
@@ -55,35 +58,98 @@ export abstract class BasePubSubPublisher {
     context: PublishContext,
     eventDescription: string
   ): Promise<Result<void, PublishError>> {
+    const result = await this.publishToTopicWithReceipt(
+      topicName,
+      event,
+      context,
+      eventDescription
+    );
+    return result.ok ? ok(undefined) : result;
+  }
+
+  /**
+   * Publish to a required topic and return the provider acknowledgement ID. Callers must keep
+   * this opaque and must not log or persist it without applying their own one-way digest.
+   */
+  protected async publishToTopicWithReceipt(
+    topicName: string,
+    event: unknown,
+    _context: PublishContext,
+    eventDescription: string
+  ): Promise<Result<string, PublishError>> {
     try {
       const topic = this.getTopic(topicName);
       const data = Buffer.from(JSON.stringify(event));
 
-      this.logger.info(
-        { topic: topicName, ...context },
-        `Publishing ${eventDescription} event to Pub/Sub`
-      );
+      this.logger.info({ topic: topicName }, `Publishing ${eventDescription} event to Pub/Sub`);
 
       const attributes = buildPublishAttributes();
 
-      await topic.publishMessage({ data, attributes });
+      const publicationReceipt = await topic.publishMessage({ data, attributes });
 
-      this.logger.info(
-        { topic: topicName, ...context },
-        `Successfully published ${eventDescription} event`
-      );
+      this.logger.info({ topic: topicName }, `Successfully published ${eventDescription} event`);
 
-      return ok(undefined);
+      return ok(publicationReceipt);
     } catch (error) {
       const errorMessage = getErrorMessage(error);
 
       this.logger.error(
-        { topic: topicName, ...context, error: errorMessage },
+        { topic: topicName, error: errorMessage },
         `Failed to publish ${eventDescription} event`
       );
 
       return err(this.mapError(topicName, errorMessage));
     }
+  }
+
+  /**
+   * Publish to a required topic while keeping provider failures outside application
+   * logs and returned errors. This is reserved for privacy-sensitive payloads whose
+   * provider error may contain serialized message data.
+   */
+  protected async publishToTopicWithSafeReceipt(
+    topicName: string,
+    event: unknown,
+    _context: PublishContext,
+    eventDescription: string
+  ): Promise<Result<string, PublishError>> {
+    try {
+      const topic = this.getTopic(topicName);
+      const data = Buffer.from(JSON.stringify(event));
+
+      this.logger.info({ topic: topicName }, `Publishing ${eventDescription} event to Pub/Sub`);
+
+      const publicationReceipt = await topic.publishMessage({
+        data,
+        attributes: buildPublishAttributes(),
+      });
+
+      this.logger.info({ topic: topicName }, `Successfully published ${eventDescription} event`);
+
+      return ok(publicationReceipt);
+    } catch {
+      this.logger.error({ topic: topicName }, `Failed to publish ${eventDescription} event`);
+      return err({ code: 'PUBLISH_FAILED', message: 'Pub/Sub publication failed' });
+    }
+  }
+
+  /**
+   * Publish a privacy-sensitive event without exposing provider errors, payloads,
+   * publication receipts, or caller context through logs and return values.
+   */
+  protected async publishToTopicSafely(
+    topicName: string,
+    event: unknown,
+    context: PublishContext,
+    eventDescription: string
+  ): Promise<Result<void, PublishError>> {
+    const result = await this.publishToTopicWithSafeReceipt(
+      topicName,
+      event,
+      context,
+      eventDescription
+    );
+    return result.ok ? ok(undefined) : result;
   }
 
   /**
@@ -97,7 +163,7 @@ export abstract class BasePubSubPublisher {
    *
    * @param topicName - The topic to publish to, or `null` to skip
    * @param event - The event payload (will be JSON serialized)
-   * @param context - Additional context for logging
+   * @param context - Opaque caller context; deliberately excluded from logs
    * @param eventDescription - Human-readable description for logs
    * @returns Result indicating success or failure (skip is success)
    */
@@ -108,14 +174,28 @@ export abstract class BasePubSubPublisher {
     eventDescription: string
   ): Promise<Result<void, PublishError>> {
     if (topicName === null) {
-      this.logger.debug(
-        { ...context, event },
-        `Topic not configured, skipping ${eventDescription}`
-      );
+      this.logger.debug({}, `Topic not configured, skipping ${eventDescription}`);
       return ok(undefined);
     }
 
     return await this.publishToTopic(topicName, event, context, eventDescription);
+  }
+
+  /**
+   * Privacy-safe counterpart of {@link publishToOptionalTopic}.
+   */
+  protected async publishToOptionalTopicSafely(
+    topicName: string | null,
+    event: unknown,
+    context: PublishContext,
+    eventDescription: string
+  ): Promise<Result<void, PublishError>> {
+    if (topicName === null) {
+      this.logger.debug({}, `Topic not configured, skipping ${eventDescription}`);
+      return ok(undefined);
+    }
+
+    return await this.publishToTopicSafely(topicName, event, context, eventDescription);
   }
 
   /**

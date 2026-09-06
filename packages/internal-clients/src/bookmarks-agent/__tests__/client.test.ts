@@ -60,6 +60,7 @@ describe('createBookmarksAgentServiceClient', () => {
         id: 'bookmark-1',
         userId: 'user-1',
         url: 'https://example.com/article',
+        resourceUrl: undefined,
         title: null,
       },
     });
@@ -72,7 +73,8 @@ describe('createBookmarksAgentServiceClient', () => {
         success: true,
         data: {
           id: 'bookmark-2',
-          url: '/#/bookmarks/bookmark-2',
+          url: 'https://example.com/nested',
+          resourceUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-2',
           bookmark: {
             id: 'bookmark-2',
             userId: 'user-2',
@@ -113,7 +115,61 @@ describe('createBookmarksAgentServiceClient', () => {
         id: 'bookmark-2',
         userId: 'user-2',
         url: 'https://example.com/nested',
+        resourceUrl: 'https://intexuraos.cloud/#/bookmarks/bookmark-2',
         title: 'Nested bookmark',
+      },
+    });
+  });
+
+  it('supports nested bookmark create envelopes without resource URLs', async () => {
+    nock(BASE_URL)
+      .post('/internal/bookmarks')
+      .reply(200, {
+        success: true,
+        data: {
+          id: 'bookmark-3',
+          url: 'https://example.com/nested-without-resource',
+          bookmark: {
+            id: 'bookmark-3',
+            userId: 'user-3',
+            status: 'active',
+            url: 'https://example.com/nested-without-resource',
+            title: 'Nested bookmark without resource URL',
+            description: null,
+            tags: [],
+            ogPreview: null,
+            ogFetchedAt: null,
+            ogFetchStatus: 'processed',
+            aiSummary: null,
+            aiSummarizedAt: null,
+            source: 'intex-agent',
+            sourceId: 'action-3',
+            archived: false,
+            createdAt: '2026-05-10T00:00:00.000Z',
+            updatedAt: '2026-05-10T00:00:00.000Z',
+          },
+        },
+      });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createBookmark({
+      userId: 'user-3',
+      url: 'https://example.com/nested-without-resource',
+      source: 'intex-agent',
+      sourceId: 'action-3',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: 'bookmark-3',
+        userId: 'user-3',
+        url: 'https://example.com/nested-without-resource',
+        title: 'Nested bookmark without resource URL',
       },
     });
   });

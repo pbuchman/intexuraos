@@ -1,7 +1,9 @@
 import type { OrchestratorStatus } from './state.js';
 import type { ExecutionMemoryPromptContext } from './execution-memory.js';
+import type { SentryIssueTaskContext } from './task.js';
 import type { WorkerType } from '../services/isolation/types.js';
 import type { WorkerAuthProvider, WorkerAuthState } from '../services/worker-auth/index.js';
+import type { LogForwarderDrainSnapshot } from '../services/log-forwarder.js';
 
 // POST /tasks request
 export interface CreateTaskRequest {
@@ -24,7 +26,16 @@ export interface CreateTaskRequest {
    */
   retriedFrom?: string;
   /** Agent type determined by code-agent routing analysis. */
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  agentType?:
+    | 'planning'
+    | 'execution'
+    | 'pull_request'
+    | 'review'
+    | 'remediation'
+    | 'ask_agent'
+    | 'sentry';
+  /** SentryBox issue context for error-triggered code tasks. */
+  sentryIssue?: SentryIssueTaskContext;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse instead of creating a new one. */
@@ -46,16 +57,23 @@ export interface CreateTaskRequest {
 
 // GET /health response
 export interface HealthResponse {
-  healthContractVersion: 1;
+  healthContractVersion: 2;
+  admissionFrozen: boolean;
+  pendingAdmissions: number;
+  admissionActivityTotal: number;
   status: OrchestratorStatus;
   capacity: number;
   running: number;
   available: number;
+  workerContainers: number | null;
+  pendingTerminalCallbacks: number | null;
+  terminalCallbackActivityTotal: number | null;
   githubTokenExpiresAt: string | null;
   dockerHealthy: boolean;
   diskHealthy: boolean;
   workerAuths: Record<WorkerAuthProvider, WorkerAuthState>;
   providerApiKeys: Record<string, ProviderApiKeyHealth>;
+  logForwarderDrain: LogForwarderDrainSnapshot;
 }
 
 export interface ProviderApiKeyHealth {

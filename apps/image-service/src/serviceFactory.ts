@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { HttpInternalAuthUsageSink, type UsageSink } from '@intexuraos/llm-pricing';
-import { LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
+import { type OpenRouter } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { ImageGenerationModel, PromptGenerator, ImageGenerator } from './domain/index.js';
-import { IMAGE_GENERATION_MODELS } from './domain/index.js';
 import { createGeneratedImageRepository } from './infra/firestore/index.js';
-import { createOpenAIImageGenerator, createGoogleImageGenerator } from './infra/image/index.js';
-import { createGeminiPromptAdapter, createGptPromptAdapter } from './infra/llm/index.js';
+import { createOpenRouterImageGenerator } from './infra/image/index.js';
+import { createOpenRouterPromptAdapter } from './infra/llm/index.js';
 import { createGcsImageStorage } from './infra/storage/index.js';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { setServices } from './serviceContainer.js';
@@ -18,6 +17,7 @@ export function initializeServices(): void {
   const storage = createGcsImageStorage(bucketName, publicBaseUrl);
 
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+  const platformOpenRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
   const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
   const sinkLogger = createAppLogger({ name: 'image-service-usage-sink' });
   const buildUsageSink = (component: string): UsageSink =>
@@ -34,7 +34,7 @@ export function initializeServices(): void {
     internalAuthToken,
     logger: createAppLogger({ name: 'user-service-client' }),
     usageSink: buildUsageSink('user-service-client'),
-    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
+    platformOpenRouterApiKey,
   });
 
   const container = {
@@ -42,26 +42,17 @@ export function initializeServices(): void {
     imageStorage: storage,
     userServiceClient,
     createPromptGenerator: (
-      provider: Google | OpenAI,
-      model: string,
+      _provider: OpenRouter,
+      _model: string,
       apiKey: string,
       userId: string,
       logger: Logger
     ): PromptGenerator => {
-      if (provider === LlmProviders.Google) {
-        return createGeminiPromptAdapter({
-          apiKey,
-          model,
-          userId,
-          logger,
-          usageSink: buildUsageSink('gemini-prompt-adapter'),
-        });
-      }
-      return createGptPromptAdapter({
+      return createOpenRouterPromptAdapter({
         apiKey,
         userId,
         logger,
-        usageSink: buildUsageSink('gpt-prompt-adapter'),
+        usageSink: buildUsageSink('openrouter-prompt-adapter'),
       });
     },
     createImageGenerator: (
@@ -70,24 +61,13 @@ export function initializeServices(): void {
       userId: string,
       logger: Logger
     ): ImageGenerator => {
-      const config = IMAGE_GENERATION_MODELS[model];
-      if (config.provider === LlmProviders.OpenAI) {
-        return createOpenAIImageGenerator({
-          apiKey,
-          model,
-          storage,
-          userId,
-          logger,
-          usageSink: buildUsageSink('openai-image-generator'),
-        });
-      }
-      return createGoogleImageGenerator({
+      return createOpenRouterImageGenerator({
         apiKey,
         model,
         storage,
         userId,
         logger,
-        usageSink: buildUsageSink('google-image-generator'),
+        usageSink: buildUsageSink('openrouter-image-generator'),
       });
     },
     generateId: (): string => randomUUID(),

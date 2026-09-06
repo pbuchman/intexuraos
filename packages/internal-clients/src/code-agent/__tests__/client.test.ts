@@ -1074,38 +1074,6 @@ describe('createCodeAgentServiceClient', () => {
     });
   });
 
-  it('maps submitToPhase2 complex task child conflicts explicitly', async () => {
-    nock(BASE_URL)
-      .post('/internal/code/submit-phase2')
-      .reply(409, {
-        success: false,
-        error: {
-          message: 'No direct children with code-task labels found',
-          details: {
-            serverCode: 'complex_task_no_qualifying_children',
-          },
-        },
-      });
-
-    const client = createCodeAgentServiceClient({
-      baseUrl: BASE_URL,
-      internalAuthToken: 'secret',
-      logger,
-    });
-    const result = await client.submitToPhase2({
-      userId: 'user-1',
-      taskId: 'task-plan-1',
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      error: {
-        code: 'COMPLEX_TASK_NO_QUALIFYING_CHILDREN',
-        message: 'No direct children with code-task labels found',
-      },
-    });
-  });
-
   it('maps submitToPhase2 worker configuration failures', async () => {
     nock(BASE_URL)
       .post('/internal/code/submit-phase2')
@@ -1209,6 +1177,30 @@ describe('createCodeAgentServiceClient', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('UNKNOWN');
     }
+  });
+
+  it('marks recompute transport warnings to skip Sentry capture', async () => {
+    nock(BASE_URL).post('/internal/code/group-summary/recompute').replyWithError('offline');
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    await client.notifyGroupSummaryRecompute({
+      userId: 'user-1',
+      linearIssueId: 'INT-1',
+      labels: [{ id: 'label-1', name: 'feature' }],
+      sourceTimestamp: '2026-01-01T12:00:00.000Z',
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _skipSentry: true,
+        url: `${BASE_URL}/internal/code/group-summary/recompute`,
+      }),
+      'internal-client network error'
+    );
   });
 
   it('maps recompute server failures to UNAVAILABLE', async () => {

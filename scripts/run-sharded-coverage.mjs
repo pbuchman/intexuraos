@@ -3,10 +3,18 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { buildCoverageShardCommand, mergeShardOutputs } from './lib/coverage-sharding.mjs';
+import {
+  buildCoverageShardCommand,
+  mergeShardOutputs,
+  shouldIgnoreCoverageShardFailure,
+  shouldRetryCoverageMerge,
+  shouldRetryCoverageShard,
+} from './lib/coverage-sharding.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const outputPath = join(repoRoot, 'scripts/test-results/test-output.txt');
+const KNOWN_RACE_RETRY_LIMIT = 2;
+const CLEANUP_RETRY_OPTIONS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 };
 
 function parseArgs(argv) {
   const shardsArg = argv.find((arg) => arg.startsWith('--shards='));
@@ -39,9 +47,7 @@ function runShard(shard, shardCount) {
       output += text;
       process.stderr.write(text);
     });
-    proc.on('close', (code) => {
-      resolveShard({ shard, code: code ?? 1, output });
-    });
+    proc.on('close', (code) => resolveShard({ shard, code: code ?? 1, output }));
   });
 }
 
@@ -50,26 +56,115 @@ async function runMerge() {
     const proc = spawn('pnpm', ['vitest', '--merge-reports', '--coverage'], {
       cwd: repoRoot,
       env: { ...process.env },
-      stdio: 'inherit',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let output = '';
+    proc.stdout.on('data', (data) => {
+      const text = data.toString();
+      output += text;
+      process.stdout.write(text);
+    });
+    proc.stderr.on('data', (data) => {
+      const text = data.toString();
+      output += text;
+      process.stderr.write(text);
     });
     proc.on('close', (code) => {
-      resolveMerge(code ?? 1);
+      resolveMerge({ code: code ?? 1, output });
     });
   });
+}
+
+function normalizeIgnoredShardFailures(results) {
+  return results.map((result) =>
+    shouldIgnoreCoverageShardFailure(result) ? { ...result, code: 0 } : result
+  );
+}
+
+async function runAllShardsWithKnownRaceRetry(shards) {
+  let allOutput = '';
+  let lastResults = [];
+
+  for (let attempt = 0; attempt <= KNOWN_RACE_RETRY_LIMIT; attempt += 1) {
+    if (attempt > 0) {
+      rmSync(join(repoRoot, '.vitest-reports'), CLEANUP_RETRY_OPTIONS);
+      rmSync(join(repoRoot, 'coverage'), CLEANUP_RETRY_OPTIONS);
+      console.warn(
+        `[coverage] Retrying all shards after known Vitest coverage temp-file race (attempt ${attempt}/${KNOWN_RACE_RETRY_LIMIT})`
+      );
+    }
+
+    const results = await Promise.all(
+      Array.from({ length: shards }, (_, index) => runShard(index + 1, shards))
+    );
+    lastResults = results;
+    allOutput += mergeShardOutputs(results);
+
+    const realFailures = results.filter(
+      (result) =>
+        result.code !== 0 &&
+        !shouldRetryCoverageShard(result) &&
+        !shouldIgnoreCoverageShardFailure(result)
+    );
+    if (realFailures.length > 0) {
+      return { results, output: allOutput };
+    }
+
+    const raceFailures = results.filter(shouldRetryCoverageShard);
+    if (raceFailures.length === 0) {
+      return { results: normalizeIgnoredShardFailures(results), output: allOutput };
+    }
+  }
+
+  return { results: normalizeIgnoredShardFailures(lastResults), output: allOutput };
+}
+
+async function runCoverageWithKnownRaceRetry(shards) {
+  let allOutput = '';
+  let lastResults = [];
+  let lastMerge = null;
+
+  for (let attempt = 0; attempt <= KNOWN_RACE_RETRY_LIMIT; attempt += 1) {
+    if (attempt > 0) {
+      rmSync(join(repoRoot, '.vitest-reports'), CLEANUP_RETRY_OPTIONS);
+      rmSync(join(repoRoot, 'coverage'), CLEANUP_RETRY_OPTIONS);
+      console.warn(
+        `[coverage] Retrying coverage shards and merge after known Vitest coverage temp-file race (attempt ${attempt}/${KNOWN_RACE_RETRY_LIMIT})`
+      );
+    }
+
+    const { results, output } = await runAllShardsWithKnownRaceRetry(shards);
+    lastResults = results;
+    allOutput += output;
+
+    const failed = results.filter((result) => result.code !== 0);
+    if (failed.length > 0) {
+      return { results, merge: null, output: allOutput };
+    }
+
+    const merge = await runMerge();
+    lastMerge = merge;
+    allOutput += merge.output;
+
+    if (merge.code === 0 || !shouldRetryCoverageMerge(merge)) {
+      return { results, merge, output: allOutput };
+    }
+  }
+
+  return { results: lastResults, merge: lastMerge, output: allOutput };
 }
 
 async function main() {
   const { shards } = parseArgs(process.argv.slice(2));
 
-  rmSync(join(repoRoot, '.vitest-reports'), { recursive: true, force: true });
-  rmSync(join(repoRoot, 'coverage'), { recursive: true, force: true });
+  rmSync(join(repoRoot, '.vitest-reports'), CLEANUP_RETRY_OPTIONS);
+  rmSync(join(repoRoot, 'coverage'), CLEANUP_RETRY_OPTIONS);
 
-  const results = await Promise.all(
-    Array.from({ length: shards }, (_, index) => runShard(index + 1, shards))
-  );
+  const { results, merge, output } = await runCoverageWithKnownRaceRetry(shards);
 
   mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, mergeShardOutputs(results));
+  writeFileSync(outputPath, output);
 
   const failed = results.filter((result) => result.code !== 0);
   if (failed.length > 0) {
@@ -79,10 +174,11 @@ async function main() {
     process.exit(1);
   }
 
-  const mergeCode = await runMerge();
-  if (mergeCode !== 0) {
-    process.exit(mergeCode);
+  if (merge?.code !== 0) {
+    process.exit(merge.code);
   }
+
+  rmSync(join(repoRoot, '.vitest-reports'), CLEANUP_RETRY_OPTIONS);
 }
 
 main().catch((error) => {

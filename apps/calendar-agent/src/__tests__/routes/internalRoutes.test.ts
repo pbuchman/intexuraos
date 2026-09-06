@@ -121,6 +121,50 @@ describe('Internal Routes', () => {
       });
     });
 
+    it('omits htmlLink from direct create response when Google Calendar does not return it', async () => {
+      fakeCalendarClient.setCreateResult(ok({
+        id: 'calendar-event-no-link',
+        summary: 'Dentist appointment',
+        description: 'Annual checkup',
+        location: 'Dental clinic',
+        start: {
+          dateTime: '2026-06-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+        end: {
+          dateTime: '2026-06-25T10:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          event: {
+            id: string;
+            summary: string;
+            htmlLink?: string;
+          };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.event).toMatchObject({
+        id: 'calendar-event-no-link',
+        summary: 'Dentist appointment',
+      });
+      expect(body.data.event.htmlLink).toBeUndefined();
+    });
+
     it('creates an event with the primary calendar when calendarId is omitted', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -203,6 +247,466 @@ describe('Internal Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('UNAUTHORIZED');
       expect(body.error.message).toBe('OAuth token expired');
+    });
+  });
+
+  describe('PATCH /internal/calendar/events/:eventId', () => {
+    const validPayload = {
+      userId: 'user-456',
+      calendarId: 'primary',
+      expectedEtag: '"event-bagrowa-v1"',
+      changes: { attendeesToAdd: [{ email: 'new@example.com' }] },
+    };
+
+    it('adds attendees while preserving the existing attendee metadata', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-bagrowa',
+        etag: '"event-bagrowa-v1"',
+        summary: 'Bagrowa',
+        start: { dateTime: '2026-06-25T18:00:00+02:00' },
+        end: { dateTime: '2026-06-25T20:30:00+02:00' },
+        attendees: [
+          {
+            email: 'existing@example.com',
+            displayName: 'Existing guest',
+            responseStatus: 'accepted',
+            optional: true,
+          },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.event).toMatchObject({
+        id: 'event-bagrowa',
+        summary: 'Bagrowa',
+        attendees: [
+          {
+            email: 'existing@example.com',
+            displayName: 'Existing guest',
+            responseStatus: 'accepted',
+            optional: true,
+          },
+          { email: 'new@example.com' },
+        ],
+      });
+      expect(fakeCalendarClient.updateEventCalls).toEqual([
+        {
+          accessToken: 'fake-google-token',
+          calendarId: 'primary',
+          eventId: 'event-bagrowa',
+          updates: {
+            attendees: [
+              {
+                email: 'existing@example.com',
+                displayName: 'Existing guest',
+                responseStatus: 'accepted',
+                optional: true,
+              },
+              { email: 'new@example.com' },
+            ],
+          },
+          options: { sendUpdates: 'all', expectedEtag: '"event-bagrowa-v1"' },
+        },
+      ]);
+    });
+
+    it('updates ordinary mutable fields without replacing attendees', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-bagrowa',
+        etag: '"event-bagrowa-v1"',
+        summary: 'Bagrowa',
+        description: 'Old description',
+        location: 'Old location',
+        start: { date: '2026-08-13' },
+        end: { date: '2026-08-14' },
+        attendees: [{ email: 'existing@example.com', responseStatus: 'accepted' }],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'user-456',
+          calendarId: 'primary',
+          expectedEtag: '"event-bagrowa-v1"',
+          changes: {
+            summary: 'Google Photos archive',
+            description: null,
+            location: null,
+            start: { date: '2026-08-22' },
+            end: { date: '2026-08-23' },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeCalendarClient.updateEventCalls).toEqual([
+        {
+          accessToken: 'fake-google-token',
+          calendarId: 'primary',
+          eventId: 'event-bagrowa',
+          updates: {
+            summary: 'Google Photos archive',
+            description: '',
+            location: '',
+            start: { date: '2026-08-22' },
+            end: { date: '2026-08-23' },
+          },
+          options: { expectedEtag: '"event-bagrowa-v1"' },
+        },
+      ]);
+    });
+
+    it('updates timed fields and removes attendees without losing the remaining metadata', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-bagrowa',
+        etag: '"event-bagrowa-v1"',
+        summary: 'Bagrowa',
+        start: { dateTime: '2026-08-22T18:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        end: { dateTime: '2026-08-22T19:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        attendees: [
+          { email: 'remove@example.com', responseStatus: 'declined' },
+          { email: 'keep@example.com', responseStatus: 'accepted', optional: true },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'user-456',
+          calendarId: 'primary',
+          expectedEtag: '"event-bagrowa-v1"',
+          changes: {
+            start: { dateTime: '2026-08-23T18:30:00+02:00', timeZone: 'Europe/Warsaw' },
+            end: { dateTime: '2026-08-23T20:00:00+02:00', timeZone: 'Europe/Warsaw' },
+            attendeesToRemove: [{ email: 'REMOVE@example.com' }],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeCalendarClient.updateEventCalls).toEqual([
+        {
+          accessToken: 'fake-google-token',
+          calendarId: 'primary',
+          eventId: 'event-bagrowa',
+          updates: {
+            start: { dateTime: '2026-08-23T18:30:00+02:00', timeZone: 'Europe/Warsaw' },
+            end: { dateTime: '2026-08-23T20:00:00+02:00', timeZone: 'Europe/Warsaw' },
+            attendees: [
+              { email: 'keep@example.com', responseStatus: 'accepted', optional: true },
+            ],
+          },
+          options: { sendUpdates: 'all', expectedEtag: '"event-bagrowa-v1"' },
+        },
+      ]);
+    });
+
+    it('does not patch Google Calendar when the attendee already exists', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-bagrowa',
+        etag: '"event-bagrowa-v1"',
+        summary: 'Bagrowa',
+        start: { dateTime: '2026-06-25T18:00:00+02:00' },
+        end: { dateTime: '2026-06-25T20:30:00+02:00' },
+        attendees: [{ email: 'New@Example.com', responseStatus: 'accepted' }],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.event.attendees).toEqual([
+        { email: 'New@Example.com', responseStatus: 'accepted' },
+      ]);
+      expect(fakeCalendarClient.updateEventCalls).toEqual([]);
+    });
+
+    it('requires the exact calendar id from the confirmed snapshot', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { ...validPayload, calendarId: undefined },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(fakeCalendarClient.updateEventCalls).toEqual([]);
+    });
+
+    it('returns 401 without internal auth', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it.each([
+      { ...validPayload, changes: { attendeesToAdd: [] } },
+      { ...validPayload, changes: { attendeesToAdd: [{ email: 'not-an-email' }] } },
+      { calendarId: 'primary', changes: { attendeesToAdd: [{ email: 'new@example.com' }] } },
+    ])('returns 400 for an invalid attendee update payload', async (payload) => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('maps a missing event through the shared error handler', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/missing-event',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Event not found' },
+      });
+    });
+
+    it('returns 409 without patching when the confirmed event version is stale', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-bagrowa',
+        etag: '"event-bagrowa-v2"',
+        summary: 'Bagrowa',
+        start: { dateTime: '2026-06-25T18:00:00+02:00' },
+        end: { dateTime: '2026-06-25T20:30:00+02:00' },
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        success: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'Calendar event changed after confirmation; repeat the request',
+        },
+      });
+      expect(fakeCalendarClient.updateEventCalls).toEqual([]);
+    });
+  });
+
+  describe('POST /internal/calendar/events/query', () => {
+    const validPayload = {
+      userId: 'user-456',
+      calendarId: 'primary',
+      timeMin: '2026-06-29T00:00:00.000Z',
+      timeMax: '2026-07-06T00:00:00.000Z',
+      maxResults: 20,
+      q: 'Dentist',
+    };
+
+    it('lists events through the internal service endpoint', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'user@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-1',
+        etag: '"event-1-v1"',
+        summary: 'Dentist',
+        start: { dateTime: '2026-06-30T09:00:00.000Z' },
+        end: { dateTime: '2026-06-30T10:00:00.000Z' },
+        description: 'Private notes',
+        location: 'Dental clinic',
+        attendees: [{ email: 'guest@example.com' }],
+        organizer: { email: 'owner@example.com' },
+        htmlLink: 'https://calendar.google.com/event?eid=event-1',
+      });
+      fakeCalendarClient.addEvent({
+        id: 'event-2',
+        summary: 'Focus block',
+        start: { dateTime: '2026-07-01T09:00:00.000Z' },
+        end: { dateTime: '2026-07-01T10:00:00.000Z' },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.events).toEqual([
+        {
+          id: 'event-1',
+          etag: '"event-1-v1"',
+          summary: 'Dentist',
+          start: { dateTime: '2026-06-30T09:00:00.000Z' },
+          end: { dateTime: '2026-06-30T10:00:00.000Z' },
+          location: 'Dental clinic',
+          htmlLink: 'https://calendar.google.com/event?eid=event-1',
+        },
+        {
+          id: 'event-2',
+          summary: 'Focus block',
+          start: { dateTime: '2026-07-01T09:00:00.000Z' },
+          end: { dateTime: '2026-07-01T10:00:00.000Z' },
+        },
+      ]);
+      expect(response.json().data.truncated).toBe(false);
+      expect(fakeCalendarClient.listEventsCalls).toEqual([
+        {
+          accessToken: 'fake-google-token',
+          calendarId: 'primary',
+          options: {
+            timeMin: '2026-06-29T00:00:00.000Z',
+            timeMax: '2026-07-06T00:00:00.000Z',
+            maxResults: 20,
+            q: 'Dentist',
+          },
+        },
+      ]);
+    });
+
+    it('lists primary calendar events with only required query fields', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'user@example.com');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'user-456',
+          timeMin: '2026-06-29T00:00:00.000Z',
+          timeMax: '2026-07-06T00:00:00.000Z',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.truncated).toBe(false);
+      expect(fakeCalendarClient.listEventsCalls).toEqual([
+        {
+          accessToken: 'fake-google-token',
+          calendarId: 'primary',
+          options: {
+            timeMin: '2026-06-29T00:00:00.000Z',
+            timeMax: '2026-07-06T00:00:00.000Z',
+          },
+        },
+      ]);
+    });
+
+    it('reports when another Google Calendar result page exists', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'user@example.com');
+      fakeCalendarClient.setListResult(ok({ events: [], truncated: true }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toEqual({ events: [], truncated: true });
+    });
+
+    it('documents the downstream error response in OpenAPI', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/openapi.json',
+      });
+
+      const spec = response.json() as {
+        paths: Record<string, Record<string, { responses?: Record<string, unknown> }>>;
+      };
+      expect(spec.paths['/internal/calendar/events/query']?.['post']?.responses).toHaveProperty('502');
+    });
+
+    it('returns 401 without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events/query',
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 when timeMax is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'user-456',
+          calendarId: 'primary',
+          timeMin: '2026-06-29T00:00:00.000Z',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when timeMax is not after timeMin', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'user-456',
+          timeMin: '2026-07-06T00:00:00.000Z',
+          timeMax: '2026-06-29T00:00:00.000Z',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 502 for downstream calendar list failures', async () => {
+      fakeCalendarClient.setListResult(err({
+        code: 'INTERNAL_ERROR',
+        message: 'Google Calendar unavailable',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/events/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json() as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Google Calendar unavailable');
     });
   });
 
@@ -297,6 +801,78 @@ describe('Internal Routes', () => {
       // Verify the extraction service received the full text, not the short title
       expect(fakeCalendarActionExtractionService.extractEventCalls).toHaveLength(1);
       expect(fakeCalendarActionExtractionService.extractEventCalls[0]?.text).toBe(fullPrompt);
+    });
+
+    it('returns Google Calendar htmlLink as resourceUrl', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Team Meeting',
+          start: '2025-01-15T14:00:00',
+          end: '2025-01-15T15:00:00',
+          location: 'Conference Room A',
+          description: 'Weekly sync',
+          valid: true,
+          error: null,
+          reasoning: 'Clear meeting request',
+        },
+      };
+      fakeCalendarClient.setCreateResult(ok({
+        id: 'calendar-event-with-link',
+        summary: 'Team Meeting',
+        start: { dateTime: '2025-01-15T14:00:00' },
+        end: { dateTime: '2025-01-15T15:00:00' },
+        htmlLink: 'https://calendar.google.com/event?eid=calendar-event-with-link',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resourceUrl).toBe('https://calendar.google.com/event?eid=calendar-event-with-link');
+    });
+
+    it('omits resourceUrl when Google Calendar does not return htmlLink', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Team Meeting',
+          start: '2025-01-15T14:00:00',
+          end: '2025-01-15T15:00:00',
+          location: 'Conference Room A',
+          description: 'Weekly sync',
+          valid: true,
+          error: null,
+          reasoning: 'Clear meeting request',
+        },
+      };
+      fakeCalendarClient.setCreateResult(ok({
+        id: 'calendar-event-without-link',
+        summary: 'Team Meeting',
+        start: { dateTime: '2025-01-15T14:00:00' },
+        end: { dateTime: '2025-01-15T15:00:00' },
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resourceUrl).toBeUndefined();
+      expect(JSON.stringify(body)).not.toContain('/#/calendar');
     });
 
     it('falls back to action.title when text field is not provided', async () => {

@@ -467,6 +467,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
+          503: {
+            description: 'Linear upstream temporarily unavailable',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
         },
       },
     },
@@ -621,7 +630,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       schema: {
         operationId: 'pruneIssues',
         summary: 'Prune redundant Linear issues to stay under subscription limit',
-        description: 'Checks active issue count and, if above threshold, uses Gemini to classify and delete redundant issues',
+        description: 'Checks active issue count and, if above threshold, uses an LLM to classify and delete redundant issues',
         tags: ['internal'],
         response: {
           200: {

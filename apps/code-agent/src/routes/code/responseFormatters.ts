@@ -11,27 +11,16 @@ import type {
   CodeTaskDispatchStatus,
   WorkerType,
 } from '../../domain/models/codeTask.js';
+import {
+  isTerminalTaskStatus,
+  normalizeTaskLifecycleTimestamp,
+  resolveMissingTaskCompletionTime,
+  resolveTaskLifecycleTime,
+  type CodeTaskLifecycleShape,
+} from '../../domain/models/taskLifecycleTime.js';
+import type { SerializedDispatchStatus } from '../../domain/issueGrouping/types.js';
 import type { ExecutionMemoryType } from '../../domain/models/executionMemory.js';
-
-interface SerializedDispatchStatus {
-  state: CodeTaskDispatchStatus['state'];
-  reason: CodeTaskDispatchStatus['reason'];
-  terminal: boolean;
-  severity: CodeTaskDispatchStatus['severity'];
-  message: string;
-  remediation: string;
-  workerNames: string[];
-  firstSeenAt: string;
-  lastSeenAt: string;
-  nextAction: CodeTaskDispatchStatus['nextAction'];
-  lastAttemptAt?: string;
-  attemptCount?: number;
-  expiresAt?: string;
-  terminalCause?: Omit<NonNullable<CodeTaskDispatchStatus['terminalCause']>, 'lastSeenAt'> & {
-    lastSeenAt: string;
-  };
-  workerHealthDetails?: CodeTaskDispatchStatus['workerHealthDetails'];
-}
+import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 
 interface SerializedCallbackState {
   webhookUrl: string;
@@ -74,6 +63,16 @@ export function timestampToIso(
   return undefined;
 }
 
+export function taskCompletionToIso(task: CodeTaskLifecycleShape): string | undefined {
+  const stored = normalizeTaskLifecycleTimestamp(task.completedAt);
+  if (stored !== undefined) return stored.toDate().toISOString();
+
+  const terminal = task.status === 'completed' || isTerminalTaskStatus(task.status);
+  if (!terminal) return undefined;
+
+  return resolveMissingTaskCompletionTime(task).at.toDate().toISOString();
+}
+
 /**
  * Convert CodeTask domain model to API response format
  */
@@ -92,7 +91,9 @@ function taskToApiResponse(task: {
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
+  statusChangedAt?: unknown;
   updatedAt: unknown;
+  queuedAt?: unknown;
   dispatchedAt?: unknown;
   linearIssueId?: string;
   prNumber?: number;
@@ -108,7 +109,10 @@ function taskToApiResponse(task: {
     summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
-    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    rebaseResult?: CodeTaskRebaseResult;
+    pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+    merge_ready?: '1';
+    merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;
@@ -147,8 +151,10 @@ function taskToApiResponse(task: {
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
+  statusChangedAt: string;
   updatedAt: string;
   dispatchedAt?: string;
+  completedAt?: string;
   linearIssueId?: string;
   prNumber?: number;
   agentType?: AgentType;
@@ -163,7 +169,10 @@ function taskToApiResponse(task: {
     summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
-    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    rebaseResult?: CodeTaskRebaseResult;
+    pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+    merge_ready?: '1';
+    merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;
@@ -274,6 +283,11 @@ function taskToApiResponse(task: {
   const callbackState = task.callbackState !== undefined
     ? serializeCallbackState(task.callbackState)
     : undefined;
+  const resolvedLifecycleAt = resolveTaskLifecycleTime(
+    task as unknown as CodeTaskLifecycleShape,
+  ).at;
+  const statusChangedAt = resolvedLifecycleAt.toDate().toISOString();
+  const completedAt = taskCompletionToIso(task as unknown as CodeTaskLifecycleShape);
 
   return {
     id: task.id,
@@ -290,8 +304,10 @@ function taskToApiResponse(task: {
     dedupKey: task.dedupKey,
     callbackReceived: task.callbackReceived,
     createdAt: timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '',
+    statusChangedAt,
     updatedAt: timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '',
     ...(task.dispatchedAt !== undefined && { dispatchedAt: timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined) as string }),
+    ...(completedAt !== undefined && { completedAt }),
     ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
     ...(task.agentType !== undefined && { agentType: task.agentType }),
@@ -334,7 +350,7 @@ function serializeCallbackState(callbackState: CodeTaskCallbackState): Serialize
   };
 }
 
-function serializeDispatchStatus(
+export function serializeDispatchStatus(
   dispatchStatus: CodeTaskDispatchStatus,
 ): SerializedDispatchStatus {
   const terminalCause = dispatchStatus.terminalCause;

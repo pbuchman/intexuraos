@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-011",
+  "title": "Query calendar events",
+  "description": "Uses the read-only calendar query tool to list synthetic tomorrow events without confirmation.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "List my calendar events tomorrow for INTEX-EVAL-011.",
+      "sourceType": "whatsapp_text"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [
+          {
+            "toolName": "query_calendar_events",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "mode",
+                "operator": "equals",
+                "value": "list"
+              },
+              {
+                "path": "timeMin",
+                "operator": "equals",
+                "value": "2026-07-17T00:00:00.000+02:00"
+              },
+              {
+                "path": "timeMax",
+                "operator": "equals",
+                "value": "2026-07-18T00:00:00.000+02:00"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "update_calendar_event",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "query_calendar_events"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Answers the read-only calendar request for tomorrow, July 17 2026.",
+              "Clearly reports that no calendar events were found for tomorrow, July 17 2026.",
+              "The closed mock returned zero calendar events; this is complete authoritative evidence for the judge and is not missing information.",
+              "Does not ask for mutation confirmation or claim to create, update, or delete an event."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -7,6 +7,7 @@
 import type { Result, Logger } from '@intexuraos/common-core';
 import type { AgentType, WorkerType } from '../models/codeTask.js';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
+import type { SentryIssueTaskContext } from '../models/sentryIssueEvent.js';
 import type { WorkerLocation } from '../models/worker.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
 import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
@@ -50,6 +51,8 @@ export interface ExecutionMemoryPromptContext {
  */
 export interface DispatchRequest {
   taskId: string;
+  /** Per-claim identifier used only to correlate dispatch logs; never sent to the Worker. */
+  dispatchAttemptId?: string;
   linearIssueId?: string;
   /** Labels from the validated Linear issue */
   linearIssueLabels: string[];
@@ -68,6 +71,8 @@ export interface DispatchRequest {
   retriedFrom?: string;
   /** Agent type for orchestrator agent-based routing. */
   agentType?: AgentType;
+  /** Sentry issue context for automatic Sentry remediation tasks. */
+  sentryIssue?: SentryIssueTaskContext;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;
   /** Existing PR tracking comment to reuse for pull_request tasks. */
@@ -106,9 +111,13 @@ export interface DispatchError {
     | 'worker_busy'
     | 'at_capacity'       // All workers returned 503 (INT-619)
     | 'dispatch_failed'
-      | 'network_error'
-      | 'invalid_response';
+    | 'network_error'
+    | 'invalid_response';
   message: string;
+  /** The worker POST may have reached the worker, so releasing the dispatch claim is unsafe. */
+  outcomeUnknown?: boolean;
+  /** Worker that received the POST, retained so an ambiguous dispatch can still be cancelled. */
+  workerLocation?: WorkerLocation;
   blocker?: Extract<CodeTaskDispatchability, { dispatchable: false }>;
 }
 
@@ -149,8 +158,9 @@ export interface TaskDispatcherService {
    * Cancel a running task on a worker.
    *
    * Sends a DELETE request to the worker to stop task execution.
-   * This is a best-effort notification - the task status in Firestore
-   * is the source of truth and should be updated before calling this.
+   * Resolves only after the worker confirms the stop (or reports the task was
+   * already terminal). Rejects when credentials, transport, or the worker
+   * response cannot confirm cancellation.
    *
    * @param taskId - The task ID to cancel
    * @param location - The worker location where the task is running

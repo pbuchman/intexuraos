@@ -7,6 +7,23 @@
 
 export { createOpenRouterClient, type OpenRouterClient } from './client.js';
 export {
+  createOpenRouterEmbeddingsClient,
+  type OpenRouterEmbeddingOptions,
+  type OpenRouterEmbeddingsClient,
+  type OpenRouterEmbeddingsConfig,
+} from './embeddingsClient.js';
+export {
+  createOpenRouterImageClient,
+  type OpenRouterImageClient,
+  type OpenRouterImageConfig,
+  type OpenRouterImageOptions,
+} from './imageClient.js';
+export {
+  OPENROUTER_GPT_4_1,
+  OPENROUTER_GPT_IMAGE_1,
+  OPENROUTER_TEXT_EMBEDDING_3_SMALL,
+} from './modelIds.js';
+export {
   createOpenRouterToolCallingClient,
   type OpenRouterToolCallingConfig,
 } from './toolCallingClient.js';
@@ -25,8 +42,30 @@ export {
   type DefaultAllowedOpenRouterModel,
 } from './defaultAllowlist.js';
 export { normalizeUsage, toModelPricing } from './costCalculator.js';
+export {
+  createOpenRouterCatalogClient,
+  createOpenRouterCatalogEntryMap,
+  type OpenRouterCatalogClient,
+  type OpenRouterCatalogClientConfig,
+  type OpenRouterCatalogSnapshot,
+} from './catalogClient.js';
+export {
+  assertIntexAgentCatalogConformance,
+  INTEX_AGENT_CATALOG_SNAPSHOT_VERSION,
+  INTEX_AGENT_REQUIRED_PARAMETERS,
+  type IntexAgentCatalogEvidence,
+  type IntexAgentCatalogModelEvidence,
+} from './intexAgentCatalog.js';
 export type {
   GenerateOptions,
+  GenerateChatOptions,
+  GenerateChatReasoningEffort,
+  GenerateChatReasoningOptions,
+  GenerateChatResult,
+  GenerateChatStreamEvent,
+  LlmChatMessage,
+  LlmChatRole,
+  LlmChatTextBlock,
   OpenRouterConfig,
   OpenRouterError,
   OpenRouterModelInfo,

@@ -14,7 +14,7 @@ import {
 const fakeLogger = createFakeLogger();
 
 const modelConfig: ImageGenerationModelConfig = {
-  provider: LlmProviders.OpenAI,
+  provider: LlmProviders.OpenRouter,
   modelId: LlmModels.GPTImage1,
 };
 
@@ -52,7 +52,7 @@ describe('createGenerateImageUseCase', () => {
   }
 
   it('returns image data on success', async () => {
-    fakeUserClient.setApiKeys({ openai: 'test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'test-key' });
     const useCase = createUseCase();
 
     const result = await useCase({
@@ -75,7 +75,7 @@ describe('createGenerateImageUseCase', () => {
   });
 
   it('saves image with slug when title provided', async () => {
-    fakeUserClient.setApiKeys({ openai: 'test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'test-key' });
     const useCase = createUseCase();
 
     const result = await useCase({
@@ -92,7 +92,7 @@ describe('createGenerateImageUseCase', () => {
   });
 
   it('forwards image usage metadata to image generator', async () => {
-    fakeUserClient.setApiKeys({ openai: 'test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'test-key' });
     const useCase = createUseCase();
 
     const result = await useCase({
@@ -143,7 +143,7 @@ describe('createGenerateImageUseCase', () => {
   });
 
   it('returns GENERATION_FAILED when image generator fails', async () => {
-    fakeUserClient.setApiKeys({ openai: 'test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'test-key' });
     fakeGenerator.setFailNext(true);
     const useCase = createUseCase();
 
@@ -159,7 +159,7 @@ describe('createGenerateImageUseCase', () => {
   });
 
   it('returns SAVE_FAILED and cleans up storage when DB save fails', async () => {
-    fakeUserClient.setApiKeys({ openai: 'test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'test-key' });
     fakeRepo.setFailNextSave(true);
     const useCase = createUseCase();
 
@@ -176,7 +176,7 @@ describe('createGenerateImageUseCase', () => {
   });
 
   it('returns SAVE_FAILED and logs when both save and cleanup fail', async () => {
-    fakeUserClient.setApiKeys({ openai: 'test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'test-key' });
     fakeRepo.setFailNextSave(true);
     fakeStorage.setFailNextDelete(true);
     const useCase = createUseCase();

@@ -81,7 +81,7 @@ None. The service does not call any other services.
 | Dependency | Purpose                                  |
 | ---------- | ---------------------------------------- |
 | Firestore  | Health check connectivity verification   |
-| Sentry     | Error tracking and log streaming         |
+| SentryBox  | Error tracking and log streaming         |
 
 ### Dependent Services
 

@@ -41,8 +41,8 @@ export const DEFAULT_OPENROUTER_ALLOWED_MODELS: readonly DefaultAllowedOpenRoute
     completionPerToken: '0',
   },
   {
-    id: 'minimax/minimax-m2.7',
-    name: 'MiniMax M2.7',
+    id: 'minimax/minimax-m3',
+    name: 'MiniMax M3',
     provider: 'MiniMax',
     promptPerToken: '0.0000003',
     completionPerToken: '0.0000012',

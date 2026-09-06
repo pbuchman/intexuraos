@@ -308,6 +308,6 @@ Every commit must pass this gate. No exceptions.
 
 These principles aren't suggestions. They're the operating system.
 
-The full enforcement rules — including forbidden language, CI failure protocol, and verification requirements — are documented in [`.claude/CLAUDE.md`](../../.claude/CLAUDE.md).
+The compact project-wide agent contract is documented in [`AGENTS.md`](../../AGENTS.md); executable checks remain the authority for CI enforcement.
 
 **Own everything. Fix everything. Ship confidently.**

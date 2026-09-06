@@ -313,6 +313,36 @@
       "description": "Technical-Debt documentation for linear-agent"
     },
     {
+      "path": "services/message-digest-service/features.md",
+      "title": "Message Digest Service",
+      "category": "services",
+      "description": "Features documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/technical.md",
+      "title": "Message Digest Service — Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/tutorial.md",
+      "title": "Message Digest Service — Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/agent.md",
+      "title": "message-digest-service — Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/technical-debt.md",
+      "title": "Message Digest Service — Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for message-digest-service"
+    },
+    {
       "path": "services/mobile-notifications-service/features.md",
       "title": "Mobile Notifications Service",
       "category": "services",
@@ -643,6 +673,42 @@
       "description": "Technical-Debt documentation for whatsapp-service"
     },
     {
+      "path": "operations/secret-packages.md",
+      "title": "Secret Packages Operations",
+      "category": "operations",
+      "description": "One-shot DEV/PROD package publication, rendering, rotation, and verification"
+    },
+    {
+      "path": "operations/secret-migration-status-report.md",
+      "title": "Secret Migration Status Report",
+      "category": "operations",
+      "description": "Historical non-secret evidence for the secret migration and superseded reversible cleanup gates"
+    },
+    {
+      "path": "operations/secret-exposure-final-cutover-plan.md",
+      "title": "Secret Exposure Final Cutover Plan",
+      "category": "operations",
+      "description": "Authoritative destructive plan for public-secret remediation and final migration cleanup"
+    },
+    {
+      "path": "operations/runtime-configuration.md",
+      "title": "Runtime Configuration And Secret Package Policy",
+      "category": "operations",
+      "description": "Classification and consumer policy for repository configuration, package members, and native exceptions"
+    },
+    {
+      "path": "operations/hetzner-prod-runbook.md",
+      "title": "Hetzner Production Runtime Runbook",
+      "category": "operations",
+      "description": "Manual exact-SHA production deployment, one-shot package loading, and fix-forward verification"
+    },
+    {
+      "path": "runbooks/internal-auth-rotation.md",
+      "title": "Internal Service-to-Service Auth Rotation",
+      "category": "runbooks",
+      "description": "Coordinated package and native-secret single-token maintenance cutover"
+    },
+    {
       "path": "architecture/ai-architecture.md",
       "title": "AI Architecture",
       "category": "architecture",
@@ -883,18 +949,6 @@
       "description": "Technical debt notes for infra-firestore"
     },
     {
-      "path": "packages/infra-gemini/README.md",
-      "title": "@intexuraos/infra-gemini",
-      "category": "packages",
-      "description": "Package documentation: infra-gemini"
-    },
-    {
-      "path": "packages/infra-gemini/technical-debt.md",
-      "title": "Technical Debt: @intexuraos/infra-gemini",
-      "category": "packages",
-      "description": "Technical debt notes for infra-gemini"
-    },
-    {
       "path": "packages/infra-glm/README.md",
       "title": "@intexuraos/infra-glm",
       "category": "packages",
@@ -1052,17 +1106,19 @@
     }
   ],
   "statistics": {
-    "total": 175,
+    "total": 183,
     "byCategory": {
       "overview": 1,
       "services-index": 1,
-      "services": 105,
+      "services": 110,
+      "operations": 4,
+      "runbooks": 1,
       "architecture": 14,
       "setup": 14,
-      "packages": 40
+      "packages": 38
     },
     "version": "4.0.0",
-    "lastUpdated": "2026-06-24",
-    "generatedAt": "2026-06-24T00:00:00.000000"
+    "lastUpdated": "2026-08-13",
+    "generatedAt": "2026-08-13T00:00:00.000000"
   }
 }

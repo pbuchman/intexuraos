@@ -5,11 +5,26 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { createHmac } from 'node:crypto';
+import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { ok } from '@intexuraos/common-core';
+import type {
+  ConversationAssistantPdfExporter,
+  ConversationAssistantPdfExportError,
+  ConversationAssistantPdfExportInput,
+} from '../domain/conversation-assistant/ports.js';
+import type { ExportConversationAssistantPdfResult } from '../domain/conversation-assistant/types.js';
 import {
+  FakeConversationAssistantRepository,
+  FakeConversationAssistantContextAttachmentDeltaBuilder,
+  FakeConversationAssistantContextAttachmentRepository,
+  FakeConversationAssistantOperationalTelemetry,
   FakeEventPublisher,
+  FakeConversationAssistantTurnRequestRepository,
+  FakeLlmGenerateClient,
+  FakeMatrixOutboundGateway,
   FakePrivateWhatsAppRepository,
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
@@ -24,6 +39,8 @@ import {
   FakeWhatsAppWebhookEventRepository,
 } from './fakes.js';
 import type { Config } from '../config.js';
+import type { ConversationAssistantTurnRequestRunner } from '../domain/conversation-assistant/turnRequestPorts.js';
+import { createConversationAssistantTurnRunner } from '../infra/llm/conversationAssistantTurnRunner.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -103,12 +120,58 @@ export const testConfig: Config = {
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
   intexMessageIngestTopic: 'test-intex-message-ingest',
+  audioStoredTopic: 'test-audio-stored',
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: 'test-internal-auth-token',
+  llmUsageServiceUrl: 'http://llm-usage.test',
+  userServiceUrl: 'http://user-service.test',
+  platformOpenRouterApiKey: 'platform-openrouter-key',
+  messageDigestServiceUrl: 'http://message-digest-service.test',
+  conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   port: 8080,
   host: '0.0.0.0',
+  matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
 };
+
+export class FakePdfConversationExporter implements ConversationAssistantPdfExporter {
+  readonly calls: ConversationAssistantPdfExportInput[] = [];
+  private nextResult: import('@intexuraos/common-core').Result<
+    ExportConversationAssistantPdfResult,
+    ConversationAssistantPdfExportError
+  > = ok({
+    bytes: Buffer.from('%PDF-test'),
+    fileName: 'alice-context.pdf',
+    contentType: 'application/pdf',
+  });
+
+  exportConversation(
+    input: ConversationAssistantPdfExportInput
+  ): Promise<
+    import('@intexuraos/common-core').Result<
+      ExportConversationAssistantPdfResult,
+      ConversationAssistantPdfExportError
+    >
+  > {
+    this.calls.push(input);
+    return Promise.resolve(this.nextResult);
+  }
+
+  failNext(message = 'render failed'): void {
+    this.nextResult = {
+      ok: false,
+      error: { message },
+    };
+  }
+
+  setFileName(fileName: string): void {
+    this.nextResult = ok({
+      bytes: Buffer.from('%PDF-test'),
+      fileName,
+      contentType: 'application/pdf',
+    });
+  }
+}
 
 /**
  * Create a valid HMAC-SHA256 signature for a payload.
@@ -402,6 +465,56 @@ export function createAudioWebhookPayload(options?: { mediaId?: string }): objec
 }
 
 /**
+ * Create a WhatsApp video message webhook payload.
+ * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
+ */
+export function createVideoWebhookPayload(options?: { mediaId?: string; caption?: string }): object {
+  const mediaId = options?.mediaId ?? 'test-video-id-12345';
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: 'wamid.video.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDVBNzYwREQ0RjMwMjYzMDcA',
+                  timestamp: '1234567890',
+                  type: 'video',
+                  video: {
+                    id: mediaId,
+                    mime_type: 'video/mp4',
+                    sha256: 'video789abc',
+                    ...(options?.caption !== undefined ? { caption: options.caption } : {}),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
  * Create a WhatsApp reaction webhook payload.
  * Used to test unsupported reaction handling.
  */
@@ -468,8 +581,17 @@ export interface TestContext {
   phoneVerificationRepository: FakePhoneVerificationRepository;
   notificationPreferencesRepository: FakeNotificationPreferencesRepository;
   privateWhatsAppRepository: FakePrivateWhatsAppRepository;
+  matrixOutboundGateway: FakeMatrixOutboundGateway;
   messageSender: FakeMessageSender;
   linkPreviewFetcher: FakeLinkPreviewFetcherPort;
+  conversationAssistantRepository: FakeConversationAssistantRepository;
+  conversationAssistantContextAttachmentRepository: FakeConversationAssistantContextAttachmentRepository;
+  conversationAssistantContextAttachmentDeltaBuilder: FakeConversationAssistantContextAttachmentDeltaBuilder;
+  conversationAssistantTurnRequestRepository: FakeConversationAssistantTurnRequestRepository;
+  conversationAssistantTurnRequestRunner: ConversationAssistantTurnRequestRunner;
+  conversationAssistantOperationalTelemetry: FakeConversationAssistantOperationalTelemetry;
+  llmClient: FakeLlmGenerateClient;
+  pdfConversationExporter: FakePdfConversationExporter;
 }
 
 /**
@@ -489,8 +611,22 @@ export function setupTestContext(): TestContext {
     notificationPreferencesRepository:
       null as unknown as FakeNotificationPreferencesRepository,
     privateWhatsAppRepository: null as unknown as FakePrivateWhatsAppRepository,
+    matrixOutboundGateway: null as unknown as FakeMatrixOutboundGateway,
     messageSender: null as unknown as FakeMessageSender,
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
+    conversationAssistantRepository: null as unknown as FakeConversationAssistantRepository,
+    conversationAssistantContextAttachmentRepository:
+      null as unknown as FakeConversationAssistantContextAttachmentRepository,
+    conversationAssistantContextAttachmentDeltaBuilder:
+      null as unknown as FakeConversationAssistantContextAttachmentDeltaBuilder,
+    conversationAssistantTurnRequestRepository:
+      null as unknown as FakeConversationAssistantTurnRequestRepository,
+    conversationAssistantTurnRequestRunner:
+      null as unknown as ConversationAssistantTurnRequestRunner,
+    conversationAssistantOperationalTelemetry:
+      null as unknown as FakeConversationAssistantOperationalTelemetry,
+    llmClient: null as unknown as FakeLlmGenerateClient,
+    pdfConversationExporter: null as unknown as FakePdfConversationExporter,
   };
 
   beforeAll(async () => {
@@ -512,8 +648,28 @@ export function setupTestContext(): TestContext {
     context.phoneVerificationRepository = new FakePhoneVerificationRepository();
     context.notificationPreferencesRepository = new FakeNotificationPreferencesRepository();
     context.privateWhatsAppRepository = new FakePrivateWhatsAppRepository();
+    context.matrixOutboundGateway = new FakeMatrixOutboundGateway();
     context.messageSender = new FakeMessageSender();
     context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
+    context.conversationAssistantRepository = new FakeConversationAssistantRepository();
+    context.conversationAssistantContextAttachmentRepository =
+      new FakeConversationAssistantContextAttachmentRepository();
+    context.conversationAssistantContextAttachmentDeltaBuilder =
+      new FakeConversationAssistantContextAttachmentDeltaBuilder();
+    context.llmClient = new FakeLlmGenerateClient();
+    context.conversationAssistantTurnRequestRepository =
+      new FakeConversationAssistantTurnRequestRepository(
+        context.conversationAssistantRepository,
+        context.conversationAssistantContextAttachmentRepository
+      );
+    context.conversationAssistantTurnRequestRunner = createConversationAssistantTurnRunner({
+      llmClientFactory: {
+        createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
+      },
+    });
+    context.conversationAssistantOperationalTelemetry =
+      new FakeConversationAssistantOperationalTelemetry();
+    context.pdfConversationExporter = new FakePdfConversationExporter();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
@@ -529,6 +685,22 @@ export function setupTestContext(): TestContext {
       phoneVerificationRepository: context.phoneVerificationRepository,
       notificationPreferencesRepository: context.notificationPreferencesRepository,
       privateWhatsAppRepository: context.privateWhatsAppRepository,
+      matrixOutboundGateway: context.matrixOutboundGateway,
+      conversationAssistantRepository: context.conversationAssistantRepository,
+      conversationAssistantContextAttachmentRepository:
+        context.conversationAssistantContextAttachmentRepository,
+      conversationAssistantContextAttachmentDeltaBuilder:
+        context.conversationAssistantContextAttachmentDeltaBuilder,
+      conversationAssistantTurnRequestRepository:
+        context.conversationAssistantTurnRequestRepository,
+      conversationAssistantTurnRequestRunner: context.conversationAssistantTurnRequestRunner,
+      conversationAssistantOperationalTelemetry:
+        context.conversationAssistantOperationalTelemetry,
+      llmClientFactory: {
+        createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
+      },
+      pdfConversationExporter: context.pdfConversationExporter,
+      conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     });
 
     clearJwksCache();
@@ -539,6 +711,11 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'] = testConfig.accessToken;
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = testConfig.allowedWabaIds.join(',');
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = testConfig.allowedPhoneNumberIds.join(',');
+    process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
+      testConfig.conversationAssistantModel;
+    process.env['INTEXURAOS_USER_SERVICE_URL'] = testConfig.userServiceUrl;
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'http://matrix-adapter.test';
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-adapter-token';
 
     context.app = await buildServer(testConfig);
   });
@@ -553,6 +730,10 @@ export function setupTestContext(): TestContext {
     delete process.env['INTEXURAOS_WHATSAPP_ACCESS_TOKEN'];
     delete process.env['INTEXURAOS_WHATSAPP_WABA_ID'];
     delete process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'];
+    delete process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
+    delete process.env['INTEXURAOS_USER_SERVICE_URL'];
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'];
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
   });
 
   return context;

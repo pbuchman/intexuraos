@@ -137,6 +137,22 @@ describe('apiRequest', () => {
     vi.restoreAllMocks();
   });
 
+  it('composes caller cancellation with the request timeout signal', async () => {
+    const caller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+      receivedSignal = init?.signal as AbortSignal | undefined;
+      return Promise.resolve(
+        mockFetchResponse({ success: true, data: { ok: true } }, 200)
+      );
+    });
+
+    await apiRequest(baseUrl, path, token, { signal: caller.signal });
+    caller.abort();
+
+    expect(receivedSignal?.aborted).toBe(true);
+  });
+
   /** Create a minimal fetch Response mock compatible with jsdom. */
   function mockFetchResponse(body: unknown, status: number): Response {
     return {
@@ -191,7 +207,7 @@ describe('apiRequest', () => {
       }
     });
 
-    it('throws generic Invalid response format for non-Fastify non-envelope response', async () => {
+    it('throws static malformed response for non-Fastify non-envelope response', async () => {
       const randomResponse = { foo: 'bar' };
 
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -204,10 +220,114 @@ describe('apiRequest', () => {
         await apiRequest(baseUrl, path, token);
       } catch (err) {
         const apiErr = err as ApiError;
-        expect(apiErr.code).toBe('UNKNOWN');
-        expect(apiErr.message).toBe('Invalid response format');
-        expect(apiErr.status).toBe(200);
+        expect(apiErr.code).toBe('MALFORMED_RESPONSE');
+        expect(apiErr.message).toBe('Received an invalid response');
+        expect(apiErr.status).toBe(502);
       }
     });
+  });
+
+  it.each([
+    ['string success flag', { success: 'true', data: { ok: true } }],
+    ['numeric success flag', { success: 1, data: { ok: true } }],
+    ['missing successful data', { success: true }],
+  ])('rejects a %s envelope as a static malformed response', async (_label, payload) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockFetchResponse(payload, 200));
+
+    await expect(apiRequest(baseUrl, path, token)).rejects.toMatchObject({
+      code: 'MALFORMED_RESPONSE', status: 502,
+    });
+  });
+
+  it.each([
+    ['missing error', { success: false }],
+    ['non-object error', { success: false, error: 'bad' }],
+    ['non-string code', { success: false, error: { code: 1, message: 'bad' } }],
+    ['non-string message', { success: false, error: { code: 'BAD', message: 1 } }],
+    ['unsafe details', { success: false, error: { code: 'BAD', message: 'safe', details: 'private' } }],
+  ])('rejects a failure envelope with %s as static malformed response', async (_label, payload) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockFetchResponse(payload, 400));
+
+    await expect(apiRequest(baseUrl, path, token)).rejects.toMatchObject({
+      code: 'MALFORMED_RESPONSE', status: 502,
+    });
+  });
+
+  it('preserves a valid structured failure envelope as ApiError', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      mockFetchResponse({ success: false, error: { code: 'BAD_REQUEST', message: 'safe', details: { field: 'value' } } }, 400)
+    );
+
+    await expect(apiRequest(baseUrl, path, token)).rejects.toMatchObject({
+      code: 'BAD_REQUEST', message: 'safe', status: 400, details: { field: 'value' },
+    });
+  });
+
+  it('does not fetch when the caller signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await expect(
+      apiRequest(baseUrl, path, token, { signal: controller.signal })
+    ).rejects.toMatchObject({ code: 'ABORTED', status: 499 });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('aborts while a 401 refresh callback is pending without issuing a retry fetch', async () => {
+    const controller = new AbortController();
+    let resolveRefresh!: (token: string) => void;
+    const refreshToken = vi.fn(() => new Promise<string>((resolve) => { resolveRefresh = resolve; }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      mockFetchResponse({ success: false, error: { code: 'UNAUTHORIZED', message: 'ignored' } }, 401)
+    );
+
+    const request = apiRequest(baseUrl, path, token, { signal: controller.signal, refreshToken });
+    await vi.waitFor(() => expect(refreshToken).toHaveBeenCalledTimes(1));
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ code: 'ABORTED', status: 499 });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    resolveRefresh('new-token');
+  });
+
+  it('aborts an initial fetch through the caller signal', async () => {
+    const controller = new AbortController();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => new Promise((_, reject) => {
+      (init?.signal as AbortSignal).addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    }));
+
+    const request = apiRequest(baseUrl, path, token, { signal: controller.signal });
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ code: 'ABORTED', status: 499 });
+  });
+
+  it('does not retry after refresh resolves when the caller aborts before the retry', async () => {
+    const controller = new AbortController();
+    let resolveRefresh!: (token: string) => void;
+    const refreshToken = vi.fn(() => new Promise<string>((resolve) => { resolveRefresh = resolve; }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      mockFetchResponse({ success: false, error: { code: 'UNAUTHORIZED', message: 'ignored' } }, 401)
+    );
+    const request = apiRequest(baseUrl, path, token, { signal: controller.signal, refreshToken });
+    await vi.waitFor(() => expect(refreshToken).toHaveBeenCalledTimes(1));
+    resolveRefresh('new-token');
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ code: 'ABORTED', status: 499 });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes its caller abort listener after a successful request', async () => {
+    const controller = new AbortController();
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockFetchResponse({ success: true, data: { ok: true } }, 200));
+
+    await expect(apiRequest<{ ok: boolean }>(baseUrl, path, token, { signal: controller.signal })).resolves.toEqual({ ok: true });
+
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 });

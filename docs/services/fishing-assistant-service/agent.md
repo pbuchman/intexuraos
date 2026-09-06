@@ -6,7 +6,7 @@
 
 - **Name:** `fishing-assistant-service`
 - **Role:** User-scoped Fishing Assistant chat, knowledge-base, and digest API.
-- **Primary Goal:** Answer fishing questions from stored knowledge and mobile notification context with validated citations.
+- **Primary Goal:** Answer fishing questions from stored knowledge, canonical Message Digest summaries, and scoped private WhatsApp evidence with validated citations.
 
 ## Capabilities
 
@@ -30,7 +30,7 @@
 | PATCH | `/pages/:pageId` | Update and reindex page text. | Path `pageId`, body `{ rawText: string }` |
 | DELETE | `/pages/:pageId` | Delete a page and its chunks. | Path `pageId` |
 | POST | `/pages/:pageId/reindex` | Reindex a page's current raw text. | Path `pageId` |
-| GET | `/digest-groups` | List mobile notification digest subscriptions. | None |
+| GET | `/digest-groups` | List the migrated Fishing definition from message-digest-service. | None |
 | GET | `/digests` | Query digests. | Query `{ groupKey: string; dateFrom: string; dateTo: string; terms?: string; limit?: string }` |
 | GET | `/digests/:groupKey/:date` | Load one digest and digest state. | Path `groupKey`, `date` |
 
@@ -43,7 +43,7 @@
 
 1. Do not invent Fishing Assistant endpoints; route files define the current HTTP surface.
 2. Treat all folder, page, chat, and message access as user-scoped. Repositories check `userId` before returning data.
-3. Chat generation requires the user's OpenRouter API key from user-service; missing keys are a handled `NO_API_KEY` error.
+3. Chat generation uses the user's OpenRouter key or platform fallback; missing access is a handled `NO_API_KEY` error.
 4. Knowledge pages are authoritative evidence when present; digest and raw-message evidence are supporting context.
 5. Assistant citations must reference known evidence source IDs. Prompt aliases are remapped before storage.
 6. Firestore timestamps in route responses are serialized to ISO strings.
@@ -60,10 +60,11 @@
 ## Dependencies
 
 - Firestore repositories in `src/infra/firestore`.
-- OpenAI embeddings through `src/infra/llm/embeddingClient.ts`.
+- OpenRouter embeddings through `src/infra/llm/embeddingClient.ts`, preserving the `text-embedding-3-small` persisted alias and 1536 dimensions.
 - Fixed chat model adapter in `src/infra/llm/fixedGeminiFlashClient.ts`.
-- user-service for user OpenRouter keys.
-- mobile-notifications-service for digest subscriptions, digest pages, digest state, and raw group messages.
+- user-service for user/platform OpenRouter resolution.
+- message-digest-service for the migrated Fishing definition and canonical summary history.
+- whatsapp-service for definition-scoped private source-message evidence.
 - llm-usage-service through `HttpInternalAuthUsageSink`.
 
 ## Usage Patterns

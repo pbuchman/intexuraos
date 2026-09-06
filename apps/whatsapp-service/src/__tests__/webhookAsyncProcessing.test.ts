@@ -12,6 +12,7 @@ import {
   createReactionWebhookPayload,
   createReplyWebhookPayload,
   createSignature,
+  createVideoWebhookPayload,
   createWebhookPayload,
   describe,
   expect,
@@ -45,6 +46,27 @@ const SAMPLE_IMAGE_BUFFER = Buffer.from([
   0xe7, 0xe8, 0xe9, 0xea, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xda,
   0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0xfb, 0xd5, 0xfb, 0xd5, 0xff, 0xd9,
 ]);
+
+interface MutableVideoWebhookPayload {
+  entry: {
+    changes: {
+      value: {
+        metadata: {
+          display_phone_number: string;
+          phone_number_id?: string;
+        };
+        messages: {
+          video?: {
+            id: string;
+            mime_type: string;
+            sha256?: string;
+            caption?: string;
+          };
+        }[];
+      };
+    }[];
+  }[];
+}
 
 describe('Webhook async processing', () => {
   const ctx = setupTestContext();
@@ -239,8 +261,8 @@ describe('Webhook async processing', () => {
     });
   });
 
-  describe('markMessageAsRead', () => {
-    it('marks message as read when text webhook is successfully processed', async () => {
+  describe('markMessageAsReadWithTyping', () => {
+    it('marks text messages as read with typing when handed to Intex', async () => {
       // Setup user mapping
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
@@ -263,7 +285,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing including mark as read
+      // Wait for async processing including mark as read with typing
       await triggerWebhookProcessing();
 
       // Verify event was processed
@@ -271,9 +293,13 @@ describe('Webhook async processing', () => {
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('completed');
 
-      // Verify message was marked as read via whatsappCloudApi
-      const markedAsRead = ctx.whatsappCloudApi.getMarkedAsReadMessages();
-      expect(markedAsRead.length).toBeGreaterThan(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toEqual([
+        {
+          phoneNumberId: '123456789012345',
+          messageId: 'wamid.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+        },
+      ]);
     });
 
     it('handles sendWhatsAppMessage failure gracefully', async () => {
@@ -403,6 +429,20 @@ describe('Webhook async processing', () => {
       // Files should be stored in GCS
       const files = ctx.mediaStorage.getAllFiles();
       expect(files.size).toBe(2); // Original + thumbnail
+
+      const ingestEvents = ctx.eventPublisher.getIntexMessageIngestEvents();
+      expect(ingestEvents).toEqual([
+        expect.objectContaining({
+          type: 'intex.message.ingest',
+          userId,
+          messageId: 'wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+          text: 'Test image caption',
+          sourceType: 'whatsapp_image',
+          whatsappSender: senderPhone,
+          sourceUrl:
+            'https://storage.example.com/signed/whatsapp/test-user-id/wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA/test-media-id-12345.jpg',
+        }),
+      ]);
     });
 
     it('handles image message without caption', async () => {
@@ -444,6 +484,98 @@ describe('Webhook async processing', () => {
       expect(messages.length).toBe(1);
       expect(messages[0]?.text).toBe('');
       expect(messages[0]?.caption).toBeUndefined();
+
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toEqual([
+        expect.objectContaining({
+          type: 'intex.message.ingest',
+          userId,
+          text: '',
+          sourceType: 'whatsapp_image',
+          sourceUrl:
+            'https://storage.example.com/signed/whatsapp/test-user-id/wamid.image.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA/test-media-id-12345.jpg',
+        }),
+      ]);
+    });
+
+    it('marks image processing retryable when publishing the Intex ingest event fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+      ctx.eventPublisher.setIntexMessageIngestFailure('Simulated intex image ingest failure');
+
+      const payload = createImageWebhookPayload({ caption: 'Receipt' });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.retryable).toBe(true);
+      expect(events[0]?.failureDetails).toContain('Failed to publish intex image ingest');
+    });
+
+    it('marks image processing retryable when creating the source URL fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setMediaUrl('test-media-id-12345', {
+        url: 'https://example.com/media/test-media-id-12345',
+        mimeType: 'image/jpeg',
+        fileSize: 12345,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://example.com/media/test-media-id-12345',
+        SAMPLE_IMAGE_BUFFER
+      );
+      ctx.mediaStorage.setFailGetSignedUrl(true);
+
+      const payload = createImageWebhookPayload({ caption: 'Receipt' });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.retryable).toBe(true);
+      expect(events[0]?.failureDetails).toContain('Failed to create image source URL');
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
     });
 
     it('handles getMediaUrl failure gracefully', async () => {
@@ -521,7 +653,7 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('failed');
     });
 
-    it('marks message as read after successful image processing', async () => {
+    it('marks image messages as read with typing when handed to Intex', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -554,14 +686,13 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Verify message was marked as read via whatsappCloudApi
-      const markedAsRead = ctx.whatsappCloudApi.getMarkedAsReadMessages();
-      expect(markedAsRead.length).toBeGreaterThan(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
     });
   });
 
   describe('audio message processing', () => {
-    it('stores voice media, replies unsupported, and does not publish Intex events', async () => {
+    it('stores voice media, publishes audio stored, and waits for transcription before Intex ingest', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
       const mediaId = 'test-audio-id-12345';
@@ -615,11 +746,164 @@ describe('Webhook async processing', () => {
       });
       expect(ctx.mediaStorage.getAllFiles().size).toBe(1);
       expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(ctx.eventPublisher.getAudioStoredEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getAudioStoredEvents()[0]).toMatchObject({
+        type: 'whatsapp.audio.stored',
+        userId,
+        messageId: messages[0]?.id,
+        mediaId,
+        gcsPath: messages[0]?.gcsPath,
+        mimeType: 'audio/ogg',
+      });
 
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
-      expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0]?.message).toBe('Voice messages are not supported by Intex yet. Please send text for now.');
+      expect(sentMessages).toHaveLength(0);
     });
+  });
+
+  describe('video message processing', () => {
+    it('stores video media, publishes transcription request, and waits before Intex ingest', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+      const mediaId = 'test-video-id-12345';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setMediaUrl(mediaId, {
+        url: 'https://cdn.example.com/video.mp4',
+        mimeType: 'video/mp4',
+        fileSize: 2000,
+      });
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://cdn.example.com/video.mp4',
+        Buffer.from([0x00, 0x01, 0x02])
+      );
+
+      const payload = createVideoWebhookPayload({ mediaId, caption: 'video note' });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+
+      const messages = ctx.messageRepository.getAll();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        userId,
+        waMessageId: 'wamid.video.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDVBNzYwREQ0RjMwMjYzMDcA',
+        mediaType: 'video',
+        text: 'video note',
+        caption: 'video note',
+        media: {
+          id: mediaId,
+          mimeType: 'video/mp4',
+          fileSize: 3,
+          sha256: 'video789abc',
+        },
+      });
+      expect(ctx.mediaStorage.getAllFiles().size).toBe(1);
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()).toHaveLength(1);
+      expect(ctx.eventPublisher.getMediaTranscriptionRequestedEvents()[0]).toMatchObject({
+        type: 'whatsapp.media.transcription.requested',
+        mediaKind: 'video',
+        messageSource: 'public_whatsapp',
+        userId,
+        messageId: messages[0]?.id,
+        mediaId,
+        gcsPath: messages[0]?.gcsPath,
+        mimeType: 'video/mp4',
+      });
+
+      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
+      expect(sentMessages).toHaveLength(0);
+    });
+
+    it('ignores video messages without media info', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+
+      const payload = createVideoWebhookPayload() as MutableVideoWebhookPayload;
+      const message = payload.entry[0]?.changes[0]?.value.messages[0];
+      if (message === undefined) {
+        throw new Error('Expected video message in test payload');
+      }
+      delete message.video;
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.ignoredReason).toEqual({
+        code: 'NO_VIDEO_MEDIA',
+        message: 'Video message has no media info',
+      });
+      expect(ctx.messageRepository.getAll()).toHaveLength(0);
+    });
+
+    it('marks the webhook event failed when video processing fails', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.whatsappCloudApi.setFailGetMediaUrl(true);
+
+      const payload = createVideoWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Failed to get video URL');
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
+    });
+
   });
 
   describe('text message error handling', () => {
@@ -703,7 +987,7 @@ describe('Webhook async processing', () => {
   });
 
   describe('unexpected error handling', () => {
-    it('handles unexpected exceptions in processWebhookAsync gracefully', async () => {
+    it('retries when the connected-mapping lookup throws unexpectedly', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -726,19 +1010,19 @@ describe('Webhook async processing', () => {
         payload: payloadString,
       });
 
-      // Should still return 200 (webhook acknowledged) even if async processing throws
+      // The public Meta webhook is acknowledged after durable persistence.
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing
+      // Pub/Sub must be rejected so the durable event is redelivered.
       const processingStatus = await triggerWebhookProcessing();
-      expect(processingStatus).toBe(200);
+      expect(processingStatus).toBe(500);
 
       // Event should be persisted (save happens before the error)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      // Status is now FAILED - the catch block updates status to prevent stuck events
       expect(events[0]?.status).toBe('failed');
-      expect(events[0]?.retryable).toBe(false);
+      expect(events[0]?.retryable).toBe(true);
+      expect(events[0]?.failureDetails).toContain('Simulated unexpected error in getMapping');
     });
   });
 
@@ -763,14 +1047,47 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing
-      await triggerWebhookProcessing();
+      // Retryable infrastructure failures must reject the Pub/Sub delivery so it is redelivered.
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.retryable).toBe(true);
       expect(events[0]?.failureDetails).toContain('Simulated user lookup failure');
+    });
+
+    it('retries when loading the connected mapping returns an error', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.userMappingRepository.setFailGetMapping(true);
+
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(await triggerWebhookProcessing()).toBe(500);
+      expect(ctx.webhookEventRepository.getAll()).toEqual([
+        expect.objectContaining({
+          status: 'failed',
+          retryable: true,
+          failureDetails: 'Simulated getMapping failure',
+        }),
+      ]);
     });
   });
 
@@ -1259,7 +1576,7 @@ describe('Webhook async processing', () => {
       expect(messages[0]?.toNumber).toBe(''); // Empty string fallback
     });
 
-    it('handles null wabaId in error message (uses "null" fallback)', async () => {
+    it('rejects a missing wabaId without reflecting the identifier', async () => {
       // Create payload with null WABA ID (missing entry)
       const payload = {
         object: 'whatsapp_business_account',
@@ -1282,11 +1599,11 @@ describe('Webhook async processing', () => {
       // Should reject with 403
       expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('waba_id');
-      expect(body.error.message).toContain('null');
+      expect(body.error.message).toBe('Webhook rejected: waba_id not allowed');
+      expect(body.error.message).not.toContain('null');
     });
 
-    it('handles null phoneNumberId in error message (uses "null" fallback)', async () => {
+    it('rejects a missing phoneNumberId without reflecting the identifier', async () => {
       // Create payload with valid WABA but missing phone_number_id
       const payload = {
         object: 'whatsapp_business_account',
@@ -1325,8 +1642,8 @@ describe('Webhook async processing', () => {
       // Should reject with 403
       expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('phone_number_id');
-      expect(body.error.message).toContain('null');
+      expect(body.error.message).toBe('Webhook rejected: phone_number_id not allowed');
+      expect(body.error.message).not.toContain('null');
     });
 
     it('handles null messageType in error message (uses "unknown" fallback)', async () => {
@@ -1623,6 +1940,50 @@ describe('Webhook async processing', () => {
     const senderPhone = '15551234567';
     const testUserId = 'user-buttons-test';
 
+    it('publishes Intex confirmation buttons as structured Intex messages', async () => {
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      const payload = createButtonWebhookPayload({
+        replyToWamid: 'wamid.confirmation.message',
+        buttonId: 'intex_confirm:confirm-1:yes',
+        buttonTitle: 'Tak',
+      });
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      await triggerWebhookProcessing();
+
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events.length).toBe(1);
+      expect(events[0]?.status).toBe('completed');
+      expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toEqual([
+        expect.objectContaining({
+          type: 'intex.message.ingest',
+          userId: testUserId,
+          text: '',
+          sourceType: 'whatsapp_button',
+          whatsappSender: senderPhone,
+          buttonResponse: {
+            buttonId: 'intex_confirm:confirm-1:yes',
+            buttonTitle: 'Tak',
+            replyToWamid: 'wamid.confirmation.message',
+          },
+        }),
+      ]);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
+    });
+
     it('ignores interactive buttons without publishing Intex messages', async () => {
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1652,6 +2013,8 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('ignored');
       expect(events[0]?.ignoredReason?.code).toBe('BUTTON_NOT_SUPPORTED');
       expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(1);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
     });
   });
 

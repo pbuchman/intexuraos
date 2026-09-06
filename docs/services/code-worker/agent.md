@@ -20,11 +20,8 @@
 
 ```typescript
 interface WorkerSecrets {
-  ANTHROPIC_API_KEY: string;
   LINEAR_API_KEY: string;
-  SENTRY_AUTH_TOKEN: string;
-  MINIMAX_API_KEY: string;
-  DASHSCOPE_API_KEY: string;
+  ERROR_HUB_HOST: string;
   OPENROUTER_API_KEY: string;
 }
 
@@ -37,10 +34,6 @@ interface WorkerConfig {
     | 'auto'
     | 'opus'
     | 'sonnet'
-    | 'minimax'
-    | 'glm'
-    | 'qwen'
-    | 'kimi'
     | 'codex'
     | 'codex-xhigh'
     | 'openrouter-free';
@@ -111,10 +104,6 @@ type WorkerType =
   | 'auto'
   | 'opus'
   | 'sonnet'
-  | 'minimax'
-  | 'glm'
-  | 'qwen'
-  | 'kimi'
   | 'codex'
   | 'codex-xhigh'
   | 'openrouter-free';
@@ -124,14 +113,14 @@ type WorkerRuntime = 'claude' | 'codex';
 interface WorkerTypeConfig {
   runtime: WorkerRuntime;
   apiBaseUrl: string;
-  apiKeyEnvVar?: 'ANTHROPIC_API_KEY' | 'MINIMAX_API_KEY' | 'DASHSCOPE_API_KEY' | 'OPENROUTER_API_KEY';
+  apiKeyEnvVar?: 'OPENROUTER_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
   disableExperimentalBetas?: boolean;
 }
 ```
 
-`codex` and `codex-xhigh` use the Codex runtime with shared Codex auth. `codex-xhigh` sets `CODEX_REASONING_EFFORT=xhigh`. All other types use the Claude runtime with Anthropic-compatible API routing.
+`auto`, `opus`, and `sonnet` use subscription-authenticated Claude CLI sessions. `codex` and `codex-xhigh` use subscription-authenticated Codex CLI sessions; `codex-xhigh` sets `CODEX_REASONING_EFFORT=xhigh`. `openrouter-free` is the only provider-key worker route.
 
 ---
 
@@ -225,12 +214,9 @@ const handle = await provider.createWorker({
   systemPrompt: 'You are a coding agent working on IntexuraOS...',
   prompt: 'Implement the feature described in INT-500.',
   secrets: {
-    ANTHROPIC_API_KEY: 'sk-ant-...',
     LINEAR_API_KEY: 'lin_api_...',
-    SENTRY_AUTH_TOKEN: 'sntrys_...',
-    MINIMAX_API_KEY: '',
-    DASHSCOPE_API_KEY: '',
-    OPENROUTER_API_KEY: '',
+    ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
+    OPENROUTER_API_KEY: 'stored-outside-repository',
   },
   gcpSaKeyPath: '/home/user/.config/gcloud/sa-key.json',
   githubAppKeyPath: '/home/user/.code-orchestrator/secrets/INT-500/github-token',

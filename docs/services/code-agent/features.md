@@ -66,11 +66,11 @@ If a PR has failing checks, a merge conflict, or a non-eligible author, the merg
 
 ### Detect and Resolve Merge Conflicts Automatically
 
-When someone pushes to a base branch, the agent checks every bot-authored PR targeting that branch for merge conflicts. If a conflict appears, the system dispatches a resolution task to your worker - the same way it dispatches any other code task. A dedicated cron job reconciles PR state every minute, syncing open/closed status and refreshing conflict information from GitHub into Firestore. Closed PRs are skipped automatically, so the cron does not waste time on stale data.
+When someone pushes to a base branch, the agent checks every bot-authored PR targeting that branch for merge conflicts. If a conflict appears, the system dispatches a resolution task to your worker - the same way it dispatches any other code task. A dedicated cron job reconciles PR state every five minutes, syncing open/closed status and refreshing conflict information from GitHub into Firestore. Closed PRs are skipped automatically, so the cron does not waste time on stale data.
 
 The reconciliation runs as a separate Cloud Scheduler job, decoupled from the webhook pipeline. This means conflict detection does not block webhook processing, and the state stays consistent even if a webhook is missed.
 
-**Example:** Your co-founder merges a PR to `development` that renames a utility function. Two of your bot-authored PRs import that function. Within a minute, the cron detects the conflict, and the agent dispatches resolution tasks for both PRs. By the time you check the dashboard, the conflicts are resolved and the PRs are ready to merge.
+**Example:** Your co-founder merges a PR to `development` that renames a utility function. Two of your bot-authored PRs import that function. Within five minutes, the cron detects the conflict, and the agent dispatches resolution tasks for both PRs. By the time you check the dashboard, the conflicts are resolved and the PRs are ready to merge.
 
 ### Design First, Then Build - With Explicit Mode Selection
 
@@ -118,7 +118,7 @@ Every line of code the agent writes is produced inside an isolated environment r
 
 You name your workers, order them by priority, and the system handles the rest. If the primary worker is occupied, the agent routes to the next available one. Health checks confirm each worker is reachable before dispatching, so you know immediately if something is misconfigured. If all workers are busy, tasks enter a queue and dispatch automatically when capacity opens. Worker credentials - the keys that connect the agent to your machines - are encrypted with AES-256-GCM at rest and masked in every API response.
 
-Multiple worker types are available across several AI providers - including Claude, MiniMax, MiMo Pro 2.5, GLM, Qwen, Kimi, Codex, and OpenRouter-backed options - so you pick the model that fits the task, or let the agent choose automatically. Different agent types (planning, execution, review, remediation) can be tuned to use different worker types independently. The GitHub Agent uses OpenRouter Gemini 3 Flash Preview for tool-calling triage, trying the user's OpenRouter key first and falling back to the platform key when needed.
+Multiple worker types are available across several AI providers - including Claude, MiniMax, MiMo Pro 2.5, GLM, Qwen, Kimi, Codex, and OpenRouter-backed options - so you pick the model that fits the task, or let the agent choose automatically. Different agent types (planning, execution, review, remediation) can be tuned to use different worker types independently. The GitHub Agent uses OpenRouter Gemini 3.6 Flash for tool-calling triage, trying the user's OpenRouter key first and falling back to the platform key when needed.
 
 When a task needs more time than the default worker budget, the submission can include `timeoutHours` from 1 to 12. Code Agent stores the override on the task and forwards it to the orchestrator, which applies it to that task's warning and hard-kill timers. If the field is omitted, the orchestrator uses its default timeout.
 

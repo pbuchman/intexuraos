@@ -2,7 +2,11 @@ import type {
   CalendarCreateEventRequest,
   CalendarCreatedEvent,
   CalendarGeneratePreviewRequest,
+  CalendarListEvent,
+  CalendarListEventsRequest,
   CalendarProcessActionRequest,
+  CalendarUpdateEventRequest,
+  CalendarUpdateEventAttendeesRequest,
 } from '@intexuraos/http-contracts';
 import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import type { InternalHttpClientLogger } from '../shared/createInternalHttpClient.js';
@@ -18,6 +22,16 @@ export interface CalendarAgentServiceConfig {
 export type ProcessCalendarRequest = CalendarProcessActionRequest;
 export type CreateCalendarEventRequest = CalendarCreateEventRequest;
 export type CreatedCalendarEvent = CalendarCreatedEvent;
+export type CalendarEvent = CalendarListEvent;
+export interface CalendarEventsPage {
+  events: CalendarEvent[];
+  truncated: boolean;
+}
+export type ListCalendarEventsRequest = CalendarListEventsRequest;
+export type UpdateCalendarEventAttendeesRequest = CalendarUpdateEventAttendeesRequest & {
+  eventId: string;
+};
+export type UpdateCalendarEventRequest = CalendarUpdateEventRequest & { eventId: string };
 export type GeneratePreviewRequest = CalendarGeneratePreviewRequest;
 
 export type CalendarPreviewStatus = 'pending' | 'ready' | 'failed';
@@ -43,6 +57,21 @@ export type CalendarAgentRequestOptions = ServiceFeedbackRequestOptions;
 export interface CalendarAgentServiceClient {
   createEvent(
     request: CreateCalendarEventRequest,
+    options?: CalendarAgentRequestOptions
+  ): Promise<Result<CreatedCalendarEvent>>;
+
+  listEvents(
+    request: ListCalendarEventsRequest,
+    options?: CalendarAgentRequestOptions
+  ): Promise<Result<CalendarEventsPage>>;
+
+  updateEventAttendees(
+    request: UpdateCalendarEventAttendeesRequest,
+    options?: CalendarAgentRequestOptions
+  ): Promise<Result<CreatedCalendarEvent>>;
+
+  updateEvent(
+    request: UpdateCalendarEventRequest,
     options?: CalendarAgentRequestOptions
   ): Promise<Result<CreatedCalendarEvent>>;
 

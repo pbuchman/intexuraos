@@ -1,4 +1,12 @@
-import type { IntexIncomingMessage } from '../../domain/ports/incomingMessageHandler.js';
+import type {
+  IntexIncomingMessage,
+  IntexIncomingMessageButtonResponse,
+  IntexIncomingMessageReplyContext,
+} from '../../domain/ports/incomingMessageHandler.js';
+import {
+  matrixCorpusSignedIngestV1Schema,
+  type MatrixCorpusSignedIngestV1,
+} from '@intexuraos/http-contracts';
 
 interface PubSubPushBody {
   message?: {
@@ -8,14 +16,34 @@ interface PubSubPushBody {
 }
 
 export function decodeIntexMessageIngestPush(body: unknown): IntexIncomingMessage {
+  const decoded = decodeIntexMessageIngestPushEnvelope(body);
+  if (decoded.kind !== 'ordinary') throw new Error('Expected intex.message.ingest event');
+  return decoded.message;
+}
+
+export type DecodedIntexMessageIngestPush =
+  | Readonly<{ kind: 'ordinary'; message: IntexIncomingMessage }>
+  | Readonly<{ kind: 'matrix_corpus'; envelope: MatrixCorpusSignedIngestV1 }>;
+
+export function decodeIntexMessageIngestPushEnvelope(
+  body: unknown
+): DecodedIntexMessageIngestPush {
   const data = extractData(body);
   const decoded = decodeJson(data);
+  const matrix = matrixCorpusSignedIngestV1Schema.safeParse(decoded);
+  if (matrix.success) return { kind: 'matrix_corpus', envelope: matrix.data };
+  if (
+    decoded !== null &&
+    typeof decoded === 'object' &&
+    (decoded as Record<string, unknown>)['kind'] === 'matrix_corpus_ingest'
+  )
+    throw new Error('Invalid Matrix corpus ingest event');
   const eventType = extractEventType(decoded);
   if (eventType !== 'intex.message.ingest') {
     throw new Error('Expected intex.message.ingest event');
   }
 
-  return toIntexIncomingMessage(decoded);
+  return { kind: 'ordinary', message: toIntexIncomingMessage(decoded) };
 }
 
 function extractData(body: unknown): string {
@@ -50,10 +78,13 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
   const type = requiredString(event, 'type');
   const userId = requiredString(event, 'userId');
   const messageId = requiredString(event, 'messageId');
-  const text = requiredString(event, 'text');
+  const text = requiredStringAllowingEmpty(event, 'text');
   const sourceType = requiredString(event, 'sourceType');
+  const sourceUrl = optionalString(event, 'sourceUrl');
   const timestamp = requiredString(event, 'timestamp');
   const whatsappSender = optionalString(event, 'whatsappSender');
+  const replyContext = optionalReplyContext(event);
+  const buttonResponse = optionalButtonResponse(event);
 
   return {
     type: type as IntexIncomingMessage['type'],
@@ -61,8 +92,11 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
     messageId,
     text,
     sourceType,
+    ...(sourceUrl !== undefined ? { sourceUrl } : {}),
     timestamp,
     ...(whatsappSender !== undefined ? { whatsappSender } : {}),
+    ...(replyContext !== undefined ? { replyContext } : {}),
+    ...(buttonResponse !== undefined ? { buttonResponse } : {}),
   };
 }
 
@@ -83,6 +117,14 @@ function requiredString(event: Record<string, unknown>, key: string): string {
   return value;
 }
 
+function requiredStringAllowingEmpty(event: Record<string, unknown>, key: string): string {
+  const value = event[key];
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid intex.message.ingest event: ${key} must be a string`);
+  }
+  return value;
+}
+
 function optionalString(event: Record<string, unknown>, key: string): string | undefined {
   const value = event[key];
   if (value === undefined) {
@@ -90,6 +132,67 @@ function optionalString(event: Record<string, unknown>, key: string): string | u
   }
   if (typeof value !== 'string') {
     throw new Error(`Invalid intex.message.ingest event: ${key} must be a string`);
+  }
+  return value;
+}
+
+function optionalReplyContext(
+  event: Record<string, unknown>
+): IntexIncomingMessageReplyContext | undefined {
+  const value = event['replyContext'];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid intex.message.ingest event: replyContext must be an object');
+  }
+
+  const context = value as Record<string, unknown>;
+  const replyToWamid = requiredString(context, 'replyToWamid');
+  const source = requiredReplyContextSource(context['source']);
+  const text = requiredString(context, 'text');
+  const truncated = requiredBoolean(context, 'truncated');
+
+  return {
+    replyToWamid,
+    source,
+    text,
+    truncated,
+  };
+}
+
+function optionalButtonResponse(
+  event: Record<string, unknown>
+): IntexIncomingMessageButtonResponse | undefined {
+  const value = event['buttonResponse'];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid intex.message.ingest event: buttonResponse must be an object');
+  }
+
+  const button = value as Record<string, unknown>;
+  return {
+    buttonId: requiredString(button, 'buttonId'),
+    buttonTitle: requiredString(button, 'buttonTitle'),
+    replyToWamid: requiredString(button, 'replyToWamid'),
+  };
+}
+
+function requiredReplyContextSource(
+  value: unknown
+): IntexIncomingMessageReplyContext['source'] {
+  if (value === 'inbound_user_message' || value === 'outbound_assistant_message') {
+    return value;
+  }
+  throw new Error('Invalid intex.message.ingest event: replyContext.source is invalid');
+}
+
+function requiredBoolean(event: Record<string, unknown>, key: string): boolean {
+  const value = event[key];
+  if (typeof value !== 'boolean') {
+    throw new Error(`Invalid intex.message.ingest event: ${key} must be a boolean`);
   }
   return value;
 }

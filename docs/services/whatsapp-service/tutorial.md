@@ -75,6 +75,43 @@ Use internal routes for agent or maintenance reads that already know the `source
 - `GET /internal/whatsapp/private/sender-days`
 - `POST /internal/whatsapp/private/aggregates/rebuild`
 
+## Continue A Conversation Assistant Analysis
+
+1. Open a completed Conversation Assistant analysis.
+2. Select **Include new messages**. This freezes a cutoff; it does not yet modify the analysis.
+3. Review the prepared summary or preview. If newer messages arrive, choose **Refresh** to replace the uncommitted draft with a newly frozen cutoff.
+4. Write the question and send. The context update and question commit atomically.
+5. Confirm the response begins with the persisted receipt containing the exact included count and range, followed by the model answer.
+6. Reload the page and confirm the context card, receipt, and answer are still represented once.
+
+To exercise corrections, complete a pending transcription or edit/redact an earlier source message after the initial snapshot. The next update should report that change as a correction. Removed text must not appear in the preview, prompt, receipt, PDF, logs, or API response.
+
+If preparation reaches the hard size limit, reduce the selected scope or start a new analysis. The service never sends a truncated snapshot.
+
+## Physically Erase A Private Account
+
+Physical erasure is an operator-only internal workflow and is intentionally different from disabling the mirror in the UI.
+
+1. Send an internally authenticated `POST /internal/whatsapp/private/accounts/:sourceAccountId/erasure` with `{ "userId": "...", "erasureRequestId": "..." }`.
+2. Retry the same request id safely if the response is interrupted.
+3. Poll `GET /internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId` until `completed`.
+4. Confirm the response contains only status, stage, attempt, timestamps, and deletion counts.
+5. Confirm the old source generation can no longer ingest or update messages. A later reconnect must receive a new source generation.
+
+Do not use this workflow as ordinary disconnect. `DELETE /private/account` remains disable-only.
+
+## Verify Message Digest readiness
+
+Message Digest Service calls the internal readiness contract with the owning user ID:
+
+```text
+POST /internal/whatsapp/delivery-readiness/get
+```
+
+A ready response exposes only a masked form of the first mapped phone. Missing mapping, disconnected account, or disabled delivery is returned as an explicit status. The digest UI must direct the user to repair the existing WhatsApp connection; it must not ask for a separate destination number.
+
+To inspect a digest source safely, first validate the owned chat through `/internal/whatsapp/private/digest-source/validate`, then use the returned account generation and source revision with `/internal/whatsapp/private/digest-source/messages/query`. Never copy request or response content into operational logs.
+
 ## Test Unsupported Voice
 
 Send a voice message. The expected reply is:

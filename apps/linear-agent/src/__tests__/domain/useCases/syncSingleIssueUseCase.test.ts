@@ -171,6 +171,36 @@ describe('syncSingleIssue', () => {
       }
     });
 
+    it('keeps a missing live issue warning out of Sentry while falling back to the webhook payload', async () => {
+      const warn = vi.fn();
+      deps.logger = { ...createFakeLogger(), warn } as unknown as Logger;
+      const event = createTestEvent({
+        action: 'create',
+        data: {
+          ...createTestEvent().data,
+          parent: { id: 'parent-from-webhook' },
+        },
+      });
+
+      const result = await syncSingleIssue(event, userId, deps);
+
+      expect(result.ok).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        {
+          userId,
+          issueId: 'issue-uuid-1',
+          identifier: 'INT-123',
+          _skipSentry: true,
+        },
+        'Webhook sync hydration returned no issue, falling back to webhook payload',
+      );
+      const saved = await issueRepo.findById('issue-uuid-1');
+      expect(saved.ok).toBe(true);
+      if (saved.ok && saved.value) {
+        expect(saved.value.parentId).toBe('parent-from-webhook');
+      }
+    });
+
     it('falls back to webhook payload when connection lookup fails before hydration', async () => {
       connectionRepo.setGetFullConnectionFailure(true, { code: 'INTERNAL_ERROR', message: 'connection failed' });
       const event = createTestEvent({

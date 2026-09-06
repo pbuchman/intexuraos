@@ -237,7 +237,7 @@ export const PRUNE_STALE_EXECUTION_MEMORY_SCHEMA = {
 export const ARCHIVE_STALE_GROUPS_SCHEMA = {
   operationId: 'archiveStaleGroups',
   summary: 'Archive issue groups with no activity for 7+ days',
-  description: 'Called by Cloud Scheduler hourly. Archives entire issue groups where all tasks have updatedAt older than the staleness threshold.',
+  description: 'Called by Cloud Scheduler hourly. Archives entire issue groups whose latest lifecycle status activity is older than the staleness threshold.',
   tags: ['internal'],
   body: {
     type: 'object',

@@ -7,8 +7,7 @@
  *  - Request validation: missing originalTaskId / userId throws with the
  *    missing field name (so call sites fail fast instead of executing a
  *    malformed lookup).
- *  - A complex parent yields a prepared submission with a `complex` block
- *    containing live direct children.
+ *  - Stale complex-task labels do not change the single-task submission target.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -135,7 +134,39 @@ describe('prepareSubmission', () => {
       expect(result.value.planningTask.id).toBe(originalTaskId);
       expect(result.value.linearIssueId).toBe(linearIssueId);
       expect(result.value.effectiveWorkerType).toBe('auto');
-      expect(result.value.complex).toBeUndefined();
+    }
+  });
+
+  it('uses defaultExecutionWorkerType when request workerType is auto', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+    mockWorkerSettingsRepo.getSettings.mockResolvedValue(
+      ok({
+        workers: [{ name: 'home-dev', url: 'x', enabled: true, cfAccessClientId: 'a', cfAccessClientSecret: 'b', dispatchSigningSecret: 'c' }],
+        defaultExecutionWorkerType: 'codex',
+      }),
+    );
+    mockLinearAgentClient.validateIssue.mockResolvedValue(
+      ok({
+        id: linearIssueId,
+        identifier: linearIssueId,
+        title: 'Feature',
+        url: `https://linear.app/x/${linearIssueId}`,
+        labels: ['code-task'],
+        childCount: 0,
+        parentId: null,
+      }),
+    );
+
+    const result = await prepareSubmission(createDeps(), {
+      originalTaskId,
+      userId,
+      workerType: 'auto',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.effectiveWorkerType).toBe('codex');
     }
   });
 
@@ -165,9 +196,8 @@ describe('prepareSubmission', () => {
     if (!result.ok) expect(result.error.code).toBe('task_not_found');
   });
 
-  it('attaches a complex context with live direct children when the parent has complex-task label', async () => {
+  it('ignores complex-task label when the planned issue is ready for one execution task', async () => {
     const task = createMockTask();
-    const validatedUuid = 'linear-uuid-parent';
     mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
     mockWorkerSettingsRepo.getSettings.mockResolvedValue(
       ok({
@@ -176,28 +206,26 @@ describe('prepareSubmission', () => {
     );
     mockLinearAgentClient.validateIssue.mockResolvedValue(
       ok({
-        id: validatedUuid,
+        id: 'parent-uuid',
         identifier: linearIssueId,
         title: 'Feature',
         url: `https://linear.app/x/${linearIssueId}`,
-        labels: ['complex-task'],
+        labels: ['code-task', 'complex-task'],
         childCount: 2,
         parentId: null,
       }),
     );
-    mockLinearAgentClient.fetchDirectChildrenLive.mockResolvedValue(
-      ok([
-        { id: 'c1', identifier: 'INT-101', url: 'u1', parentId: validatedUuid, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-        { id: 'c2', identifier: 'INT-102', url: 'u2', parentId: validatedUuid, labels: ['code-task'], assigneeId: null, state: 'Backlog' },
-      ]),
-    );
 
     const result = await prepareSubmission(createDeps(), { originalTaskId, userId });
+
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.complex).toBeDefined();
-      expect(result.value.complex?.validatedIssueUuid).toBe(validatedUuid);
-      expect(result.value.complex?.directChildren).toHaveLength(2);
-    }
+    expect(mockLinearAgentClient.fetchDirectChildrenLive).not.toHaveBeenCalled();
+    if (!result.ok) return;
+    expect(result.value).toEqual({
+      planningTask: expect.objectContaining({ id: originalTaskId }),
+      userId,
+      linearIssueId,
+      effectiveWorkerType: expect.any(String),
+    });
   });
 });

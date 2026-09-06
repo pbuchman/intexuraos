@@ -630,8 +630,14 @@ describe('createPerplexityClient', () => {
       }
     });
 
-    it('handles API error', async () => {
+    it('retries a provider HTTP 500 and returns the recovered response', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(500, 'Internal error');
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { role: 'assistant', content: 'Recovered.' } }],
+          usage: { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60 },
+        });
 
       const client = createPerplexityClient({
         apiKey: 'test-key',
@@ -642,10 +648,24 @@ describe('createPerplexityClient', () => {
       });
       const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-      }
+      expect(result).toMatchObject({ ok: true, value: { content: 'Recovered.' } });
+      expect(nock.isDone()).toBe(true);
+    });
+
+    it('does not retry a non-transient provider HTTP 400', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(400, 'Invalid request');
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'API_ERROR' } });
+      expect(nock.isDone()).toBe(true);
     });
 
     it('handles network error', async () => {

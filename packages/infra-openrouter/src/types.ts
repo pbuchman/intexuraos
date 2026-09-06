@@ -6,12 +6,24 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
-import type { OwnerType } from '@intexuraos/llm-contract';
+import type {
+  LlmResponseFormat,
+  MatrixCorpusLlmCallContextV1,
+  OwnerType,
+} from '@intexuraos/llm-contract';
 
 export type {
   LLMError as OpenRouterError,
   ResearchResult,
   GenerateResult,
+  LlmChatRole,
+  LlmChatTextBlock,
+  LlmChatMessage,
+  GenerateChatOptions,
+  GenerateChatReasoningEffort,
+  GenerateChatReasoningOptions,
+  GenerateChatResult,
+  GenerateChatStreamEvent,
 } from '@intexuraos/llm-contract';
 
 /**
@@ -19,7 +31,7 @@ export type {
  */
 export interface GenerateOptions {
   /** Request a specific response format from the model (e.g., JSON mode). */
-  responseFormat?: { type: 'json_object' | 'text' };
+  responseFormat?: LlmResponseFormat;
   /** Semantic identifier for what the prompt was used for (e.g., 'linear-issue-title', 'code-worker-validation') */
   promptType: string;
   /**
@@ -33,6 +45,7 @@ export interface GenerateOptions {
     taskId?: string | null;
     requestId?: string | null;
   };
+  matrixCorpusContext?: MatrixCorpusLlmCallContextV1;
 }
 
 /**
@@ -79,12 +92,27 @@ export interface OpenRouterConfig {
   userId: string;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
+  /** Maximum transient provider attempts. Default: 3. */
+  maxAttempts?: number;
+  /** Optional absolute wall-clock deadline shared across provider calls. */
+  deadlineAtMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
   /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
   ownerType?: OwnerType;
+  /** Canonical model ID persisted in Matrix corpus evidence. */
+  evidenceModelId?: string;
+  /** OpenRouter-specific provider routing constraints. */
+  providerRouting?: {
+    /** Route only to providers that support every supplied request parameter. */
+    requireParameters?: boolean;
+    /** Provider slugs in preferred routing order. */
+    order?: readonly string[];
+    /** Whether OpenRouter may route outside the configured provider order. */
+    allowFallbacks?: boolean;
+  };
 }
 
 /**
@@ -125,6 +153,10 @@ export interface OpenRouterUsage {
   completion_tokens: number;
   total_tokens: number;
   cost?: number; // OpenRouter reports USD cost per request (always present per docs, optional for back-compat)
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    cache_write_tokens?: number;
+  };
 }
 
 /**
@@ -138,11 +170,24 @@ export interface OpenRouterResponse {
   choices: {
     index: number;
     message: {
-      content: string;
+      content: unknown;
       role: string;
+      annotations?: OpenRouterAnnotation[];
     };
     finish_reason: string;
+    error?: unknown;
   }[];
   usage?: OpenRouterUsage;
-  annotations?: (string | { url?: string })[];
+  /** Legacy top-level annotation location retained for response compatibility. */
+  annotations?: OpenRouterAnnotation[];
 }
+
+export type OpenRouterAnnotation =
+  | string
+  | {
+      url?: string;
+      type?: string;
+      url_citation?: {
+        url?: string;
+      };
+    };

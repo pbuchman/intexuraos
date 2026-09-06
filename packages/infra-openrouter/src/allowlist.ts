@@ -1,5 +1,5 @@
 /**
- * Curated allowlist of 15 frontier models from 10 providers.
+ * Curated allowlist of 16 frontier models from 11 providers.
  *
  * This is a hardcoded list instead of fetching the full OpenRouter catalog
  * to avoid overwhelming users and ensure quality. Each entry includes
@@ -32,10 +32,19 @@ export interface AllowedOpenRouterModel {
 }
 
 /**
- * Curated allowlist of 15 frontier models from 10 providers.
+ * Curated allowlist of 16 frontier models from 11 providers.
  * Fallback pricing is used when live pricing is unavailable.
  */
 export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
+  // DeepSeek
+  {
+    id: 'deepseek/deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    provider: 'DeepSeek',
+    contextLength: 1_048_576,
+    promptPerToken: '0.000000098',
+    completionPerToken: '0.000000196',
+  },
   // Qwen
   {
     id: 'qwen/qwen3.5-plus-02-15',
@@ -55,10 +64,10 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
   },
   // MiniMax
   {
-    id: 'minimax/minimax-m2.7',
-    name: 'MiniMax M2.7',
+    id: 'minimax/minimax-m3',
+    name: 'MiniMax M3',
     provider: 'MiniMax',
-    contextLength: 205_000,
+    contextLength: 1_000_000,
     promptPerToken: '0.0000003',
     completionPerToken: '0.0000012',
   },
@@ -72,12 +81,12 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     completionPerToken: '0.000006',
   },
   {
-    id: 'x-ai/grok-4.1-fast',
-    name: 'Grok 4.1 Fast',
+    id: 'x-ai/grok-4.3',
+    name: 'Grok 4.3',
     provider: 'xAI',
-    contextLength: 2_000_000,
-    promptPerToken: '0.0000002',
-    completionPerToken: '0.0000005',
+    contextLength: 1_000_000,
+    promptPerToken: '0.00000125',
+    completionPerToken: '0.0000025',
   },
   // Moonshot
   {
@@ -123,12 +132,12 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     completionPerToken: '0.0000025',
   },
   {
-    id: 'google/gemini-3-flash-preview',
-    name: 'Gemini 3 Flash Preview',
+    id: 'google/gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
     provider: 'Google',
-    contextLength: 1_000_000,
-    promptPerToken: '0.0000003',
-    completionPerToken: '0.0000025',
+    contextLength: 1_048_576,
+    promptPerToken: '0.0000015',
+    completionPerToken: '0.0000075',
   },
   // OpenAI
   {

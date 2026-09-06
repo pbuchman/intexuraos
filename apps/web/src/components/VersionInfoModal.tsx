@@ -6,16 +6,27 @@ interface VersionInfoModalProps {
 }
 
 const GITHUB_REPO_URL = 'https://github.com/pbuchman/intexuraos';
+const UNKNOWN_VALUE = 'unknown';
+
+function getBuildValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() !== '' ? value : fallback;
+}
+
+function formatBuildDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Unknown build date' : date.toLocaleString();
+}
 
 export function VersionInfoModal({ onClose }: VersionInfoModalProps): React.JSX.Element {
-  const version = import.meta.env.INTEXURAOS_BUILD_VERSION;
-  const commitSha = import.meta.env.INTEXURAOS_COMMIT_SHA;
-  const commitMessage = import.meta.env.INTEXURAOS_COMMIT_MESSAGE;
-  const buildDate = import.meta.env.INTEXURAOS_BUILD_DATE;
+  const version = getBuildValue(import.meta.env.INTEXURAOS_BUILD_VERSION, 'Unknown version');
+  const commitSha = getBuildValue(import.meta.env.INTEXURAOS_COMMIT_SHA, UNKNOWN_VALUE);
+  const commitMessage = getBuildValue(import.meta.env.INTEXURAOS_COMMIT_MESSAGE, 'Unknown commit');
+  const buildDate = getBuildValue(import.meta.env.INTEXURAOS_BUILD_DATE, UNKNOWN_VALUE);
 
-  const shortSha = commitSha.slice(0, 7);
+  const hasCommitSha = commitSha !== UNKNOWN_VALUE;
+  const shortSha = hasCommitSha ? commitSha.slice(0, 7) : UNKNOWN_VALUE;
   const commitUrl = `${GITHUB_REPO_URL}/commit/${commitSha}`;
-  const formattedDate = new Date(buildDate).toLocaleString();
+  const formattedDate = formatBuildDate(buildDate);
 
   return (
     <Modal
@@ -26,7 +37,8 @@ export function VersionInfoModal({ onClose }: VersionInfoModalProps): React.JSX.
       title="Version Information"
       hideTitle
       padded={false}
-      contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 relative w-full max-w-md rounded-xl bg-white shadow-2xl dark:bg-slate-800"
+      overlayClassName="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
+      contentClassName="fixed left-1/2 top-1/2 z-[60] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white shadow-2xl dark:bg-slate-800"
     >
       <button
         onClick={onClose}
@@ -64,15 +76,21 @@ export function VersionInfoModal({ onClose }: VersionInfoModalProps): React.JSX.
               <p className="truncate text-slate-900 dark:text-slate-100" title={commitMessage}>
                 {commitMessage}
               </p>
-              <a
-                href={commitUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 inline-flex items-center gap-1 font-mono text-sm text-blue-600 hover:underline dark:text-blue-400"
-              >
-                {shortSha}
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              {hasCommitSha ? (
+                <a
+                  href={commitUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 font-mono text-sm text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  {shortSha}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                <p className="mt-1 font-mono text-sm text-slate-500 dark:text-slate-400">
+                  {shortSha}
+                </p>
+              )}
             </div>
           </div>
 

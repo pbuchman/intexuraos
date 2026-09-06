@@ -3,6 +3,7 @@
  * These functions transform Linear SDK types to our internal domain types.
  */
 
+import { setTimeout as sleep } from 'node:timers/promises';
 import { type Issue, type Team } from '@linear/sdk';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type {
@@ -195,17 +196,37 @@ export function mapTeam(team: Team): LinearTeam {
   };
 }
 
+/**
+ * Detects transient upstream 5xx errors in error messages from the Linear SDK.
+ * The SDK embeds HTTP status codes in the thrown Error message (e.g.
+ * "GraphQL Error (Code: 502) - ..."), so classification is done by message
+ * inspection rather than a structured error code.
+ */
+export function isTransientUpstreamError(error: unknown): boolean {
+  const message = getErrorMessage(error, '');
+  return /\(Code:\s*50[234]\)/.test(message);
+}
+
 /** Maps unknown errors to typed LinearError. Exported for testing. */
 export function mapLinearError(error: unknown): LinearError {
   const message = getErrorMessage(error, 'Unknown Linear API error');
 
+  // Check transient upstream 5xx first: the Linear SDK embeds the status code
+  // in the thrown Error message (e.g. "GraphQL Error (Code: 502) - <html>..."),
+  // and the body may contain unrelated digits/tokens that would otherwise
+  // misclassify the error as 401/404.
+  if (isTransientUpstreamError(error)) {
+    // Replace potentially-bloated raw error body (e.g. Cloudflare HTML) with a clean message.
+    return { code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' };
+  }
   if (message.includes('429') || message.includes('rate limit')) {
     return { code: 'RATE_LIMIT', message: 'Linear API rate limit exceeded' };
   }
   if (
     message.includes('401') ||
     message.includes('Unauthorized') ||
-    message.includes('Invalid API key')
+    message.includes('Invalid API key') ||
+    message.includes('Authentication required, not authenticated')
   ) {
     return { code: 'INVALID_API_KEY', message: 'Invalid Linear API key' };
   }
@@ -214,6 +235,97 @@ export function mapLinearError(error: unknown): LinearError {
   }
 
   return { code: 'API_ERROR', message };
+}
+
+/**
+ * Identifies transient Linear API failures (5xx server errors and transport-level
+ * network errors) that should be retried with backoff before being reported to
+ * the caller. Used to suppress noise from Cloudflare 502/503/504 gateway errors
+ * during scheduled full syncs (Sentry: INT-1801).
+ * Exported for testing.
+ */
+export function isTransientLinearError(error: unknown): boolean {
+  if (error === null || error === undefined) return false;
+  const message = getErrorMessage(error, '').toLowerCase();
+  if (message === '') return false;
+
+  // 5xx server-side failures are transient by definition
+  if (/\b(500|501|502|503|504|505|506|507|508|510|511)\b/.test(message)) {
+    return true;
+  }
+
+  // Transport / network errors
+  const transientNetworkPatterns = [
+    'network request failed',
+    'econnreset',
+    'etimedout',
+    'econnrefused',
+    'enotfound',
+    'eai_again',
+    'fetch failed',
+    'socket hang up',
+    'bad gateway',
+    'service unavailable',
+    'gateway timeout',
+  ];
+  return transientNetworkPatterns.some((pattern) => message.includes(pattern));
+}
+
+export interface RetryOnTransientOptions {
+  /** Maximum number of retries (default: 3 = total of 4 attempts). */
+  maxRetries?: number;
+  /** Initial delay in ms; doubled each attempt (default: 500). */
+  baseDelayMs?: number;
+  /** Hard cap on delay between attempts in ms (default: 4000). */
+  maxDelayMs?: number;
+  /** Logger-like sink used for transient retry attempts (optional). */
+  onRetry?: (info: {
+    operationName: string;
+    attempt: number;
+    delayMs: number;
+    error: unknown;
+  }) => void;
+}
+
+/**
+ * Run `op`, retrying on transient errors with exponential backoff.
+ * Re-throws immediately on non-transient errors and re-throws the last
+ * transient error after exhausting retries.
+ * Exported for testing.
+ */
+export async function retryOnTransient<T>(
+  op: () => Promise<T>,
+  operationName: string,
+  jitterSeed: number,
+  options: RetryOnTransientOptions = {}
+): Promise<T> {
+  const maxRetries = options.maxRetries ?? 3;
+  const baseDelayMs = options.baseDelayMs ?? 500;
+  const maxDelayMs = options.maxDelayMs ?? 4000;
+  // Bounded additive jitter derived from the seed; deterministic per call.
+  const seedFraction = (Math.abs(jitterSeed) % 1000) / 1000;
+
+  let attempt = 0;
+  let lastError: unknown;
+  while (attempt <= maxRetries) {
+    try {
+      return await op();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientLinearError(error) || attempt >= maxRetries) {
+        throw error;
+      }
+      const exponentialDelay = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
+      const jitter = Math.floor(exponentialDelay * seedFraction * 0.25);
+      const delayMs = Math.min(maxDelayMs, exponentialDelay + jitter);
+      options.onRetry?.({ operationName, attempt: attempt + 1, delayMs, error });
+      await sleep(delayMs);
+      attempt += 1;
+    }
+  }
+  // Unreachable in practice: the inner branch either returns, throws, or
+  // increments attempt; the loop guard ensures we exit only on the throw path.
+  throw lastError;
 }
 
 /**

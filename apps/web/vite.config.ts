@@ -6,6 +6,7 @@ import { resolve } from 'path';
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { WEB_SERVICE_URLS } from './src/config.generated';
+import { PUBLIC_WEB_ENV_KEYS } from './src/publicEnv';
 
 interface BuildInfo {
   version: string;
@@ -58,19 +59,13 @@ function getBuildInfo(): BuildInfo {
 }
 
 export default defineConfig(({ mode }) => {
-  // Load env from .env files
-  const fileEnv = loadEnv(mode, process.cwd(), 'INTEXURAOS_');
-
-  // Also pick up INTEXURAOS_ vars from shell environment (direnv)
-  const shellEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key.startsWith('INTEXURAOS_') && value !== undefined) {
-      shellEnv[key] = value;
-    }
-  }
-
-  // Merge: file env takes precedence over shell env
-  const env = { ...shellEnv, ...fileEnv };
+  const fileEnv = loadEnv(mode, process.cwd(), '');
+  const publicEnv = Object.fromEntries(
+    PUBLIC_WEB_ENV_KEYS.flatMap((key) => {
+      const value = fileEnv[key] ?? process.env[key];
+      return value === undefined ? [] : [[key, value]];
+    })
+  );
 
   const buildInfo = getBuildInfo();
   const buildVersion = `${buildInfo.version}-${buildInfo.shortSha}`;
@@ -86,6 +81,14 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      {
+        name: 'strip-source-map-references',
+        enforce: 'post',
+        renderChunk(code) {
+          if (!code.includes('sourceMappingURL')) return null;
+          return { code: code.replaceAll('sourceMappingURL', 'sourceMapURL'), map: null };
+        },
+      },
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.png', 'logo.png'],
@@ -189,12 +192,14 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    // Expose INTEXURAOS_ prefixed env vars to the client
-    envPrefix: 'INTEXURAOS_',
+    // Disable automatic exposure. Every browser value is injected explicitly.
+    envPrefix: '__NO_AUTOMATIC_PUBLIC_ENV__',
     define: {
-      // Make shell env vars available to import.meta.env
       ...Object.fromEntries(
-        Object.entries(env).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)])
+        Object.entries(publicEnv).map(([key, value]) => [
+          `import.meta.env.${key}`,
+          JSON.stringify(value),
+        ])
       ),
       'import.meta.env.INTEXURAOS_BUILD_VERSION': JSON.stringify(buildVersion),
       'import.meta.env.INTEXURAOS_COMMIT_SHA': JSON.stringify(buildInfo.fullSha),
@@ -209,7 +214,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       emptyOutDir: true,
-      sourcemap: true,
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks(id: string): string | undefined {
@@ -230,18 +235,18 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      allowedHosts: true,
-      host: '0.0.0.0',
+      allowedHosts: ['localhost', '127.0.0.1'],
+      host: '127.0.0.1',
       port: 3000,
       strictPort: true,
       hmr: false,
       proxy: apiProxy,
     },
     preview: {
-      allowedHosts: true,
+      allowedHosts: ['localhost', '127.0.0.1'],
       port: 3000,
       strictPort: true,
-      host: '0.0.0.0',
+      host: '127.0.0.1',
       proxy: apiProxy,
     },
   };

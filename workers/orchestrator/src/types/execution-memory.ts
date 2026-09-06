@@ -2,6 +2,7 @@ export type ExecutionMemoryPromptMemoryType =
   | 'implementation_pattern'
   | 'verification_pattern'
   | 'pitfall_pattern'
+  | 'single_artifact_planning'
   | 'decomposition_pattern'
   | 'planning_decision'
   | 'review_finding';

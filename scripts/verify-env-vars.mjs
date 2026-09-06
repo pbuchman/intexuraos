@@ -46,11 +46,13 @@ const COMMON_OPTIONAL_ENV = new Set([
   // Optional service config vars (have E2E defaults or are production-only)
   'INTEXURAOS_SERVICE_URL',
   'INTEXURAOS_WEB_URL', // Web app URL for task links (has fallback)
+  'INTEXURAOS_WEB_APP_URL', // Public web app URL for task links (has fallback)
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_CODE_AGENT_URL',
   'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_CONVERSATION_ASSISTANT_MODEL',
   // Auth0 JWT vars (optional in E2E mode)
   'INTEXURAOS_AUTH0_AUDIENCE',
   'INTEXURAOS_AUTH0_ISSUER',
@@ -59,8 +61,6 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
-  // Platform-wide Gemini API key (primary fallback for services using user-service client)
-  'INTEXURAOS_GEMINI_APP_API_KEY',
   // Queue config (optional — have sensible defaults: maxSize=50, ttlMinutes=1440)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
@@ -110,12 +110,27 @@ function extractRequiredEnv(indexContent) {
   //   const REQUIRED_ENV = [...];
   // and the typed-loadEnv form
   //   const REQUIRED_ENV = [...] as const;
-  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\](?:\s+as\s+const)?\s*;/;
+  // as well as mutable arrays used for conditionally-required feature env:
+  //   const REQUIRED_ENV: string[] = [...];
+  const requiredEnvPattern =
+    /const\s+REQUIRED_ENV(?:\s*:\s*[^=]+)?\s*=\s*\[([\s\S]*?)\](?:\s+as\s+const)?\s*;/;
   const requiredMatch = indexContent.match(requiredEnvPattern);
   if (requiredMatch) {
     const stringPattern = /'([^']+)'/g;
     let stringMatch;
     while ((stringMatch = stringPattern.exec(requiredMatch[1])) !== null) {
+      vars.push(stringMatch[1]);
+    }
+  }
+
+  // Values pushed conditionally are declared but are only required when the
+  // corresponding feature is enabled at runtime.
+  const conditionalEnvPattern = /REQUIRED_ENV\.push\(([\s\S]*?)\);/g;
+  let conditionalMatch;
+  while ((conditionalMatch = conditionalEnvPattern.exec(indexContent)) !== null) {
+    const stringPattern = /'([^']+)'/g;
+    let stringMatch;
+    while ((stringMatch = stringPattern.exec(conditionalMatch[1])) !== null) {
       vars.push(stringMatch[1]);
     }
   }
@@ -319,7 +334,9 @@ function isCommonServiceVar(varName) {
     'INTEXURAOS_AUTH0_DOMAIN',
     'INTEXURAOS_AUTH0_CLIENT_ID',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-    'INTEXURAOS_GEMINI_APP_API_KEY',
+    'INTEXURAOS_ENVIRONMENT',
+    'INTEXURAOS_SENTRY_DSN',
+    'GOOGLE_APPLICATION_CREDENTIALS',
     // Global infrastructure vars (set once, used by all services)
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_APP_URL',

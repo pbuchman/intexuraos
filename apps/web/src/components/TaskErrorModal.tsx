@@ -40,7 +40,7 @@ export function TaskErrorModal({
 
   const handlePrimaryAction = (): void => {
     // For retry action, call the onRetry callback
-    if (config.primaryAction?.label === 'Try Again' && onRetry !== undefined) {
+    if (config.primaryAction?.label === 'Try again' && onRetry !== undefined) {
       onRetry();
       return;
     }
@@ -71,7 +71,7 @@ export function TaskErrorModal({
   };
 
   const details: Record<string, string> = {
-    'Error Code': error.code,
+    'Error code': error.code,
     'Status': error.status.toString(),
     'Message': error.message,
     ...(error.details ?? {}),
@@ -119,7 +119,7 @@ export function TaskErrorModal({
             </p>
           </div>
 
-          {/* Collapsible Technical Details */}
+          {/* Collapsible technical details */}
           {config.showDetails && (
             <div className="mt-4">
               <button
@@ -130,7 +130,7 @@ export function TaskErrorModal({
                 aria-expanded={showDetails}
               >
                 {showDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                Technical Details
+                Technical details
               </button>
               {showDetails && (
                 <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50">

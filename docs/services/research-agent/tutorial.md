@@ -1,7 +1,7 @@
 # Research Agent — Tutorial
 
 > **Time:** 20-30 minutes
-> **Prerequisites:** Node.js 20+, valid Auth0 access token, at least one LLM provider API key configured in user-service
+> **Prerequisites:** Node.js 20+, valid Auth0 access token, an OpenRouter credential resolvable by user-service
 > **You'll learn:** How to submit research, poll for completion, understand partial failures, use OpenRouter models, and enhance existing results
 
 ---
@@ -24,7 +24,7 @@ Before starting, ensure you have:
 
 - [ ] Access to the IntexuraOS project
 - [ ] A valid Auth0 bearer token (obtain via the web app login flow)
-- [ ] At least one LLM API key configured (Google, OpenAI, or Anthropic)
+- [ ] An OpenRouter credential available through user-service (user key or platform fallback)
 - [ ] `curl` and `jq` installed for the examples
 
 Set your token and base URL:
@@ -46,8 +46,8 @@ curl -s -X POST "$BASE_URL/" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "What are the main tradeoffs between PostgreSQL and MongoDB for a SaaS product?",
-    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6"],
-    "synthesisModel": "gemini-2.5-pro"
+    "selectedModels": ["or:google/gemini-3.6-flash", "or:anthropic/claude-sonnet-4.6"],
+    "synthesisModel": "or:google/gemini-3.6-flash"
   }' | jq .
 ```
 
@@ -61,11 +61,11 @@ curl -s -X POST "$BASE_URL/" \
     "status": "pending",
     "title": "",
     "prompt": "What are the main tradeoffs...",
-    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6"],
-    "synthesisModel": "gemini-2.5-pro",
+    "selectedModels": ["or:google/gemini-3.6-flash", "or:anthropic/claude-sonnet-4.6"],
+    "synthesisModel": "or:google/gemini-3.6-flash",
     "llmResults": [
-      { "model": "gemini-2.5-pro", "status": "pending" },
-      { "model": "claude-sonnet-4-6", "status": "pending" }
+      { "model": "or:google/gemini-3.6-flash", "status": "pending" },
+      { "model": "or:anthropic/claude-sonnet-4.6", "status": "pending" }
     ],
     "startedAt": "2026-03-15T10:00:00.000Z"
   }
@@ -158,7 +158,7 @@ curl -s "$BASE_URL/$RESEARCH_ID" \
 {
   "status": "awaiting_confirmation",
   "partialFailure": {
-    "failedModels": ["claude-sonnet-4-6"],
+    "failedModels": ["or:anthropic/claude-sonnet-4.6"],
     "detectedAt": "2026-03-15T10:05:00.000Z",
     "retryCount": 0
   }
@@ -188,7 +188,7 @@ After `proceed`, the research moves to `synthesizing` and completes normally usi
 
 ## Part 4: Browse OpenRouter Models (5 minutes)
 
-If you have an OpenRouter API key configured, you can access 15 curated frontier models from 10 providers.
+With an OpenRouter credential resolved by user-service, you can access 16 curated frontier models from 10 providers.
 
 ### Step 4.1: List Available Models
 
@@ -224,14 +224,14 @@ curl -s -X POST "$BASE_URL/" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Compare React Server Components vs traditional SSR approaches",
-    "selectedModels": ["gemini-2.5-pro", "or:x-ai/grok-4.20-beta", "or:qwen/qwen3.5-plus-02-15"],
-    "synthesisModel": "gemini-2.5-pro"
+    "selectedModels": ["or:google/gemini-3.6-flash", "or:x-ai/grok-4.20-beta", "or:qwen/qwen3.5-plus-02-15"],
+    "synthesisModel": "or:google/gemini-3.6-flash"
   }' | jq .
 ```
 
 ### What Just Happened?
 
-The research was submitted with a mix of native (Gemini) and OpenRouter (Grok, Qwen) models. All three run in parallel through the same pipeline. OpenRouter model IDs are validated against the curated allowlist at execution time.
+The research was submitted with Google, xAI, and Qwen models routed through OpenRouter. All three run in parallel through the same pipeline. Model IDs are validated against the curated allowlist at execution time. Raw `gemini-*` IDs are rejected; Google models must use `or:google/...`.
 
 ---
 
@@ -246,7 +246,7 @@ curl -s -X POST "$BASE_URL/$RESEARCH_ID/enhance" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "additionalModels": ["sonar-pro"],
+    "additionalModels": ["or:x-ai/grok-4.20-beta"],
     "additionalContexts": [
       {
         "content": "Our current stack: Node.js backend, 50k users, 10TB data, heavy write workload.",
@@ -259,7 +259,7 @@ curl -s -X POST "$BASE_URL/$RESEARCH_ID/enhance" \
 **Expected response:** A new research ID. The enhanced research:
 
 - Copies completed LLM results from the source (marked `copiedFromSource: true`)
-- Runs only `sonar-pro` against the original prompt plus the new context
+- Runs only `or:x-ai/grok-4.20-beta` against the original prompt plus the new context
 - Re-synthesizes with all results combined
 - Tracks source costs separately in `sourceLlmCostUsd`
 
@@ -301,10 +301,10 @@ curl -s "$BASE_URL/$ENHANCED_ID" \
 | `401 Unauthorized`               | Your bearer token is expired — refresh it via the web app login flow                                               |
 | `404 Not Found`                  | The research ID does not exist or belongs to a different user                                                      |
 | Status stuck at `processing`     | Check Pub/Sub subscription delivery — the LLM call topic may be backlogged                                         |
-| Status `failed`, all models down | At least one API key is missing or invalid — check user-service keys                                               |
+| Status `failed`, all models down | The OpenRouter credential is unavailable or invalid — check user-service credential resolution                   |
 | `enhance` returns `NO_CHANGES`   | You must provide at least one of: additionalModels, additionalContexts, synthesisModel change, or removeContextIds |
 | Notion export not appearing      | Confirm `POST /settings/notion` was called with a valid page ID                                           |
-| OpenRouter models endpoint 404   | OpenRouter API key not configured in user-service — add one first                                                  |
+| OpenRouter models endpoint 404   | No user or platform OpenRouter credential resolved — check user-service configuration                             |
 | OpenRouter model rejected        | The model ID is not on the curated allowlist — check `GET /openrouter/models` for valid IDs               |
 
 ---
@@ -327,7 +327,7 @@ Test your understanding:
 
 1. **Easy:** List all your researches and find the one with the highest `totalCostUsd`
 2. **Medium:** Submit a research with `skipSynthesis: true` — observe what status it reaches and why the result differs from a normal research
-3. **Hard:** Submit a research mixing native and OpenRouter models, wait for `awaiting_confirmation` (you can simulate by providing an invalid API key for one model), then test all three confirmation decisions — `proceed`, `retry`, and `cancel` — and observe the resulting status transitions
+3. **Hard:** Submit a research with three OpenRouter models, induce one model-specific failure in a controlled test environment, then test all three confirmation decisions — `proceed`, `retry`, and `cancel` — and observe the resulting status transitions
 
 <details>
 <summary>Solutions</summary>
@@ -348,8 +348,8 @@ curl -s -X POST "$BASE_URL/" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "What is dependency injection?",
-    "selectedModels": ["gemini-2.5-pro"],
-    "synthesisModel": "gemini-2.5-pro",
+    "selectedModels": ["or:google/gemini-3.6-flash"],
+    "synthesisModel": "or:google/gemini-3.6-flash",
     "skipSynthesis": true
   }' | jq .
 ```
@@ -358,7 +358,7 @@ With `skipSynthesis: true`, the research reaches `completed` after the single mo
 
 ### Exercise 3: Mixed Models with Partial Failure
 
-Configure one model with no API key by temporarily removing it from user-service. Submit a three-model research mixing native and OpenRouter models. When `awaiting_confirmation` appears, test:
+In a controlled test environment, make one selected OpenRouter model return a model-specific failure while the others succeed. Submit a three-model research. When `awaiting_confirmation` appears, test:
 
 - `"decision": "proceed"` -> synthesizes with the successful models
 - `"decision": "retry"` -> re-queues the failed model; status goes to `retrying`

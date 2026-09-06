@@ -7,6 +7,8 @@ export type PrivateWhatsAppChatType = 'direct' | 'group' | 'unknown';
 export type PrivateWhatsAppMessageDirection = 'incoming' | 'outgoing';
 export type PrivateWhatsAppSummaryStatus = 'not_started' | 'completed' | 'failed';
 export type PrivateWhatsAppAccountStatus = 'active' | 'disabled';
+export type PrivateWhatsAppMediaStorageStatus = 'stored';
+export type PrivateWhatsAppTranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type PrivateWhatsAppMessageType =
   | 'text'
   | 'image'
@@ -17,13 +19,85 @@ export type PrivateWhatsAppMessageType =
   | 'reaction'
   | 'redaction'
   | 'unknown';
+export type PrivateWhatsAppRelationKind = 'replacement' | 'redaction';
+export type PrivateWhatsAppRelationApplicationStatus = 'pending' | 'applied' | 'superseded';
+export type PrivateWhatsAppRelationTargetUnavailableReason =
+  | 'matrix_notice'
+  | 'redacted_reaction_tombstone';
+
+export interface PrivateWhatsAppRelationInput {
+  kind: PrivateWhatsAppRelationKind;
+  targetMatrixEventId: string;
+  applicationStatus: 'pending';
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
+}
+
+export interface PrivateWhatsAppRelationInfo {
+  kind: PrivateWhatsAppRelationKind;
+  targetMatrixEventId: string;
+  applicationStatus: PrivateWhatsAppRelationApplicationStatus;
+  targetMessageId?: string;
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
+  appliedAt?: string;
+}
 
 export interface PrivateWhatsAppMediaInfo {
   mxcUri: string;
   mimeType?: string;
   fileName?: string;
   sizeBytes?: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
   sha256?: string;
+  storageStatus?: PrivateWhatsAppMediaStorageStatus;
+  gcsPath?: string;
+  thumbnailGcsPath?: string;
+  storedMimeType?: string;
+  storedSizeBytes?: number;
+  storedAt?: string;
+}
+
+export interface PrivateWhatsAppReactionInfo {
+  emoji: string;
+  targetMatrixEventId: string;
+  targetMessageId: string;
+  /** Optional for backward compatibility with reaction rows written before durable resolution. */
+  applicationStatus?: PrivateWhatsAppRelationApplicationStatus;
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
+  appliedAt?: string;
+}
+
+export interface PrivateWhatsAppReactionInput {
+  emoji: string;
+  targetMatrixEventId: string;
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
+}
+
+export interface PrivateWhatsAppReactionSummary {
+  id: string;
+  emoji: string;
+  senderKey?: string;
+  senderDisplayName?: string;
+  senderPhoneNumber?: string;
+  direction: PrivateWhatsAppMessageDirection;
+  eventTimestamp: string;
+}
+
+export interface PrivateWhatsAppTranscriptionError {
+  code: string;
+  message: string;
+}
+
+export interface PrivateWhatsAppTranscriptionState {
+  status: PrivateWhatsAppTranscriptionStatus;
+  jobId?: string;
+  text?: string;
+  summary?: string;
+  detectedLanguage?: string;
+  error?: PrivateWhatsAppTranscriptionError;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface PrivateWhatsAppChatInput {
@@ -45,6 +119,8 @@ export interface PrivateWhatsAppMessageInput {
   type: PrivateWhatsAppMessageType;
   text?: string;
   media?: PrivateWhatsAppMediaInfo;
+  reaction?: PrivateWhatsAppReactionInput;
+  relation?: PrivateWhatsAppRelationInput;
   eventTimestamp: string;
   eventDayKey?: string;
   eventTimeZone?: string;
@@ -64,9 +140,13 @@ export interface PrivateWhatsAppAccount {
   id: string;
   userId: string;
   sourceAccountId: string;
+  /** Immutable generation fence. New physical reconnections receive a new value. */
+  generationId?: string;
   phoneNumberNormalized: string;
   displayName: string;
   status: PrivateWhatsAppAccountStatus;
+  erasureStatus?: 'erasing';
+  erasureRequestId?: string;
   createdAt: string;
   updatedAt: string;
   lastIngestAt?: string;
@@ -93,12 +173,18 @@ export interface PrivateWhatsAppChat {
   userId: string;
   sourceAccountId: string;
   matrixRoomId: string;
+  matrixRoomIds?: string[];
   chatType: PrivateWhatsAppChatType;
   displayName?: string;
   avatarMxcUri?: string;
   messageCount?: number;
   participantCount?: number;
   participantKeys?: string[];
+  transcriptionEnabled?: boolean;
+  transcriptionEnabledAt?: string;
+  transcriptionUpdatedAt?: string;
+  contextChangeSequence?: number;
+  contextChangedAt?: string;
   firstSeenAt: string;
   lastEventAt: string;
   updatedAt: string;
@@ -121,6 +207,9 @@ export interface PrivateWhatsAppMessage {
   messageType: PrivateWhatsAppMessageType;
   text?: string;
   media?: PrivateWhatsAppMediaInfo;
+  reaction?: PrivateWhatsAppReactionInfo;
+  relation?: PrivateWhatsAppRelationInfo;
+  reactions?: PrivateWhatsAppReactionSummary[];
   eventTimestamp: string;
   eventDayKey?: string;
   eventTimeZone?: string;
@@ -129,6 +218,16 @@ export interface PrivateWhatsAppMessage {
   receivedAt: string;
   ingestedAt: string;
   deliveryMode: PrivateWhatsAppDeliveryMode;
+  transcription?: PrivateWhatsAppTranscriptionState;
+  contextRevision?: number;
+  contextChangeSequence?: number;
+  contextState?: 'visible' | 'redacted' | 'deleted';
+  editedAt?: string;
+  redactedAt?: string;
+  contextOriginalText?: string;
+  latestReplacementMessageId?: string;
+  latestReplacementEventTimestamp?: string;
+  redactedReactionTargetMessageId?: string;
   rawMatrixEvent: unknown;
   schemaVersion?: number;
 }
@@ -176,6 +275,7 @@ export interface PrivateWhatsAppIngestOutcome {
   chatId: string;
   messageId: string;
   matrixEventId: string;
+  chatTranscriptionEnabled?: boolean;
 }
 
 export interface PrivateWhatsAppIngestEventResult {
@@ -207,6 +307,142 @@ export interface PrivateWhatsAppMessageQueryInput {
 export interface PrivateWhatsAppMessageQueryResult {
   messages: PrivateWhatsAppMessage[];
   nextCursor?: string;
+}
+
+export interface PrivateWhatsAppConversationContextMessageResult {
+  messages: PrivateWhatsAppMessage[];
+  totalCount: number;
+  nextCursor?: string;
+}
+
+export interface PrivateWhatsAppReactionQueryInput {
+  sourceAccountId: string;
+  chatId?: string;
+  targets: {
+    messageId: string;
+    matrixEventId: string;
+  }[];
+}
+
+export interface PrivateWhatsAppReactionQueryResult {
+  reactionsByMessageId: Record<string, PrivateWhatsAppReactionSummary[]>;
+  attachedReactionMessageIds: string[];
+}
+
+export interface PrivateConversationContextRequest {
+  userId: string;
+  chatId: string;
+  from: string;
+  to: string;
+  maxMessages?: number;
+}
+
+export interface PrivateConversationContextMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: PrivateWhatsAppMessageDirection;
+  speakerLabel: string;
+  messageType: PrivateWhatsAppMessageType;
+  contentKind: 'text' | 'transcription';
+  content: string;
+  reactions?: PrivateWhatsAppReactionSummary[];
+}
+
+export type PrivateConversationContextOmissionReason =
+  | 'media_only'
+  | 'failed_transcription'
+  | 'pending_transcription'
+  | 'non_text'
+  | 'over_limit';
+
+export interface PrivateConversationContextOmittedMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: PrivateWhatsAppMessageDirection;
+  speakerLabel: string;
+  messageType: PrivateWhatsAppMessageType;
+  omissionReason: PrivateConversationContextOmissionReason;
+  contentKind?: 'text' | 'transcription';
+  content?: string;
+  reactions?: PrivateWhatsAppReactionSummary[];
+  reaction?: {
+    emoji: string;
+    targetMatrixEventId?: string;
+    targetMessageId?: string;
+  };
+}
+
+export interface PrivateConversationContextOmittedCounts {
+  mediaOnly: number;
+  failedTranscriptions: number;
+  pendingTranscriptions: number;
+  nonText: number;
+  overLimit: number;
+}
+
+export interface PrivateConversationContextResponse {
+  chat: {
+    id: string;
+    displayName?: string;
+    chatType: 'direct';
+    firstSeenAt: string;
+    lastEventAt: string;
+    messageCount: number;
+  };
+  range: {
+    from: string;
+    to: string;
+  };
+  messages: PrivateConversationContextMessage[];
+  omittedMessages: PrivateConversationContextOmittedMessage[];
+  omitted: PrivateConversationContextOmittedCounts;
+  messageCount: number;
+  transcriptSha256: string;
+}
+
+export interface PrivateConversationContextMessageQueryInput {
+  sourceAccountId: string;
+  chatId: string;
+  from: string;
+  to: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface UpdatePrivateWhatsAppChatTranscriptionInput {
+  sourceAccountId: string;
+  chatId: string;
+  enabled: boolean;
+  now: string;
+}
+
+export interface UpdatePrivateWhatsAppMessageTranscriptionInput {
+  userId: string;
+  messageId: string;
+  transcription: PrivateWhatsAppTranscriptionState;
+}
+
+export interface UpdatePrivateWhatsAppMessageTranscriptionResult {
+  status: 'updated' | 'unchanged';
+  messageId: string;
+  chatId?: string;
+  contextRevision?: number;
+  contextChangeSequence?: number;
+}
+
+export interface UpdatePrivateWhatsAppMessageStoredMediaInput {
+  sourceAccountId: string;
+  messageId: string;
+  media: PrivateWhatsAppMediaInfo;
+  now: string;
+}
+
+export interface UpdatePrivateWhatsAppMessageStoredMediaResult {
+  status: 'updated' | 'already_stored';
+  message: PrivateWhatsAppMessage;
+  chat: PrivateWhatsAppChat;
 }
 
 export interface PrivateWhatsAppChatQueryInput {

@@ -33,9 +33,9 @@ function buildDispatchQueueUrl(webAppUrl: string): string {
 function buildCtaUrl(task: CodeTask, webAppUrl: string): { displayText: string; url: string } {
   const prUrl = task.result?.prUrl;
   if (prUrl !== undefined && prUrl.length > 0) {
-    return { displayText: 'View Pull Request', url: prUrl };
+    return { displayText: 'View pull request', url: prUrl };
   }
-  return { displayText: 'View Progress', url: buildCodeTaskUrl(task.id, webAppUrl) };
+  return { displayText: 'View progress', url: buildCodeTaskUrl(task.id, webAppUrl) };
 }
 
 export interface WhatsAppNotifierConfig {
@@ -66,19 +66,11 @@ async function resolveTaskTitle(
   return summarizeTask(task);
 }
 
-function formatCompletionMessage(title: string, task: CodeTask, linearIssueId?: string): string {
+function formatCompletionMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
-  const result = task.result;
-  if (!result) {
-    return `✅ ${idPrefix}${title}`;
-  }
-
-  const branchLine = result.branch !== undefined ? `Branch: ${result.branch}\n` : '';
-  const commitsLine = result.commits !== undefined ? `Commits: ${String(result.commits)}\n` : '';
-  const summaryLine = result.summary ?? '';
   return `✅ ${idPrefix}${title}
 
-${branchLine}${commitsLine}${summaryLine}`;
+Task completed.`;
 }
 
 function formatFailureMessage(title: string, error: TaskError, linearIssueId?: string): string {
@@ -103,28 +95,20 @@ function formatResumedMessage(title: string, _task: CodeTask, linearIssueId?: st
   return `🔄 ${idPrefix}${title}`;
 }
 
-function formatResumedCompletionMessage(title: string, task: CodeTask, linearIssueId?: string): string {
+function formatResumedCompletionMessage(title: string, _task: CodeTask, linearIssueId?: string): string {
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
-  const result = task.result;
-  if (!result) {
-    return `🔁 ${idPrefix}${title}`;
-  }
-
-  const summaryLine = result.summary ?? '';
   return `🔁 ${idPrefix}${title}
 
-${summaryLine}`;
+Resumed task completed.`;
 }
 
 function formatDesignCompleteMessage(
   title: string,
-  task: CodeTask,
+  _task: CodeTask,
   includeButtonPrompt: boolean,
   linearIssueId?: string
 ): string {
   const idPrefix = linearIssueId !== undefined ? `${linearIssueId} | ` : '';
-  const result = task.result;
-  const summary = result?.summary ?? 'Design completed and ready for implementation.';
 
   const buttonPrompt = includeButtonPrompt
     ? '\n\nReady to implement? Click the button below to start Phase 2.'
@@ -132,7 +116,15 @@ function formatDesignCompleteMessage(
 
   return `🎨 ${idPrefix}${title}
 
-${summary}${buttonPrompt}`;
+Plan is ready for implementation.${buttonPrompt}`;
+}
+
+function formatReadyForMergeMessage(title: string, task: CodeTask, linearIssueId?: string): string {
+  const idPrefix = linearIssueId ?? task.linearIssueId;
+  const prefix = idPrefix !== undefined ? `${idPrefix} | ` : '';
+  return `🟣 ${prefix}${title}
+
+Waiting for your approval and deployment.`;
 }
 
 function formatTaskDispatchBlockedMessage(info: TaskDispatchBlockedNotificationInfo): string {
@@ -178,10 +170,10 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         message,
         ctaUrl: buildCtaUrl(task, webAppUrl),
         correlationId: task.traceId,
-        important: true,
+        important: false,
       };
       if (prUrl !== undefined && prUrl.length > 0) {
-        publishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
+        publishParams.ctaUrl = { displayText: 'View pull request', url: prUrl };
       }
 
       const result = await whatsappPublisher.publishSendMessage(publishParams);
@@ -247,7 +239,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         userId,
         message,
         buttons,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
+        ctaUrl: { displayText: 'View progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
       });
 
@@ -284,7 +276,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         userId,
         message,
         buttons,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
+        ctaUrl: { displayText: 'View progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
         important: true,
       });
@@ -312,10 +304,10 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         message,
         ctaUrl: buildCtaUrl(task, webAppUrl),
         correlationId: task.traceId,
-        important: true,
+        important: false,
       };
       if (prUrl !== undefined && prUrl.length > 0) {
-        resumedPublishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
+        resumedPublishParams.ctaUrl = { displayText: 'View pull request', url: prUrl };
       }
 
       const result = await whatsappPublisher.publishSendMessage(resumedPublishParams);
@@ -383,6 +375,32 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
       return ok(undefined);
     },
 
+    async notifyTaskReadyForMerge(
+      userId: string,
+      task: CodeTask,
+      info: { prUrl: string; linearIssueId?: string }
+    ): Promise<Result<void, NotificationError>> {
+      const title = await resolveTaskTitle(linearAgentClient, userId, task);
+      const message = formatReadyForMergeMessage(title, task, info.linearIssueId);
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        ctaUrl: { displayText: 'View pull request', url: info.prUrl },
+        correlationId: task.traceId,
+        important: true,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
     async notifyTaskQueued(
       userId: string,
       task: CodeTask,
@@ -396,7 +414,7 @@ Queued. Position: ${String(position)}`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
+        ctaUrl: { displayText: 'View progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
       });
 
@@ -423,7 +441,7 @@ The task timed out before a worker could start. Open the task for the recorded d
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id, webAppUrl) },
+        ctaUrl: { displayText: 'View progress', url: buildTaskUrl(task.id, webAppUrl) },
         correlationId: task.traceId,
         important: true,
       });
@@ -477,7 +495,7 @@ Please check worker availability and retry manually if needed.`;
         userId,
         message: formatTaskDispatchBlockedMessage(info),
         ctaUrl,
-        important: true,
+        important: false,
       });
 
       if (!result.ok) {
@@ -513,7 +531,7 @@ A follow-up fix task has been automatically dispatched.`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Pull Request', url: info.prUrl },
+        ctaUrl: { displayText: 'View pull request', url: info.prUrl },
       });
 
       if (!result.ok) {

@@ -1,27 +1,49 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import {
+  type AudioStoredEvent,
+  type EventPublisherPort,
+  type ExtractLinkPreviewsEvent,
   IngestPrivateWhatsAppEventsUseCase,
   type DisablePrivateWhatsAppAccountInput,
+  type IntexMessageIngestEvent,
+  type MatrixCorpusSignedIngestEvent,
   type IngestPrivateWhatsAppEventInput,
   type IngestPrivateWhatsAppEventsInput,
+  type MediaCleanupEvent,
+  type MediaTranscriptionRequestedEvent,
   type PrivateWhatsAppAccount,
   type PrivateWhatsAppAggregateRebuildInput,
   type PrivateWhatsAppAggregateRebuildResult,
+  type PrivateWhatsAppChat,
   type PrivateWhatsAppChatQueryInput,
   type PrivateWhatsAppChatQueryResult,
+  type PrivateWhatsAppContextJournalQueryInput,
+  type PrivateWhatsAppContextJournalQueryResult,
+  type PrivateWhatsAppContextMessagesByIdsInput,
+  type PrivateWhatsAppConversationContextMessageResult,
   type PrivateWhatsAppIngestOutcome,
+  type PrivateWhatsAppMessage,
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppMessageQueryResult,
+  type PrivateWhatsAppOwnedChatInput,
   type PrivateWhatsAppRepository,
   type PrivateWhatsAppSenderQueryInput,
   type PrivateWhatsAppSenderQueryResult,
   type PrivateWhatsAppSenderDayQueryInput,
   type PrivateWhatsAppSenderDayQueryResult,
+  type PrivateWhatsAppTranscriptionState,
   type StorePrivateWhatsAppMessageInput,
+  type UpdatePrivateWhatsAppChatTranscriptionInput,
+  type UpdatePrivateWhatsAppMessageStoredMediaInput,
+  type UpdatePrivateWhatsAppMessageStoredMediaResult,
+  type UpdatePrivateWhatsAppMessageTranscriptionInput,
+  type UpdatePrivateWhatsAppMessageTranscriptionResult,
   type UpsertPrivateWhatsAppAccountInput,
+  type WebhookProcessEvent,
   type WhatsAppError,
 } from '../../domain/whatsapp/index.js';
+import type { PrivateConversationContextMessageQueryInput } from '../../domain/whatsapp/models/PrivateWhatsApp.js';
 import type { Logger } from '../../domain/whatsapp/utils/logger.js';
 
 const logger: Logger = {
@@ -70,8 +92,10 @@ function createInput(
 
 class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   readonly stored: StorePrivateWhatsAppMessageInput[] = [];
+  readonly transcriptions: { messageId: string; transcription: PrivateWhatsAppTranscriptionState }[] = [];
   private readonly seenEventIds = new Map<string, PrivateWhatsAppIngestOutcome>();
   failNextStore = false;
+  chatTranscriptionEnabled = false;
 
   getAccountByUserId(
     _userId: string
@@ -121,16 +145,84 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
       chatId: `chat-${String(this.stored.length + 1)}`,
       messageId: `message-${String(this.stored.length + 1)}`,
       matrixEventId: input.message.matrixEventId,
+      chatTranscriptionEnabled: this.chatTranscriptionEnabled,
     };
     this.stored.push(input);
     this.seenEventIds.set(input.message.matrixEventId, outcome);
     return Promise.resolve(ok(outcome));
   }
 
+  getMessageById(_messageId: string): Promise<Result<null, WhatsAppError>> {
+    return Promise.resolve(ok(null));
+  }
+
+  getChatById(_input: {
+    sourceAccountId: string;
+    chatId: string;
+  }): Promise<Result<PrivateWhatsAppChat | null, WhatsAppError>> {
+    return Promise.resolve(ok(null));
+  }
+
+  updateChatTranscriptionSetting(
+    _input: UpdatePrivateWhatsAppChatTranscriptionInput
+  ): Promise<Result<PrivateWhatsAppChat, WhatsAppError>> {
+    return Promise.resolve(
+      err({ code: 'NOT_FOUND', message: 'Chat writes are not used by this fake' })
+    );
+  }
+
+  updateMessageStoredMedia(
+    _input: UpdatePrivateWhatsAppMessageStoredMediaInput
+  ): Promise<Result<UpdatePrivateWhatsAppMessageStoredMediaResult, WhatsAppError>> {
+    return Promise.resolve(
+      err({ code: 'NOT_FOUND', message: 'Stored media writes are not used by this fake' })
+    );
+  }
+
+  updateMessageTranscription(
+    input: UpdatePrivateWhatsAppMessageTranscriptionInput
+  ): Promise<Result<UpdatePrivateWhatsAppMessageTranscriptionResult, WhatsAppError>> {
+    this.transcriptions.push({
+      messageId: input.messageId,
+      transcription: input.transcription,
+    });
+    return Promise.resolve(ok({ status: 'updated', messageId: input.messageId }));
+  }
+
+  getConversationContextJournalHead(
+    _input: PrivateWhatsAppOwnedChatInput
+  ): Promise<Result<number, WhatsAppError>> {
+    return Promise.resolve(ok(0));
+  }
+
+  findConversationContextJournalEntries(
+    _input: PrivateWhatsAppContextJournalQueryInput
+  ): Promise<Result<PrivateWhatsAppContextJournalQueryResult, WhatsAppError>> {
+    return Promise.resolve(ok({ entries: [] }));
+  }
+
+  findConversationContextMessagesByIds(
+    _input: PrivateWhatsAppContextMessagesByIdsInput
+  ): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>> {
+    return Promise.resolve(ok([]));
+  }
+
   findMessages(
     _input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>> {
     return Promise.resolve(ok({ messages: [] }));
+  }
+
+  findReactionsForMessageIds(
+    _input: Parameters<PrivateWhatsAppRepository['findReactionsForMessageIds']>[0]
+  ): ReturnType<PrivateWhatsAppRepository['findReactionsForMessageIds']> {
+    return Promise.resolve(ok({ reactionsByMessageId: {}, attachedReactionMessageIds: [] }));
+  }
+
+  findConversationContextMessages(
+    _input: PrivateConversationContextMessageQueryInput
+  ): Promise<Result<PrivateWhatsAppConversationContextMessageResult, WhatsAppError>> {
+    return Promise.resolve(ok({ messages: [], totalCount: 0 }));
   }
 
   findChats(
@@ -160,14 +252,78 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   }
 }
 
+class TestEventPublisher implements EventPublisherPort {
+  readonly audioStoredEvents: AudioStoredEvent[] = [];
+  readonly mediaTranscriptionRequestedEvents: MediaTranscriptionRequestedEvent[] = [];
+  failNextAudioStored = false;
+  failNextMediaTranscriptionRequested = false;
+
+  publishMediaCleanup(_event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.failNextAudioStored) {
+      this.failNextAudioStored = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Audio publish failed' }));
+    }
+    this.audioStoredEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishMediaTranscriptionRequested(
+    event: MediaTranscriptionRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.failNextMediaTranscriptionRequested) {
+      this.failNextMediaTranscriptionRequested = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Media transcription publish failed' })
+      );
+    }
+    this.mediaTranscriptionRequestedEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishIntexMessageIngest(_event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishMatrixCorpusIngest(
+    _event: MatrixCorpusSignedIngestEvent
+  ): Promise<Result<{ publisherReceiptDigest: string }, WhatsAppError>> {
+    return Promise.resolve(ok({ publisherReceiptDigest: '1'.repeat(64) }));
+  }
+
+  publishWebhookProcess(_event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishExtractLinkPreviews(_event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishConversationAssistantPreparation(): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishConversationAssistantContextAttachmentPreparation(): Promise<
+    Result<void, WhatsAppError>
+  > {
+    return Promise.resolve(ok(undefined));
+  }
+}
+
 describe('IngestPrivateWhatsAppEventsUseCase', () => {
   let repository: TestPrivateWhatsAppRepository;
+  let eventPublisher: TestEventPublisher;
   let useCase: IngestPrivateWhatsAppEventsUseCase;
 
   beforeEach(() => {
     repository = new TestPrivateWhatsAppRepository();
+    eventPublisher = new TestEventPublisher();
     useCase = new IngestPrivateWhatsAppEventsUseCase({
       privateWhatsAppRepository: repository,
+      eventPublisher,
     });
   });
 
@@ -193,6 +349,34 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored[0]?.deliveryMode).toBe('live');
     expect(repository.stored[0]?.message.text).toBe('hello from private whatsapp');
     expect(repository.stored[0]?.message.direction).toBe('incoming');
+  });
+
+  it('does not write private source-account identifiers to success or failure logs', async () => {
+    const privateSourceAccountId = 'private-source-account-must-not-be-logged';
+    const privacyLogger: Logger = {
+      info: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const success = await useCase.execute(
+      createInput({ sourceAccountId: privateSourceAccountId }),
+      privacyLogger
+    );
+    expect(success.ok).toBe(true);
+
+    repository.failNextStore = true;
+    const failure = await useCase.execute(
+      createInput({ sourceAccountId: privateSourceAccountId }),
+      privacyLogger
+    );
+    expect(failure.ok).toBe(false);
+
+    expect(
+      JSON.stringify([
+        vi.mocked(privacyLogger.info).mock.calls,
+        vi.mocked(privacyLogger.error).mock.calls,
+      ])
+    ).not.toContain(privateSourceAccountId);
   });
 
   it('stores outgoing Matrix events from the private account owner', async () => {
@@ -227,6 +411,658 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored[0]?.message.direction).toBe('outgoing');
     expect(repository.stored[0]?.message.senderDisplayName).toBe('You');
     expect(repository.stored[0]?.message.senderKey).toBe('matrix:@pbuchman:home-dev');
+  });
+
+  it('normalizes Matrix reaction target metadata for private WhatsApp events', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$target-event',
+                  key: '👍',
+                },
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      (repository.stored[0]?.message as { reaction?: { emoji: string; targetMatrixEventId: string } })
+        .reaction
+    ).toEqual({
+      emoji: '👍',
+      targetMatrixEventId: '$target-event',
+    });
+  });
+
+  it('normalizes explicit private reaction metadata and ignores malformed reaction relations', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$explicit-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+              reaction: {
+                emoji: '👍',
+                targetMatrixEventId: '$explicit-target-event',
+              },
+            },
+          }),
+          createEvent({
+            matrixEventId: '$empty-explicit-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+              reaction: {
+                emoji: '',
+                targetMatrixEventId: '$target-event',
+              },
+            },
+            rawMatrixEvent: 'not-a-record',
+          }),
+          createEvent({
+            matrixEventId: '$missing-content-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$missing-content-reaction-event',
+            },
+          }),
+          createEvent({
+            matrixEventId: '$missing-relates-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$missing-relates-reaction-event',
+              content: {},
+            },
+          }),
+          createEvent({
+            matrixEventId: '$wrong-reltype-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$wrong-reltype-reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.reference',
+                  event_id: '$target-event',
+                  key: '👍',
+                },
+              },
+            },
+          }),
+          createEvent({
+            matrixEventId: '$empty-key-reaction-event',
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              text: '👍',
+            },
+            rawMatrixEvent: {
+              type: 'm.reaction',
+              event_id: '$empty-key-reaction-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.annotation',
+                  event_id: '$target-event',
+                  key: '',
+                },
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(repository.stored).toHaveLength(6);
+    expect(repository.stored[0]?.message.reaction).toEqual({
+      emoji: '👍',
+      targetMatrixEventId: '$explicit-target-event',
+    });
+    expect(repository.stored.slice(1).map((stored) => stored.message.reaction)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('accepts reviewed unavailable relation targets only for backfill delivery', async () => {
+    const reviewedEvents = [
+      createEvent({
+        matrixEventId: '$reviewed-replacement',
+        message: {
+          direction: 'incoming',
+          type: 'text',
+          text: 'replacement text',
+          relation: {
+            kind: 'replacement',
+            targetMatrixEventId: '$notice-target',
+            applicationStatus: 'pending',
+            targetUnavailableReason: 'matrix_notice',
+          },
+        },
+      }),
+      createEvent({
+        matrixEventId: '$reviewed-reaction',
+        message: {
+          direction: 'incoming',
+          type: 'reaction',
+          reaction: {
+            emoji: '👍',
+            targetMatrixEventId: '$redacted-reaction-target',
+            targetUnavailableReason: 'redacted_reaction_tombstone',
+          },
+        },
+      }),
+    ];
+
+    const backfill = await useCase.execute(
+      createInput({ deliveryMode: 'backfill', events: reviewedEvents }),
+      logger
+    );
+    expect(backfill).toMatchObject({
+      ok: true,
+      value: { accepted: 2, duplicates: 0, rejected: 0 },
+    });
+    expect(repository.stored.map((entry) => entry.message)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          relation: expect.objectContaining({ targetUnavailableReason: 'matrix_notice' }),
+        }),
+        expect.objectContaining({
+          reaction: expect.objectContaining({
+            targetUnavailableReason: 'redacted_reaction_tombstone',
+          }),
+        }),
+      ])
+    );
+
+    const live = await useCase.execute(
+      createInput({
+        deliveryMode: 'live',
+        events: [
+          {
+            ...reviewedEvents[0],
+            matrixEventId: '$live-reviewed-replacement',
+          },
+        ],
+      }),
+      logger
+    );
+    expect(live).toMatchObject({
+      ok: true,
+      value: {
+        accepted: 0,
+        duplicates: 0,
+        rejected: 1,
+        messages: [
+          {
+            matrixEventId: '$live-reviewed-replacement',
+            outcome: 'rejected',
+            reason: 'reviewed_relation_target_requires_backfill',
+          },
+        ],
+      },
+    });
+
+    const invalidReasons = await useCase.execute(
+      createInput({
+        deliveryMode: 'backfill',
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$invalid-reviewed-relation' }),
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              relation: {
+                kind: 'replacement',
+                targetMatrixEventId: '$target',
+                applicationStatus: 'pending',
+                targetUnavailableReason: 'unapproved',
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$invalid-reviewed-reaction' }),
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              reaction: {
+                emoji: '👍',
+                targetMatrixEventId: '$target',
+                targetUnavailableReason: 123,
+              },
+            },
+          },
+        ],
+      }),
+      logger
+    );
+    expect(invalidReasons).toMatchObject({
+      ok: true,
+      value: {
+        accepted: 0,
+        duplicates: 0,
+        rejected: 2,
+        messages: [
+          { reason: 'invalid_relation_target_unavailable_reason' },
+          { reason: 'invalid_relation_target_unavailable_reason' },
+        ],
+      },
+    });
+  });
+
+  it('normalizes replacement and redaction relations before repository storage', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$replacement-event' }),
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'corrected text',
+              relation: {
+                kind: 'replacement',
+                targetMatrixEventId: '$original-event',
+                applicationStatus: 'pending',
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$redaction-event' }),
+            message: {
+              direction: 'incoming',
+              type: 'redaction',
+            },
+            rawMatrixEvent: {
+              type: 'm.room.redaction',
+              event_id: '$redaction-event',
+              redacts: '$original-event',
+              content: {},
+            },
+          },
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      repository.stored.map(
+        (stored) =>
+          (stored.message as {
+            relation?: {
+              kind: string;
+              targetMatrixEventId: string;
+              applicationStatus: string;
+            };
+          }).relation
+      )
+    ).toEqual([
+      {
+        kind: 'replacement',
+        targetMatrixEventId: '$original-event',
+        applicationStatus: 'pending',
+      },
+      {
+        kind: 'redaction',
+        targetMatrixEventId: '$original-event',
+        applicationStatus: 'pending',
+      },
+    ]);
+  });
+
+  it('normalizes content redactions, Matrix replacements, and explicit redactions', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$content-redaction-event' }),
+            message: { direction: 'incoming', type: 'redaction' },
+            rawMatrixEvent: {
+              type: 'm.room.redaction',
+              event_id: '$content-redaction-event',
+              content: { redacts: '$content-redaction-target' },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$matrix-replacement-event' }),
+            message: { direction: 'incoming', type: 'text', text: 'Matrix replacement' },
+            rawMatrixEvent: {
+              type: 'm.room.message',
+              event_id: '$matrix-replacement-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.replace',
+                  event_id: '$matrix-replacement-target',
+                },
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$explicit-redaction-event' }),
+            message: {
+              direction: 'incoming',
+              type: 'redaction',
+              relation: {
+                kind: 'redaction',
+                targetMatrixEventId: '$explicit-redaction-target',
+                applicationStatus: 'pending',
+              },
+            },
+          },
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(repository.stored.map((stored) => stored.message.relation)).toEqual([
+      {
+        kind: 'redaction',
+        targetMatrixEventId: '$content-redaction-target',
+        applicationStatus: 'pending',
+      },
+      {
+        kind: 'replacement',
+        targetMatrixEventId: '$matrix-replacement-target',
+        applicationStatus: 'pending',
+      },
+      {
+        kind: 'redaction',
+        targetMatrixEventId: '$explicit-redaction-target',
+        applicationStatus: 'pending',
+      },
+    ]);
+  });
+
+  it('rejects malformed explicit and Matrix context relations before repository writes', async () => {
+    const base = createEvent();
+    const malformedEvents: unknown[] = [
+      {
+        ...base,
+        matrixEventId: '$relation-not-object',
+        message: { ...base.message, relation: 'replacement' },
+      },
+      {
+        ...base,
+        matrixEventId: '$relation-unsupported-kind',
+        message: {
+          ...base.message,
+          relation: { kind: 'reference', targetMatrixEventId: '$target' },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$relation-empty-target',
+        message: {
+          ...base.message,
+          relation: { kind: 'replacement', targetMatrixEventId: '   ' },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$redaction-invalid-target',
+        message: { direction: 'incoming', type: 'redaction' },
+        rawMatrixEvent: {
+          type: 'm.room.redaction',
+          event_id: '$redaction-invalid-target',
+          redacts: 42,
+          content: {},
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$replacement-missing-target',
+        rawMatrixEvent: {
+          type: 'm.room.message',
+          event_id: '$replacement-missing-target',
+          content: { 'm.relates_to': { rel_type: 'm.replace' } },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$replacement-empty-target',
+        rawMatrixEvent: {
+          type: 'm.room.message',
+          event_id: '$replacement-empty-target',
+          content: {
+            'm.relates_to': { rel_type: 'm.replace', event_id: '   ' },
+          },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$replacement-self-target',
+        rawMatrixEvent: {
+          type: 'm.room.message',
+          event_id: '$replacement-self-target',
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.replace',
+              event_id: '$replacement-self-target',
+            },
+          },
+        },
+      },
+    ];
+
+    const result = await useCase.execute(createInput({ events: malformedEvents }), logger);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages).toEqual(
+      malformedEvents.map((event) => ({
+        matrixEventId: String((event as { matrixEventId: unknown }).matrixEventId),
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      }))
+    );
+    expect(repository.stored).toEqual([]);
+  });
+
+  it('rejects malformed and self-targeting context relations without repository writes', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$self-replacement' }),
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'invalid',
+              relation: {
+                kind: 'replacement',
+                targetMatrixEventId: '$self-replacement',
+                applicationStatus: 'pending',
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$self-redaction' }),
+            message: { direction: 'incoming', type: 'redaction' },
+            rawMatrixEvent: {
+              type: 'm.room.redaction',
+              event_id: '$self-redaction',
+              redacts: '$self-redaction',
+              content: {},
+            },
+          },
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({ accepted: 0, duplicates: 0, rejected: 2 });
+    expect(result.value.messages).toEqual([
+      {
+        matrixEventId: '$self-replacement',
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      },
+      {
+        matrixEventId: '$self-redaction',
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      },
+    ]);
+    expect(repository.stored).toEqual([]);
+  });
+
+  it('prioritizes an invalid context relation over malformed media metadata', async () => {
+    const event = createEvent({ matrixEventId: '$invalid-relation-and-media' }) as unknown as Record<
+      string,
+      unknown
+    >;
+    event['message'] = {
+      direction: 'incoming',
+      type: 'image',
+      relation: {
+        kind: 'unsupported',
+        targetMatrixEventId: '$relation-target',
+      },
+      media: {},
+    };
+    const result = await useCase.execute(
+      createInput({
+        events: [event],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages).toEqual([
+      {
+        matrixEventId: '$invalid-relation-and-media',
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      },
+    ]);
+    expect(repository.stored).toEqual([]);
+  });
+
+  it('rejects a pending context operation without an event timestamp before repository storage', async () => {
+    const event = createEvent({
+      matrixEventId: '$pending-operation-without-timestamp',
+      message: {
+        direction: 'incoming',
+        type: 'text',
+        text: 'Late edit',
+        relation: {
+          kind: 'replacement',
+          targetMatrixEventId: '$pending-operation-target',
+          applicationStatus: 'pending',
+        },
+      },
+    }) as unknown as Record<string, unknown>;
+    Reflect.deleteProperty(event, 'eventTimestamp');
+
+    const result = await useCase.execute(createInput({ events: [event] }), logger);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages).toEqual([
+      {
+        matrixEventId: '$pending-operation-without-timestamp',
+        outcome: 'rejected',
+        reason: 'missing_event_timestamp',
+      },
+    ]);
+    expect(repository.stored).toEqual([]);
+  });
+
+  it('preserves stored private image media fields from the Matrix adapter', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$stored-image',
+            message: {
+              direction: 'incoming',
+              type: 'image',
+              text: 'image.jpg',
+              media: {
+                mxcUri: 'mxc://home-dev/image',
+                mimeType: 'image/jpeg',
+                fileName: 'image.jpg',
+                sizeBytes: 11,
+                width: 1280,
+                height: 720,
+                durationMs: 3456,
+                sha256: 'sha256-value',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+                thumbnailGcsPath: 'whatsapp/private/user-123/message/image_thumb.jpg',
+                storedMimeType: 'image/jpeg',
+                storedSizeBytes: 11,
+                storedAt: '2026-06-26T10:00:00.000Z',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(repository.stored[0]?.message.media).toEqual({
+      mxcUri: 'mxc://home-dev/image',
+      mimeType: 'image/jpeg',
+      fileName: 'image.jpg',
+      sizeBytes: 11,
+      width: 1280,
+      height: 720,
+      durationMs: 3456,
+      sha256: 'sha256-value',
+      storageStatus: 'stored',
+      gcsPath: 'whatsapp/private/user-123/message/image.jpg',
+      thumbnailGcsPath: 'whatsapp/private/user-123/message/image_thumb.jpg',
+      storedMimeType: 'image/jpeg',
+      storedSizeBytes: 11,
+      storedAt: '2026-06-26T10:00:00.000Z',
+    });
   });
 
   it('derives sender identity and Europe/Warsaw day metadata before persistence', async () => {
@@ -312,6 +1148,170 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
       messages: [{ matrixEventId: '$event-1', outcome: 'duplicate' }],
     });
     expect(repository.stored).toHaveLength(1);
+  });
+
+  it('publishes private audio transcription jobs only for enabled chats and created events', async () => {
+    repository.chatTranscriptionEnabled = true;
+    const audioEvent = createEvent({
+      matrixEventId: '$audio-event-1',
+      message: {
+        direction: 'incoming',
+        type: 'audio',
+        media: {
+          mxcUri: 'mxc://home-dev/audio-event-1',
+          mimeType: 'audio/ogg',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message-1/audio.ogg',
+          storedMimeType: 'audio/ogg',
+          storedSizeBytes: 1234,
+        },
+      },
+    });
+
+    const firstResult = await useCase.execute(createInput({ events: [audioEvent] }), logger);
+    const duplicateResult = await useCase.execute(createInput({ events: [audioEvent] }), logger);
+
+    expect(firstResult.ok).toBe(true);
+    expect(duplicateResult.ok).toBe(true);
+    expect(eventPublisher.audioStoredEvents).toEqual([
+      {
+        type: 'whatsapp.audio.stored',
+        messageSource: 'private_whatsapp',
+        userId: 'user-123',
+        messageId: 'message-1',
+        mediaId: 'mxc://home-dev/audio-event-1',
+        gcsPath: 'whatsapp/private/user-123/message-1/audio.ogg',
+        mimeType: 'audio/ogg',
+        timestamp: expect.any(String),
+      },
+    ]);
+  });
+
+  it('skips private audio transcription jobs when the chat is disabled or audio is not stored', async () => {
+    const disabledResult = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$disabled-audio',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/disabled-audio',
+                mimeType: 'audio/ogg',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/message-1/audio.ogg',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+    repository.chatTranscriptionEnabled = true;
+    const missingStorageResult = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$unstored-audio',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/unstored-audio',
+                mimeType: 'audio/ogg',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(disabledResult.ok).toBe(true);
+    expect(missingStorageResult.ok).toBe(true);
+    expect(eventPublisher.audioStoredEvents).toEqual([]);
+  });
+
+  it('skips private audio transcription jobs for non-audio messages even when chat transcription is enabled', async () => {
+    repository.chatTranscriptionEnabled = true;
+
+    const result = await useCase.execute(createInput(), logger);
+
+    expect(result.ok).toBe(true);
+    expect(eventPublisher.audioStoredEvents).toEqual([]);
+  });
+
+  it('publishes private video transcription jobs only for enabled chats and created events', async () => {
+    repository.chatTranscriptionEnabled = true;
+    const videoEvent = createEvent({
+      matrixEventId: '$video-event-1',
+      message: {
+        direction: 'incoming',
+        type: 'video',
+        media: {
+          mxcUri: 'mxc://home-dev/video-event-1',
+          mimeType: 'video/mp4',
+          storageStatus: 'stored',
+          gcsPath: 'whatsapp/private/user-123/message-1/video.mp4',
+          storedMimeType: 'video/mp4',
+          storedSizeBytes: 4321,
+        },
+      },
+    });
+
+    const firstResult = await useCase.execute(createInput({ events: [videoEvent] }), logger);
+    const duplicateResult = await useCase.execute(createInput({ events: [videoEvent] }), logger);
+
+    expect(firstResult.ok).toBe(true);
+    expect(duplicateResult.ok).toBe(true);
+    expect(eventPublisher.mediaTranscriptionRequestedEvents).toEqual([
+      {
+        type: 'whatsapp.media.transcription.requested',
+        messageSource: 'private_whatsapp',
+        mediaKind: 'video',
+        userId: 'user-123',
+        messageId: 'message-1',
+        mediaId: 'mxc://home-dev/video-event-1',
+        gcsPath: 'whatsapp/private/user-123/message-1/video.mp4',
+        mimeType: 'video/mp4',
+        timestamp: expect.any(String),
+      },
+    ]);
+  });
+
+  it('returns a persistence error when publishing a private audio transcription job fails', async () => {
+    repository.chatTranscriptionEnabled = true;
+    eventPublisher.failNextAudioStored = true;
+
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          createEvent({
+            matrixEventId: '$audio-publish-failure',
+            message: {
+              direction: 'incoming',
+              type: 'audio',
+              media: {
+                mxcUri: 'mxc://home-dev/audio-publish-failure',
+                mimeType: 'audio/ogg',
+                storageStatus: 'stored',
+                gcsPath: 'whatsapp/private/user-123/audio-publish-failure/audio.ogg',
+              },
+            },
+          }),
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected publish failure');
+    expect(result.error).toMatchObject({
+      code: 'INTERNAL_ERROR',
+      message: 'Audio publish failed',
+    });
+    expect(eventPublisher.audioStoredEvents).toEqual([]);
   });
 
   it('rejects unsupported directions without writing them', async () => {

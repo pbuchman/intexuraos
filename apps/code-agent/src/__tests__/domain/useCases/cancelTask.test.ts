@@ -3,8 +3,8 @@
  *
  * Mirrors the test shape of cancelTaskWithNonce.test.ts: each domain error code
  * has a dedicated assertion, the happy path verifies worker
- * side effects, and the "best effort" branches (worker unreachable, no worker
- * credentials) are exercised so the handler never surfaces them to the caller.
+ * side effects, and worker failures are exercised so Firestore never claims a
+ * task was cancelled while its worker may still be running.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,9 +51,10 @@ describe('cancelTask', () => {
 
     codeTaskRepo = {
       create: vi.fn(),
-      findById: vi.fn(),
+      findById: vi.fn().mockResolvedValue(ok(baseTask)),
       findByIdForUser: vi.fn(),
       update: vi.fn().mockResolvedValue(ok({ ...baseTask, status: 'cancelled' })),
+      runInTransaction: vi.fn(async (operation) => await operation({} as never)),
     } as unknown as CodeTaskRepository;
 
     taskDispatcher = {
@@ -145,6 +146,34 @@ describe('cancelTask', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('internal_error');
     }
+    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when atomic repository transactions are unavailable', async () => {
+    const repositoryWithoutTransactions = {
+      ...codeTaskRepo,
+      runInTransaction: undefined,
+    } as unknown as CodeTaskRepository;
+
+    const result = await cancelTask(
+      { ...deps(), codeTaskRepo: repositoryWithoutTransactions },
+      { taskId: 'task-123', userId: 'user-789' },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('internal_error');
+    expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a Firestore read error', async () => {
+    vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(
+      err({ code: 'FIRESTORE_ERROR', message: 'read failed' }),
+    );
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('internal_error');
     expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
   });
 
@@ -162,12 +191,21 @@ describe('cancelTask', () => {
       expect(result.value.cancelled).toBe(true);
     }
 
-    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', { status: 'cancelled' });
+    expect(codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-123',
+      { status: 'cancelled' },
+      { transaction: expect.any(Object) },
+    );
     expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', {
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'client-id',
       cfAccessClientSecret: 'client-secret',
     });
+    const updateCallOrder = vi.mocked(codeTaskRepo.update).mock.invocationCallOrder[0];
+    if (updateCallOrder === undefined) throw new Error('Expected cancellation update call');
+    expect(vi.mocked(taskDispatcher.cancelOnWorker).mock.invocationCallOrder[0]).toBeLessThan(
+      updateCallOrder,
+    );
   });
 
   it('cancels queued tasks', async () => {
@@ -177,7 +215,27 @@ describe('cancelTask', () => {
     const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
 
     expect(result.ok).toBe(true);
-    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', { status: 'cancelled' });
+    expect(codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-123',
+      { status: 'cancelled' },
+      { transaction: expect.any(Object) },
+    );
+    expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+  });
+
+  it('returns the cancelled task PR lock for owner-fenced cleanup', async () => {
+    const queued = { ...baseTask, status: 'queued', prNumber: 42 } as CodeTask;
+    vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(queued));
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+      ok({ ...queued, status: 'cancelled' }),
+    );
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result).toEqual(ok({
+      cancelled: true,
+      locksToCleanup: [{ repository: 'pbuchman/intexuraos', prNumber: 42 }],
+    }));
   });
 
   it('cancels dispatched tasks', async () => {
@@ -189,17 +247,69 @@ describe('cancelTask', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('still succeeds when worker notification throws (best-effort)', async () => {
+  it('rejects a stale finalization when the dispatch fence changes', async () => {
+    const first = { ...baseTask, dispatchToken: 'dispatch-a' } as CodeTask;
+    const second = { ...baseTask, dispatchToken: 'dispatch-b' } as CodeTask;
+    vi.mocked(codeTaskRepo.findById)
+      .mockResolvedValueOnce(ok(first))
+      .mockResolvedValueOnce(ok(second));
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('internal_error');
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a terminal status that wins the cancellation race', async () => {
+    vi.mocked(codeTaskRepo.findById)
+      .mockResolvedValueOnce(ok(baseTask))
+      .mockResolvedValueOnce(ok({ ...baseTask, status: 'implemented' } as CodeTask));
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('task_not_cancellable');
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('treats a concurrent cancellation as idempotent', async () => {
+    vi.mocked(codeTaskRepo.findById)
+      .mockResolvedValueOnce(ok(baseTask))
+      .mockResolvedValueOnce(ok({ ...baseTask, status: 'cancelled' } as CodeTask));
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(true);
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('cancels atomically if dispatch rolled back to queued while the worker stop was in flight', async () => {
+    vi.mocked(codeTaskRepo.findById)
+      .mockResolvedValueOnce(ok(baseTask))
+      .mockResolvedValueOnce(ok({ ...baseTask, status: 'queued' } as CodeTask));
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(true);
+    expect(codeTaskRepo.update).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the task active when the worker does not confirm cancellation', async () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
     vi.mocked(taskDispatcher.cancelOnWorker).mockRejectedValueOnce(new Error('Worker unreachable'));
 
     const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+    }
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalled();
   });
 
-  it('skips worker credentials when the matching worker is disabled', async () => {
+  it('uses configured credentials to cancel a running task after the worker is disabled', async () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
     vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
       ok({
@@ -222,20 +332,30 @@ describe('cancelTask', () => {
     const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
 
     expect(result.ok).toBe(true);
-    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
+      'task-123',
+      'home-mac',
+      {
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'client-id',
+        cfAccessClientSecret: 'client-secret',
+      },
+    );
+    expect(codeTaskRepo.update).toHaveBeenCalledOnce();
   });
 
-  it('skips worker credentials when settings are missing', async () => {
+  it('keeps a running task active when settings are missing', async () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
     vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(ok(null));
 
     const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
 
-    expect(result.ok).toBe(true);
-    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+    expect(result.ok).toBe(false);
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+    expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
   });
 
-  it('skips worker credentials when getSettings errors', async () => {
+  it('keeps a running task active when worker settings cannot be read', async () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
     vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
       err({ code: 'internal_error', message: 'Settings unavailable' })
@@ -243,7 +363,76 @@ describe('cancelTask', () => {
 
     const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
 
-    expect(result.ok).toBe(true);
-    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+    expect(result.ok).toBe(false);
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+    expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+  });
+
+  it('maps a queued cancellation update that loses the task to task_not_found', async () => {
+    const queued = { ...baseTask, status: 'queued' } as CodeTask;
+    vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(queued));
+    vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
+      err({ code: 'NOT_FOUND', message: 'task disappeared' }),
+    );
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('task_not_found');
+    expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+  });
+
+  it('fails closed if transaction support disappears after worker cancellation preparation', async () => {
+    const runTransaction = codeTaskRepo.runInTransaction;
+    if (runTransaction === undefined) throw new Error('Expected transactional repository');
+    const runTransactionMock = vi.mocked(runTransaction);
+    runTransactionMock.mockImplementationOnce(async (operation) => {
+      const result = await operation({} as never);
+      Object.assign(codeTaskRepo, { runInTransaction: undefined });
+      return result;
+    });
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('internal_error');
+    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledOnce();
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('returns task_not_found if the task disappears after the worker confirms cancellation', async () => {
+    vi.mocked(codeTaskRepo.findById)
+      .mockResolvedValueOnce(ok(baseTask))
+      .mockResolvedValueOnce(err({ code: 'NOT_FOUND', message: 'task disappeared' }));
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('task_not_found');
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('fails closed if the final transactional read fails after worker confirmation', async () => {
+    vi.mocked(codeTaskRepo.findById)
+      .mockResolvedValueOnce(ok(baseTask))
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'final read failed' }));
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('internal_error');
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a finalization race that changes task ownership', async () => {
+    vi.mocked(codeTaskRepo.findById)
+      .mockResolvedValueOnce(ok(baseTask))
+      .mockResolvedValueOnce(ok({ ...baseTask, userId: 'different-user' } as CodeTask));
+
+    const result = await cancelTask(deps(), { taskId: 'task-123', userId: 'user-789' });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('not_owner');
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
   });
 });

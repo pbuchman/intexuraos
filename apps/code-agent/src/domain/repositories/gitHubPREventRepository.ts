@@ -7,7 +7,34 @@ import type { GitHubPREvent, CreateGitHubPREventInput } from '../models/gitHubPR
 
 export type RepositoryError =
   | { code: 'FIRESTORE_ERROR'; message: string }
-  | { code: 'DUPLICATE_EVENT'; message: string };
+  | { code: 'DUPLICATE_EVENT'; message: string; eventId?: string }
+  | { code: 'TRIAGE_LEASE_NOT_OWNED'; message: string };
+
+export interface AcquireGitHubPRTriageInput {
+  eventId: string;
+  leaseOwner: string;
+  acquiredAt: Date;
+  leaseDurationMs: number;
+}
+
+export type AcquireGitHubPRTriageResult =
+  | { kind: 'acquired'; event: GitHubPREvent; leaseToken: string }
+  | { kind: 'busy' }
+  | { kind: 'completed' }
+  | { kind: 'not_found' };
+
+export interface CompleteGitHubPRTriageInput {
+  eventId: string;
+  leaseToken: string;
+  completedAt: Date;
+}
+
+export interface FailGitHubPRTriageInput {
+  eventId: string;
+  leaseToken: string;
+  failedAt: Date;
+  reason: string;
+}
 
 export interface GitHubPREventRepository {
   /**
@@ -15,6 +42,21 @@ export interface GitHubPREventRepository {
    * Returns DUPLICATE_EVENT error if event with same deliveryId already exists.
    */
   save(input: CreateGitHubPREventInput): Promise<Result<GitHubPREvent, RepositoryError>>;
+
+  /** Atomically acquire the evaluation lease stored on the event document. */
+  acquireTriage(
+    input: AcquireGitHubPRTriageInput
+  ): Promise<Result<AcquireGitHubPRTriageResult, RepositoryError>>;
+
+  /** Mark triage complete only when the caller still owns the lease. */
+  completeTriage(
+    input: CompleteGitHubPRTriageInput
+  ): Promise<Result<void, RepositoryError>>;
+
+  /** Release a failed triage attempt only when the caller still owns the lease. */
+  failTriage(
+    input: FailGitHubPRTriageInput
+  ): Promise<Result<void, RepositoryError>>;
 
   /**
    * Find an event by its Firestore document ID.

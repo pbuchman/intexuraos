@@ -85,8 +85,11 @@ describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
   let server: Awaited<ReturnType<typeof buildServer>>;
+  let originalWebAppUrl: string | undefined;
 
   beforeEach(async () => {
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
 
     // Mock linear-agent HTTP calls
     nock('http://linear-agent:8086')
@@ -278,6 +281,11 @@ describe('codeRoutes', () => {
   });
 
   afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
     resetServices();
     resetFirestore();
     nock.cleanAll();
@@ -369,6 +377,59 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.result.review_comments_posted).toBe('2');
       expect(body.data.result.review_types).toBe('code_quality,architecture');
+    });
+
+    it('returns durable merge-ready result fields when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review PR',
+        sanitizedPrompt: 'review pr',
+        systemPromptHash: 'review-auto',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-merge-ready-123',
+        agentType: 'review',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const updateResult = await repo.update(created.value.id, {
+        status: 'reviewed',
+        result: {
+          summary: 'Reviewed the PR and no remediation is required.',
+          rebaseResult: { attempted: false, reason: 'not_required' },
+          pull_request_outcome_label: 'no_changes_needed',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+        } as typeof created.value.result,
+      });
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/tasks/${created.value.id}`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.result).toMatchObject({
+        rebaseResult: { attempted: false, reason: 'not_required' },
+        pull_request_outcome_label: 'no_changes_needed',
+        merge_ready: '1',
+        merge_ready_reason: 'review_no_remediation',
+      });
     });
 
     it('returns execution memory candidates and search counts when present', async () => {
@@ -1466,7 +1527,7 @@ describe('codeRoutes', () => {
         sanitizedPrompt: 'fix bug',
         systemPromptHash: 'abc123',
         workerType: 'opus',
-        workerLocation: 'vm',
+        workerLocation: 'home-mac',
         repository: 'test/repo',
         baseBranch: 'main',
         traceId: 'trace-123',
@@ -2780,6 +2841,14 @@ describe('codeRoutes', () => {
         cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       });
 
+      await getServices().workerSettingsRepo.addWorker('user-123', {
+        name: 'mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
       const response = await server.inject({
         method: 'POST',
         url: '/internal/code/cancel-with-nonce',
@@ -3595,7 +3664,9 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toBe(newTaskId);
       expect(body.data.retriedFrom).toBe(taskId);
-      expect(body.data.resourceUrl).toContain('/code-tasks/');
+      expect(body.data.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${newTaskId}`
+      );
     });
 
     it('should include additional context in retry prompt', async () => {
@@ -4078,7 +4149,9 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.codeTaskId).toMatch(/^task_/);
       expect(body.data.implementationOf).toBe(created.value.id);
-      expect(body.data.resourceUrl).toContain('/#/code-tasks/');
+      expect(body.data.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${body.data.codeTaskId}`
+      );
       expect(body.data.workerLocation).toBe('queued');
     });
 
@@ -4147,7 +4220,7 @@ describe('codeRoutes', () => {
         method: 'POST',
         url: `/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
-        body: { workerType: 'kimi' },
+        body: { workerType: 'openrouter-free' },
       });
 
       // Must NOT return 400 validation error — schema must accept kimi
@@ -4161,7 +4234,7 @@ describe('codeRoutes', () => {
       const executionTask = await repo.findById(body.data.codeTaskId);
       expect(executionTask.ok).toBe(true);
       if (!executionTask.ok) return;
-      expect(executionTask.value.workerType).toBe('kimi');
+      expect(executionTask.value.workerType).toBe('openrouter-free');
     });
   });
 

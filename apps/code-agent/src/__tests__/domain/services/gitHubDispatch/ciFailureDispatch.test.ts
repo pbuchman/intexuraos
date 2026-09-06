@@ -7,6 +7,7 @@ import {
 import type { WebhookDispatchServiceDeps } from '../../../../domain/services/gitHubDispatch/types.js';
 import type { GitHubPREvent } from '../../../../domain/models/gitHubPREvent.js';
 import { generateWebhookSecret } from '../../../../domain/utils/secrets.js';
+import { buildGitHubEventTaskId } from '../../../../domain/services/gitHubDispatch/eventTaskReservation.js';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -50,6 +51,7 @@ function makeDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): WebhookD
     gitHubPREventRepo: {} as never,
     codeTaskRepo: {
       findLatestExecutionTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+      findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'missing' })),
       create: vi.fn(),
     } as never,
     logLineRepo: {} as never,
@@ -65,7 +67,10 @@ function makeDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): WebhookD
     workerSettingsRepo: {} as never,
     gitHubPRClient: {} as never,
     userServiceClient: {} as never,
-    firestore: {} as never,
+    firestore: {
+      runTransaction: vi.fn(async (operation: (transaction: unknown) => Promise<unknown>) =>
+        await operation({})),
+    } as never,
     messageBuilder: { build: vi.fn() } as never,
     allowedBots: new Set(),
     orchestratorSecret: 'secret',
@@ -198,10 +203,43 @@ describe('executeCIFailureDispatch', () => {
     );
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
-    expect(createCall?.id).toMatch(/^task_/);
+    expect(createCall?.id).toBe(buildGitHubEventTaskId('ci-fix', baseEvent.id));
     expect(createCall?.webhookSecret).toBe(
       generateWebhookSecret(deps.orchestratorSecret, createCall?.id ?? '')
     );
+  });
+
+  it('reuses the deterministic task on triage replay without enqueueing or notifying twice', async () => {
+    const originalTask = {
+      id: 'task-parent',
+      userId: 'user-1',
+      workerType: 'claude' as const,
+      workerLocation: 'home',
+      baseBranch: 'main',
+    };
+    const taskId = buildGitHubEventTaskId('ci-fix', baseEvent.id);
+    const existingTask = {
+      id: taskId,
+      userId: 'user-1',
+      traceId: `ci-fix-${baseEvent.id}`,
+      systemPromptHash: 'ci-failure-fix',
+      status: 'running',
+    };
+    vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(originalTask as never));
+    vi.mocked(deps.codeTaskRepo.findById).mockResolvedValue(ok(existingTask as never));
+
+    const result = await executeCIFailureDispatch(deps, { event: baseEvent, logger: mockLogger });
+
+    expect(result).toEqual({
+      success: true,
+      fixTaskCreated: true,
+      parentTaskId: 'task-parent',
+      fixTaskId: taskId,
+    });
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+    expect(deps.whatsappNotifier.notifyCIFailure).not.toHaveBeenCalled();
+    expect(deps.automationLog.record).not.toHaveBeenCalled();
   });
 
   it('returns failure when create fails', async () => {
@@ -246,7 +284,7 @@ describe('executeCIFailureDispatch', () => {
     );
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
-    expect(createCall?.id).toMatch(/^task_/);
+    expect(createCall?.id).toBe(buildGitHubEventTaskId('ci-fix', eventWithNoPayload.id));
     expect(createCall?.webhookSecret).toBe(
       generateWebhookSecret(deps.orchestratorSecret, createCall?.id ?? '')
     );

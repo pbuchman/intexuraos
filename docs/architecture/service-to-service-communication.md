@@ -31,13 +31,14 @@ All internal endpoints follow the pattern:
 | `image-service`                | `images`                          | AI image generation and storage              |
 | `intex-agent`                  | `intex-agent`                     | WhatsApp text direct tools                   |
 | `linear-agent`                 | `linear`                          | Linear issue sync and action processing      |
-| `mobile-notifications-service` | `mobile-notifications`            | Push notification delivery                   |
+| `message-digest-service`       | `message-digests`                 | Digest scheduling, runs, and delivery authorization |
+| `mobile-notifications-service` | `mobile-notifications`            | Captured Android notification queries        |
 | `notes-agent`                  | `notes`                           | Note management                              |
 | `notion-service`               | `notion`                          | Notion integration and page preview          |
 | `research-agent`               | `llm`, `research`                 | LLM orchestration and research processing    |
 | `user-service`                 | `users`                           | User settings, LLM API keys, OAuth tokens    |
 | `web-agent`                    | `link-previews`, `page-summaries` | Web scraping and link preview                |
-| `whatsapp-service`             | (webhook receiver)                | WhatsApp inbound webhook handling            |
+| `whatsapp-service`             | `whatsapp`                        | WhatsApp webhooks, private source reads, and outbound delivery |
 | `api-docs-hub`                 | (no internal routes)              | OpenAPI documentation aggregator             |
 | `web`                          | (frontend — no routes)            | React SPA                                    |
 
@@ -84,23 +85,15 @@ X-Internal-Auth: <token>
 INTEXURAOS_INTERNAL_AUTH_TOKEN=<shared-secret>
 ```
 
-For zero-downtime rotation, also accept the previous token via:
-
-```bash
-INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS=<previous-shared-secret>
-```
-
-`validateInternalAuth` accepts EITHER value and returns
-`{ valid: true, tokenUsed: 'current' | 'previous' }` so callers can
-log/alert when the PREVIOUS token is used. See
-[`docs/runbooks/internal-auth-rotation.md`](../runbooks/internal-auth-rotation.md)
-for the quarterly rotation procedure.
+`validateInternalAuth` accepts exactly this value. Rotation is a hard cutover:
+stop every writer, replace the token in both environments, and restart all
+consumers. There is no previous-token fallback or overlap window.
 
 The static shared secret is a Phase 1 mechanism; per-service Google OIDC is
 the Phase 2 target — see
 [`docs/architecture/internal-oidc-phase-two.md`](./internal-oidc-phase-two.md).
 
-**Note:** Services should use the `INTEXURAOS_` prefix for consistency. Legacy services may use `INTERNAL_AUTH_TOKEN`.
+**Note:** Services use the `INTEXURAOS_` prefix consistently.
 
 ### Server-Side Validation
 

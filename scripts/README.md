@@ -1,392 +1,260 @@
 # Scripts
 
-Build, deployment, and utility scripts.
+Repository utilities for configuration, package publication, deployment,
+database maintenance, and CI. Secret-bearing output must always remain outside
+the repository in mode-`0600` files.
 
-## sync-secrets.sh
+## Runtime Configuration
 
-Single entrypoint for local secrets workflow.
+Render reviewable non-secret configuration:
 
 ```bash
-# Run from repository root
-./scripts/sync-secrets.sh [environment]
-
-# Examples:
-./scripts/sync-secrets.sh                  # sync only (non-interactive)
-./scripts/sync-secrets.sh dev              # explicit environment
-./scripts/sync-secrets.sh --add-new        # sync + prompt for missing values
-./scripts/sync-secrets.sh dev --add-new    # env-specific add-new mode
+node scripts/render-runtime-config.mjs --environment dev --format shell-export
+node scripts/render-runtime-config.mjs --environment prod --format dotenv
 ```
 
-Mode 1: default (non-interactive)
+The renderer uses the exact tracked allowlist. It rejects missing, duplicate,
+unknown, and secret-classified names.
 
-1. Reads Terraform-defined `INTEXURAOS_*` secrets from `terraform/environments/<env>/main.tf`
-2. Syncs readable/exportable secrets from GCP Secret Manager into `.envrc`
-3. Prints missing/unreadable secrets (no prompts)
+## Secret Packages
 
-Mode 2: `--add-new` (interactive)
+`config/environments/secret-packages.json` defines the exact DEV and PROD
+package membership. `config/environments/secret-package-sources.json` permits
+only the current base package as an incremental build source.
 
-1. Runs the same sync flow as default mode
-2. Prompts only for missing secret values (no overwrite flow)
-3. Re-syncs `.envrc` after successful additions
-
-Prerequisites:
-
-- gcloud CLI installed and authenticated
-- Project configured (or provided with `--project-id`)
-- Terraform applied (secret resources must exist before adding versions)
-
-## verify-connections.sh
-
-Verification script for Claude Code cloud development setup.
+Build a complete candidate from an exact current version and explicit private
+overrides:
 
 ```bash
-# Run from repository root
+node scripts/build-secret-package.mjs \
+  --environment dev \
+  --project-id intexuraos-dev-pbuchman \
+  --base-version <numeric-version> \
+  --override-env NAME=<mode-0600-file> \
+  --override-file NAME=<mode-0600-file> \
+  --output <mode-0600-candidate>
+```
+
+Alternatively provide every manifest member exactly once without a base
+version. The builder rejects `latest`, incomplete/duplicate/unknown members,
+symlinks, unsafe modes, empty values, and files larger than 64 KiB.
+
+Validate, publish, fetch, or render one exact version:
+
+```bash
+node scripts/secret-package.mjs validate \
+  --environment dev --payload-file <candidate>
+node scripts/secret-package.mjs publish \
+  --environment dev --project-id intexuraos-dev-pbuchman \
+  --payload-file <candidate> --receipt-file <private-receipt>
+node scripts/secret-package.mjs fetch \
+  --environment dev --version <numeric-version> \
+  --project-id intexuraos-dev-pbuchman --output <mode-0600-file>
+node scripts/secret-package.mjs render \
+  --environment dev --version <numeric-version> \
+  --project-id intexuraos-dev-pbuchman --output-dir <private-directory>
+```
+
+All commands validate schema, environment, exact membership, string/file
+shape, CRC32C, permissions, and numeric versions. Output is limited to safe
+metadata and counts. Package values never enter Terraform state or Git.
+
+Verify tracked contracts:
+
+```bash
+pnpm run verify:secret-packages
+```
+
+See [Secret Packages Operations](../docs/operations/secret-packages.md).
+
+## Home Dev Package Projection
+
+Render one exact DEV version:
+
+```bash
+SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
+  ./scripts/sync-secrets.sh --version <numeric-version>
+```
+
+The renderer atomically installs mode-`0600` `.envrc` and the approved private
+files, deletes superseded local renders, and never reads individual Secret
+Manager containers. The renderer credential is selected only for this command
+and is not exported to runtime.
+
+The DEV projection root is application-managed and must never be passed to
+generic `secret-package render`; use a separate private scratch directory for
+generic rendering.
+
+Generate the strict orchestrator environment only after the package render:
+
+```bash
+node scripts/generate-orchestrator-env.mjs \
+  --output "${HOME}/.code-orchestrator/env" \
+  --user-home "${HOME}"
+```
+
+The generator pins the Home Dev orchestrator Code Agent base and usage webhook
+to exact production endpoints. It ignores inherited localhost or DEV URLs;
+`INTEXURAOS_ENVIRONMENT=dev` and `INTEXURAOS_RUNTIME=dev` remain audited legacy
+host/observability tags, not routing inputs.
+
+Run the production-to-DEV dependency regression gate after editing any tracked
+or non-ignored repository file:
+
+```bash
+pnpm run verify:production-dev-dependencies
+```
+
+This direct command is the CI authority. The unit suite skips a second full
+repository traversal by default; to exercise that redundant wrapper explicitly,
+run `INTEXURAOS_RUN_TRACKED_PRODUCTION_DEV_GATE_TEST=1 pnpm exec vitest run
+scripts/__tests__/production-dev-dependency-gate.test.ts`.
+
+The file universe is derived by the verifier and cannot be narrowed by policy.
+Intentional historical/test/hibernation occurrences require an exact line,
+occurrence count, classification, owner, and reason in the tracked policy. The
+literal scanner canonicalizes supported JS/JSON, YAML/HCL, shell ANSI-C, CSS,
+and HTML/XML escape forms through Node's WHATWG/UTS-46 host implementation.
+It also folds bounded recursive percent encoding and common statically computable
+JavaScript/TypeScript expressions: adjacent literal concatenation, template
+interpolation from literals or one unambiguous `const`, `String(...)`, literal
+array `.join(...)`, and literal UTF-8 base64 decoding. For GitHub Actions
+workflows it also composes statically enumerable `env` references with literal
+`format(...)` expressions and shell-adjacent quote/ANSI-C projections. A
+relevant unresolved workflow value that could complete the forbidden hostname
+fails closed after all supported projections; harmless standalone unresolved
+values remain outside the hostname contract. Case/Unicode variants, duplicate
+or stale entries, duplicate JSON keys, malformed text, NUL bytes, symlinks,
+inventory changes, files whose SHA-256 changes across the whole scan, and
+bounded expansion overflow all fail closed. The one intentional non-text test
+fixture is pinned separately by SHA-256. Other dynamic environment
+substitution, mutable identifiers, runtime branches, and custom decoders still
+require an executable or data-flow-specific regression test.
+
+For a statically computed occurrence, `lineEquals` names the exact discovered
+sink line even when that isolated line does not spell the hostname. Such an
+entry is accepted only when whole-file constant analysis produces an occurrence
+at the same path and exact line; an arbitrary or stale sink line fails closed.
+
+Production Web deployment consumes the manifest only through
+`scripts/render-production-web-service-env.mjs`, which emits validated relative
+`apiPath` entries. Its regression test executes the real deployment shell with
+a DEV `serviceUrl` sentinel and verifies both the final build environment and
+sanitized dotenv output.
+
+Build the Alloy projection without direct GCP access:
+
+```bash
+sudo -n env \
+  HOME=/home/pbuchman \
+  SECRET_PACKAGE_RENDER_DIR=/home/pbuchman/.config/intexuraos/secret-packages/dev \
+  INTEXURAOS_ENVIRONMENT=dev \
+  bash scripts/observability/load-grafana-cloud-env.sh
+```
+
+## Production Deployment
+
+`scripts/hetzner/github-actions-deploy.sh` deploys the exact GitHub Actions SHA
+and exact protected package version. It stops PM2 and Alloy, runs the one-shot
+loader, installs static web and code, starts services, writes the deployment
+attestation, verifies health, and deletes prior releases.
+
+The production loader may run manually only while PM2 and Alloy are stopped:
+
+```bash
+sudo -n INTEXURAOS_ENVIRONMENT=prod \
+  bash scripts/hetzner/load-secrets.sh --version <numeric-version>
+```
+
+It publishes a complete stable projection and has no partial, activation,
+previous-release, or rollback mode. Any failure leaves services stopped for a
+fix-forward repair.
+
+## Edge And Cutover Verification
+
+- `generate-dev-caddy.mjs`: generates one explicitly selected immutable DEV
+  edge profile (`active-pre-cutover`, `active-post-cutover`, `draining`, or
+  `hibernated`) or the separate production Matrix fragment from the tracked
+  manifests. The byte-exact outputs in `config/edge/generated/` are deployment
+  inputs and must match the generator; live hosts select these files instead of
+  regenerating or editing route semantics.
+- `validate-dev-caddy-profiles.mjs`: compares every tracked edge fixture with
+  fresh generator output, then validates all five files with a pinned Caddy
+  container in isolated, networkless runs. Missing Docker/Caddy validation is a
+  hard failure.
+
+Generate one reviewable output on stdout or validate the complete tracked set:
+
+```bash
+node scripts/generate-dev-caddy.mjs --profile active-post-cutover
+node scripts/generate-dev-caddy.mjs --matrix-fragment
+pnpm run verify:dev-edge-profiles
+```
+
+- `install-dev-static-web.sh`: verifies and publishes an exact-SHA Home Dev
+  static build under `/var/www/intexuraos-dev/current` with Caddy-readable
+  permissions.
+- `verify-final-cutover-plan.mjs`: checks saved Terraform plan JSON against the
+  frozen exact address/action allowlist.
+- `security/final-cutover-data.mjs`: one-time offline encrypted-data and
+  retired-worker migration while every writer is stopped.
+
+## Connection Verification
+
+```bash
 ./scripts/verify-connections.sh
 ```
 
-The script verifies:
+Checks Git/GitHub, GCP identity, repository secret hygiene, and branch state.
 
-1. GitHub/Git connectivity
-2. GCP service account configuration
-3. Security (gitignore verification)
-4. Current branch status
-
-See [docs/setup/10-claude-code-cloud-dev.md](../docs/setup/10-claude-code-cloud-dev.md) for full setup guide.
-
-## CI Scripts
-
-### ci.mjs
-
-Runs the full CI pipeline in phases ordered by failure likelihood. Phases run in parallel within each phase, aborting on first failure for fast feedback.
+## CI
 
 ```bash
 pnpm run ci
-```
-
-### ci-tracked.mjs
-
-Wrapper around `ci.mjs` that appends failure records to `.claude/ci-failures/{project}-{branch}.jsonl` for LLM learning and pattern recognition.
-
-```bash
 pnpm run ci:tracked
-```
-
-### ci-capture.sh
-
-Runs `ci:tracked` and saves output to a timestamped file in `/tmp/` with branch-safe naming.
-
-```bash
 ./scripts/ci-capture.sh
 ```
 
-### ci-failure-report.mjs
+- `ci.mjs`: full repository CI pipeline.
+- `ci-tracked.mjs`: compatibility alias for the full repository CI pipeline.
+- `ci-capture.sh`: captures output to a private temporary file.
 
-Aggregates CI failure records from `.claude/ci-failures/` and reports patterns. Focuses on first-run failures to identify recurring LLM coding mistakes.
+## Builds And Deployments
 
-```bash
-node scripts/ci-failure-report.mjs              # Full report
-node scripts/ci-failure-report.mjs --first-run  # First-run failures only
-node scripts/ci-failure-report.mjs --json       # JSON output
-node scripts/ci-failure-report.mjs --days 7     # Last 7 days only
-```
+- `build-service.mjs <service>`: bundle one service.
+- `build-all-services.mjs`: bundle all deployable services.
+- `build-worker-image.sh [tag]`: build and push the code-worker image.
+- `push-missing-images.sh`: build images missing from Artifact Registry.
+- `deploy-workers.sh [worker|--all]`: deploy retained function workers.
+- `setup-worker-network.sh`: validate/create the code-worker Docker network.
 
-### ci-health.mjs
+Artifact Registry cleanup tools live under `scripts/artifact-registry/`; see
+[Artifact Registry Cleanup](../docs/operations/artifact-registry-cleanup.md).
 
-Minimal HTTP health server on port 8080. Used by CI infrastructure to verify the environment is responsive.
+## Development
 
-## Build Scripts
+- `dev-setup.mjs`: start local emulators and validate the environment.
+- `pm2-wait-start.mjs`: wait for a dependency health endpoint.
+- `pubsub-publish-test.mjs`: publish local test events.
+- `test-llm-clients.ts <userId>`: exercise allowed LLM routes with user-service
+  credentials.
 
-### build-service.mjs
-
-Builds a single app service using esbuild, bundling all `@intexuraos/*` workspace packages and externalizing third-party dependencies.
-
-```bash
-node scripts/build-service.mjs <service-name>
-```
-
-### build-all-services.mjs
-
-Builds a predefined set of Cloud Run services by invoking `build-service.mjs` in sequence.
+## Firestore
 
 ```bash
-node scripts/build-all-services.mjs
-```
-
-### build-worker-image.sh
-
-Builds and pushes the code-worker Docker image to Artifact Registry.
-
-```bash
-./scripts/build-worker-image.sh [image-tag]
-```
-
-### push-missing-images.sh
-
-Detects services with Dockerfiles, checks which images are missing from Artifact Registry, and builds and pushes the missing ones.
-
-```bash
-./scripts/push-missing-images.sh
-```
-
-## Deployment Scripts
-
-### deploy-workers.sh
-
-Deploys Cloud Function workers to GCS. Builds the worker, generates a production `package.json`, creates `function.zip`, and uploads to the GCS functions source bucket.
-
-```bash
-./scripts/deploy-workers.sh                  # Interactive: choose workers
-./scripts/deploy-workers.sh vm-lifecycle     # Deploy specific worker
-./scripts/deploy-workers.sh --all            # Deploy all workers
-```
-
-### setup-worker-network.sh
-
-Creates an isolated Docker network for code-worker containers with IP-level restrictions blocking metadata server, localhost, and private IP ranges.
-
-```bash
-./scripts/setup-worker-network.sh
-```
-
-### Artifact Registry Cleanup Tools
-
-Safe inventory and prune tooling for `intexuraos-dev` lives under `scripts/artifact-registry/`.
-
-```bash
-node scripts/artifact-registry/export-live-images.mjs ...
-node scripts/artifact-registry/generate-prune-plan.mjs ...
-node scripts/artifact-registry/apply-prune-plan.mjs ...
-```
-
-See [docs/operations/artifact-registry-cleanup.md](../docs/operations/artifact-registry-cleanup.md) for the full runbook.
-
-## Development Scripts
-
-### dev-setup.mjs
-
-Starts Docker emulators and validates the development environment. Does not sync data from GCP.
-
-```bash
-pnpm run dev:setup
-```
-
-### pm2-wait-start.mjs
-
-Polls a health URL before starting a service's entry point. Used by PM2-managed services that depend on `app-settings-service` being available at startup.
-
-### pubsub-publish-test.mjs
-
-Publishes test events to local Pub/Sub for development and debugging. Supports all event types used across the system.
-
-```bash
-node scripts/pubsub-publish-test.mjs [event-type]
-```
-
-### backfill-research-favourite.mjs
-
-Backfills `favourite: false` on research documents that are missing the field. Requires `FIRESTORE_EMULATOR_HOST` to be set.
-
-### test-llm-clients.ts
-
-Integration test script that verifies all LLM provider clients (`research`, `generate`, `generateImage`) work correctly with real API keys fetched from user-service.
-
-```bash
-npx tsx scripts/test-llm-clients.ts <userId>
-```
-
-## Database Scripts
-
-### migrate.mjs
-
-Runs pending Firestore database migrations in order by numeric prefix. Tracks applied migrations in the `_migrations` collection. Also supports regenerating the tracked Firestore artifacts without deploying.
-
-```bash
-node scripts/migrate.mjs                    # Run pending migrations
-node scripts/migrate.mjs --status           # Show applied/pending
-node scripts/migrate.mjs --dry-run          # Preview without applying
-node scripts/migrate.mjs --project <id>     # Target specific project
+node scripts/migrate.mjs
+node scripts/migrate.mjs --status
+node scripts/migrate.mjs --dry-run
 node scripts/migrate.mjs --write-artifacts-only
 ```
 
-### generate-firestore-config.mjs
-
-Aggregates Firestore indexes and rules from all migration files and writes the tracked `firestore.indexes.json` and `firestore.rules` artifacts. This is equivalent to `node scripts/migrate.mjs --write-artifacts-only`.
-
-```bash
-node scripts/generate-firestore-config.mjs
-```
-
-### migrate-v8-ignore.mjs
-
-One-time migration script that converts legacy inline `v8 ignore` comments to the current start/stop format.
-
-## Parallel Execution Scripts
-
-### typecheck-parallel.mjs
-
-Runs `tsc --noEmit` in parallel across all workspaces that have a typecheck script. Significantly faster than sequential execution.
-
-```bash
-pnpm run typecheck
-```
-
-### lint-parallel.mjs
-
-Runs ESLint in batches of 4 workspaces at a time to prevent OOM crashes with `strictTypeChecked` config.
-
-```bash
-pnpm run lint
-```
-
-## Verification Scripts (CI)
-
-These scripts run as part of `pnpm run ci` Static Validation phase.
-
-### verify-boundaries.mjs
-
-Verifies that the ESLint `boundaries` plugin is loaded and package import boundary rules are correctly enforced. Uses positive and negative test cases.
-
-### verify-common.mjs
-
-Verifies that `packages/common-core` contains only cross-cutting utilities and has not accumulated domain-specific logic.
-
-### verify-date-formatting.mjs
-
-Verifies that date formatting in `apps/web` uses the centralized utility from `@/utils/dateFormat` rather than scattered local implementations.
-
-### verify-env-vars.mjs
-
-Verifies that all `process.env` usages in apps are declared in `REQUIRED_ENV` and registered in `ecosystem.config.cjs`.
-
-### verify-error-serializers.mjs
-
-Verifies that all logger configurations include error serializers to prevent `{ error: {} }` in structured logs.
-
-### verify-firestore-ownership.mjs
-
-Verifies that each Firestore collection is only accessed by its owning service, as registered in `firestore-collections.json`.
-
-### verify-firestore-artifacts.mjs
-
-Verifies that committed `firestore.indexes.json` and `firestore.rules` still match the current migration aggregation.
-
-### verify-hash-routing.mjs
-
-Verifies that `apps/web` uses `HashRouter` and not `BrowserRouter` (required for GCS static hosting).
-
-### verify-llm-architecture.ts
-
-Verifies LLM client architecture rules: only allowed implementations exist, clients use `usageLogger`, no hardcoded model/provider strings outside `llm-contract`.
-
-### verify-logging.mjs
-
-Verifies that factory functions accepting optional loggers are always called with a logger in `services.ts`.
-
-### verify-migrations.mjs
-
-Verifies migration files follow naming conventions (`NNN_name.mjs`), have sequential IDs, export required metadata and `up` functions, and match the tracked `migrations/manifest.json` checksums.
-
-### verify-no-console.mjs
-
-Verifies that `eslint-disable` comments are not used to bypass the `no-console` rule in non-exempt paths.
-
-### verify-package-json.mjs
-
-Verifies that `package.json` does not contain truncation artifacts (`...`) from LLM-generated edits.
-
-### verify-pattern-suppression.mjs
-
-Verifies that all `@allow-*` suppression comments include a reason after `--`.
-
-### verify-prompt-versions.mjs
-
-Verifies that all `PromptBuilder` objects have a valid semver `version` field and that versions are bumped when prompt content changes.
-
-### verify-pubsub.mjs
-
-Verifies that all Pub/Sub publishers extend `BasePubSubPublisher`.
-
-### verify-reply-send.mjs
-
-Verifies that all HTTP responses use `reply.ok()` or `reply.fail()` instead of raw `reply.send()` or direct object returns.
-
-### verify-required-endpoints.mjs
-
-Verifies that all apps expose `/openapi.json`, `/health`, and `/docs` endpoints.
-
-### verify-sentry-logging.mjs
-
-Verifies that all loggers in apps are created via `createAppLogger()` from `@intexuraos/infra-sentry` rather than direct `pino()` calls.
-
-### verify-terraform-secrets.mjs
-
-Scans Terraform files for hardcoded secrets (API keys, tokens, private keys).
-
-### verify-test-isolation.mjs
-
-Verifies that tests use in-memory fakes and do not make external network calls, require Docker, or connect to real emulators.
-
-### verify-test-stdout.mjs
-
-Verifies that test output contains only vitest-expected lines, detecting accidental `console.log` or non-silent logger usage in tests.
-
-### verify-v8-ignore.mjs
-
-Verifies that all `v8 ignore` comments use a valid category from the canonical list and include a reason.
-
-### verify-vitest-config.mjs
-
-Verifies that coverage thresholds in `vitest.config.ts` remain at 95% and the exclusion list has not grown.
-
-### verify-workspace-deps.mjs
-
-Verifies that all `@intexuraos/*` imports in apps and packages are declared in their `package.json` dependencies, preventing Docker build failures.
-
-## Workspace Verification Scripts
-
-### verify-workspace.sh
-
-Runs targeted verification (typecheck, lint, tests + coverage) for a single workspace.
-
-```bash
-./scripts/verify-workspace.sh <workspace-name>
-# Example: ./scripts/verify-workspace.sh research-agent
-```
-
-### verify-workspace-tracked.mjs
-
-Wrapper around `verify-workspace.sh` that tracks failures to `.claude/ci-failures/` for LLM learning.
-
-```bash
-pnpm run verify:workspace:tracked -- <workspace-name>
-```
-
-## Utility Scripts
-
-### install-hooks.mjs
-
-Installs:
-
-- a `pre-commit` hook that blocks modifications to `vitest.config.ts`
-- a `pre-push` hook that runs `pnpm verify:migrations` and `pnpm verify:firestore-artifacts`
-
-```bash
-node scripts/install-hooks.mjs
-```
-
-### show-low-coverage.mjs
-
-Reads `coverage/coverage-summary.json` and prints files with the lowest coverage percentages.
-
-```bash
-node scripts/show-low-coverage.mjs
-```
-
-### import-issues.sh
-
-Imports GitHub issues from `scripts/github-issues.yaml` using the `gh` CLI.
-
-```bash
-./scripts/import-issues.sh
-./scripts/import-issues.sh --dry-run
-```
+`generate-firestore-config.mjs` regenerates tracked rules and indexes from the
+migration set.
+
+## Static Verification
+
+The `verify-*.mjs` scripts enforce repository invariants for boundaries,
+configuration, environment mappings, Firestore ownership, generated artifacts,
+hash routing, LLM architecture, logging, migrations, secret packages, and
+source hygiene. They run through CI and should also be used as focused checks
+for the changed area.

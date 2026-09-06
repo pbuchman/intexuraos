@@ -76,11 +76,11 @@ When the code agent discovers that the work described in an issue has already be
 
 ### Clean Up Your Board Automatically
 
-As your issue count grows, the Linear Agent monitors your board against a configurable threshold. When the active issue count exceeds 200, it uses Gemini to classify issues as deletion candidates — cancelled issues, duplicates, obsolete sub-issues, simple fixes that were already merged, and review-only items that no longer need tracking. The candidates are stored for your review in the web app, not deleted immediately. You see each candidate's score, reason, and category before confirming deletion.
+As your issue count grows, the Linear Agent monitors your board against a configurable threshold. When the active issue count exceeds 200, it uses the resolved LLM client to classify issues as deletion candidates — cancelled issues, duplicates, obsolete sub-issues, simple fixes that were already merged, and review-only items that no longer need tracking. Platform fallback traffic goes through OpenRouter. The candidates are stored for your review in the web app, not deleted immediately. You see each candidate's score, reason, and category before confirming deletion.
 
 This keeps your Linear workspace under subscription limits without manual auditing. The classification runs on a schedule, and confirmed deletions cascade through all connected users' local caches — so the cleanup is visible everywhere.
 
-**Example:** Your board has grown to 230 issues over several sprints. The pruning system activates and Gemini classifies 30 candidates: 8 cancelled issues, 6 duplicates, 10 sub-issues whose parents are already done, and 6 simple fixes that were merged weeks ago. You review the list in the web app, confirm, and the candidates are soft-deleted from Linear. Your board drops back to 200 issues.
+**Example:** Your board has grown to 230 issues over several sprints. The pruning system activates and the LLM classifies 30 candidates: 8 cancelled issues, 6 duplicates, 10 sub-issues whose parents are already done, and 6 simple fixes that were merged weeks ago. You review the list in the web app, confirm, and the candidates are soft-deleted from Linear. Your board drops back to 200 issues.
 
 ### Generate Titles from Descriptions
 

@@ -12,9 +12,15 @@ import {
   calendarCreateEventDataSchema,
   calendarCreateEventInputSchema,
   calendarCreateEventRequestSchema,
+  calendarUpdateEventDataSchema,
+  calendarUpdateEventRequestSchema,
+  calendarUpdateEventAttendeesDataSchema,
+  calendarUpdateEventAttendeesRequestSchema,
   calendarCreatedEventSchema,
   calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
+  calendarListEventsDataSchema,
+  calendarListEventsRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
@@ -44,6 +50,7 @@ export const ERROR_CODES = [
   'FORBIDDEN',
   'NOT_FOUND',
   'CONFLICT',
+  'SERVICE_UNAVAILABLE',
   'DOWNSTREAM_ERROR',
   'INTERNAL_ERROR',
   'MISCONFIGURED',
@@ -56,10 +63,12 @@ export const ErrorCodeSchema = {
   type: 'string',
   enum: [
     'INVALID_REQUEST',
+    'EMPTY_TRANSCRIPT',
     'UNAUTHORIZED',
     'FORBIDDEN',
     'NOT_FOUND',
     'CONFLICT',
+    'SERVICE_UNAVAILABLE',
     'DOWNSTREAM_ERROR',
     'INTERNAL_ERROR',
     'MISCONFIGURED',
@@ -221,6 +230,30 @@ export const contractComponentSchemas = {
   CalendarCreateEventData: toOpenApiComponentSchema(
     'CalendarCreateEventData',
     calendarCreateEventDataSchema
+  ),
+  CalendarUpdateEventRequest: toOpenApiComponentSchema(
+    'CalendarUpdateEventRequest',
+    calendarUpdateEventRequestSchema
+  ),
+  CalendarUpdateEventData: toOpenApiComponentSchema(
+    'CalendarUpdateEventData',
+    calendarUpdateEventDataSchema
+  ),
+  CalendarUpdateEventAttendeesRequest: toOpenApiComponentSchema(
+    'CalendarUpdateEventAttendeesRequest',
+    calendarUpdateEventAttendeesRequestSchema
+  ),
+  CalendarUpdateEventAttendeesData: toOpenApiComponentSchema(
+    'CalendarUpdateEventAttendeesData',
+    calendarUpdateEventAttendeesDataSchema
+  ),
+  CalendarListEventsRequest: toOpenApiComponentSchema(
+    'CalendarListEventsRequest',
+    calendarListEventsRequestSchema
+  ),
+  CalendarListEventsData: toOpenApiComponentSchema(
+    'CalendarListEventsData',
+    calendarListEventsDataSchema
   ),
   CalendarProcessActionRequest: toOpenApiComponentSchema(
     'CalendarProcessActionRequest',

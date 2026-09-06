@@ -2,13 +2,15 @@
  * Synthesis helper functions for creating synthesis providers.
  */
 
-import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels } from '@intexuraos/llm-contract';
-import { isAllowedModel } from '@intexuraos/infra-openrouter';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+} from '@intexuraos/llm-contract';
 import type { ResearchModel } from '../../domain/research/index.js';
 import type { ServiceContainer, DecryptedApiKeys } from '../../services.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { LlmSynthesisProvider } from '../../domain/research/ports/index.js';
 import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
+import { isExecutableSynthesisModel } from './storedResearchModels.js';
 
 export interface SynthesisProviders {
   synthesizer: LlmSynthesisProvider;
@@ -33,33 +35,26 @@ export function createSynthesisProviders(
 ): SynthesisProviders {
   const { createSynthesizer, createContextInferrer } = services;
 
-  const synthesisProvider = getProviderForModel(synthesisModel);
-  const synthesisKey = apiKeys[synthesisProvider];
-
-  // Reject non-allowlisted OpenRouter models to enforce curated model policy
-  if (isOpenRouterModel(synthesisModel) && !isAllowedModel(getOpenRouterRawId(synthesisModel))) {
-    throw new Error(
-      `OpenRouter model '${synthesisModel}' is not in the curated allowlist`
-    );
+  if (!isExecutableSynthesisModel(synthesisModel)) {
+    throw new Error(`Research synthesis model '${synthesisModel}' is not executable`);
   }
 
+  const synthesisKey = apiKeys.openrouter;
   if (synthesisKey === undefined || synthesisKey === '') {
-    throw new Error(`No API key configured for provider '${synthesisProvider}'`);
+    throw new Error("No API key configured for provider 'openrouter'");
   }
 
   const synthesizer = createSynthesizer(synthesisModel, synthesisKey, userId, logger, researchId);
 
   const result: SynthesisProviders = { synthesizer };
 
-  if (apiKeys.google !== undefined) {
-    result.contextInferrer = createContextInferrer(
-      LlmModels.Gemini25Flash,
-      apiKeys.google,
-      userId,
-      logger,
-      researchId
-    );
-  }
+  result.contextInferrer = createContextInferrer(
+    DEFAULT_PLATFORM_LLM_MODEL,
+    synthesisKey,
+    userId,
+    logger,
+    researchId
+  );
 
   return result;
 }

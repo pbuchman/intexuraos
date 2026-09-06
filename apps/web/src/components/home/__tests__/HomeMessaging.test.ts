@@ -60,6 +60,9 @@ describe('homepage showcase messaging', () => {
     expect(selfBuilding).not.toContain('Cursor and Copilot send your code to the cloud');
 
     expect(council).toContain('multi-model research council');
+    expect(council).toContain('OPENROUTER');
+    expect(council).toContain('OpenRouter-routed models');
+    expect(council).not.toContain("name: 'GOOGLE'");
     expect(council).not.toContain('You get the truth');
 
     expect(engineering).toContain('prompt versioning');

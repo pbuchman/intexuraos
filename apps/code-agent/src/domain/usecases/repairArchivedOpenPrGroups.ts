@@ -20,7 +20,7 @@ export interface RepairArchivedOpenPrGroupsDeps {
     ): Promise<Result<CodeTask[]>>;
     update(
       taskId: string,
-      input: { status: CodeTask['status']; updatedAt: Date },
+      input: { status: CodeTask['status'] },
     ): Promise<Result<CodeTask>>;
   };
   gitHubPRSummaryRepo: Pick<GitHubPRSummaryRepository, 'findAllOpen'>;
@@ -68,16 +68,14 @@ function groupKeyOf(task: CodeTask): string {
   return task.linearIssueId ?? `standalone_${task.id}`;
 }
 
-function toDate(value: CodeTask['updatedAt']): Date {
-  return value instanceof Date ? value : value.toDate();
-}
-
 function isNonArchived(task: CodeTask): boolean {
   return task.status !== 'archived';
 }
 
-function compareByUpdatedAtDesc(left: CodeTask, right: CodeTask): number {
-  return right.updatedAt.toMillis() - left.updatedAt.toMillis();
+function compareByCreatedAtDesc(left: CodeTask, right: CodeTask): number {
+  return right.createdAt.seconds - left.createdAt.seconds
+    || right.createdAt.nanoseconds - left.createdAt.nanoseconds
+    || right.id.localeCompare(left.id);
 }
 
 function hasClosedOrMergedPr(task: CodeTask): boolean {
@@ -124,7 +122,7 @@ function compareRepairCandidates(
     return rightVisibility - leftVisibility;
   }
 
-  return compareByUpdatedAtDesc(left, right);
+  return compareByCreatedAtDesc(left, right);
 }
 
 export function createRepairArchivedOpenPrGroupsUseCase(
@@ -198,14 +196,14 @@ export function createRepairArchivedOpenPrGroupsUseCase(
 
       const tasksByGroup = new Map<string, CodeTask[]>();
       for (const task of prTasksResult.value) {
-        const key = `${task.userId}_${groupKeyOf(task)}`;
+        const key = JSON.stringify([task.userId, groupKeyOf(task)]);
         const existing = tasksByGroup.get(key) ?? [];
         existing.push(task);
         tasksByGroup.set(key, existing);
       }
 
       for (const [groupIdentity, prGroupTasks] of tasksByGroup) {
-        const latestPrTask = [...prGroupTasks].sort(compareByUpdatedAtDesc)[0];
+        const latestPrTask = [...prGroupTasks].sort(compareByCreatedAtDesc)[0];
         if (latestPrTask === undefined || seenGroups.has(groupIdentity)) {
           continue;
         }
@@ -298,12 +296,6 @@ export function createRepairArchivedOpenPrGroupsUseCase(
         }
 
         const restoredStatus = resolveCompletedTaskStatus(latestGroupTask.agentType);
-        const repairedGroupTasks = groupTasks.map((task) =>
-          task.id === latestGroupTask.id
-            ? { ...task, status: restoredStatus }
-            : task,
-        );
-
         if (dryRun) {
           groupsRepaired++;
           tasksRestored++;
@@ -312,7 +304,6 @@ export function createRepairArchivedOpenPrGroupsUseCase(
 
         const updateResult = await codeTaskRepo.update(latestGroupTask.id, {
           status: restoredStatus,
-          updatedAt: toDate(latestGroupTask.updatedAt),
         });
         if (!updateResult.ok) {
           tasksFailed++;
@@ -328,6 +319,9 @@ export function createRepairArchivedOpenPrGroupsUseCase(
           continue;
         }
 
+        const repairedGroupTasks = groupTasks.map((task) =>
+          task.id === latestGroupTask.id ? updateResult.value : task,
+        );
         const recomputeResult = await groupSummaryRepo.recomputeGroupFromTasks(
           latestGroupTask.userId,
           groupKeyOf(latestGroupTask),
@@ -346,7 +340,6 @@ export function createRepairArchivedOpenPrGroupsUseCase(
           );
           const rollbackResult = await codeTaskRepo.update(latestGroupTask.id, {
             status: latestGroupTask.status,
-            updatedAt: toDate(latestGroupTask.updatedAt),
           });
           if (!rollbackResult.ok) {
             tasksFailed++;

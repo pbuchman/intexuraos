@@ -104,6 +104,25 @@ describe('createDevOutputStream', () => {
       expect(line).toContain('extra=kept');
     });
 
+    it('keeps reqId on warning and error lines that are reported to Sentry', () => {
+      for (const level of [40, 50, 60]) {
+        stream.write(
+          JSON.stringify({
+            level,
+            time: Date.now(),
+            msg: 'reported failure',
+            name: 'svc',
+            reqId: 'req-6',
+          })
+        );
+      }
+
+      expect(output).toHaveLength(3);
+      for (const line of output) {
+        expect(stripAnsi(line)).toContain('reqId=req-6');
+      }
+    });
+
     it('excludes standard pino fields from extras', () => {
       const log = JSON.stringify({
         level: 30,
@@ -244,6 +263,30 @@ describe('createDevOutputStream', () => {
       const line = output[0] as string;
       expect(line).toContain('taskId=task_5d3…f7ce');
       expect(line).not.toContain(longId);
+    });
+
+    it.each([
+      'requestId',
+      'request_id',
+      'reqId',
+      'req_id',
+      'taskId',
+      'task_id',
+      'traceId',
+      'trace_id',
+    ])('keeps the full warning-level %s correlation value for exact log lookup', (key) => {
+      const correlationId = '12345678-1234-4123-8123-123456789abc';
+      stream.write(
+        JSON.stringify({
+          level: 40,
+          time: Date.now(),
+          msg: 'reported warning',
+          name: 'svc',
+          [key]: correlationId,
+        })
+      );
+
+      expect(stripAnsi(output.at(-1) as string)).toContain(`${key}=${correlationId}`);
     });
 
     it('keeps short strings intact', () => {

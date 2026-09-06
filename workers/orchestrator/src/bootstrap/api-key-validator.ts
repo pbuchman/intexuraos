@@ -5,7 +5,7 @@
  *   1. `validateWorkerApiKey(name, value)` — pure synchronous format check,
  *      throws on empty / whitespace-only values. Tested in isolation.
  *   2. `validateWorkerApiKeys(...)` — orchestrates live validation against
- *      upstream providers (Anthropic, OpenRouter, DashScope, etc.). It
+ *      OpenRouter. It
  *      *warns* but never throws, so a single provider outage never blocks
  *      the orchestrator from starting.
  */
@@ -104,7 +104,6 @@ export async function fetchWithRetry(
  * accepted. Logs success/failure but never throws — a single provider
  * outage must not block the orchestrator from starting.
  */
-/* v8 ignore start -- module-init: bootstrap-time live upstream validation cannot be unit-tested without real HTTP sockets; the synchronous format validator is unit-tested instead @preserve */
 export async function validateThirdPartyApiKey(
   workerTypeName: string,
   apiKey: string,
@@ -161,8 +160,16 @@ export async function validateThirdPartyApiKey(
     if (resp.ok) {
       logger.info({ apiKey: suffix }, `${keyName} validated successfully`);
     } else {
+      // Sentry INTEXURAOS-HOME-DEV-1F: this is a startup-time health probe, not a
+      // runtime failure. The orchestrator continues to boot and dispatch tasks;
+      // worker tasks that need a rotated/revoked key will fail at the per-task
+      // call site, where the real user impact is already captured. Forwarding
+      // this to Sentry on every orchestrator restart (PM2 auto-restart loop)
+      // produces alert noise that the previous INT-1767 fix suppressed for the
+      // Claude/Codex auth-state warns; the third-party validator hits the same
+      // Pino transport, so it needs the same `_skipSentry` escape hatch.
       logger.error(
-        { status: resp.status, apiKey: suffix },
+        { status: resp.status, apiKey: suffix, _skipSentry: true },
         `${keyName} validation failed — ${workerTypeName} tasks will fail`
       );
     }
@@ -174,7 +181,6 @@ export async function validateThirdPartyApiKey(
     );
   }
 }
-/* v8 ignore stop @preserve */
 
 /** Logs the initial state of claude/codex worker auth at startup. */
 export function logWorkerAuthStartupStatus(
@@ -195,7 +201,9 @@ export function logWorkerAuthStartupStatus(
       'Code worker auth active'
     );
   } else {
-    logger.warn({ state: claudeState }, 'Code worker auth not ready');
+    // Expired OAuth tokens are refreshed on first use; this warning is informational.
+    // Real auth failures still surface via per-task error paths.
+    logger.warn({ state: claudeState, _skipSentry: true }, 'Code worker auth not ready');
   }
 
   if (codexState.status === 'active') {
@@ -209,16 +217,14 @@ export function logWorkerAuthStartupStatus(
       'Codex worker auth active'
     );
   } else {
-    logger.warn({ state: codexState }, 'Codex worker auth not ready');
+    // Same rationale as Claude: expired Codex auth is refreshed on demand,
+    // not a startup-time error worth paging on.
+    logger.warn({ state: codexState, _skipSentry: true }, 'Codex worker auth not ready');
   }
 }
 
 /** Third-party keys validated at startup (live network requests). */
 export interface WorkerApiKeysForValidation {
-  minimaxKey: string;
-  mimoKey: string;
-  dashscopeKey: string;
-  kimiKey: string;
   openRouterKey: string;
 }
 
@@ -244,7 +250,11 @@ export async function validateWorkerApiKeys(
       'Code worker auth validated — Claude-backed tasks ready'
     );
   } else {
-    logger.warn({ state: claudeState }, 'Code worker auth not ready at startup');
+    // Sentry INTEXURAOS-HOME-DEV-1G: an expired Claude OAuth token at startup is
+    // expected (tokens are refreshed on first use), so this warn is informational
+    // and must not become alert noise. The Pino Sentry transport honors
+    // `_skipSentry` and still writes the log to stdout for Cloud Logging.
+    logger.warn({ state: claudeState, _skipSentry: true }, 'Code worker auth not ready at startup');
   }
 
   const codexState = workerAuthRegistry.getState('codex');
@@ -258,25 +268,13 @@ export async function validateWorkerApiKeys(
       'Codex worker auth validated — Codex tasks ready'
     );
   } else {
-    logger.warn({ state: codexState }, 'Codex worker auth not ready at startup');
+    // Same rationale as Claude: do not page on an informational startup state.
+    logger.warn({ state: codexState, _skipSentry: true }, 'Codex worker auth not ready at startup');
   }
 
-  // Validate all third-party API keys in parallel.
-  // GLM and Qwen use the DashScope API key; Kimi uses its own native Kimi Code key.
+  // OpenRouter is the only provider API used by code workers.
   /* v8 ignore start -- module-init: validateThirdPartyApiKey fan-out issues live HTTPS probes that cannot be exercised without real sockets; the inner function carries its own ignore and the per-key empty-guard branches short-circuit during unit tests before any network call @preserve */
   await Promise.all([
-    keys.minimaxKey !== ''
-      ? validateThirdPartyApiKey('minimax', keys.minimaxKey, logger)
-      : Promise.resolve(),
-    keys.mimoKey !== ''
-      ? validateThirdPartyApiKey('mimo-pro', keys.mimoKey, logger)
-      : Promise.resolve(),
-    keys.dashscopeKey !== ''
-      ? validateThirdPartyApiKey('qwen', keys.dashscopeKey, logger)
-      : Promise.resolve(),
-    keys.kimiKey !== ''
-      ? validateThirdPartyApiKey('kimi', keys.kimiKey, logger)
-      : Promise.resolve(),
     keys.openRouterKey !== ''
       ? validateThirdPartyApiKey('openrouter-free', keys.openRouterKey, logger)
       : Promise.resolve(),

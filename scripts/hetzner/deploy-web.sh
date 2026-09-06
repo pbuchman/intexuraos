@@ -6,8 +6,14 @@ IFS=$'\n\t'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 ENV_FILE="${ENV_FILE:-/etc/intexuraos/.env.prod}"
-WEB_ROOT="${WEB_ROOT:-/var/www/intexuraos/web/dist}"
-WEB_SAFE_SECRETS=(
+WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-/var/www/intexuraos/web/releases}"
+WEB_CURRENT_LINK="${WEB_CURRENT_LINK:-/var/www/intexuraos/web/current}"
+WEB_ROOT="${WEB_ROOT:-}"
+ACTIVATE_WEB="true"
+if [[ -n "${WEB_ROOT}" ]]; then
+  ACTIVATE_WEB="false"
+fi
+WEB_BUILD_ENV_KEYS=(
   INTEXURAOS_AUTH0_DOMAIN
   INTEXURAOS_AUTH0_SPA_CLIENT_ID
   INTEXURAOS_AUTH_AUDIENCE
@@ -20,7 +26,7 @@ WEB_ENV_BACKUP_DIR=""
 WEB_SANITIZED_ENV_FILE=""
 
 usage() {
-  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod %s [--repo-dir path] [--env-file path] [--web-root path]\n' "$(basename "$0")"
+  printf 'Usage: COMMIT_SHA=<40hex> COMMIT_MESSAGE=<subject> INTEXURAOS_ENVIRONMENT=prod %s [--repo-dir path] [--env-file path] [--web-root path]\n' "$(basename "$0")"
 }
 
 fail() {
@@ -49,18 +55,13 @@ clear_intexuraos_env() {
 }
 
 export_build_metadata() {
-  if [[ -n "${COMMIT_MESSAGE:-}" && -z "${COMMIT_SHA:-}" ]]; then
-    fail "COMMIT_SHA is required when COMMIT_MESSAGE is set"
-  fi
+  [[ -n "${COMMIT_SHA:-}" ]] || fail "COMMIT_SHA is required"
+  [[ "${COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]] \
+    || fail "COMMIT_SHA must be a 40-character lowercase hexadecimal SHA"
+  [[ -n "${COMMIT_MESSAGE:-}" ]] || fail "COMMIT_MESSAGE is required"
 
-  if [[ -n "${COMMIT_SHA:-}" && -z "${COMMIT_MESSAGE:-}" ]]; then
-    fail "COMMIT_MESSAGE is required when COMMIT_SHA is set"
-  fi
-
-  if [[ -n "${COMMIT_SHA:-}" ]]; then
-    export COMMIT_SHA
-    export COMMIT_MESSAGE
-  fi
+  export COMMIT_SHA
+  export COMMIT_MESSAGE
 }
 
 parse_args() {
@@ -90,10 +91,12 @@ parse_args() {
         shift
         [[ $# -gt 0 ]] || fail "--web-root requires a value"
         WEB_ROOT="$1"
+        ACTIVATE_WEB="false"
         shift
         ;;
       --web-root=*)
         WEB_ROOT="${1#*=}"
+        ACTIVATE_WEB="false"
         shift
         ;;
       -h|--help)
@@ -115,30 +118,12 @@ read_env_value() {
 
   value="$(node -e '
     const { readFileSync } = require("node:fs");
+    const { parse } = require("dotenv");
     const key = process.argv[1];
     const envFile = process.argv[2];
-    const lines = readFileSync(envFile, "utf8").split(/\r?\n/);
-
-    function unquote(value) {
-      if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
-        return value
-          .slice(1, -1)
-          .replace(/\\n/g, "\n")
-          .replace(/\\r/g, "\r")
-          .replace(/\\"/g, "\"")
-          .replace(/\\\\/g, "\\");
-      }
-      return value;
-    }
-
-    for (const line of lines) {
-      if (line === "" || line.startsWith("#")) continue;
-      const index = line.indexOf("=");
-      if (index === -1) continue;
-      if (line.slice(0, index) === key) {
-        process.stdout.write(unquote(line.slice(index + 1)));
-        process.exit(0);
-      }
+    const parsed = parse(readFileSync(envFile, "utf8"));
+    if (Object.hasOwn(parsed, key)) {
+      process.stdout.write(parsed[key]);
     }
   ' "${key}" "${ENV_FILE}")"
 
@@ -165,23 +150,19 @@ write_env_line() {
 
 export_web_service_urls() {
   local manifest_path="${REPO_DIR}/apps/web/service-manifest.json"
+  local rendered_service_entries=""
   local env_var=""
   local api_path=""
 
   [[ -f "${manifest_path}" ]] || fail "Missing web service manifest: ${manifest_path}"
+  rendered_service_entries="$(
+    node "${REPO_DIR}/scripts/render-production-web-service-env.mjs" "${manifest_path}"
+  )" || fail "Failed to render production web service URLs"
 
   while IFS=$'\t' read -r env_var api_path; do
     [[ -n "${env_var}" && -n "${api_path}" ]] || continue
     export "${env_var}=${api_path}"
-  done < <(
-    node -e '
-      const { readFileSync } = require("node:fs");
-      const manifest = JSON.parse(readFileSync(process.argv[1], "utf8"));
-      for (const service of manifest.services) {
-        process.stdout.write("INTEXURAOS_" + service.envSuffix + "_URL\t" + service.apiPath + "\n");
-      }
-    ' "${manifest_path}"
-  )
+  done <<< "${rendered_service_entries}"
 }
 
 prepare_sanitized_web_env_file() {
@@ -190,6 +171,9 @@ prepare_sanitized_web_env_file() {
   local env_path=""
   local key=""
   local env_value=""
+  local rendered_service_entries=""
+  local service_env_var=""
+  local service_api_path=""
 
   [[ -d "${web_dir}" ]] || fail "Missing web app directory: ${web_dir}"
 
@@ -206,21 +190,20 @@ prepare_sanitized_web_env_file() {
   chmod 600 "${WEB_SANITIZED_ENV_FILE}"
   write_env_line "${WEB_SANITIZED_ENV_FILE}" "INTEXURAOS_ENVIRONMENT" "prod"
 
-  for key in "${WEB_SAFE_SECRETS[@]}"; do
+  for key in "${WEB_BUILD_ENV_KEYS[@]}"; do
     env_value="$(read_env_value "${key}")"
     [[ -n "${env_value}" ]] || fail "${key} is missing from ${ENV_FILE}"
     write_env_line "${WEB_SANITIZED_ENV_FILE}" "${key}" "${env_value}"
   done
 
-  node -e '
-    const { readFileSync, appendFileSync } = require("node:fs");
-    const manifest = JSON.parse(readFileSync(process.argv[1], "utf8"));
-    const outputPath = process.argv[2];
-    const quote = (value) => "\"" + String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
-    for (const service of manifest.services) {
-      appendFileSync(outputPath, "INTEXURAOS_" + service.envSuffix + "_URL=" + quote(service.apiPath) + "\n");
-    }
-  ' "${REPO_DIR}/apps/web/service-manifest.json" "${WEB_SANITIZED_ENV_FILE}"
+  rendered_service_entries="$(
+    node "${REPO_DIR}/scripts/render-production-web-service-env.mjs" \
+      "${REPO_DIR}/apps/web/service-manifest.json"
+  )" || fail "Failed to render sanitized production web service URLs"
+  while IFS=$'\t' read -r service_env_var service_api_path; do
+    [[ -n "${service_env_var}" && -n "${service_api_path}" ]] || continue
+    write_env_line "${WEB_SANITIZED_ENV_FILE}" "${service_env_var}" "${service_api_path}"
+  done <<< "${rendered_service_entries}"
 }
 
 restore_web_env_files() {
@@ -242,16 +225,60 @@ restore_web_env_files() {
   fi
 }
 
-build_and_publish() {
-  WEB_ROOT="${WEB_ROOT%/}"
-
+build_web() {
   cd "${REPO_DIR}"
   prepare_sanitized_web_env_file
   pnpm --filter @intexuraos/web build
 
   [[ -f apps/web/dist/index.html ]] || fail "apps/web/dist/index.html was not produced"
+}
+
+publish_inactive_web_root() {
+  [[ -n "${WEB_ROOT}" ]] || fail "WEB_ROOT is required for a non-activating Web build"
+  WEB_ROOT="${WEB_ROOT%/}"
   install -d -m 755 "${WEB_ROOT}"
   rsync -a --delete apps/web/dist/ "${WEB_ROOT}/"
+}
+
+stage_web_release() {
+  local staging_dir=""
+  local differences=""
+  WEB_ROOT="${WEB_RELEASES_ROOT%/}/${COMMIT_SHA}"
+  install -d -m 755 "${WEB_RELEASES_ROOT}"
+  if [[ -e "${WEB_ROOT}" || -L "${WEB_ROOT}" ]]; then
+    [[ -d "${WEB_ROOT}" && ! -L "${WEB_ROOT}" && -f "${WEB_ROOT}/index.html" ]] \
+      || fail "Existing Web release target is invalid"
+    differences="$(rsync -rcln --delete --itemize-changes --exclude deployment.json \
+      apps/web/dist/ "${WEB_ROOT}/")"
+    [[ -z "${differences}" ]] || fail "Existing Web release differs from the verified build"
+    return 0
+  fi
+  staging_dir="$(mktemp -d "${WEB_RELEASES_ROOT}/.${COMMIT_SHA}.XXXXXX")"
+  rsync -a --delete apps/web/dist/ "${staging_dir}/"
+  [[ -f "${staging_dir}/index.html" ]] || fail "Staged Web release is incomplete"
+  chmod 755 "${staging_dir}"
+  mv -T "${staging_dir}" "${WEB_ROOT}"
+}
+
+activate_web_release() {
+  local next_link=""
+  [[ -d "${WEB_ROOT}" && ! -L "${WEB_ROOT}" && -f "${WEB_ROOT}/index.html" ]] \
+    || fail "Web release is not ready for activation"
+  install -d -m 755 "$(dirname "${WEB_CURRENT_LINK}")"
+  next_link="$(mktemp "${WEB_CURRENT_LINK}.next.XXXXXX")"
+  rm -f -- "${next_link}"
+  ln -s "${WEB_ROOT}" "${next_link}"
+  mv -Tf "${next_link}" "${WEB_CURRENT_LINK}"
+}
+
+build_and_publish() {
+  build_web
+  if [[ "${ACTIVATE_WEB}" == "false" ]]; then
+    publish_inactive_web_root
+    return 0
+  fi
+  stage_web_release
+  activate_web_release
 }
 
 main() {

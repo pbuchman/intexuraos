@@ -150,10 +150,10 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         },
       },
       async (request: FastifyRequest<{ Body: WebhookPayload }>, reply: FastifyReply) => {
-        // Log incoming request (before validation for debugging)
+        // Log request metadata only. Webhook payloads contain phone numbers and message text.
         logIncomingRequest(request, {
           message: 'Received WhatsApp webhook POST',
-          bodyPreviewLength: 500,
+          bodyPreviewLength: 0,
         });
 
         // Get raw body for signature validation
@@ -177,7 +177,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
         if (!signatureValid) {
           request.log.warn(
-            { reason: 'invalid_signature', signatureReceived: signature },
+            { reason: 'invalid_signature' },
             'Webhook rejected: invalid signature'
           );
           return await reply.fail('FORBIDDEN', 'Invalid webhook signature');
@@ -193,17 +193,13 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           request.log.warn(
             {
               reason: 'waba_id_mismatch',
-              receivedWabaId: wabaId,
-              receivedPhoneNumberId: phoneNumberId,
-              receivedDisplayPhoneNumber: displayPhoneNumber,
-              allowedWabaIds: config.allowedWabaIds,
+              hasWabaId: wabaId !== null,
+              hasPhoneNumberId: phoneNumberId !== null,
+              hasDisplayPhoneNumber: displayPhoneNumber !== null,
             },
             'Webhook rejected: waba_id not in allowed list'
           );
-          return await reply.fail(
-            'FORBIDDEN',
-            `Webhook rejected: waba_id "${wabaId ?? 'null'}" not allowed`
-          );
+          return await reply.fail('FORBIDDEN', 'Webhook rejected: waba_id not allowed');
         }
 
         // Validate phone number ID
@@ -211,17 +207,13 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           request.log.warn(
             {
               reason: 'phone_number_id_mismatch',
-              receivedWabaId: wabaId,
-              receivedPhoneNumberId: phoneNumberId,
-              receivedDisplayPhoneNumber: displayPhoneNumber,
-              allowedPhoneNumberIds: config.allowedPhoneNumberIds,
+              wabaValidated: true,
+              hasPhoneNumberId: phoneNumberId !== null,
+              hasDisplayPhoneNumber: displayPhoneNumber !== null,
             },
             'Webhook rejected: phone_number_id not in allowed list'
           );
-          return await reply.fail(
-            'FORBIDDEN',
-            `Webhook rejected: phone_number_id "${phoneNumberId ?? 'null'}" not allowed`
-          );
+          return await reply.fail('FORBIDDEN', 'Webhook rejected: phone_number_id not allowed');
         }
 
         // Persist webhook event with initial PENDING status

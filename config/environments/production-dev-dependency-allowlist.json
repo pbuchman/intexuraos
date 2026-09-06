@@ -1,0 +1,1959 @@
+{
+  "schemaVersion": 1,
+  "forbiddenHost": "dev.intexuraos.cloud",
+  "binaryAllowlist": [
+    {
+      "path": "workers/orchestrator/src/__tests__/fixtures/completion-verifier/raw-rawlogs/planning-probe-unclear.rawlogs.txt",
+      "sha256": "d3af1774e0fb61cf763bc5325b0b41567f55b44318624bb5b378599d774358dc",
+      "classification": "intentional-test",
+      "owner": "Completion verifier fixtures",
+      "reason": "The exact NUL-bearing test corpus is pinned by SHA-256 and never enters production routing."
+    }
+  ],
+  "allowlist": [
+    {
+      "path": ".codex/skills/debug-code-task/SKILL.md",
+      "lineEquals": "description: Investigate IntexuraOS code-task executions only when the user shares a `dev.intexuraos.cloud` or `intexuraos.cloud` `/#/code-tasks/task_*` URL, or provides a direct `task_*` ID and asks to debug, investigate, or understand what happened.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": ".codex/skills/debug-code-task/SKILL.md",
+      "lineEquals": "- `https://dev.intexuraos.cloud/#/code-tasks/task_*`",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": ".codex/skills/debug-code-task/SKILL.md",
+      "lineEquals": "- Do not use this skill for `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": ".codex/skills/debug-code-task/SKILL.md",
+      "lineEquals": "   - `dev.intexuraos.cloud` is accepted only for historical investigations.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": ".codex/skills/debug-intex-session/SKILL.md",
+      "lineEquals": "description: Investigate IntexuraOS WhatsApp Assistant sessions when the user shares a `dev.intexuraos.cloud` or `intexuraos.cloud` `/#/whatsapp/sessions?session=intex_session_*` URL, or provides an `intex_session_*` ID and asks to debug, investigate, or understand what happened.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": ".codex/skills/debug-intex-session/SKILL.md",
+      "lineEquals": "- `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": ".codex/skills/debug-intex-session/SKILL.md",
+      "lineEquals": "- Do not use this skill for `https://dev.intexuraos.cloud/#/code-tasks/task_*`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": ".codex/skills/debug-intex-session/SKILL.md",
+      "lineEquals": "   - `dev.intexuraos.cloud` is accepted only for historical investigations.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/config.test.ts",
+      "lineEquals": "    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/config.test.ts",
+      "lineEquals": "      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/config.test.ts",
+      "lineEquals": "      expect(config.webAppUrl).toBe('https://dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/services/codeTaskCallbackUrls.test.ts",
+      "lineEquals": "    expect(buildTaskCompleteWebhookUrl('https://dev.intexuraos.cloud')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/services/codeTaskCallbackUrls.test.ts",
+      "lineEquals": "      'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/services/codeTaskCallbackUrls.test.ts",
+      "lineEquals": "    expect(classifyCallbackOwner(normalizeCallbackBaseUrl('https://dev.intexuraos.cloud'))).toBe('dev');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/usecases/mergeConflicts/notifyConflicts.test.ts",
+      "lineEquals": "    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/usecases/mergeConflicts/notifyConflicts.test.ts",
+      "lineEquals": "    expect(buildTaskUrl('task-1')).toBe('https://dev.intexuraos.cloud/#/code-tasks/task-1');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/usecases/submitDirectCodeTask.test.ts",
+      "lineEquals": "    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/usecases/submitDirectCodeTask.test.ts",
+      "lineEquals": "        `https://dev.intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts",
+      "lineEquals": "    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts",
+      "lineEquals": "    expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_planning');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/usecases/submitToExecutionAgent/dispatchSubmission.test.ts",
+      "lineEquals": "    expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/utils/continuationPr.test.ts",
+      "lineEquals": "      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/utils/continuationPr.test.ts",
+      "lineEquals": "        '[View in IntexuraOS](https://dev.intexuraos.cloud/#/code-tasks/task_retry_1)'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/utils/taskUrls.test.ts",
+      "lineEquals": "    expect(normalizeWebAppUrl('https://dev.intexuraos.cloud/')).toBe('https://dev.intexuraos.cloud');",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/utils/taskUrls.test.ts",
+      "lineEquals": "    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/utils/taskUrls.test.ts",
+      "lineEquals": "    expect(resolveConfiguredWebAppUrl()).toBe('https://dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/utils/taskUrls.test.ts",
+      "lineEquals": "    expect(buildCodeTaskUrl('task-1', 'https://dev.intexuraos.cloud/')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/domain/utils/taskUrls.test.ts",
+      "lineEquals": "      'https://dev.intexuraos.cloud/#/code-tasks/task-1'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/firestore/task-serializer.test.ts",
+      "lineEquals": "        webhookUrl: 'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete',",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/firestore/task-serializer.test.ts",
+      "lineEquals": "        callbackBaseUrl: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/firestore/task-serializer.test.ts",
+      "lineEquals": "      webhookUrl: 'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/firestore/task-serializer.test.ts",
+      "lineEquals": "      callbackBaseUrl: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts",
+      "lineEquals": "      expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts",
+      "lineEquals": "        'https://dev.intexuraos.cloud/#/code-tasks/task-123'",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts",
+      "lineEquals": "      expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud/')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts",
+      "lineEquals": "        webAppUrl: 'https://dev.intexuraos.cloud/',",
+      "expectedOccurrences": 3,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts",
+      "lineEquals": "        url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts",
+      "lineEquals": "            url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts",
+      "lineEquals": "            url: 'https://dev.intexuraos.cloud/#/code-tasks/dispatch-queue',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/services/factories/clientFactory.test.ts",
+      "lineEquals": "    webAppUrl: 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/services/factories/llmFactory.test.ts",
+      "lineEquals": "    orchestratorSecret: '', serviceUrl: '', codeTaskCallbackBaseUrl: '', webAppUrl: 'https://dev.intexuraos.cloud', userServiceUrl: '',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/services/factories/publisherFactory.test.ts",
+      "lineEquals": "    webAppUrl: 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/services/factories/services.test.ts",
+      "lineEquals": "    webAppUrl: 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/usecases/submitTaskFeedback.test.ts",
+      "lineEquals": "      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/usecases/submitTaskFeedback.test.ts",
+      "lineEquals": "      expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_abc123');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/usecases/submitTaskFeedback.test.ts",
+      "lineEquals": "      expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/feedback-task-123');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/__tests__/usecases/submitTaskFeedback.test.ts",
+      "lineEquals": "          'https://dev.intexuraos.cloud/#/code-tasks/feedback-task-123'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/domain/services/__tests__/automationCommentRenderer.test.ts",
+      "lineEquals": "      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/domain/services/__tests__/automationCommentRenderer.test.ts",
+      "lineEquals": "        '**14:35 UTC** -- Implementation queued | opus | [View task](https://dev.intexuraos.cloud/#/code-tasks/task_abc123)'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/code-agent/src/domain/services/codeTaskCallbackUrls.ts",
+      "lineEquals": "const PUBLIC_CALLBACK_HOSTS = new Set(['intexuraos.cloud', 'dev.intexuraos.cloud']);",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    },
+    {
+      "path": "apps/code-agent/src/domain/services/codeTaskCallbackUrls.ts",
+      "lineEquals": "    if (parsed.hostname === 'dev.intexuraos.cloud') return 'dev';",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    },
+    {
+      "path": "apps/intex-agent/src/__tests__/config.test.ts",
+      "lineEquals": "    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/intex-agent/src/__tests__/config.test.ts",
+      "lineEquals": "      webAppUrl: 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/intex-agent/src/__tests__/domain/intexAgentRunner.test.ts",
+      "lineEquals": "      runnerWebAppUrl: 'https://dev.intexuraos.cloud/',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/intex-agent/src/__tests__/domain/intexAgentRunner.test.ts",
+      "lineEquals": "        url: 'https://dev.intexuraos.cloud/#/code-tasks/task-2',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/intex-agent/src/__tests__/routes/testRunRoutes.test.ts",
+      "lineEquals": "      webAppUrl: 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/linear-agent/src/__tests__/infra/codeAgentHttpClient.test.ts",
+      "lineEquals": "            resourceUrl: 'https://dev.intexuraos.cloud/#/code-tasks/task-abc',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/linear-agent/src/__tests__/routes/linearOpenApiRoutes.test.ts",
+      "lineEquals": "    expect(serverUrls).not.toContain('https://dev.intexuraos.cloud/api/linear');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "apps/web/service-manifest.json",
+      "lineEquals": "    { \"name\": \"code-agent\",                   \"envSuffix\": \"CODE_AGENT\",                   \"apiPath\": \"/api/code\",              \"proxyTarget\": \"http://localhost:8128\",                    \"serviceUrl\": \"https://dev.intexuraos.cloud/api/code\" },",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "apps/web/src/hooks/usePm2Logs.ts",
+      "lineEquals": "  // Dev machine (dev.intexuraos.cloud): through Caddy (/logs/stream → localhost:8106/stream)",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    },
+    {
+      "path": "apps/web/src/utils/__tests__/conversationAssistantDraftStorage.test.ts",
+      "lineEquals": "        origin: 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "config/edge/dev-access.json",
+      "lineEquals": "  \"host\": \"dev.intexuraos.cloud\",",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "config/edge/generated/active-post-cutover.caddy",
+      "lineEquals": "dev.intexuraos.cloud:80 {",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "config/edge/generated/active-pre-cutover.caddy",
+      "lineEquals": "dev.intexuraos.cloud:80 {",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "config/edge/generated/draining.caddy",
+      "lineEquals": "dev.intexuraos.cloud:80 {",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "config/edge/generated/hibernated.caddy",
+      "lineEquals": "dev.intexuraos.cloud:80 {",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "docs/architecture/gcp-hetzner-environment-comparison.md",
+      "lineEquals": "IntexuraOS currently has one GCP project, `intexuraos-dev-pbuchman`, and one GCP Terraform root, `terraform/environments/dev/`. The `dev` name is historical: this root owns infrastructure for the public production domain `intexuraos.cloud` and retained shared resources used by both production and `dev.intexuraos.cloud`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/architecture/internal-oidc-phase-two.md",
+      "lineEquals": "For a temporarily resumed retained DEV profile (`dev.intexuraos.cloud`), use",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/operations/dev-hibernation.md",
+      "lineEquals": "   tunnel, `dev.intexuraos.cloud`, Access application/policies, and service-token policy. Capture",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/operations/dev-hibernation.md",
+      "lineEquals": "   point to `dev.intexuraos.cloud` outside the reviewed allow-list.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/operations/orchestrator-identity-decision.md",
+      "lineEquals": "`dev.intexuraos.cloud` occurrence requires an exact byte-preserving line, exact occurrence count,",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/operations/secret-exposure-final-cutover-plan.md",
+      "lineEquals": "- Public `https://dev.intexuraos.cloud/src/config.ts` still exposes the broad",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/operations/sentry-code-task-automation.md",
+      "lineEquals": "| Retained DEV recovery | `https://dev.intexuraos.cloud/api/code/webhooks/sentry`       |",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/2026-03-01-environment-standardization.md",
+      "lineEquals": "| **dev**     | dev.intexuraos.cloud | PM2                   | home-dev | `~/deploy/intexuraos`    |",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/2026-03-01-environment-standardization.md",
+      "lineEquals": "| URL contains                         | `dev.intexuraos.cloud`    | `intexuraos.cloud` (without `dev.`)    |",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/2026-03-01-environment-standardization.md",
+      "lineEquals": "STEP 1: Check the URL/context. Does it contain dev.intexuraos.cloud or localhost? → dev",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/2026-03-01-environment-standardization.md",
+      "lineEquals": "2. Adds URL-based detection table (dev.intexuraos.cloud vs intexuraos.cloud)",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/2026-03-07-code-tasks-list-redesign.md",
+      "lineEquals": "Start the dev server and verify against dev.intexuraos.cloud:",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/2026-04-10-claude-session-id-tracking.md",
+      "lineEquals": "Via the web UI at `https://dev.intexuraos.cloud/#/ask-agent`, send:",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/2026-04-24-INT-1538-observability-unification.md",
+      "lineEquals": "- **Deviation from original §S8:** the original draft of §S8 listed `terraform/environments/prod/**` and required `alert_email` (`type = string`, no default). The monorepo only has `terraform/environments/dev/` (per `.claude/CLAUDE.md`, the single GCP project `intexuraos-dev-pbuchman` serves both `dev.intexuraos.cloud` and `intexuraos.cloud`), so the new resources were folded into the existing `terraform/modules/monitoring/` module and exposed through `terraform/environments/dev/`. `alert_email` is kept optional (`default = null`) at the module boundary so the module is still usable from workstations without secrets; it is supplied per-environment via `terraform.tfvars`. This plan section reflects the as-built design.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/fix-llm-usage-page-regressions.md",
+      "lineEquals": "- **Manual smoke on `dev.intexuraos.cloud/#/llm-usage`:**",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1342-track-3-firestore-migration.md",
+      "lineEquals": "4.1. Deploy all touched apps to `dev.intexuraos.cloud` (PM2 reload).",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1354-llm-usage-date-filter-indexes.md",
+      "lineEquals": "Verify on `https://dev.intexuraos.cloud/#/llm-usage`:",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1451-whatsapp-voice-transcription-investigation.md",
+      "lineEquals": "**Environment scope:** dev (`dev.intexuraos.cloud` home-dev PM2) — same bug latent in Cloud Run / Hetzner prod.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1451-whatsapp-voice-transcription-investigation.md",
+      "lineEquals": "There is **no** Pub/Sub subscription that pushes to `dev.intexuraos.cloud` (home-dev PM2). Home-dev only receives inbound HTTP directly from Meta's webhook when the Meta app is configured to call `dev.intexuraos.cloud/api/whatsapp/webhook`. Whichever environment is currently pointed at by Meta (per user: dev) performs the audio-stored publish — and that publish has to succeed for transcription to run on the Cloud Function.",
+      "expectedOccurrences": 2,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1536-infra-env-var-refactor.md",
+      "lineEquals": "- Modify: `.claude/reference/infrastructure.md` (state `intexuraos-dev-pbuchman` is authoritative for both `dev.intexuraos.cloud` and `intexuraos.cloud`)",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1536-infra-env-var-refactor.md",
+      "lineEquals": "- [ ] Update `.claude/CLAUDE.md` `Environments` section: `dev=dev.intexuraos.cloud` and `prod=intexuraos.cloud` both served from `intexuraos-dev-pbuchman`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "**Goal:** Make WhatsApp notification links generated from the dev environment point at `https://dev.intexuraos.cloud` instead of any localhost URL, while keeping production links on `https://intexuraos.cloud`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "- `ecosystem.config.cjs` - change the common dev fallback for `INTEXURAOS_WEB_APP_URL` from localhost to `https://dev.intexuraos.cloud`, and remove or align the `actions-agent` service-specific override that currently defeats the common value.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    'actions-agent': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    'code-agent': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    'mobile-notifications-service': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    'research-agent': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    process.env.INTEXURAOS_WEB_APP_URL ?? 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "Then remove the redundant `SERVICE_ENV_MAPPINGS['actions-agent'].INTEXURAOS_WEB_APP_URL` entry entirely so `actions-agent` inherits the common value. If the implementation keeps the service-specific entry for a concrete reason, update its fallback to the same `https://dev.intexuraos.cloud` value and document why the override still exists.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "  expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    'https://dev.intexuraos.cloud/#/code-tasks/task-123'",
+      "expectedOccurrences": 2,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "  expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud/')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    createMockConfig({ webAppUrl: 'https://dev.intexuraos.cloud/' })",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "    url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "  process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "  expect(buildTaskUrl('task-1')).toBe('https://dev.intexuraos.cloud/#/code-tasks/task-1');",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "webAppUrl: 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "- `ecosystem.config.cjs` uses `https://dev.intexuraos.cloud` as the `INTEXURAOS_WEB_APP_URL` fallback.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "- `ecosystem.config.cjs` has no `actions-agent` service-specific `INTEXURAOS_WEB_APP_URL` override pointing at `http://localhost:3000`; `actions-agent` inherits the common dev fallback or has an explicitly aligned `https://dev.intexuraos.cloud` fallback.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1638-whatsapp-dev-links.md",
+      "lineEquals": "- Dev PM2 services that produce WhatsApp user-facing links receive `INTEXURAOS_WEB_APP_URL=https://dev.intexuraos.cloud` when no shell override is set.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1704-object-creation-link-formatting.md",
+      "lineEquals": "    expect(normalizeWebAppUrl('https://dev.intexuraos.cloud/')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1704-object-creation-link-formatting.md",
+      "lineEquals": "      'https://dev.intexuraos.cloud'",
+      "expectedOccurrences": 2,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1704-object-creation-link-formatting.md",
+      "lineEquals": "    expect(normalizeWebAppUrl('https://dev.intexuraos.cloud///')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1704-object-creation-link-formatting.md",
+      "lineEquals": "    expect(buildWebAppHashUrl('#/notes/note-1', 'https://dev.intexuraos.cloud/')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1704-object-creation-link-formatting.md",
+      "lineEquals": "      'https://dev.intexuraos.cloud/#/notes/note-1'",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1704-object-creation-link-formatting.md",
+      "lineEquals": "process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/plans/INT-1704-object-creation-link-formatting.md",
+      "lineEquals": "expect(buildCodeTaskUrl('task_123')).toBe('https://dev.intexuraos.cloud/#/code-tasks/task_123');",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/runbooks/hetzner-web-static-cutover-int-1636.md",
+      "lineEquals": "| Auth0 SPA app       | Allowed Callback URLs                | `https://intexuraos.cloud`                                                             | Keep `https://dev.intexuraos.cloud` only as the retained recovery callback; DEV is normally hibernated. No `*.run.app`. |",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/setup/08-mobile-notifications-xiaomi.md",
+      "lineEquals": "- **Retained DEV recovery URL:** `https://dev.intexuraos.cloud/api/notifications/webhooks`",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/setup/12-linear-integration.md",
+      "lineEquals": "| Retained DEV recovery | `https://dev.intexuraos.cloud/api/linear/webhooks`     |",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/setup/13-github-oauth.md",
+      "lineEquals": "| Homepage URL               | `https://dev.intexuraos.cloud`                                        | `https://intexuraos.cloud`                                        |",
+      "expectedOccurrences": 1,
+      "classification": "retained-oauth-callback",
+      "owner": "Retained OAuth resume configuration",
+      "reason": "The exact DEV callback or origin remains intentionally registered so the hibernated environment can be resumed."
+    },
+    {
+      "path": "docs/setup/13-github-oauth.md",
+      "lineEquals": "| Authorization callback URL | `https://dev.intexuraos.cloud/api/user-service/oauth/github/callback` | `https://intexuraos.cloud/api/user-service/oauth/github/callback` |",
+      "expectedOccurrences": 1,
+      "classification": "retained-oauth-callback",
+      "owner": "Retained OAuth resume configuration",
+      "reason": "The exact DEV callback or origin remains intentionally registered so the hibernated environment can be resumed."
+    },
+    {
+      "path": "docs/setup/14-google-calendar-oauth.md",
+      "lineEquals": "| Authorized redirect URIs | `https://dev.intexuraos.cloud/api/user-service/oauth/google/callback`   | `https://intexuraos.cloud/api/user-service/oauth/google/callback`   |",
+      "expectedOccurrences": 1,
+      "classification": "retained-oauth-callback",
+      "owner": "Retained OAuth resume configuration",
+      "reason": "The exact DEV callback or origin remains intentionally registered so the hibernated environment can be resumed."
+    },
+    {
+      "path": "docs/setup/16-private-whatsapp-matrix-sync.md",
+      "lineEquals": "production at `localhost` or `dev.intexuraos.cloud`; without the reviewed route",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-research-pages-ux-standardization.md",
+      "lineEquals": "Open a research detail page in the browser at `dev.intexuraos.cloud/#/research/{id}`. Verify:",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-research-pages-ux-standardization.md",
+      "lineEquals": "Open `dev.intexuraos.cloud/#/research`. Verify:",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-web-pages-ux-standardization.md",
+      "lineEquals": "- [ ] **Step 3:** Manually verify at `dev.intexuraos.cloud/#/todos` — filter pills, sort, compact rows, overlay delete, modal opens on click.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-web-pages-ux-standardization.md",
+      "lineEquals": "- [ ] **Step 3:** Manually verify at `dev.intexuraos.cloud/#/bookmarks`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-web-pages-ux-standardization.md",
+      "lineEquals": "- [ ] **Step 3:** Manually verify at `dev.intexuraos.cloud/#/inbox`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-web-pages-ux-standardization.md",
+      "lineEquals": "- [ ] **Step 3:** Manually verify at `dev.intexuraos.cloud/#/whatsapp`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-web-pages-ux-standardization.md",
+      "lineEquals": "- [ ] **Step 3:** Manually verify at `dev.intexuraos.cloud/#/linear-issues`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-web-pages-ux-standardization.md",
+      "lineEquals": "- [ ] **Step 3:** Manually verify at `dev.intexuraos.cloud/#/notifications`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-03-19-web-pages-ux-standardization.md",
+      "lineEquals": "- [ ] **Step 4:** Manually verify at `dev.intexuraos.cloud/#/notes`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-04-10-hetzner-prod-migration.md",
+      "lineEquals": "**Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Cloud Run). No \"local\". Firestore shared.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-04-10-hetzner-prod-migration.md",
+      "lineEquals": "**Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev, Pub/Sub emulator) | prod=`intexuraos.cloud` (PM2, Hetzner CX32, real GCP Pub/Sub). No \"local\". Firestore shared (single `(default)` database, see INT-1335 for protection).",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-04-13-llm-model-migration-and-pricing-fixes.md",
+      "lineEquals": "After deploying to the dev environment (`dev.intexuraos.cloud` via PM2), navigate to the Research Agent page, open the model dropdown, and confirm you see \"Claude Opus 4.6\", \"Claude Sonnet 4.6\", \"GPT-5.4\". Pick each and confirm the page doesn't throw in the browser console. This step is a manual verification on the dev environment, not a CI gate.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-04-13-llm-model-migration-and-pricing-fixes.md",
+      "lineEquals": "Open `https://dev.intexuraos.cloud`, pick the Research Agent, run one research task with each new model, confirm the cost is logged in the LLM Usage page. Cost per research should be non-zero and roughly match a hand calculation from the published prices.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-04-17-digest-rewrite-and-ui.md",
+      "lineEquals": "Log in via dev.intexuraos.cloud. Go to Notifications → Podsumowania dzienne. Click today's row → click \"Wygeneruj ponownie\". Confirm the new digest displays `headline + bullets`, no Heatmap above, and that the headline is distinct from prior days' content.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-05-code-task-dispatch-status-and-recovery.md",
+      "lineEquals": "  - `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL=https://dev.intexuraos.cloud/api/code`",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "  - Must canonicalize public `intexuraos.cloud` and `dev.intexuraos.cloud` bases to `/api/code`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "  expect(buildTaskCompleteWebhookUrl('https://dev.intexuraos.cloud')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "    'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete'",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "const PUBLIC_CALLBACK_HOSTS = new Set(['intexuraos.cloud', 'dev.intexuraos.cloud']);",
+      "expectedOccurrences": 2,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "    normalizeInternalCallbackUrl('https://dev.intexuraos.cloud/internal/logs')",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "  ).toBe('https://dev.intexuraos.cloud/api/code/internal/logs');",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "| dev | `https://dev.intexuraos.cloud/api/code` |",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-06-09-code-task-callback-environment-independence.md",
+      "lineEquals": "- Preserve localhost and arbitrary test domains. Only `intexuraos.cloud` and `dev.intexuraos.cloud` need public `/api/code` canonicalization.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "- `https://dev.intexuraos.cloud/*` returns a deterministic, non-cacheable `503 Service",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "  depends on `dev.intexuraos.cloud`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "4. Make the hibernated profile own `dev.intexuraos.cloud:80`, emit a minimal `503`, add",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "   Home Dev tunnel, `dev.intexuraos.cloud` public hostname, Access application/policies, and the",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "or orchestrator fallback points to `dev.intexuraos.cloud`. Maintain an explicit allow-list for",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "   Matrix call uses `dev.intexuraos.cloud/api/matrix-outbound`.",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "- `dev.intexuraos.cloud` public and origin `503` behavior for `/`, a browser API, every former",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "- `https://dev.intexuraos.cloud/*` — changes from static/browser/API/machine routing to a",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md",
+      "lineEquals": "- `/api/matrix-outbound/*` routing from `dev.intexuraos.cloud`; the post-cutover active profile",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-19-intex-agent-matrix-corpus-live-acceptance-design.md",
+      "lineEquals": "- against `https://dev.intexuraos.cloud` and Home Dev host-local services;",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-19-intex-agent-matrix-corpus-live-acceptance-design.md",
+      "lineEquals": "`https://dev.intexuraos.cloud` using the existing authenticated operator account. The",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Documentation and operator compatibility",
+      "reason": "The exact DEV hostname is retained as historical, diagnostic, or resume documentation rather than production routing."
+    },
+    {
+      "path": "ecosystem.config.cjs",
+      "lineEquals": "  INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "ecosystem.config.cjs",
+      "lineEquals": "  INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'https://dev.intexuraos.cloud/api/code/openapi.json',",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "ecosystem.config.cjs",
+      "lineEquals": "    INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "ecosystem.config.cjs",
+      "lineEquals": "    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "ecosystem.config.cjs",
+      "lineEquals": "    INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/linear',",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "ecosystem.generated.cjs",
+      "lineEquals": "  INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "packages/common-core/src/__tests__/webAppUrl.test.ts",
+      "lineEquals": "    expect(normalizeWebAppUrl('https://dev.intexuraos.cloud///')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "packages/common-core/src/__tests__/webAppUrl.test.ts",
+      "lineEquals": "      'https://dev.intexuraos.cloud'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "packages/common-core/src/__tests__/webAppUrl.test.ts",
+      "lineEquals": "    expect(resolveWebAppUrl('https://dev.intexuraos.cloud/')).toBe('https://dev.intexuraos.cloud');",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "packages/common-core/src/__tests__/webAppUrl.test.ts",
+      "lineEquals": "    expect(buildWebAppHashUrl('/#/bookmarks/bookmark-1', 'https://dev.intexuraos.cloud/')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "packages/common-core/src/__tests__/webAppUrl.test.ts",
+      "lineEquals": "      'https://dev.intexuraos.cloud/#/bookmarks/bookmark-1'",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "packages/common-core/src/__tests__/webAppUrl.test.ts",
+      "lineEquals": "    expect(buildWebAppHashUrl('#/bookmarks/bookmark-1', 'https://dev.intexuraos.cloud/')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "packages/infra-sentry/src/__tests__/devStream.test.ts",
+      "lineEquals": "        req: { method: 'POST', url: '/auth/firebase-token', host: 'dev.intexuraos.cloud' },",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/dev-edge-manifest.test.ts",
+      "lineEquals": "    expect(manifest.host).toBe('dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/dev-edge-manifest.test.ts",
+      "lineEquals": "    expect(output).toContain('dev.intexuraos.cloud:80');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/dev-edge-profiles.test.ts",
+      "lineEquals": "    expect(output).toContain('dev.intexuraos.cloud:80 {');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/dev-edge-profiles.test.ts",
+      "lineEquals": "    expect(output).not.toContain('dev.intexuraos.cloud:80');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/dev-hibernation-instructions.test.ts",
+      "lineEquals": "      expect(skill).toMatch(/dev\\.intexuraos\\.cloud[^\\n]*(?:historical|legacy)/iu);",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/dev-hibernation-instructions.test.ts",
+      "lineEquals": "      expect(skill).not.toContain('`dev.intexuraos.cloud` = dev');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/dev-hibernation-instructions.test.ts",
+      "lineEquals": "      expect(source).not.toContain('curl -X POST https://dev.intexuraos.cloud/');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/e2e-workflow-env.test.ts",
+      "lineEquals": "    expect(startCodeAgentStep).not.toContain('dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/ecosystem.config.test.ts",
+      "lineEquals": "      'code-agent': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/ecosystem.config.test.ts",
+      "lineEquals": "      'intex-agent': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/ecosystem.config.test.ts",
+      "lineEquals": "      'message-digest-service': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/ecosystem.config.test.ts",
+      "lineEquals": "      'mobile-notifications-service': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/ecosystem.config.test.ts",
+      "lineEquals": "      'research-agent': 'https://dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/orchestrator-production-ownership.test.ts",
+      "lineEquals": "      'https://dev.intexuraos.cloud/api/code/internal/webhooks/usage-events',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/orchestrator-production-ownership.test.ts",
+      "lineEquals": "    expect(generated['INTEXURAOS_USAGE_WEBHOOK_URL']).not.toContain('dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/orchestrator-production-ownership.test.ts",
+      "lineEquals": "      value: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "        forbiddenHost: 'dev.intexuraos.cloud',",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      '{\"CALLBACK_URL\":\"https://dev.intexuraos.cloud/api/code\"}\\n'",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    const line = '{\"CALLBACK_URL\":\"https://dev.intexuraos.cloud/api/code\"}';",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    const line = 'https://dev.intexuraos.cloud';",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "        lineEquals: 'dev.intexuraos.cloud',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    const line = '{\"FIRST\":\"https://dev.intexuraos.cloud\",\"SECOND\":\"https://dev.intexuraos.cloud\"}';",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      '{\"schemaVersion\":1,\"schemaVersion\":1,\"forbiddenHost\":\"dev.intexuraos.cloud\",\"allowlist\":[],\"binaryAllowlist\":[]}\\n'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    expect(result.stderr).toContain('forbiddenHost must be exactly dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"export const callback = 'https://DEV.INTEXURAOS.CLOUD./api/code';\\n\"",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    write(root, 'docs/history.md', 'Historical https://dev.intexuraos.cloud reference\\n');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    write(root, 'terraform/hetzner-prod/cloud-init.yaml.tftpl', 'DEV.INTEXURAOS.CLOUD\\n');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    write(root, 'dist/runtime-input.custom', 'https://dev.intexuraos.cloud/from-dist\\n');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    writeFileSync(process.env.GATE_TEST_RUNTIME, \"export const endpoint = 'https://dev.intexuraos.cloud';\\\\n\");",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const caseAndRootDot = 'https://DEV.INTEXURAOS.CLOUD.:443/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const percentBytes = 'https://d%65v%E3%80%82intexuraos%EF%BC%8Ecloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const unicodeDots = 'https://dev。intexuraos．cloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const fullwidth = 'https://ｄｅｖ．ｉｎｔｅｘｕｒａｏｓ．ｃｌｏｕｄ/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const circled = 'https://ⓓⓔⓥ.ⓘⓝⓣⓔⓧⓤⓡⓐⓞⓢ.ⓒⓛⓞⓤⓓ/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const escapedLetters = 'https://\\x64\\u0065\\u{76}\\u002eintexuraos\\x2ecloud/api';`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const paddedCodePoint = 'https://dev\\u{00002e}intexuraos\\u{3002}cloud/api';`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const identityEscaped = 'https://\\dev\\.intexuraos\\.cloud/api';`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const escapedPercent = 'https://dev\\x252eintexuraos\\u00252ecloud/api';`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const yamlHcl = \"https://\\U00000064\\u0065v\\U0000002Eintexuraos.cloud/api\";`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const ansiC = $'https://dev\\t.intexuraos.\\x63loud/api';`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const ansiControl = $'https://de\\cIv.intexuraos.cloud/api';`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      String.raw`const css = url(https://\\64 \\65 \\76 \\2e intexuraos\\2e cloud/api);`,",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const html = 'https://&#100;&#101;&#118;&period;intexuraos&#x2e;cloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const htmlNamed = 'https://de&shy;v&percnt;2eintexuraos&period;cloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const htmlNestedJs = 'https://dev&bsol;u002eintexuraos&bsol;u002ecloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "      \"const htmlNestedCss = 'https://dev&bsol;2e intexuraos&bsol;2e cloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "        \"const recursivelyEncoded = 'https://dev%252eintexuraos%252ecloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "        \"const computed = 'https://dev' + '.intexuraos' + '.cloud/api';\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "        '      - run: curl \"https://d\"\"ev.intexuraos.cloud/x\"',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "        '      - run: curl https://d\"e\"v.intexuraos.cloud/x',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "        \"      - run: curl https://$'d'$'ev.intexuraos.cloud/x'\",",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    const seedLine = \"const host = 'dev.intexuraos.cloud';\";",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    const contents = Buffer.from('fixture\\0https://dev.intexuraos.cloud\\n');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    const textContents = Buffer.from(\"export const owner = 'https://dev.intexuraos.cloud';\\n\");",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "            serviceUrl: 'https://dev.intexuraos.cloud/must-not-render',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    expect(rendered.stdout).not.toContain('dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/production-dev-dependency-gate.test.ts",
+      "lineEquals": "    expect(`${buildEnvironment}\\n${sanitizedDotenv}`).not.toContain('dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/runtime-config-terraform.test.ts",
+      "lineEquals": "      'https://dev.intexuraos.cloud/*',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/verify-service-wiring.test.ts",
+      "lineEquals": "        serviceUrl: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/verify-service-wiring.test.ts",
+      "lineEquals": "  INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/verify-service-wiring.test.ts",
+      "lineEquals": "      { envVar: 'INTEXURAOS_CODE_AGENT_URL', url: 'https://dev.intexuraos.cloud/api/code' },",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/verify-service-wiring.test.ts",
+      "lineEquals": "    writeFixture(rootDir, 'ecosystem.config.cjs', ECOSYSTEM_FIXTURE);",
+      "expectedOccurrences": 2,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/__tests__/verify-service-wiring.test.ts",
+      "lineEquals": "        INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "scripts/generate-dev-caddy.mjs",
+      "lineEquals": "  if (accessManifest.schemaVersion !== 1 || accessManifest.host !== 'dev.intexuraos.cloud') {",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "scripts/verify-production-dev-dependencies.mjs",
+      "lineEquals": "const REQUIRED_FORBIDDEN_HOST = 'dev.intexuraos.cloud';",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    },
+    {
+      "path": "scripts/verify-production-dev-dependencies.mjs",
+      "lineEquals": "      if (new RegExp(`^${pattern}$`, 'iu').test(REQUIRED_FORBIDDEN_HOST)) return true;",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    },
+    {
+      "path": "scripts/verify-production-dev-dependencies.mjs",
+      "lineEquals": "    fail(`forbiddenHost must be exactly ${REQUIRED_FORBIDDEN_HOST}`);",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    },
+    {
+      "path": "terraform/environments/dev/main.tf",
+      "lineEquals": "        \"https://dev.intexuraos.cloud/*\",",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "terraform/environments/dev/service-urls.auto.tfvars.json",
+      "lineEquals": "    \"INTEXURAOS_CODE_AGENT_URL\": \"https://dev.intexuraos.cloud/api/code\",",
+      "expectedOccurrences": 1,
+      "classification": "hibernation-profile",
+      "owner": "DEV hibernation and recovery contract",
+      "reason": "The exact hostname is retained for the reversible DEV profile and is not a production routing destination."
+    },
+    {
+      "path": "workers/orchestrator/src/services/__tests__/callback-url.test.ts",
+      "lineEquals": "    expect(normalizeInternalCallbackUrl('https://dev.intexuraos.cloud/internal/logs')).toBe(",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "workers/orchestrator/src/services/__tests__/callback-url.test.ts",
+      "lineEquals": "      'https://dev.intexuraos.cloud/api/code/internal/logs'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "workers/orchestrator/src/services/__tests__/callback-url.test.ts",
+      "lineEquals": "        'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete'",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "workers/orchestrator/src/services/__tests__/callback-url.test.ts",
+      "lineEquals": "    ).toBe('https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "workers/orchestrator/src/services/__tests__/system-prompt.test.ts",
+      "lineEquals": "        expect(result).toContain('dev.intexuraos.cloud');",
+      "expectedOccurrences": 1,
+      "classification": "intentional-test",
+      "owner": "Repository regression tests",
+      "reason": "The exact DEV hostname is retained only as explicit test input or expected output."
+    },
+    {
+      "path": "workers/orchestrator/src/services/callback-url.ts",
+      "lineEquals": "const PUBLIC_CALLBACK_HOSTS = new Set(['intexuraos.cloud', 'dev.intexuraos.cloud']);",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    },
+    {
+      "path": "workers/orchestrator/src/services/prompts/prompt-shared.ts",
+      "lineEquals": "When asked to debug or investigate a code task from \\`dev.intexuraos.cloud\\` (dev environment), you MUST immediately exit with a clear message:",
+      "expectedOccurrences": 1,
+      "classification": "historical-input",
+      "owner": "Runtime compatibility contract",
+      "reason": "The exact DEV hostname is retained for parsing historical input or the explicitly recoverable DEV runtime, not production fallback routing."
+    }
+  ]
+}

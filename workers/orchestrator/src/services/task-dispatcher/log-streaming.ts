@@ -63,10 +63,12 @@ export async function flushAndCloseLogForwarder(
   logger: Logger,
   taskId: string
 ): Promise<void> {
-  await flushTaskLogs(logForwarder, logger, taskId);
   try {
-    logForwarder.close(taskId);
+    await logForwarder.flushAndStop(taskId);
   } catch (error) {
-    logger.warn({ taskId, error }, 'Failed to close log forwarder after compliance validation');
+    logger.warn(
+      { taskId, error },
+      'Failed to flush and stop log forwarder after compliance validation'
+    );
   }
 }

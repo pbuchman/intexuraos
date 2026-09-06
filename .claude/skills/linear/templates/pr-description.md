@@ -40,7 +40,7 @@ Addresses: [INT-XXX](LINEAR_ISSUE_URL)
 ## Cross-References
 
 - **Linear Issue**: [INT-XXX](LINEAR_URL)
-- **Sentry Issue** (if applicable): [Issue Title](SENTRY_URL)
+- **SentryBox Issue** (if applicable): [Issue Title](SENTRYBOX_URL)
 
 ---
 

@@ -18,11 +18,6 @@ output "retained_firestore_database_id" {
   value       = local.retained_gcp.firestore_database_id
 }
 
-output "cloudflare_dns_api_token_secret_id" {
-  description = "Retained GCP Secret Manager secret ID for the Cloudflare DNS API token."
-  value       = local.retained_gcp.cloudflare_dns_api_token_secret_id
-}
-
 output "retained_gcp_inventory" {
   description = "Read-only inventory of retained GCP resources that remain owned by terraform/environments/dev."
   value       = local.retained_gcp_inventory
@@ -190,7 +185,6 @@ output "cutover_cloud_run_subscriptions_to_pause_or_remove" {
 output "cutover_cloud_run_scheduler_jobs_to_pause_or_remove" {
   description = "Existing Cloud Run-targeted scheduler jobs to pause or remove during the named cutover step to prevent duplicate processing."
   value = [
-    "mobile-notifications-digest-yesterday-${var.source_environment}",
     "intexuraos-linear-sync-hourly-${var.source_environment}",
     "intexuraos-linear-issues-prune-hourly-${var.source_environment}",
     "intexuraos-drain-task-queue-${var.source_environment}",

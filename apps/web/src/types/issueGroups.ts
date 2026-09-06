@@ -31,6 +31,10 @@ export interface IssueGroup {
   pipeline: PipelineState;
   latestTask: CodeTask;
   aggregateStatus: GroupStatus;
+  lastActivityAt: string;
+  lastActivityStatus: CodeTask['status'];
+  lastActivityTaskId: string;
+  lastModifiedAt: string;
   mostRecentDispatchedAt?: string;
   isImportant?: boolean;
 }

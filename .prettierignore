@@ -7,3 +7,5 @@ coverage
 docs/
 # Migration files are immutable after their manifest checksum is recorded.
 migrations/*.mjs
+# Generated Firestore rules use Firebase syntax, for which Prettier has no parser.
+firestore.rules

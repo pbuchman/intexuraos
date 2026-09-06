@@ -47,6 +47,32 @@ resource "google_logging_metric" "whatsapp_webhook_errors" {
   }
 }
 
+resource "google_logging_metric" "gemini_security_changes" {
+  name        = "gemini-security-changes"
+  description = "Generative Language API enablement or API-key lifecycle changes"
+  filter      = <<-EOT
+    log_id("cloudaudit.googleapis.com/activity")
+    (
+      (
+        protoPayload.serviceName="serviceusage.googleapis.com"
+        protoPayload.methodName=~"ServiceUsage.EnableService$"
+        protoPayload.request.name:"services/generativelanguage.googleapis.com"
+      )
+      OR
+      (
+        protoPayload.serviceName="apikeys.googleapis.com"
+        protoPayload.methodName=~"(CreateKey|UndeleteKey|UpdateKey)$"
+      )
+    )
+  EOT
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+}
+
 # =============================================================================
 # CUSTOM METRIC DESCRIPTORS - Code Tasks
 # =============================================================================
@@ -61,7 +87,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_submitted" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 
   labels {
@@ -81,7 +107,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_completed" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 
   labels {
@@ -101,7 +127,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_duration_seconds" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 }
 
@@ -143,7 +169,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_cost_dollars" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 
   labels {
@@ -392,7 +418,7 @@ resource "google_monitoring_dashboard" "main" {
               dataSets = [{
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-sub\")"
+                    filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.labels.subscription_id=has_substring(\"-dlq-\")"
                     aggregation = {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_MEAN"
@@ -481,7 +507,7 @@ resource "google_monitoring_dashboard" "main" {
             scorecard = {
               timeSeriesQuery = {
                 timeSeriesFilter = {
-                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.label.subscription_id=has_substring(\"-dlq-sub\")"
+                  filter = "resource.type=\"pubsub_subscription\" metric.type=\"pubsub.googleapis.com/subscription/num_undelivered_messages\" resource.labels.subscription_id=has_substring(\"-dlq-\")"
                   aggregation = {
                     alignmentPeriod    = "60s"
                     perSeriesAligner   = "ALIGN_MEAN"
@@ -608,6 +634,41 @@ resource "google_monitoring_alert_policy" "llm_errors" {
   }
 }
 
+resource "google_monitoring_alert_policy" "gemini_security_changes" {
+  count        = var.alert_email != null ? 1 : 0
+  display_name = "Gemini API Or API Key Security Change"
+
+  combiner = "OR"
+  conditions {
+    display_name = "Generative Language API or API key changed"
+    condition_threshold {
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.gemini_security_changes.name}\" resource.type=\"audited_resource\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.email[0].name]
+
+  alert_strategy {
+    auto_close = "3600s"
+  }
+
+  documentation {
+    content   = "Security-sensitive Gemini/API-key configuration changed. Keep generativelanguage.googleapis.com disabled and investigate the matching Admin Activity entry."
+    mime_type = "text/markdown"
+  }
+}
+
 resource "google_monitoring_alert_policy" "cloud_run_5xx" {
   count        = var.alert_email != null ? 1 : 0
   display_name = "Cloud Run 5xx Error Rate High"
@@ -724,7 +785,7 @@ resource "google_monitoring_alert_policy" "dlq_messages" {
       filter          = <<-EOT
         resource.type="pubsub_subscription"
         metric.type="pubsub.googleapis.com/subscription/num_undelivered_messages"
-        resource.label.subscription_id=has_substring("-dlq-sub")
+        resource.labels.subscription_id=has_substring("-dlq-")
       EOT
       comparison      = "COMPARISON_GT"
       threshold_value = 0
@@ -747,7 +808,50 @@ resource "google_monitoring_alert_policy" "dlq_messages" {
   }
 
   documentation {
-    content   = "Messages have failed processing and moved to DLQ. Investigate immediately - messages will expire after 7 days."
+    content   = "Messages have failed processing and moved to a DLQ. Investigate within the 31-day retention window using [the Pub/Sub DLQ runbook](https://github.com/pbuchman/intexuraos/blob/development/docs/operations/pubsub-dlq-runbook.md)."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "dlq_forwarding_failures" {
+  count        = var.alert_email != null ? 1 : 0
+  display_name = "Dead Letter Queue Forwarding Failed"
+
+  combiner = "OR"
+  conditions {
+    display_name = "Pub/Sub could not forward or acknowledge a dead letter"
+    condition_threshold {
+      filter          = <<-EOT
+        resource.type="pubsub_subscription"
+        metric.type="pubsub.googleapis.com/subscription/dead_letter_message_count"
+        metric.labels.response_code!="success"
+      EOT
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "60s"
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields = [
+          "resource.label.subscription_id",
+          "metric.label.response_code",
+        ]
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.email[0].name]
+
+  alert_strategy {
+    auto_close = "3600s"
+  }
+
+  documentation {
+    content   = "Pub/Sub failed to forward a dead letter or ACK its source message. Check the source subscription IAM and follow [the Pub/Sub DLQ runbook](https://github.com/pbuchman/intexuraos/blob/development/docs/operations/pubsub-dlq-runbook.md)."
     mime_type = "text/markdown"
   }
 }

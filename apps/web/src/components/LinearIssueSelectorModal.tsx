@@ -108,14 +108,14 @@ export function LinearIssueSelectorModal({
       onOpenChange={(open): void => {
         if (!open) onClose();
       }}
-      title="Select Linear Issue"
+      title="Select Linear issue"
       hideTitle
       padded={false}
       contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-2xl dark:bg-slate-800"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Select Linear Issue
+          Select Linear issue
         </h2>
         <button
           onClick={onClose}

@@ -13,9 +13,15 @@ import {
   calendarCreateEventDataSchema,
   calendarCreateEventInputSchema,
   calendarCreateEventRequestSchema,
+  calendarUpdateEventDataSchema,
+  calendarUpdateEventRequestSchema,
+  calendarUpdateEventAttendeesDataSchema,
+  calendarUpdateEventAttendeesRequestSchema,
   calendarCreatedEventSchema,
   calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
+  calendarListEventsDataSchema,
+  calendarListEventsRequestSchema,
   calendarPreviewDataSchema,
   calendarPreviewSchema,
   calendarProcessActionRequestSchema,
@@ -34,6 +40,11 @@ import {
   webAgentPageSummarySchema,
   webAgentSummarizePageRequestSchema,
 } from './zod/index.js';
+import {
+  testRunDtoV1Schema,
+  testRunListDtoV1Schema,
+  testScenarioDtoV1Schema,
+} from './intexAgentTestRuns.js';
 import { toFastifySchema } from './zod/json-schema.js';
 
 /**
@@ -59,10 +70,12 @@ export const fastifyErrorCodeSchema = {
   type: 'string',
   enum: [
     'INVALID_REQUEST',
+    'EMPTY_TRANSCRIPT',
     'UNAUTHORIZED',
     'FORBIDDEN',
     'NOT_FOUND',
     'CONFLICT',
+    'SERVICE_UNAVAILABLE',
     'DOWNSTREAM_ERROR',
     'INTERNAL_ERROR',
     'MISCONFIGURED',
@@ -84,6 +97,9 @@ export const fastifyErrorBodySchema = {
 };
 
 export const contractFastifySchemas = {
+  IntexAgentTestRunList: toFastifySchema('IntexAgentTestRunList', testRunListDtoV1Schema),
+  IntexAgentTestRun: toFastifySchema('IntexAgentTestRun', testRunDtoV1Schema),
+  IntexAgentTestScenario: toFastifySchema('IntexAgentTestScenario', testScenarioDtoV1Schema),
   ServiceFeedback: toFastifySchema('ServiceFeedback', serviceFeedbackZodSchema),
   BookmarksCreateBookmarkRequest: toFastifySchema(
     'BookmarksCreateBookmarkRequest',
@@ -128,6 +144,27 @@ export const contractFastifySchemas = {
     'CalendarCreateEventData',
     calendarCreateEventDataSchema
   ),
+  CalendarUpdateEventRequest: toFastifySchema(
+    'CalendarUpdateEventRequest',
+    calendarUpdateEventRequestSchema
+  ),
+  CalendarUpdateEventData: toFastifySchema(
+    'CalendarUpdateEventData',
+    calendarUpdateEventDataSchema
+  ),
+  CalendarUpdateEventAttendeesRequest: toFastifySchema(
+    'CalendarUpdateEventAttendeesRequest',
+    calendarUpdateEventAttendeesRequestSchema
+  ),
+  CalendarUpdateEventAttendeesData: toFastifySchema(
+    'CalendarUpdateEventAttendeesData',
+    calendarUpdateEventAttendeesDataSchema
+  ),
+  CalendarListEventsRequest: toFastifySchema(
+    'CalendarListEventsRequest',
+    calendarListEventsRequestSchema
+  ),
+  CalendarListEventsData: toFastifySchema('CalendarListEventsData', calendarListEventsDataSchema),
   CalendarProcessActionRequest: toFastifySchema(
     'CalendarProcessActionRequest',
     calendarProcessActionRequestSchema

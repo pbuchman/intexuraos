@@ -102,6 +102,7 @@ export class TaskRunner {
             modelName: WORKER_TYPES[task.workerType].model,
           }),
           ...(task.agentType !== undefined && { agentType: task.agentType }),
+          ...(task.sentryIssue !== undefined && { sentryIssue: task.sentryIssue }),
           ...(task.trackingCommentId !== undefined && {
             trackingCommentId: task.trackingCommentId,
           }),

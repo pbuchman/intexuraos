@@ -148,7 +148,7 @@ function validateBlockerKeywords(comments) {
         message:
           `Explanation lacks blocker keyword. ` +
           `Must contain at least one of: ${BLOCKER_KEYWORDS.slice(0, 5).join(', ')}, ... ` +
-          `See .claude/reference/coverage-exemptions.md for full list.`,
+          `See CATEGORY_SPECIFIC_KEYWORDS in scripts/verify-v8-ignore.mjs for the full list.`,
       });
     }
   }

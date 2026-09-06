@@ -6,6 +6,20 @@ import {
 } from '@intexuraos/code-task-domain';
 import { z } from 'zod';
 
+function hasHttpProtocol(value: string): boolean {
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export const HttpWebhookUrlSchema = z
+  .string()
+  .url()
+  .refine(hasHttpProtocol, 'webhookUrl must use HTTP or HTTPS');
+
 // Worker type validation
 export const WorkerTypeSchema = z.enum(CODE_TASK_WORKER_TYPES);
 
@@ -35,6 +49,7 @@ const ExecutionMemoryPromptMemorySchema = z.object({
     'implementation_pattern',
     'verification_pattern',
     'pitfall_pattern',
+    'single_artifact_planning',
     'decomposition_pattern',
     'planning_decision',
     'review_finding',
@@ -53,13 +68,26 @@ const ExecutionMemoryPromptContextSchema = z.object({
   matchedMemories: z.array(ExecutionMemoryPromptMemorySchema),
 });
 
+const SentryIssueTaskContextSchema = z.object({
+  organizationSlug: z.string().min(1),
+  projectSlug: z.string().min(1),
+  projectId: z.string().min(1).optional(),
+  issueId: z.string().min(1),
+  issueShortId: z.string().min(1).optional(),
+  issueUrl: z.string().url(),
+  title: z.string().min(1),
+  action: z.string().min(1),
+  eventId: z.string().min(1).optional(),
+  receivedAt: z.string().datetime(),
+});
+
 // POST /tasks request schema
 export const CreateTaskRequestSchema = z.object({
   taskId: z
     .string()
     .regex(
-      /^task_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      'taskId must match /^task_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/'
+      /^task_(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|review_[0-9a-f]{32}|github_[0-9a-f]{40})$/i,
+      'taskId must be a canonical task UUID or a deterministic review/GitHub task ID'
     ),
   workerType: WorkerTypeSchema,
   prompt: z.string().min(1),
@@ -70,13 +98,14 @@ export const CreateTaskRequestSchema = z.object({
   linearIssueLabels: z.array(z.string()).default([]),
   hasChildren: z.boolean().default(false),
   slug: z.string().optional(),
-  webhookUrl: z.string().url(),
+  webhookUrl: HttpWebhookUrlSchema,
   webhookSecret: z.string().min(1),
   actionId: z.string().optional(),
   retriedFrom: z.string().min(1).optional(),
   agentType: z
-    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'])
+    .enum(['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry'])
     .optional(),
+  sentryIssue: SentryIssueTaskContextSchema.optional(),
   executionMemoryContext: ExecutionMemoryPromptContextSchema.optional(),
   trackingCommentId: z.string().min(1).optional(),
   prNumber: z.number().int().positive().optional(),

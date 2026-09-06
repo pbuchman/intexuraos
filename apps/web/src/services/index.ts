@@ -12,7 +12,11 @@ export {
   getLlmKeys,
   setLlmKey,
   deleteLlmKey,
+  updateIntexAgentModel,
   type LlmKeysResponse,
+  type IntexAgentModelPatchRequest,
+  type IntexAgentModelPatchResponse,
+  type IntexAgentModelSelectorV1,
   type SetLlmKeyRequest,
   type SetLlmKeyResponse,
 } from './llmKeysApi.js';

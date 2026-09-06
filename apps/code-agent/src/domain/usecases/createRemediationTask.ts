@@ -3,7 +3,7 @@
  *
  * Standalone use case — creates a fresh container with purpose-built prompt.
  * Key differences from createReviewTask:
- * - No dedup behavior (multiple remediation tasks can coexist)
+ * - Repository prompt dedup is idempotent when review completion repeats
  * - Linear issue linking from existing execution task only
  * - Purpose-built remediation prompt with review findings
  * - agentType: 'remediation'
@@ -17,6 +17,7 @@ import type { UserLookupService } from '../ports/userLookupService.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { AutomationLog } from '../ports/automationLog.js';
+import { isActiveTaskStatus } from '../models/taskLifecycleTime.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
 
@@ -168,8 +169,45 @@ export async function createRemediationTask(
 
   const createResult = await codeTaskRepo.create(taskInput);
   if (!createResult.ok) {
-    logger.error({ error: createResult.error }, 'Failed to create remediation task');
-    return err({ code: 'task_creation_failed', message: createResult.error.message });
+    const createError = createResult.error;
+    let recoveryError: { code: string; message: string } | undefined;
+    if (createError.code === 'DUPLICATE_PROMPT' || createError.code === 'ACTIVE_TASK_EXISTS') {
+      const existingResult = await codeTaskRepo.findById(createError.existingTaskId);
+      if (existingResult.ok) {
+        const existingTask = existingResult.value;
+        if (
+          existingTask.linearIssueId === linearIssueId
+          && existingTask.agentType === 'remediation'
+          && existingTask.userId === userId
+          && existingTask.repository === repository
+          && existingTask.prNumber === prNumber
+          && isActiveTaskStatus(existingTask.status)
+        ) {
+          logger.info(
+            { error: createError, existingTaskId: existingTask.id },
+            createError.code === 'DUPLICATE_PROMPT'
+              ? 'Reusing existing remediation task after repository dedup'
+              : 'Reusing active remediation task after Linear issue dedup',
+          );
+          return ok({
+            status: 'queued' as const,
+            taskId: existingTask.id,
+            workerType: existingTask.workerType,
+          });
+        }
+      } else {
+        recoveryError = existingResult.error;
+      }
+    }
+
+    logger.error(
+      {
+        error: createError,
+        ...(recoveryError !== undefined && { recoveryError }),
+      },
+      'Failed to create remediation task',
+    );
+    return err({ code: 'task_creation_failed', message: createError.message });
   }
 
   const task = createResult.value;

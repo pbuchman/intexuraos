@@ -34,6 +34,7 @@ export interface BootstrapEnvConfig {
   usageWebhookUrl: string;
   githubAppId: string;
   githubInstallationId: string;
+  githubPrivateKeyPath: string;
   projectId: string;
   gcpSaKeyPath: string;
   port: number;
@@ -45,23 +46,12 @@ export interface BootstrapEnvConfig {
   workerForensicsMode: boolean;
   workerForensicsBasePath?: string;
   preserveWorkerContainers: boolean;
-  githubPrivateKeyOverride?: string;
   linearApiKey: string;
-  sentryAuthToken: string;
-  minimaxApiKey: string;
-  mimoApiKey: string;
-  dashscopeApiKey: string;
-  kimiApiKey: string;
+  errorHubHost: string;
   openRouterApiKey: string;
-  geminiApiKey: string;
   gitUserNameOverride?: string;
   gitUserEmailOverride?: string;
   logLevel: string;
-  /**
-   * Logical environment name forwarded to `initWorker()` (INT-1565 §S5).
-   * Used as Sentry `environment` and on log-stream tags.
-   */
-  environment: string;
   /**
    * Sentry DSN read from `INTEXURAOS_SENTRY_DSN`. When unset, `initWorker()`
    * skips Sentry initialization (per `initWorker.ts`).
@@ -122,6 +112,41 @@ function readOptionalString(env: EnvReader, name: string): string | undefined {
   return raw !== undefined && raw !== '' ? raw : undefined;
 }
 
+const TAILNET_DNS_HOSTNAME_PATTERN =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}ts\.net$/u;
+
+function readErrorHubHost(env: EnvReader): string {
+  const value = getRequiredEnv('INTEXURAOS_ERROR_HUB_HOST', env);
+  let origin: URL | undefined;
+  if (!/\s/u.test(value)) {
+    try {
+      origin = new URL(`https://${value}`);
+    } catch {
+      origin = undefined;
+    }
+  }
+
+  if (
+    origin === undefined ||
+    origin.hostname === '' ||
+    !TAILNET_DNS_HOSTNAME_PATTERN.test(origin.hostname.toLowerCase()) ||
+    origin.port !== '8443' ||
+    origin.host.toLowerCase() !== value.toLowerCase() ||
+    origin.username !== '' ||
+    origin.password !== '' ||
+    origin.pathname !== '/' ||
+    origin.search !== '' ||
+    origin.hash !== ''
+  ) {
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
+      'Invalid INTEXURAOS_ERROR_HUB_HOST. Expected a tailnet DNS host on port 8443.'
+    );
+  }
+
+  return value;
+}
+
 function normalizeWorkerImageRef(image: string): string {
   const digestIndex = image.indexOf('@sha256:');
   if (digestIndex < 0) {
@@ -145,6 +170,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const usageWebhookUrl = getRequiredEnv('INTEXURAOS_USAGE_WEBHOOK_URL', env);
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID', env);
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID', env);
+  const githubPrivateKeyPath = getRequiredEnv('INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH', env);
   const projectId = getRequiredEnv('INTEXURAOS_PROJECT_ID', env);
   const gcpSaKeyPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS', env);
 
@@ -179,31 +205,15 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     getOptionalEnv('INTEXURAOS_PRESERVE_WORKER_CONTAINERS', '1', env) !== '0';
 
   const linearApiKey = getRequiredEnv('INTEXURAOS_LINEAR_API_KEY', env);
-  const sentryAuthToken = getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN', env);
-  const minimaxApiKey = getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY', env);
-  const mimoApiKey = getRequiredEnv('INTEXURAOS_MIMO_APP_API_KEY', env);
-  const dashscopeApiKey = getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY', env);
-  const kimiApiKey = getRequiredEnv('INTEXURAOS_KIMI_APP_API_KEY', env);
-  const geminiApiKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY', env);
-  const openRouterApiKey = env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+  const openRouterApiKey = getRequiredEnv('INTEXURAOS_OPENROUTER_APP_API_KEY', env);
 
   const logLevel = getOptionalEnv('LOG_LEVEL', 'info', env);
-  // Environment name for the unified worker bootstrap (INT-1565 §S5). The
-  // INTEXURAOS_ENVIRONMENT var is the canonical source; NODE_ENV is consulted
-  // as a fallback for dev shells that don't export it. Defaults to
-  // `development` so a missing value never crashes initWorker().
-  const environment = getOptionalEnv(
-    'INTEXURAOS_ENVIRONMENT',
-    getOptionalEnv('NODE_ENV', 'development', env),
-    env
-  );
-
   const repoPath = readOptionalString(env, 'INTEXURAOS_REPOSITORY_PATH');
   const workerForensicsBasePath = readOptionalString(env, 'INTEXURAOS_CODE_WORKER_FORENSICS_PATH');
-  const githubPrivateKeyOverride = readOptionalString(env, 'INTEXURAOS_GITHUB_APP_PRIVATE_KEY');
   const gitUserNameOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_NAME');
   const gitUserEmailOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_EMAIL');
   const sentryDsn = readOptionalString(env, 'INTEXURAOS_SENTRY_DSN');
+  const errorHubHost = readErrorHubHost(env);
   // Release identifier: prefer Cloud Run's K_REVISION (auto-injected on every
   // deploy) and fall back to an explicit override for non-Cloud-Run hosts.
   const release =
@@ -218,6 +228,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     usageWebhookUrl,
     githubAppId,
     githubInstallationId,
+    githubPrivateKeyPath,
     projectId,
     gcpSaKeyPath,
     port,
@@ -229,19 +240,12 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     workerForensicsMode,
     ...(workerForensicsBasePath !== undefined ? { workerForensicsBasePath } : {}),
     preserveWorkerContainers,
-    ...(githubPrivateKeyOverride !== undefined ? { githubPrivateKeyOverride } : {}),
     linearApiKey,
-    sentryAuthToken,
-    minimaxApiKey,
-    mimoApiKey,
-    dashscopeApiKey,
-    kimiApiKey,
+    errorHubHost,
     openRouterApiKey,
-    geminiApiKey,
     ...(gitUserNameOverride !== undefined ? { gitUserNameOverride } : {}),
     ...(gitUserEmailOverride !== undefined ? { gitUserEmailOverride } : {}),
     logLevel,
-    environment,
     ...(sentryDsn !== undefined ? { sentryDsn } : {}),
     ...(release !== undefined ? { release } : {}),
   };

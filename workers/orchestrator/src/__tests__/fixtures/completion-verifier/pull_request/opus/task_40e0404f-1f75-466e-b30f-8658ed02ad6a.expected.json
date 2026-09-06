@@ -14,8 +14,9 @@
     ],
     "memory_ids_rejected": [],
     "memory_usage_summary": "Memory 1 guided the comprehensive search for single-repo hardcoding patterns (org names, fixed env vars for repo URLs, global installation IDs); memory 2 ensured the audit distinguished app-specific vs shared-package logic; memory 3 surfaced and corrected the env-var contract mismatch (`INTEXURAOS_GITHUB_INSTALLATION_ID` vs the plan's fictional `..._APP_INSTALLATION_ID`).",
+    "pull_request_outcome": "",
     "summary": "* PR #1889 was already merged; opened new PR #1903 from fresh `development` with updated plan on branch `plan/int-1423-multi-repo-support-v2`.\n  * Added Appendix A to `docs/plans/2026-04-20-multi-repo-support-investigation.md`: consolidated table of every `intexuraos` / `pbuchman/intexuraos` / `github.com`-in-git-context reference, annotated with action classes (R-CHANGE / R-PARAM / M-META / D-DISPLAY / T-FIXTURE / N-NOTE).\n  * Corrected the orchestrator installation-id env var name throughout the plan (`INTEXURAOS_GITHUB_INSTALLATION_ID`), and surfaced `apps/web/src/pages/MergeQueuePage.tsx:13-14` which revision 1 missed.\n  * `pnpm run ci:tracked` passed all phases; posted the comprehensive audit comment on PR #1903 and updated the in-place tracking comment on PR #1889."
   },
-  "missingRequired": [],
+  "missingRequired": ["pull_request_outcome"],
   "warnings": []
 }

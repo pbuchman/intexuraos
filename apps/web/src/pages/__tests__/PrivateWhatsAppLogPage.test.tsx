@@ -3,16 +3,37 @@
  * @vitest-environment jsdom
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UsePrivateWhatsAppLogResult } from '@/hooks/usePrivateWhatsAppLog';
 
 const mockUsePrivateWhatsAppLog = vi.fn();
+const mockGetAccessToken = vi.fn<() => Promise<string>>();
+const mockGetPrivateWhatsAppMessageMediaUrl = vi.fn();
 
 vi.mock('@/hooks/usePrivateWhatsAppLog', () => ({
   usePrivateWhatsAppLog: (): UsePrivateWhatsAppLogResult => mockUsePrivateWhatsAppLog(),
+}));
+
+vi.mock('@/context', () => ({
+  useAuth: (): { getAccessToken: typeof mockGetAccessToken } => ({
+    getAccessToken: mockGetAccessToken,
+  }),
+}));
+
+vi.mock('@/services/whatsappApi', () => ({
+  getPrivateWhatsAppMessageMediaUrl: (
+    ...args: unknown[]
+  ): ReturnType<typeof mockGetPrivateWhatsAppMessageMediaUrl> =>
+    mockGetPrivateWhatsAppMessageMediaUrl(...args),
+}));
+
+vi.mock('@/components/whatsapp/PrivateWhatsAppImagePreview', () => ({
+  PrivateWhatsAppImagePreview: ({ message }: { message: { id: string } }): React.JSX.Element => (
+    <div data-testid="private-whatsapp-image-preview">{message.id}</div>
+  ),
 }));
 
 vi.mock('@/components', async () => {
@@ -124,11 +145,13 @@ function createHookResult(
     loadingMoreChats: false,
     loadingMoreMessages: false,
     refreshing: false,
+    transcriptionToggleChatId: undefined,
     error: null,
     setChatSearch: vi.fn(),
     selectChat: vi.fn(),
     selectDay: vi.fn(),
     clearDay: vi.fn(),
+    setChatTranscriptionEnabled: vi.fn(),
     refresh: vi.fn(),
     loadMoreChats: vi.fn(),
     loadMoreMessages: vi.fn(),
@@ -138,6 +161,13 @@ function createHookResult(
 
 describe('PrivateWhatsAppLogPage', () => {
   beforeEach(() => {
+    mockGetAccessToken.mockResolvedValue('access-token');
+    mockGetPrivateWhatsAppMessageMediaUrl.mockImplementation(
+      async (_token: string, messageId: string) => ({
+        url: `https://storage.example.com/${messageId}`,
+        expiresAt: '2026-06-22T09:30:00.000Z',
+      })
+    );
     mockUsePrivateWhatsAppLog.mockReturnValue(createHookResult());
   });
 
@@ -206,5 +236,354 @@ describe('PrivateWhatsAppLogPage', () => {
 
     expect(screen.getByText('Jun 22, 2026')).toBeInTheDocument();
     expect(screen.queryByText(/utc-helper:/)).not.toBeInTheDocument();
+  });
+
+  it('renders inline reactions', () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'msg-with-reaction',
+            chatId: 'chat-group',
+            chatDisplayName: 'Fishing Crew (WA)',
+            chatType: 'group',
+            senderKey: 'phone:+48123456789',
+            senderDisplayName: 'Monika (WA)',
+            senderPhoneNumber: '+48123456789',
+            direction: 'incoming',
+            messageType: 'text',
+            text: 'hello from the group',
+            reactions: [
+              {
+                id: 'reaction-1',
+                emoji: '👍',
+                senderDisplayName: 'Alice',
+                direction: 'incoming',
+                eventTimestamp: '2026-07-03T10:05:00.000Z',
+              },
+            ],
+            eventTimestamp: '2026-06-22T09:00:00.000Z',
+            eventDayKey: '2026-06-22',
+            eventTimeZone: 'Europe/Warsaw',
+            receivedAt: '2026-06-22T09:00:02.000Z',
+            ingestedAt: '2026-06-22T09:00:03.000Z',
+            deliveryMode: 'live',
+            schemaVersion: 2,
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('👍')).toBeInTheDocument();
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+  });
+
+  it('renders standalone reaction entries when the target message is outside the current page', () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'reaction-message',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'reaction',
+            text: '👍',
+            reaction: {
+              emoji: '👍',
+              targetMessageId: 'earlier-message',
+            },
+            eventTimestamp: '2026-06-22T09:05:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:05:02.000Z',
+            ingestedAt: '2026-06-22T09:05:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Reacted 👍 to an earlier message')).toBeInTheDocument();
+  });
+
+  it('renders stored private images with captions while old images stay placeholders', () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'stored-image',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'image',
+            text: 'stored image',
+            media: {
+              mxcUri: 'mxc://home-dev/stored',
+              mimeType: 'image/jpeg',
+              fileName: 'stored.jpg',
+              storageStatus: 'stored',
+              hasMedia: true,
+              hasThumbnail: true,
+            },
+            eventTimestamp: '2026-06-22T09:00:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:00:02.000Z',
+            ingestedAt: '2026-06-22T09:00:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'old-placeholder-image',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'image',
+            media: {
+              mxcUri: 'mxc://home-dev/old',
+              mimeType: 'image/jpeg',
+              fileName: 'image.jpg',
+            },
+            eventTimestamp: '2026-06-22T09:01:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:01:02.000Z',
+            ingestedAt: '2026-06-22T09:01:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'stored-original-without-thumbnail',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'image',
+            media: {
+              mxcUri: 'mxc://home-dev/original-only',
+              mimeType: 'image/jpeg',
+              fileName: 'original-only.jpg',
+              storageStatus: 'stored',
+              hasMedia: true,
+              hasThumbnail: false,
+            },
+            eventTimestamp: '2026-06-22T09:02:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:02:02.000Z',
+            ingestedAt: '2026-06-22T09:02:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('private-whatsapp-image-preview')).toHaveTextContent('stored-image');
+    expect(screen.getByText('stored image')).toBeInTheDocument();
+    expect(screen.getByText('image.jpg')).toBeInTheDocument();
+    expect(screen.getByText('original-only.jpg')).toBeInTheDocument();
+  });
+
+  it('toggles chat transcripts and renders private audio transcription state', async () => {
+    const user = userEvent.setup();
+    const setChatTranscriptionEnabled = vi.fn();
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        selectedChat: {
+          id: 'chat-group',
+          displayName: 'Fishing Crew (WA)',
+          chatType: 'group',
+          firstEventAt: '2026-06-22T08:00:00.000Z',
+          lastEventAt: '2026-06-22T09:00:00.000Z',
+          messageCount: 3,
+          participantCount: 2,
+          transcriptionEnabled: false,
+          updatedAt: '2026-06-22T09:01:00.000Z',
+          schemaVersion: 2,
+        },
+        setChatTranscriptionEnabled,
+        messages: [
+          {
+            id: 'audio-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/audio-completed',
+              mimeType: 'audio/ogg',
+              fileName: 'voice.ogg',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-completed',
+              text: 'Bring the documents tomorrow.',
+              completedAt: '2026-06-22T09:03:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:02:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:02:02.000Z',
+            ingestedAt: '2026-06-22T09:02:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'audio-failed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/audio-failed',
+              mimeType: 'audio/ogg',
+              fileName: 'broken.ogg',
+            },
+            transcription: {
+              status: 'failed',
+              jobId: 'job-failed',
+              error: {
+                code: 'TRANSCRIPTION_FAILED',
+                message: 'Audio format was not supported',
+              },
+              completedAt: '2026-06-22T09:04:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:04:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:04:02.000Z',
+            ingestedAt: '2026-06-22T09:04:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'video-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'video',
+            media: {
+              mxcUri: 'mxc://home-dev/video-completed',
+              mimeType: 'video/mp4',
+              fileName: 'clip.mp4',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-video-completed',
+              text: 'The video says to bring the blue folder.',
+              completedAt: '2026-06-22T09:05:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:05:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:05:02.000Z',
+            ingestedAt: '2026-06-22T09:05:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole('switch', { name: /transcripts/i }));
+
+    expect(setChatTranscriptionEnabled).toHaveBeenCalledWith('chat-group', true);
+    expect(screen.getByText('Bring the documents tomorrow.')).toBeInTheDocument();
+    expect(screen.getByText('Audio format was not supported')).toBeInTheDocument();
+    expect(screen.getByText('The video says to bring the blue folder.')).toBeInTheDocument();
+  });
+
+  it('renders stored private audio and video players while preserving transcripts', async () => {
+    mockUsePrivateWhatsAppLog.mockReturnValueOnce(
+      createHookResult({
+        messages: [
+          {
+            id: 'audio-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'audio',
+            media: {
+              mxcUri: 'mxc://home-dev/audio-completed',
+              mimeType: 'audio/ogg',
+              fileName: 'voice.ogg',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-audio-completed',
+              text: 'Audio transcript stays visible.',
+              completedAt: '2026-06-22T09:03:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:02:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:02:02.000Z',
+            ingestedAt: '2026-06-22T09:02:03.000Z',
+            deliveryMode: 'live',
+          },
+          {
+            id: 'video-completed',
+            chatId: 'chat-group',
+            direction: 'incoming',
+            messageType: 'video',
+            media: {
+              mxcUri: 'mxc://home-dev/video-completed',
+              mimeType: 'video/mp4',
+              fileName: 'clip.mp4',
+              storageStatus: 'stored',
+              hasMedia: true,
+            },
+            transcription: {
+              status: 'completed',
+              jobId: 'job-video-completed',
+              text: 'Video transcript stays visible.',
+              completedAt: '2026-06-22T09:05:00.000Z',
+            },
+            eventTimestamp: '2026-06-22T09:05:00.000Z',
+            eventDayKey: '2026-06-22',
+            receivedAt: '2026-06-22T09:05:02.000Z',
+            ingestedAt: '2026-06-22T09:05:03.000Z',
+            deliveryMode: 'live',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateWhatsAppLogPage />
+      </MemoryRouter>
+    );
+
+    const audio = await screen.findByLabelText('Play voice.ogg');
+    const video = await screen.findByLabelText('Play clip.mp4');
+
+    expect(audio.tagName).toBe('AUDIO');
+    expect(audio).toHaveAttribute('controls');
+    expect(audio).toHaveAttribute('src', 'https://storage.example.com/audio-completed');
+    expect(video.tagName).toBe('VIDEO');
+    expect(video).toHaveAttribute('controls');
+    expect(video).toHaveAttribute('src', 'https://storage.example.com/video-completed');
+    expect(screen.getByText('Audio transcript stays visible.')).toBeInTheDocument();
+    expect(screen.getByText('Video transcript stays visible.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockGetPrivateWhatsAppMessageMediaUrl).toHaveBeenCalledWith(
+        'access-token',
+        'audio-completed'
+      );
+      expect(mockGetPrivateWhatsAppMessageMediaUrl).toHaveBeenCalledWith(
+        'access-token',
+        'video-completed'
+      );
+    });
   });
 });

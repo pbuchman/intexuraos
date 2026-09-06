@@ -52,12 +52,12 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'awaiting_confirmation',
-    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.GPT54,
     llmResults: [
       {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini20Flash,
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPT54,
         status: 'completed',
         result: 'Google Result',
       },
@@ -124,12 +124,12 @@ describe('retryFailedLlms', () => {
       title: 'Test Research',
       prompt: 'Test research prompt',
       status: 'awaiting_confirmation',
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-      synthesisModel: LlmModels.Gemini25Pro,
+      selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+      synthesisModel: LlmModels.GPT54,
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -231,11 +231,11 @@ describe('retryFailedLlms', () => {
 
   it('handles multiple failed models', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
+      selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'completed',
           result: 'Result',
         },

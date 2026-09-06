@@ -1,0 +1,279 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-003",
+  "title": "Clarify a missing start, then use the default calendar duration",
+  "description": "Asks only for a genuinely missing start time, then uses a visible one-hour default in the final confirmation without asking for an end time.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 on 2026-07-21.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "At noon.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "confirmation_button",
+      "previousTurnIndex": 1,
+      "decision": "accept"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "update_calendar_event",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "clarification_requested",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "clarification_requested",
+              "assertions": [
+                {
+                  "path": "textPreview",
+                  "operator": "exists"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Asks only for the genuinely missing start time for the grounded event title and date.",
+              "Does not ask for an end time, duration, or optional location; does not show final creation-confirmation buttons; and does not claim that an event was created."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 1,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "update_calendar_event",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session",
+          "activeTool": "create_calendar_event"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "confirmation_requested", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_requested",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_calendar_event"
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerCount",
+                  "operator": "equals",
+                  "value": 2
+                },
+                {
+                  "path": "argsSummary.syntheticMarkerDigest",
+                  "operator": "equals",
+                  "value": "df556f2cf480abccb1b38ef61e273d7ffa80d7771bcc68defdebb1cdd5f8e64b"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Uses the supplied noon start and a visible 60-minute default ending at 13:00 while preserving the previously supplied title and date, then presents the final reviewable sanitized confirmation.",
+              "Expected complete sanitized confirmation evidence: `Title: [redacted]`, `Start: [redacted]`, and `End: [redacted]`.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
+              "Does not ask for an end time, request the date again, or expose raw argument content in the sanitized reply."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 2,
+        "requiredToolCalls": [
+          {
+            "toolName": "create_calendar_event",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "summaryLength",
+                "operator": "exists"
+              },
+              {
+                "path": "start",
+                "operator": "contains",
+                "value": "2026-07-21T12:00"
+              },
+              {
+                "path": "end",
+                "operator": "contains",
+                "value": "2026-07-21T13:00"
+              },
+              {
+                "path": "syntheticMarkerCount",
+                "operator": "equals",
+                "value": 2
+              },
+              {
+                "path": "syntheticMarkerDigest",
+                "operator": "equals",
+                "value": "df556f2cf480abccb1b38ef61e273d7ffa80d7771bcc68defdebb1cdd5f8e64b"
+              }
+            ]
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_note",
+          "query_calendar_events",
+          "update_calendar_event",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "continued"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "user_message",
+            "confirmation_resolved",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "confirmation_resolved",
+              "assertions": [
+                {
+                  "path": "resolution",
+                  "operator": "equals",
+                  "value": "accepted"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "create_calendar_event"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Clearly communicates that the calendar event with the visible default duration was created successfully.",
+              "Does not request more calendar details or another confirmation."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

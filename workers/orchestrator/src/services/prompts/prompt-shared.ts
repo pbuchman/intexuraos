@@ -1,5 +1,6 @@
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
+import type { SentryIssueTaskContext } from '../../types/task.js';
 import type { WorkerType } from '../isolation/types.js';
 
 export const WORKER_TYPE_FALLBACK = `<${CODE_TASK_WORKER_TYPES.join('|')}>`;
@@ -7,21 +8,15 @@ export const WORKER_TYPE_FALLBACK = `<${CODE_TASK_WORKER_TYPES.join('|')}>`;
 export const WORKER_INSTRUCTIONS = `### Git CLI (MANDATORY — NON-NEGOTIABLE)
 Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, diff, log, branching, PRs, and any operation \`gh\` supports. Fall back to \`git\` only when \`gh\` has no equivalent (e.g., \`git add\`, \`git commit\`).
 
-### GCP Service Account Credentials
-GCP service account credentials are mounted at \`/secrets/gcp-sa.json\` and pre-activated via \`gcloud auth activate-service-account\`. Use these credentials to check production logs when investigating issues:
-
-\`\`\`bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="<service>"' --project=intexuraos-dev-pbuchman --limit=50 --format=json
-\`\`\`
+### Cloud Access Boundary
+Code workers intentionally receive no GCP service-account credential and no Secret Manager access. Use repository evidence and authenticated application diagnostics. If direct cloud inspection is genuinely required, request the separately audited, least-privilege operator workflow.
 
 ### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
 When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
 > "Dev environment code tasks cannot be debugged from the code worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
 
-For production code tasks (\`intexuraos.cloud\`), use the debug-code-task skill:
-- Skill definition: \`.claude/skills/debug-code-task/SKILL.md\`
-- Fetch script: \`.claude/skills/debug-code-task/scripts/fetch-task.cjs\`
-- Usage: \`node .claude/skills/debug-code-task/scripts/fetch-task.cjs <taskId> [--logs] [--logs-only]\``;
+For production code tasks (\`intexuraos.cloud\`), run:
+\`node scripts/agent-tools/fetch-code-task.cjs <taskId> [--logs] [--logs-only]\``;
 
 export const COMMENT_DRIVEN_DECISION_LOG = `### Comment-Driven Decision Log (MANDATORY when comments exist)
 
@@ -56,7 +51,15 @@ export interface SystemPromptParams {
   linearIssueLabels: string[];
   workerType?: WorkerType;
   modelName?: string;
-  agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
+  agentType?:
+    | 'planning'
+    | 'execution'
+    | 'pull_request'
+    | 'review'
+    | 'remediation'
+    | 'ask_agent'
+    | 'sentry';
+  sentryIssue?: SentryIssueTaskContext;
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   continuationPrNumber?: number;

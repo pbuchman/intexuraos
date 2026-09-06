@@ -3,7 +3,11 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels, LlmModels,
+  LlmProviders,
+} from '@intexuraos/llm-contract';
 import type { Research } from '../domain/research/index.js';
 import {
   deleteResearch,
@@ -41,12 +45,12 @@ function createTestResearch(overrides?: Partial<Research>): Research {
     userId: 'user-123',
     title: '',
     prompt: 'Test prompt',
-    selectedModels: [LlmModels.Gemini25Pro],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54],
+    synthesisModel: LlmModels.GPT54,
     status: 'pending',
     llmResults: [
       {
-        provider: LlmProviders.Google,
+        provider: LlmProviders.OpenAI,
         model: 'gemini-2.0-flash-exp',
         status: 'pending',
       },
@@ -68,8 +72,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test research prompt',
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus46],
-        synthesisModel: LlmModels.Gemini25Pro,
+        selectedModels: [LlmModels.GPT54, LlmModels.ClaudeOpus46],
+        synthesisModel: LlmModels.GPT54,
       },
       {
         researchRepo: fakeRepo,
@@ -84,7 +88,7 @@ describe('submitResearch', () => {
       expect(result.value.userId).toBe('user-123');
       expect(result.value.prompt).toBe('Test research prompt');
       expect(result.value.status).toBe('pending');
-      expect(result.value.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.ClaudeOpus46]);
+      expect(result.value.selectedModels).toEqual([LlmModels.GPT54, LlmModels.ClaudeOpus46]);
       expect(result.value.llmResults).toHaveLength(2);
     }
   });
@@ -95,11 +99,11 @@ describe('submitResearch', () => {
         userId: 'user-123',
         prompt: 'Test prompt',
         selectedModels: [
-          LlmModels.Gemini25Pro,
+          LlmModels.GPT54,
           LlmModels.O4MiniDeepResearch,
           LlmModels.ClaudeOpus46,
         ],
-        synthesisModel: LlmModels.Gemini25Pro,
+        synthesisModel: LlmModels.GPT54,
       },
       {
         researchRepo: fakeRepo,
@@ -111,7 +115,7 @@ describe('submitResearch', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.llmResults).toHaveLength(3);
-      expect(result.value.llmResults[0]?.provider).toBe(LlmProviders.Google);
+      expect(result.value.llmResults[0]?.provider).toBe(LlmProviders.OpenAI);
       expect(result.value.llmResults[0]?.status).toBe('pending');
       expect(result.value.llmResults[1]?.provider).toBe(LlmProviders.OpenAI);
       expect(result.value.llmResults[2]?.provider).toBe(LlmProviders.Anthropic);
@@ -125,8 +129,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Pro],
-        synthesisModel: LlmModels.Gemini25Pro,
+        selectedModels: [LlmModels.GPT54],
+        synthesisModel: LlmModels.GPT54,
       },
       {
         researchRepo: fakeRepo,
@@ -146,8 +150,8 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Pro],
-        synthesisModel: LlmModels.Gemini25Pro,
+        selectedModels: [LlmModels.GPT54],
+        synthesisModel: LlmModels.GPT54,
         skipSynthesis: true,
       },
       {
@@ -169,7 +173,7 @@ describe('submitResearch', () => {
         userId: 'user-123',
         prompt: 'Test prompt',
         selectedModels: [LlmModels.ClaudeOpus46],
-        synthesisModel: LlmModels.Gemini25Pro,
+        synthesisModel: LlmModels.GPT54,
       },
       {
         researchRepo: fakeRepo,
@@ -328,48 +332,48 @@ describe('validateSelectedModels', () => {
   it('filters out models not in the available list', () => {
     const availableModels: AvailableModelInfo[] = [
       {
-        id: LlmModels.Gemini25Pro,
-        provider: LlmProviders.Google,
-        displayName: 'Gemini 2.5 Pro',
-        keywords: ['gemini'],
+        id: DEFAULT_PLATFORM_LLM_MODEL,
+        provider: LlmProviders.OpenRouter,
+        displayName: 'MiniMax M3',
+        keywords: ['openrouter'],
         isProviderDefault: true,
       },
     ];
 
     // Pass a model that is NOT in availableModels
     const result = validateSelectedModels(
-      [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus46],
+      [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.ClaudeOpus46],
       availableModels
     );
 
-    expect(result).toEqual([LlmModels.Gemini25Pro]);
+    expect(result).toEqual([DEFAULT_PLATFORM_LLM_MODEL]);
     expect(result).not.toContain(LlmModels.ClaudeOpus46);
   });
 
-  it('keeps only one model per provider', () => {
+  it('keeps multiple unique models from the same OpenRouter provider', () => {
     const availableModels: AvailableModelInfo[] = [
       {
-        id: LlmModels.Gemini25Pro,
-        provider: LlmProviders.Google,
-        displayName: 'Gemini 2.5 Pro',
-        keywords: ['gemini'],
+        id: DEFAULT_PLATFORM_LLM_MODEL,
+        provider: LlmProviders.OpenRouter,
+        displayName: 'MiniMax M3',
+        keywords: ['openrouter'],
         isProviderDefault: true,
       },
       {
-        id: LlmModels.Gemini25Flash,
-        provider: LlmProviders.Google,
-        displayName: 'Gemini 2.5 Flash',
-        keywords: ['flash'],
+        id: IntexAgentModels.Gemini36Flash,
+        provider: LlmProviders.OpenRouter,
+        displayName: 'Gemini 3.6 Flash',
+        keywords: ['openrouter'],
         isProviderDefault: false,
       },
     ];
 
     const result = validateSelectedModels(
-      [LlmModels.Gemini25Pro, LlmModels.Gemini25Flash],
+      [DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini36Flash],
       availableModels
     );
 
-    expect(result).toEqual([LlmModels.Gemini25Pro]);
+    expect(result).toEqual([DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini36Flash]);
   });
 });
 
@@ -378,10 +382,10 @@ describe('validateSynthesisModel', () => {
     // GPT52 is a valid synthesis model, but not in the available list
     const availableModels: AvailableModelInfo[] = [
       {
-        id: LlmModels.Gemini25Pro,
-        provider: LlmProviders.Google,
-        displayName: 'Gemini 2.5 Pro',
-        keywords: ['gemini'],
+        id: LlmModels.ClaudeSonnet46,
+        provider: LlmProviders.Anthropic,
+        displayName: 'Claude Sonnet 4.6',
+        keywords: ['claude'],
         isProviderDefault: true,
       },
     ];
@@ -400,17 +404,17 @@ describe('validateSynthesisModel', () => {
   it('returns model when it is a valid synthesis model and available', () => {
     const availableModels: AvailableModelInfo[] = [
       {
-        id: LlmModels.Gemini25Pro,
-        provider: LlmProviders.Google,
-        displayName: 'Gemini 2.5 Pro',
-        keywords: ['gemini'],
+        id: DEFAULT_PLATFORM_LLM_MODEL,
+        provider: LlmProviders.OpenRouter,
+        displayName: 'MiniMax M3',
+        keywords: ['openrouter'],
         isProviderDefault: true,
       },
     ];
 
-    const result = validateSynthesisModel(LlmModels.Gemini25Pro, availableModels);
+    const result = validateSynthesisModel(DEFAULT_PLATFORM_LLM_MODEL, availableModels);
 
-    expect(result).toBe(LlmModels.Gemini25Pro);
+    expect(result).toBe(DEFAULT_PLATFORM_LLM_MODEL);
   });
 
   it('returns undefined for model that does not support synthesis', () => {

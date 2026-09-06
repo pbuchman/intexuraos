@@ -14,6 +14,7 @@ import type { WebhookClient } from '../services/webhook-client.js';
 import type { StatusUpdateClient } from '../services/status-update-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { Task, TaskResult } from '../types/task.js';
 import type { OrchestratorState } from '../types/state.js';
@@ -201,6 +202,7 @@ describe('TaskDispatcher', () => {
   } as unknown as WorktreeManager;
 
   // Mock IsolationProvider
+  const mockGetDrainWorkerContainerCount = vi.fn(async () => 0);
   const mockIsolationProvider: IsolationProvider = {
     createWorker: vi.fn(
       async (config): Promise<WorkerHandle> => ({
@@ -223,6 +225,7 @@ describe('TaskDispatcher', () => {
     copyOut: vi.fn(async () => undefined),
     statsSnapshot: vi.fn(async () => ({ cpuTotalUsage: 0, memoryUsage: 0, pidsCurrent: 0 })),
     listWorkers: vi.fn(async () => []),
+    getDrainWorkerContainerCount: mockGetDrainWorkerContainerCount,
     cleanupTaskSession: vi.fn(async () => undefined),
     isResumeAvailable: vi.fn(async () => true),
     isHealthy: vi.fn(() => true),
@@ -275,11 +278,7 @@ describe('TaskDispatcher', () => {
     getSecrets: () => ({
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
-      SENTRY_AUTH_TOKEN: 'test-sentry-token',
-      MINIMAX_API_KEY: 'test-minimax-key',
-      MIMO_API_KEY: 'test-mimo-key',
-      DASHSCOPE_API_KEY: 'test-dashscope-key',
-      KIMI_API_KEY: 'test-kimi-key',
+      ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
       OPENROUTER_API_KEY: 'test-openrouter-key',
     }),
     gcpSaKeyPath: '/tmp/gcp-sa.json',
@@ -305,6 +304,12 @@ describe('TaskDispatcher', () => {
     send: vi.fn(async () => ({ ok: true, value: undefined })),
     retryPending: vi.fn(async () => undefined),
     getPendingCount: vi.fn(async () => 0),
+    getInFlightCount: vi.fn(() => 0),
+    getTerminalCallbackActivityTotal: vi.fn(() => 0),
+    getDrainCallbackSnapshot: vi.fn(async () => ({
+      pendingTerminalCallbacks: 0,
+      terminalCallbackActivityTotal: 0,
+    })),
   } as unknown as WebhookClient;
 
   // Mock StatusUpdateClient
@@ -639,6 +644,40 @@ describe('TaskDispatcher', () => {
       expect('jsonSchema' in (config ?? {})).toBe(false);
     });
 
+    it('should store Sentry issue context and include it in the worker system prompt', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'sentry-task',
+        workerType: 'codex-xhigh',
+        prompt: 'Fix the Sentry issue',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue: {
+          organizationSlug: 'intexura',
+          projectSlug: 'code-agent',
+          issueId: '123456',
+          issueUrl: 'https://intexura.sentry.io/issues/123456/',
+          title: 'TypeError: cannot read property',
+          action: 'created',
+          receivedAt: '2026-06-28T12:00:00.000Z',
+        },
+      };
+
+      const result = await dispatcher.submitTask(request);
+      await flushAsync();
+
+      expect(result.ok).toBe(true);
+      const task = await dispatcher.getTask('sentry-task');
+      expect(task?.sentryIssue?.issueUrl).toBe('https://intexura.sentry.io/issues/123456/');
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls[0];
+      const config = createWorkerCall?.[0];
+      expect(config?.systemPrompt).toContain('[AGENT:SENTRY]');
+      expect(config?.systemPrompt).toContain('https://intexura.sentry.io/issues/123456/');
+    });
+
     it('should use provided repository and baseBranch when given', async () => {
       const request: CreateTaskRequest = {
         taskId: 'test-task-with-repo',
@@ -853,6 +892,107 @@ describe('TaskDispatcher', () => {
 
     it('should return configured capacity', () => {
       expect(dispatcher.getCapacity()).toBe(5);
+    });
+
+    it('returns authoritative worker and terminal callback ownership for drain evidence', async () => {
+      mockGetDrainWorkerContainerCount.mockResolvedValueOnce(2);
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockResolvedValueOnce({
+        pendingTerminalCallbacks: 4,
+        terminalCallbackActivityTotal: 12,
+      });
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: 2,
+        pendingTerminalCallbacks: 4,
+        terminalCallbackActivityTotal: 12,
+      });
+    });
+
+    it('fails closed when authoritative drain ownership cannot be read', async () => {
+      mockGetDrainWorkerContainerCount.mockRejectedValueOnce(new Error('docker unavailable'));
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockRejectedValueOnce(
+        new Error('state unavailable')
+      );
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: null,
+        pendingTerminalCallbacks: null,
+        terminalCallbackActivityTotal: 0,
+      });
+    });
+
+    it('fails closed when the isolation provider has no drain ownership counter', async () => {
+      const providerWithoutDrainCount: IsolationProvider = { ...mockIsolationProvider };
+      delete providerWithoutDrainCount.getDrainWorkerContainerCount;
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        { ...mockIsolationConfig, provider: providerWithoutDrainCount },
+        singleAttemptCompletionControl
+      );
+
+      await expect(localDispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: null,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 0,
+      });
+      expect(mockGetDrainWorkerContainerCount).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid worker and terminal activity drain counters', async () => {
+      mockGetDrainWorkerContainerCount.mockResolvedValueOnce(-1);
+      vi.mocked(mockWebhookClient.getTerminalCallbackActivityTotal).mockReturnValueOnce(-1);
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockResolvedValueOnce({
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: -1,
+      });
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: null,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: null,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { count: -1 },
+        'Invalid worker container drain count'
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          snapshot: {
+            pendingTerminalCallbacks: 0,
+            terminalCallbackActivityTotal: -1,
+          },
+        },
+        'Invalid pending terminal callback drain count'
+      );
+    });
+
+    it('rejects an invalid pending terminal callback count without hiding valid activity', async () => {
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockResolvedValueOnce({
+        pendingTerminalCallbacks: -1,
+        terminalCallbackActivityTotal: 12,
+      });
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: 0,
+        pendingTerminalCallbacks: null,
+        terminalCallbackActivityTotal: 12,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          snapshot: {
+            pendingTerminalCallbacks: -1,
+            terminalCallbackActivityTotal: 12,
+          },
+        },
+        'Invalid pending terminal callback drain count'
+      );
     });
   });
 
@@ -1793,7 +1933,13 @@ describe('TaskDispatcher', () => {
     it('returns parsed rebase result for valid JSON with attempted: true, success: true', () => {
       const output = JSON.stringify({ attempted: true, success: true });
       const result = getInternal().parseRebaseResultOutput(output, 'task-1');
-      expect(result).toEqual({ attempted: true, success: true });
+      expect(result).toEqual({ attempted: true, success: true, conflictFiles: [] });
+    });
+
+    it('returns parsed rebase result for valid JSON with attempted: false', () => {
+      const output = JSON.stringify({ attempted: false });
+      const result = getInternal().parseRebaseResultOutput(output, 'task-not-required');
+      expect(result).toEqual({ attempted: false, reason: 'not_required' });
     });
 
     it('returns parsed rebase result with conflictFiles for valid JSON with attempted: true, success: false, conflictFiles', () => {
@@ -2864,6 +3010,79 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('sentry outcome=failed finalizes the task as failed instead of completed', async () => {
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '{"type":"thread.started","thread_id":"test-session"}\n' +
+          '{"type":"turn.started"}\n' +
+          JSON.stringify({
+            type: 'item.completed',
+            item: {
+              type: 'agent_message',
+              text: 'SENTRY_AGENT_FINAL:\n- outcome: failed\n',
+            },
+          }) +
+          '\n'
+      );
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'sentry',
+          outcome: 'failed',
+          pr: '',
+          sentry_issue: 'https://intexura.sentry.io/issues/123456/',
+          linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+          verification: 'not run',
+          reproduction: 'not feasible before authentication failed',
+          failure_reason: 'sentry_auth_failed',
+          summary: 'Could not fetch Sentry issue details.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'sentry-failed-outcome-test',
+        workerType: 'codex-xhigh',
+        prompt: 'Sentry task with failed verdict',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['sentry', 'code-task'],
+        hasChildren: false,
+        agentType: 'sentry',
+        sentryIssue: {
+          organizationSlug: 'intexura',
+          projectSlug: 'code-agent',
+          issueId: '123456',
+          issueUrl: 'https://intexura.sentry.io/issues/123456/',
+          title: 'TypeError: cannot read property',
+          action: 'created',
+          receivedAt: '2026-06-28T12:00:00.000Z',
+        },
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('sentry-failed-outcome-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('reason: sentry_auth_failed'),
+            }),
+          }),
+        })
+      );
+    });
+
     it('INT-1457: verifier passed + execution outcome=failed + exit 1 + claudeError → combined message', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
@@ -2957,7 +3176,7 @@ describe('TaskDispatcher', () => {
       });
       const request: CreateTaskRequest = {
         taskId: 'glm-tier-optional-accept',
-        workerType: 'glm',
+        workerType: 'openrouter-free',
         prompt: 'Weak-worker review task',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
@@ -2985,6 +3204,18 @@ describe('TaskDispatcher', () => {
         return p?.status === 'completed';
       });
       expect(sentCall).toBeDefined();
+
+      const telemetryWarning = vi.mocked(mockLogger.warn).mock.calls.find(([context, message]) => {
+        const logContext = context as { taskId?: string } | undefined;
+        return (
+          message === 'Accepting task despite missing telemetry (optional tier)' &&
+          logContext?.taskId === 'glm-tier-optional-accept'
+        );
+      });
+      expect(telemetryWarning?.[0]).toMatchObject({
+        taskId: 'glm-tier-optional-accept',
+        [SKIP_SENTRY_KEY]: true,
+      });
     });
 
     it('[INT-1461/INT-1470] tier=required worker with only telemetry missing → accepts with telemetryAccepted=true (was: retry 3x then fail)', async () => {
@@ -5524,7 +5755,7 @@ describe('TaskDispatcher', () => {
     it('should skip shared auth preflight for GLM tasks', async () => {
       const request: CreateTaskRequest = {
         taskId: 'glm-skip-validation',
-        workerType: 'glm',
+        workerType: 'openrouter-free',
         prompt: 'Test GLM task',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
@@ -5561,11 +5792,13 @@ describe('TaskDispatcher', () => {
   });
 
   describe('log flush in finalizeTask', () => {
-    it('calls flush and close before terminal webhook', async () => {
+    it('flushes before terminal webhook and stops after final cleanup', async () => {
       const drainState = createStatePersistence();
+      const drainFlushAndStop = vi.fn(async () => undefined);
       const drainLogForwarder = {
         ...mockLogForwarder,
         flush: vi.fn(async () => undefined),
+        flushAndStop: drainFlushAndStop,
         close: vi.fn(),
       } as unknown as LogForwarder;
 
@@ -5619,14 +5852,28 @@ describe('TaskDispatcher', () => {
       };
       await internal.finalizeTask(task as unknown as Record<string, unknown>, 'completed', {});
 
+      expect(drainFlushAndStop).toHaveBeenCalledWith('drain-test');
       expect(drainLogForwarder.flush).toHaveBeenCalledWith('drain-test');
-      expect(drainLogForwarder.close).toHaveBeenCalledWith('drain-test');
+      expect(drainLogForwarder.close).not.toHaveBeenCalledWith('drain-test');
 
       const webhookCalls = vi.mocked(mockWebhookClient.send).mock.calls;
-      const terminalCall = webhookCalls.find(
-        (c) => (c[0] as { payload: { taskId: string } }).payload.taskId === 'drain-test'
+      const terminalCallIndex = webhookCalls.findIndex(
+        (c) =>
+          (c[0] as { payload: { taskId: string; status?: string } }).payload.taskId ===
+            'drain-test' &&
+          (c[0] as { payload: { taskId: string; status?: string } }).payload.status === 'completed'
       );
-      expect(terminalCall).toBeDefined();
+      expect(terminalCallIndex).toBeGreaterThanOrEqual(0);
+      const flushOrder = vi.mocked(drainLogForwarder.flush).mock.invocationCallOrder.at(0);
+      const stopOrder = drainFlushAndStop.mock.invocationCallOrder.at(0);
+      const webhookOrder = vi
+        .mocked(mockWebhookClient.send)
+        .mock.invocationCallOrder.at(terminalCallIndex);
+      if (flushOrder === undefined || stopOrder === undefined || webhookOrder === undefined) {
+        throw new Error('Missing flush, stop, or terminal webhook invocation order');
+      }
+      expect(flushOrder).toBeLessThan(webhookOrder);
+      expect(stopOrder).toBeGreaterThan(webhookOrder);
     });
   });
 
@@ -6287,7 +6534,7 @@ describe('TaskDispatcher', () => {
 
       expect(result).toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'no-pr-test' }),
+        expect.objectContaining({ taskId: 'no-pr-test', _skipSentry: true }),
         'Compliance validation skipped: no PR number'
       );
     });
@@ -6326,7 +6573,7 @@ describe('TaskDispatcher', () => {
 
       expect(result).toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'empty-transcript' }),
+        expect.objectContaining({ taskId: 'empty-transcript', _skipSentry: true }),
         'Compliance validation skipped: no transcript entries'
       );
     });
@@ -6442,7 +6689,7 @@ describe('TaskDispatcher', () => {
       startedAt: new Date().toISOString(),
     } as unknown as Task;
 
-    it('skips logForwarder.close when keepLogForwarderOpen is true', async () => {
+    it('flushes without stopping when keepLogForwarderOpen is true', async () => {
       const internal = dispatcher as unknown as {
         finalizeTask: (
           task: Task,
@@ -6454,14 +6701,16 @@ describe('TaskDispatcher', () => {
 
       vi.mocked(mockLogForwarder.close).mockClear();
       vi.mocked(mockLogForwarder.flush).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
 
       await internal.finalizeTask(testTask, 'completed', { result: {} }, true);
 
       expect(mockLogForwarder.flush).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flushAndStop).not.toHaveBeenCalledWith(testTask.taskId);
       expect(mockLogForwarder.close).not.toHaveBeenCalledWith(testTask.taskId);
     });
 
-    it('calls logForwarder.close when keepLogForwarderOpen is false', async () => {
+    it('atomically flushes and stops when keepLogForwarderOpen is false', async () => {
       const internal = dispatcher as unknown as {
         finalizeTask: (
           task: Task,
@@ -6472,13 +6721,28 @@ describe('TaskDispatcher', () => {
       };
 
       vi.mocked(mockLogForwarder.close).mockClear();
+      vi.mocked(mockLogForwarder.flush).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
 
       await internal.finalizeTask(testTask, 'completed', { result: {} }, false);
 
-      expect(mockLogForwarder.close).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flushAndStop).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flush).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.close).not.toHaveBeenCalledWith(testTask.taskId);
+      const finalizationLogs = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter(([taskId]) => taskId === testTask.taskId)
+        .map(([, content]) => content);
+      expect(
+        finalizationLogs.some((content) => content.includes('Finalizing: flushing logs'))
+      ).toBe(true);
+      expect(finalizationLogs.some((content) => content.includes('Finalizing: flushed logs'))).toBe(
+        false
+      );
     });
 
-    it('calls logForwarder.close when keepLogForwarderOpen is omitted (default)', async () => {
+    it('atomically flushes and stops when keepLogForwarderOpen is omitted', async () => {
       const internal = dispatcher as unknown as {
         finalizeTask: (
           task: Task,
@@ -6489,26 +6753,30 @@ describe('TaskDispatcher', () => {
       };
 
       vi.mocked(mockLogForwarder.close).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
 
       await internal.finalizeTask(testTask, 'completed', { result: {} });
 
-      expect(mockLogForwarder.close).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flushAndStop).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.close).not.toHaveBeenCalledWith(testTask.taskId);
     });
   });
 
   describe('flushAndCloseLogForwarder', () => {
-    it('flushes and closes log forwarder for a task', async () => {
+    it('atomically flushes and stops log forwarder for a task', async () => {
       const internal = dispatcher as unknown as {
         flushAndCloseLogForwarder: (taskId: string) => Promise<void>;
       };
 
       vi.mocked(mockLogForwarder.flush).mockClear();
       vi.mocked(mockLogForwarder.close).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
 
       await internal.flushAndCloseLogForwarder('flush-close-test');
 
-      expect(mockLogForwarder.flush).toHaveBeenCalledWith('flush-close-test');
-      expect(mockLogForwarder.close).toHaveBeenCalledWith('flush-close-test');
+      expect(mockLogForwarder.flushAndStop).toHaveBeenCalledWith('flush-close-test');
+      expect(mockLogForwarder.flush).not.toHaveBeenCalledWith('flush-close-test');
+      expect(mockLogForwarder.close).not.toHaveBeenCalledWith('flush-close-test');
     });
   });
 
@@ -8173,6 +8441,10 @@ describe('TaskDispatcher', () => {
         expect(result.ok).toBe(true);
         expect(mockWorktreeManager.isWorktreeRegistered).toHaveBeenCalledWith('adopt-needs-repair');
         expect(mockWorktreeManager.repairWorktree).toHaveBeenCalledWith('adopt-needs-repair');
+        expect(vi.mocked(mockLogForwarder.registerTask).mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(mockWorktreeManager.isWorktreeRegistered).mock.invocationCallOrder[0] ??
+            Number.MAX_VALUE
+        );
         expect(mockIsolationProvider.createWorker).toHaveBeenCalled();
       });
 
@@ -8196,11 +8468,24 @@ describe('TaskDispatcher', () => {
         }
         // No worker should be started when the worktree cannot be repaired.
         expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
-        // Log forwarder must not be registered when adoption short-circuits
-        // on a lost worktree — nothing is going to emit on it.
-        expect(mockLogForwarder.registerTask).not.toHaveBeenCalled();
+        // Repair/finalization logs must use the persisted task callback owner, then release it.
+        expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
+          'adopt-lost',
+          'secret-123',
+          task.webhookUrl
+        );
+        expect(mockLogForwarder.unregisterTask).toHaveBeenCalledWith('adopt-lost');
         // Running count must be released so capacity is not permanently leaked.
         expect(dispatcher.getRunningCount()).toBe(0);
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'adopt-lost',
+            worktreePath: '/tmp/worktrees/adopt-lost',
+            error: expect.any(Error),
+            [SKIP_SENTRY_KEY]: true,
+          }),
+          'git worktree repair failed during adoption — marking task as WORKTREE_LOST'
+        );
         // Task must be finalized as failed with the WORKTREE_LOST webhook error code.
         expect(mockWebhookClient.send).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -10827,13 +11112,19 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.statsSnapshot).mockRejectedValueOnce(
         new Error('stats unavailable')
       );
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
 
       const dispatcher = await triggerInactivityRestart('stats-fail-test');
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-fail-test');
       const task = await dispatcher.getTask('stats-fail-test');
       expect(task?.inactivityRestartCount).toBe(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'stats-fail-test', _skipSentry: true }),
+        'Failed to capture container stats before inactivity kill'
+      );
 
+      warnSpy.mockRestore();
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
@@ -10883,6 +11174,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.statsSnapshot).mockImplementationOnce(
         () => new Promise(() => undefined)
       );
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
 
       const dispatcher = await triggerInactivityRestart('stats-hang-test');
       await vi.advanceTimersByTimeAsync(31_000);
@@ -10891,7 +11183,12 @@ describe('TaskDispatcher', () => {
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-hang-test');
       const task = await dispatcher.getTask('stats-hang-test');
       expect(task?.inactivityRestartCount).toBe(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'stats-hang-test', _skipSentry: true }),
+        'Failed to capture container stats before inactivity kill'
+      );
 
+      warnSpy.mockRestore();
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
@@ -10909,7 +11206,7 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'destroy-hang-test' }),
+        expect.objectContaining({ taskId: 'destroy-hang-test', _skipSentry: true }),
         'Failed to destroy worker for inactivity restart'
       );
       const task = await dispatcher.getTask('destroy-hang-test');
@@ -12553,16 +12850,16 @@ describe('getTaskEventUrl', () => {
     );
   });
 
-  it('should return the original URL if task-complete is not present', () => {
+  it('should derive the task-event endpoint from the callback owner when marker is absent', () => {
     const url = 'https://code-agent.example.com/internal/webhooks/other';
-    expect(getTaskEventUrl(url)).toBe(url);
+    expect(getTaskEventUrl(url)).toBe(
+      'https://code-agent.example.com/internal/webhooks/task-event'
+    );
   });
 
-  it('should only replace the first occurrence', () => {
+  it('should discard callback-specific query data when deriving the task-event endpoint', () => {
     const url =
       'https://example.com/internal/webhooks/task-complete?fallback=/internal/webhooks/task-complete';
-    expect(getTaskEventUrl(url)).toBe(
-      'https://example.com/internal/webhooks/task-event?fallback=/internal/webhooks/task-complete'
-    );
+    expect(getTaskEventUrl(url)).toBe('https://example.com/internal/webhooks/task-event');
   });
 });

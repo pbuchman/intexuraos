@@ -496,7 +496,7 @@ describe('workerSettingsRepository', () => {
       });
 
       await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
-      await repo.updateDefaultReviewWorkerType('user-1', 'glm');
+      await repo.updateDefaultReviewWorkerType('user-1', 'openrouter-free');
       await repo.deleteWorker('user-1', 'home-mac');
 
       const settings = await repo.getSettings('user-1');
@@ -506,7 +506,7 @@ describe('workerSettingsRepository', () => {
       }
       if (settings.ok && settings.value !== null) {
         expect(settings.value.workers).toEqual([]);
-        expect(settings.value.defaultReviewWorkerType).toBe('glm');
+        expect(settings.value.defaultReviewWorkerType).toBe('openrouter-free');
       }
     });
 
@@ -1003,14 +1003,14 @@ describe('workerSettingsRepository', () => {
       await repo.addWorker('user-review-default', createWorkerConfig());
 
       // Update default review worker type
-      const updateResult = await repo.updateDefaultReviewWorkerType('user-review-default', 'glm');
+      const updateResult = await repo.updateDefaultReviewWorkerType('user-review-default', 'openrouter-free');
       expect(updateResult.ok).toBe(true);
 
       // Verify it's returned by getSettings
       const settingsResult = await repo.getSettings('user-review-default');
       expect(settingsResult.ok).toBe(true);
       if (settingsResult.ok && settingsResult.value !== null) {
-        expect(settingsResult.value.defaultReviewWorkerType).toBe('glm');
+        expect(settingsResult.value.defaultReviewWorkerType).toBe('openrouter-free');
       }
     });
 
@@ -1054,13 +1054,13 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      const updateResult = await repo.updateDefaultReviewWorkerType('user-delegate', 'glm');
+      const updateResult = await repo.updateDefaultReviewWorkerType('user-delegate', 'openrouter-free');
       expect(updateResult.ok).toBe(true);
 
       const settingsResult = await repo.getSettings('user-delegate');
       expect(settingsResult.ok).toBe(true);
       if (settingsResult.ok && settingsResult.value !== null) {
-        expect(settingsResult.value.defaultReviewWorkerType).toBe('glm');
+        expect(settingsResult.value.defaultReviewWorkerType).toBe('openrouter-free');
         expect(settingsResult.value.workers).toEqual([]);
       }
     });
@@ -1076,14 +1076,14 @@ describe('workerSettingsRepository', () => {
       const updateResult = await repo.updateDefaultWorkerType(
         'user-remediation-new',
         'defaultRemediationWorkerType',
-        'glm'
+        'openrouter-free'
       );
       expect(updateResult.ok).toBe(true);
 
       const settingsResult = await repo.getSettings('user-remediation-new');
       expect(settingsResult.ok).toBe(true);
       if (settingsResult.ok && settingsResult.value !== null) {
-        expect(settingsResult.value.defaultRemediationWorkerType).toBe('glm');
+        expect(settingsResult.value.defaultRemediationWorkerType).toBe('openrouter-free');
         expect(settingsResult.value.workers).toEqual([]);
       }
     });
@@ -1119,12 +1119,12 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateDefaultWorkerType('user-planning-roundtrip', 'defaultPlanningWorkerType', 'glm');
+      await repo.updateDefaultWorkerType('user-planning-roundtrip', 'defaultPlanningWorkerType', 'openrouter-free');
 
       const settingsResult = await repo.getSettings('user-planning-roundtrip');
       expect(settingsResult.ok).toBe(true);
       if (settingsResult.ok && settingsResult.value !== null) {
-        expect(settingsResult.value.defaultPlanningWorkerType).toBe('glm');
+        expect(settingsResult.value.defaultPlanningWorkerType).toBe('openrouter-free');
       }
     });
 
@@ -1143,21 +1143,37 @@ describe('workerSettingsRepository', () => {
       }
     });
 
+    it('should round-trip defaultSentryWorkerType via getSettings', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateDefaultWorkerType('user-sentry-roundtrip', 'defaultSentryWorkerType', 'codex-xhigh');
+
+      const settingsResult = await repo.getSettings('user-sentry-roundtrip');
+      expect(settingsResult.ok).toBe(true);
+      if (settingsResult.ok && settingsResult.value !== null) {
+        expect(settingsResult.value.defaultSentryWorkerType).toBe('codex-xhigh');
+      }
+    });
+
     it('should not include unset fields in getSettings', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateDefaultWorkerType('user-unset-fields', 'defaultRemediationWorkerType', 'glm');
+      await repo.updateDefaultWorkerType('user-unset-fields', 'defaultRemediationWorkerType', 'openrouter-free');
 
       const settingsResult = await repo.getSettings('user-unset-fields');
       expect(settingsResult.ok).toBe(true);
       if (settingsResult.ok && settingsResult.value !== null) {
-        expect(settingsResult.value.defaultRemediationWorkerType).toBe('glm');
+        expect(settingsResult.value.defaultRemediationWorkerType).toBe('openrouter-free');
         expect(settingsResult.value.defaultExecutionWorkerType).toBeUndefined();
         expect(settingsResult.value.defaultPlanningWorkerType).toBeUndefined();
         expect(settingsResult.value.defaultPullRequestWorkerType).toBeUndefined();
+        expect(settingsResult.value.defaultSentryWorkerType).toBeUndefined();
       }
     });
   });
@@ -1169,13 +1185,13 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateDefaultWorkerType('user-clear', 'defaultRemediationWorkerType', 'glm');
+      await repo.updateDefaultWorkerType('user-clear', 'defaultRemediationWorkerType', 'openrouter-free');
 
       // Verify it was set
       const before = await repo.getSettings('user-clear');
       expect(before.ok).toBe(true);
       if (before.ok && before.value !== null) {
-        expect(before.value.defaultRemediationWorkerType).toBe('glm');
+        expect(before.value.defaultRemediationWorkerType).toBe('openrouter-free');
       }
 
       // Clear it
@@ -1196,7 +1212,7 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateDefaultWorkerType('user-clear-independent', 'defaultRemediationWorkerType', 'glm');
+      await repo.updateDefaultWorkerType('user-clear-independent', 'defaultRemediationWorkerType', 'openrouter-free');
       await repo.updateDefaultWorkerType('user-clear-independent', 'defaultExecutionWorkerType', 'opus');
 
       await repo.clearDefaultWorkerType('user-clear-independent', 'defaultRemediationWorkerType');

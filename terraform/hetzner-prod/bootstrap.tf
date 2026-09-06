@@ -28,9 +28,7 @@ resource "terraform_data" "bootstrap_prod" {
     bootstrap_source_hash = local.bootstrap_source_hash
   }
 
-  depends_on = [
-    hcloud_server.prod,
-  ]
+  depends_on = [hcloud_server.prod]
 
   connection {
     type        = "ssh"
@@ -43,7 +41,7 @@ resource "terraform_data" "bootstrap_prod" {
   provisioner "remote-exec" {
     inline = [
       "cloud-init status --wait || true",
-      "install -d -o deploy -g deploy -m 755 /opt/intexuraos /var/www/intexuraos/web/dist",
+      "install -d -o deploy -g deploy -m 755 /opt/intexuraos /var/www/intexuraos/web /var/www/intexuraos/web/dist /var/www/intexuraos/web/releases",
       "install -d -o deploy -g deploy -m 700 /home/deploy/.ssh",
       "printf '%s\\n' '${var.deploy_ssh_public_key}' > /home/deploy/.ssh/authorized_keys",
       "chown deploy:deploy /home/deploy/.ssh /home/deploy/.ssh/authorized_keys",
@@ -59,16 +57,10 @@ resource "terraform_data" "bootstrap_prod" {
     destination = "/tmp/intexuraos-provisioner-sa-key.json"
   }
 
-  provisioner "file" {
-    source      = pathexpand(var.runtime_sa_key_path)
-    destination = "/tmp/intexuraos-runtime-sa-key.json"
-  }
-
   provisioner "remote-exec" {
     inline = [
       "install -m 600 -o deploy -g deploy /tmp/intexuraos-provisioner-sa-key.json /home/deploy/provisioner-sa-key.json",
-      "install -m 600 -o deploy -g deploy /tmp/intexuraos-runtime-sa-key.json /home/deploy/runtime-sa-key.json",
-      "rm -f /tmp/intexuraos-provisioner-sa-key.json /tmp/intexuraos-runtime-sa-key.json",
+      "rm -f /tmp/intexuraos-provisioner-sa-key.json",
     ]
   }
 
@@ -76,6 +68,16 @@ resource "terraform_data" "bootstrap_prod" {
     interpreter = ["/usr/bin/env", "bash", "-lc"]
     command     = <<-EOT
       set -euo pipefail
+      commit_sha="$(git -C '${local.repo_root}' rev-parse --verify HEAD)"
+      [[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || {
+        printf 'ERROR: Bootstrap candidate commit SHA is invalid\n' >&2
+        exit 1
+      }
+      [[ -z "$(git -C '${local.repo_root}' status --porcelain=v1 --untracked-files=all)" ]] || {
+        printf 'ERROR: Bootstrap source checkout must be clean\n' >&2
+        exit 1
+      }
+      printf -v commit_sha_quoted '%q' "$commit_sha"
       rsync -az --delete \
         --exclude '.git/' \
         --exclude '.terraform/' \
@@ -87,14 +89,9 @@ resource "terraform_data" "bootstrap_prod" {
         --exclude '*.tfstate.*' \
         -e 'ssh ${local.ssh_common_args}' \
         '${local.repo_root}/' 'deploy@${hcloud_primary_ip.prod_ipv4.ip_address}:/opt/intexuraos/'
+      ssh ${local.ssh_common_args} deploy@${hcloud_primary_ip.prod_ipv4.ip_address} \
+        "cd /opt/intexuraos && sudo -n INTEXURAOS_COMMIT_SHA=$commit_sha_quoted INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/provision.sh --version ${var.prod_secret_package_version} --skip-certbot"
     EOT
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/provision.sh --skip-certbot",
-      "sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'",
-    ]
   }
 
   provisioner "local-exec" {
@@ -106,13 +103,12 @@ resource "terraform_data" "bootstrap_prod" {
       printf -v commit_sha_quoted '%q' "$commit_sha"
       printf -v commit_message_quoted '%q' "$commit_message"
       ssh ${local.ssh_common_args} deploy@${hcloud_primary_ip.prod_ipv4.ip_address} \
-        "cd /opt/intexuraos && COMMIT_SHA=$commit_sha_quoted COMMIT_MESSAGE=$commit_message_quoted INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh"
+        "cd /opt/intexuraos && COMMIT_SHA=$commit_sha_quoted COMMIT_MESSAGE=$commit_message_quoted INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh && INTEXURAOS_COMMIT_SHA=$commit_sha_quoted INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh"
     EOT
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'",
       "cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh",
     ]
   }

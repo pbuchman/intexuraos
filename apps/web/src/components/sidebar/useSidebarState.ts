@@ -27,6 +27,8 @@ export interface SidebarState {
   setIsFishingAssistantOpen: (next: boolean) => void;
   isWhatsAppOpen: boolean;
   setIsWhatsAppOpen: (next: boolean) => void;
+  isIntexAgentOpen: boolean;
+  setIsIntexAgentOpen: (next: boolean) => void;
   savedFilters: SavedNotificationFilter[];
   navRef: React.RefObject<HTMLElement | null>;
 }
@@ -59,6 +61,9 @@ export function useSidebarState(): SidebarState {
   );
   const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(() =>
     window.location.hash.includes('/whatsapp') || window.location.hash.includes('/notes')
+  );
+  const [isIntexAgentOpen, setIsIntexAgentOpen] = useState(() =>
+    window.location.hash.includes('/intex-agent')
   );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
@@ -113,9 +118,9 @@ export function useSidebarState(): SidebarState {
     }
   }, [location.pathname]);
 
-  // Auto-expand code tasks when on code-tasks sub-pages (excludes Battlefield)
+  // Auto-expand code tasks when on Battlefield or code-tasks sub-pages.
   useEffect(() => {
-    if (location.pathname.startsWith('/code-tasks') && location.pathname !== '/code-tasks') {
+    if (location.pathname.startsWith('/code-tasks')) {
       setIsCodeTasksOpen(true);
     }
   }, [location.pathname]);
@@ -141,6 +146,12 @@ export function useSidebarState(): SidebarState {
   useEffect(() => {
     if (location.pathname.startsWith('/whatsapp') || location.pathname === '/notes') {
       setIsWhatsAppOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/intex-agent')) {
+      setIsIntexAgentOpen(true);
     }
   }, [location.pathname]);
 
@@ -223,6 +234,8 @@ export function useSidebarState(): SidebarState {
     setIsFishingAssistantOpen,
     isWhatsAppOpen,
     setIsWhatsAppOpen,
+    isIntexAgentOpen,
+    setIsIntexAgentOpen,
     savedFilters,
     navRef,
   };

@@ -3,7 +3,21 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import { WhatsAppCloudApiAdapter } from '../../infra/whatsapp/index.js';
+
+const { infoSpy, errorSpy } = vi.hoisted(() => ({
+  infoSpy: vi.fn(),
+  errorSpy: vi.fn(),
+}));
+
+vi.mock('@intexuraos/infra-sentry', () => ({
+  createAppLogger: (): Logger =>
+    ({
+      info: infoSpy,
+      error: errorSpy,
+    }) as unknown as Logger,
+}));
 
 const mockClient = {
   getMediaUrl: vi.fn(),
@@ -24,6 +38,47 @@ describe('WhatsAppCloudApiAdapter', () => {
   beforeEach(() => {
     adapter = new WhatsAppCloudApiAdapter(accessToken);
     vi.clearAllMocks();
+  });
+
+  it('never writes provider identifiers, recipient phones, or media URLs to logs', async () => {
+    const privateValues = {
+      mediaId: 'private-media-id-123',
+      mediaUrl: 'https://lookaside.fbsbx.com/private-media-token',
+      phoneNumberId: 'private-phone-number-id-456',
+      recipientPhone: '+48123123123',
+      replyToMessageId: 'private-reply-id-789',
+      messageId: 'private-message-id-321',
+    };
+
+    mockClient.getMediaUrl.mockResolvedValue(
+      ok({
+        url: privateValues.mediaUrl,
+        mimeType: 'image/jpeg',
+        sha256: 'private-media-sha',
+        fileSize: 123,
+      })
+    );
+    mockClient.downloadMedia.mockResolvedValue(ok(Buffer.from('private media bytes')));
+    mockClient.sendTextMessage.mockResolvedValue(ok({ messageId: privateValues.messageId }));
+    mockClient.markAsRead.mockResolvedValue(ok(undefined));
+    mockClient.markAsReadWithTyping.mockResolvedValue(ok(undefined));
+
+    await adapter.getMediaUrl(privateValues.mediaId);
+    await adapter.downloadMedia(privateValues.mediaUrl);
+    await adapter.sendMessage(
+      privateValues.phoneNumberId,
+      privateValues.recipientPhone,
+      'private message body',
+      privateValues.replyToMessageId
+    );
+    await adapter.markAsRead(privateValues.phoneNumberId, privateValues.messageId);
+    await adapter.markAsReadWithTyping(privateValues.phoneNumberId, privateValues.messageId);
+
+    const serializedLogs = JSON.stringify([...infoSpy.mock.calls, ...errorSpy.mock.calls]);
+    for (const privateValue of Object.values(privateValues)) {
+      expect(serializedLogs).not.toContain(privateValue);
+    }
+    expect(serializedLogs).not.toContain('private message body');
   });
 
   describe('getMediaUrl', () => {

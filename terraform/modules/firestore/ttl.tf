@@ -10,15 +10,23 @@
 # Retention policy (set at write time, not here):
 # - GitHub event collections: 24 hours
 # - code_tasks log subcollections: 7 days
+# - Completed private WhatsApp erasure status records: 30 days
+# - Uncommitted Conversation Assistant context updates and their chunks: 30 minutes
+#   (committing an update removes expireAt atomically)
 
 locals {
   ttl_collection_groups = [
     "github-webhook-audit-events",
     "github-pr-events",
     "github-event-log-entries",
+    "code_review_events",
     "logs",
     "log_lines",
     "turn_metrics",
+    "whatsapp_private_erasure_requests",
+    "whatsapp_conversation_assistant_context_attachments",
+    "whatsapp_conversation_assistant_context_chunks",
+    "whatsapp_conversation_assistant_transcript_chunks",
   ]
 }
 

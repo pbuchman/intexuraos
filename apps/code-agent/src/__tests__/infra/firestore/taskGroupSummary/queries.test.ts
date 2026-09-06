@@ -150,6 +150,36 @@ describe('queries: buildListQuery', () => {
     expect(snap.docs[0]?.data()?.['groupKey']).toBe('INT-B');
   });
 
+  it('keeps last-updated cursor ordering on lifecycle activity when metadata writes invert technical updatedAt', async () => {
+    const oldestActivity = Timestamp.fromDate(new Date('2026-03-01T00:00:00Z'));
+    const middleActivity = Timestamp.fromDate(new Date('2026-03-02T00:00:00Z'));
+    const newestActivity = Timestamp.fromDate(new Date('2026-03-03T00:00:00Z'));
+    const newestMetadata = Timestamp.fromDate(new Date('2026-03-10T00:00:00Z'));
+    fakeFirestore.seedCollection('task_group_summaries', [
+      seedDoc('u4_INT-A', { userId: 'u4', groupKey: 'INT-A', latestTaskUpdatedAt: oldestActivity, updatedAt: newestMetadata }),
+      seedDoc('u4_INT-B', { userId: 'u4', groupKey: 'INT-B', latestTaskUpdatedAt: middleActivity, updatedAt: middleActivity }),
+      seedDoc('u4_INT-C', { userId: 'u4', groupKey: 'INT-C', latestTaskUpdatedAt: newestActivity, updatedAt: newestActivity }),
+    ]);
+
+    const firstPageQuery = buildListQuery(
+      fakeFirestore as unknown as Firestore,
+      { userId: 'u4', sortBy: 'last-updated', limit: 1 },
+    );
+    const firstPage = await firstPageQuery.get();
+    const cursorDoc = firstPage.docs[0];
+    expect(cursorDoc?.data()?.['groupKey']).toBe('INT-C');
+    if (cursorDoc === undefined) return;
+
+    const secondPageQuery = buildListQuery(
+      fakeFirestore as unknown as Firestore,
+      { userId: 'u4', sortBy: 'last-updated', limit: 1 },
+      cursorDoc,
+    );
+    const secondPage = await secondPageQuery.get();
+
+    expect(secondPage.docs[0]?.data()?.['groupKey']).toBe('INT-B');
+  });
+
   it('sorts by dispatched descending', async () => {
     const q = buildListQuery(fakeFirestore as unknown as Firestore, { userId: 'u1', sortBy: 'dispatched', limit: 10 });
     const snap = await q.get();

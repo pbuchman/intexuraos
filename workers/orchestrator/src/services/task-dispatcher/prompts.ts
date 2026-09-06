@@ -4,6 +4,8 @@ import type { PromptBuilder } from '../prompt-builder.js';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
 import type { Task, TaskResult } from '../../types/task.js';
 import type { Logger } from '@intexuraos/common-core';
+import { parseCodeTaskRebaseResult } from '@intexuraos/code-task-domain';
+import { buildRequiredTaskCallbackUrl } from '../callback-url.js';
 
 export const FATAL_EXIT_CODE_PREFIX = 'fatal_exit_code_';
 
@@ -12,7 +14,7 @@ Continue working on the task from where you left off. Review your progress so fa
 resume the next incomplete step.`;
 
 export function getTaskEventUrl(webhookUrl: string): string {
-  return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
+  return buildRequiredTaskCallbackUrl(webhookUrl, '/internal/webhooks/task-event');
 }
 
 export function hasFatalExitCodeField(missingFields: string[]): string | undefined {
@@ -38,7 +40,7 @@ export interface MissingFieldsPromptInput {
 export const missingFieldsPrompt: PromptBuilder<MissingFieldsPromptInput> = {
   name: 'missing-fields-resume',
   description: 'Auto-continue prompt asking the agent to re-emit missing deliverable fields',
-  version: '1.0.0',
+  version: '1.0.2',
 
   build(input: MissingFieldsPromptInput): string {
     const { agentType, missingFields, rawLogs } = input;
@@ -129,19 +131,7 @@ export function parseRebaseResultOutput(
   logger: Logger
 ): TaskResult['rebaseResult'] | undefined {
   try {
-    const parsed = JSON.parse(output) as {
-      attempted?: boolean;
-      success?: boolean;
-      conflictFiles?: string[];
-    };
-    if (parsed.attempted === true && typeof parsed.success === 'boolean') {
-      return {
-        attempted: parsed.attempted,
-        success: parsed.success,
-        ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
-      };
-    }
-    return undefined;
+    return parseCodeTaskRebaseResult(JSON.parse(output));
   } catch (parseError) {
     logger.warn({ taskId, error: parseError }, 'Failed to parse rebase result');
     return undefined;

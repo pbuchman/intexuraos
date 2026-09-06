@@ -6,14 +6,14 @@ import { describe, it, expect } from 'vitest';
 import { extractReviewWorkerType, isReviewCommandComment, normalizeReviewWorkerType } from '../../../domain/utils/reviewTriage.js';
 
 describe('extractReviewWorkerType', () => {
-  it('extracts worker type from @review with minimax', () => {
+  it('rejects a retired minimax worker type', () => {
     const workerType = extractReviewWorkerType('@review with minimax');
-    expect(workerType).toBe('minimax');
+    expect(workerType).toBeUndefined();
   });
 
-  it('extracts worker type from @review architecture security qwen', () => {
+  it('rejects a retired qwen worker type', () => {
     const workerType = extractReviewWorkerType('@review architecture security qwen');
-    expect(workerType).toBe('qwen');
+    expect(workerType).toBeUndefined();
   });
 
   it('returns undefined when no worker type found', () => {
@@ -36,9 +36,9 @@ describe('extractReviewWorkerType', () => {
     expect(workerType).toBe('sonnet');
   });
 
-  it('extracts glm worker type', () => {
+  it('rejects a retired glm worker type', () => {
     const workerType = extractReviewWorkerType('@review glm');
-    expect(workerType).toBe('glm');
+    expect(workerType).toBeUndefined();
   });
 
   it('extracts auto worker type', () => {
@@ -62,8 +62,8 @@ describe('extractReviewWorkerType', () => {
   });
 
   it('is case-insensitive', () => {
-    const workerType = extractReviewWorkerType('@review with MINIMAX');
-    expect(workerType).toBe('minimax');
+    const workerType = extractReviewWorkerType('@review with OPENROUTER-FREE');
+    expect(workerType).toBe('openrouter-free');
   });
 
   it('returns first recognized worker when multiple tokens present', () => {
@@ -72,8 +72,8 @@ describe('extractReviewWorkerType', () => {
   });
 
   it('extracts worker type from multi-review comment with worker specifier', () => {
-    const workerType = extractReviewWorkerType('@review architecture, security with qwen');
-    expect(workerType).toBe('qwen');
+    const workerType = extractReviewWorkerType('@review architecture, security with openrouter-free');
+    expect(workerType).toBe('openrouter-free');
   });
 });
 
@@ -112,12 +112,12 @@ describe('isReviewCommandComment', () => {
 });
 
 describe('normalizeReviewWorkerType', () => {
-  it('normalizes qwen to qwen', () => {
-    expect(normalizeReviewWorkerType('qwen')).toBe('qwen');
+  it('normalizes openrouter-free', () => {
+    expect(normalizeReviewWorkerType('openrouter-free')).toBe('openrouter-free');
   });
 
   it('normalizes case-insensitively', () => {
-    expect(normalizeReviewWorkerType('MINIMAX')).toBe('minimax');
+    expect(normalizeReviewWorkerType('OPENROUTER-FREE')).toBe('openrouter-free');
   });
 
   it('returns undefined for unknown type', () => {

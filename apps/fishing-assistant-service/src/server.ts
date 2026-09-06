@@ -17,7 +17,7 @@ import { fishingAssistantRoutes } from './routes/index.js';
 const SERVICE_NAME = 'fishing-assistant-service';
 const SERVICE_VERSION = '0.0.4';
 
-const REQUIRED_SECRETS = ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENAI_APP_API_KEY'];
+const REQUIRED_SECRETS = ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   return {

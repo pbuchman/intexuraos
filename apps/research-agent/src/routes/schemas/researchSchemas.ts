@@ -2,7 +2,12 @@
  * JSON schemas for research endpoints.
  */
 
-import { researchSchema, researchSummarySchema, supportedModelSchema } from './common.js';
+import {
+  researchSchema,
+  researchSummarySchema,
+  supportedModelSchema,
+  supportedSynthesisModelSchema,
+} from './common.js';
 
 export const createResearchBodySchema = {
   type: 'object',
@@ -23,8 +28,9 @@ export const createResearchBodySchema = {
       items: supportedModelSchema,
       minItems: 1,
       maxItems: 6,
+      uniqueItems: true,
     },
-    synthesisModel: supportedModelSchema,
+    synthesisModel: supportedSynthesisModelSchema,
     inputContexts: {
       type: 'array',
       items: {
@@ -163,8 +169,9 @@ export const saveDraftBodySchema = {
       type: 'array',
       items: supportedModelSchema,
       maxItems: 6,
+      uniqueItems: true,
     },
-    synthesisModel: supportedModelSchema,
+    synthesisModel: supportedSynthesisModelSchema,
     inputContexts: {
       type: 'array',
       items: {
@@ -279,6 +286,7 @@ export const enhanceResearchBodySchema = {
       type: 'array',
       items: supportedModelSchema,
       maxItems: 6,
+      uniqueItems: true,
       description: 'Additional models to run research with',
     },
     additionalContexts: {
@@ -300,7 +308,7 @@ export const enhanceResearchBodySchema = {
       maxItems: 5,
       description: 'Additional custom sources/contexts to include',
     },
-    synthesisModel: supportedModelSchema,
+    synthesisModel: supportedSynthesisModelSchema,
     removeContextIds: {
       type: 'array',
       items: { type: 'string' },

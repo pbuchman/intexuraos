@@ -91,7 +91,13 @@ type ServiceErrorCode =
   | 'EXTERNAL_API_ERROR';
 
 // codeTaskWorkerTypes.ts
-type CodeTaskWorkerType = 'auto' | 'opus' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi';
+type CodeTaskWorkerType =
+  | 'auto'
+  | 'opus'
+  | 'sonnet'
+  | 'codex'
+  | 'codex-xhigh'
+  | 'openrouter-free';
 ```
 
 ## Exported Functions
@@ -159,7 +165,14 @@ const ServiceErrorCodes: {
   EXTERNAL_API_ERROR: 'EXTERNAL_API_ERROR';
 };
 const TRACE_ID_HEADER: 'X-Trace-Id';
-const CODE_TASK_WORKER_TYPES: readonly ['auto', 'opus', 'sonnet', 'minimax', 'glm', 'qwen', 'kimi'];
+const CODE_TASK_WORKER_TYPES: readonly [
+  'auto',
+  'opus',
+  'sonnet',
+  'codex',
+  'codex-xhigh',
+  'openrouter-free',
+];
 ```
 
 ## Exported Classes
@@ -181,7 +194,7 @@ common-core (leaf)
   <- http-server
   <- infra-pubsub
   <- infra-firestore
-  <- infra-claude, infra-gemini, infra-gpt
+  <- infra-claude, infra-gpt, infra-openrouter
   <- infra-notion, infra-perplexity, infra-sentry, infra-whatsapp
   <- llm-utils, llm-prompts, llm-pricing, llm-factory, llm-contract
   <- internal-clients

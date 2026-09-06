@@ -34,7 +34,15 @@ export async function buildListQuery(
 
   // Firestore 'in' operator throws on empty array, so only add filter when non-empty
   if (input.status !== undefined && input.status.length > 0) {
-    query = query.where('status', 'in', input.status);
+    const persistedStatuses: string[] = [...input.status];
+    if (
+      input.status.some(
+        (status) => status === 'planned' || status === 'reviewed' || status === 'implemented',
+      )
+    ) {
+      persistedStatuses.push('completed');
+    }
+    query = query.where('status', 'in', persistedStatuses);
   }
 
   query = query.orderBy('createdAt', 'desc');

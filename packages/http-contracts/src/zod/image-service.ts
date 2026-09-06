@@ -14,7 +14,7 @@ const llmCorrelationSchema = z
 export const imageGeneratePromptRequestSchema = z
   .object({
     text: z.string().min(10).max(60000),
-    model: z.enum(['gpt-4.1', LlmModels.Gemini25Pro]),
+    model: z.literal('gpt-4.1'),
     userId: z.string(),
     promptType: z.string().min(1).optional(),
     correlation: llmCorrelationSchema.optional(),
@@ -44,7 +44,7 @@ export const imageGeneratePromptResponseSchema = createApiSuccessEnvelopeSchema(
 export const imageGenerateImageRequestSchema = z
   .object({
     prompt: z.string().min(10).max(2000),
-    model: z.enum([LlmModels.GPTImage1, LlmModels.Gemini25FlashImage]),
+    model: z.literal(LlmModels.GPTImage1),
     userId: z.string(),
     title: z.string().max(100).optional(),
     promptType: z.string().min(1).optional(),

@@ -118,8 +118,13 @@ export async function autoRetryTask(
     autoRetryAttempt: attemptNumber,
     ...(failedTask.agentType !== undefined && { agentType: failedTask.agentType }),
     ...(failedTask.linearIssueId !== undefined && { linearIssueId: failedTask.linearIssueId }),
+    ...(failedTask.sentryIssue !== undefined && { sentryIssue: failedTask.sentryIssue }),
     ...(failedTask.prNumber !== undefined && { prNumber: failedTask.prNumber }),
     ...(failedTask.prBranch !== undefined && { prBranch: failedTask.prBranch }),
+    ...(failedTask.reviewTypes !== undefined && { reviewTypes: failedTask.reviewTypes }),
+    ...(failedTask.reviewCommitSha !== undefined && {
+      reviewCommitSha: failedTask.reviewCommitSha,
+    }),
     ...(cooloffSchedule !== undefined && {
       dispatchSchedule: {
         notBeforeAt: cooloffSchedule.notBeforeAt,

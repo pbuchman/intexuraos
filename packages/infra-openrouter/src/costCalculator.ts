@@ -35,12 +35,18 @@ export function toModelPricing(promptPerToken: string, completionPerToken: strin
 export function normalizeUsage(
   inputTokens: number,
   outputTokens: number,
-  _providerCost: number | null | undefined
+  providerCost: number | null | undefined
 ): NormalizedUsage {
+  const providerReportedUsd =
+    typeof providerCost === 'number' && Number.isFinite(providerCost) && providerCost >= 0
+      ? providerCost
+      : undefined;
+
   return {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
-    costUsd: 0,
+    costUsd: providerReportedUsd ?? 0,
+    ...(providerReportedUsd !== undefined && { providerReportedUsd }),
   };
 }

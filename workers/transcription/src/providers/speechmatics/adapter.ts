@@ -42,9 +42,9 @@ interface JsonV2Response {
 }
 
 /**
- * Speechmatics EU API base URL.
+ * Speechmatics EU API origin. The SDK appends versioned /v2 paths.
  */
-const SPEECHMATICS_EU_API_URL = 'https://asr.api.speechmatics.com/v2';
+const SPEECHMATICS_EU_API_URL = 'https://asr.api.speechmatics.com';
 
 /**
  * Extract a human-readable message from an error object.

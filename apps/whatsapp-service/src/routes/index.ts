@@ -15,6 +15,14 @@ import { verificationRoutes } from './verificationRoutes.js';
 import { internalRoutes } from './internalRoutes.js';
 import { privateSyncRoutes } from './privateSyncRoutes.js';
 import { createPrivateReadRoutes } from './privateReadRoutes.js';
+import { privateMediaRoutes } from './privateMediaRoutes.js';
+import { conversationAssistantRoutes } from './conversationAssistantRoutes.js';
+import { privateMatrixOutboundRoutes } from './privateMatrixOutboundRoutes.js';
+import { privateErasureRoutes } from './privateErasureRoutes.js';
+import { privateDigestSourceRoutes } from './privateDigestSourceRoutes.js';
+import { outboundDeliveryRoutes } from './outboundDeliveryRoutes.js';
+import { createMatrixCorpusRoutes } from './matrixCorpusRoutes.js';
+import { getServices } from '../services.js';
 
 /**
  * Creates routes plugin with config.
@@ -30,9 +38,23 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(preferencesRoutes);
     fastify.register(verificationRoutes);
     fastify.register(createPrivateReadRoutes());
+    fastify.register(conversationAssistantRoutes);
     fastify.register(createPubsubRoutes());
     fastify.register(internalRoutes);
     fastify.register(privateSyncRoutes);
+    fastify.register(privateMediaRoutes);
+    fastify.register(privateMatrixOutboundRoutes);
+    fastify.register(privateErasureRoutes);
+    fastify.register(privateDigestSourceRoutes);
+    fastify.register(outboundDeliveryRoutes);
+    if (config.matrixCorpus.enabled) {
+      const matrixCorpus = getServices().matrixCorpus;
+      if (matrixCorpus === undefined) {
+        done(new Error('Matrix corpus service composition is unavailable'));
+        return;
+      }
+      fastify.register(createMatrixCorpusRoutes(matrixCorpus.routes));
+    }
     done();
   };
 }

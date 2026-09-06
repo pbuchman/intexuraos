@@ -1,4 +1,4 @@
-import type { ApiErrorResponse, ApiResponse } from '@/types';
+import type { ApiResponse } from '@/types';
 import { newRequestId } from '@/services/requestId';
 
 export type ConflictReason = 'duplicate' | 'active';
@@ -43,7 +43,7 @@ export class ApiError extends Error {
   }
 }
 
-interface RequestOptions {
+export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   headers?: Record<string, string>;
@@ -54,11 +54,54 @@ interface RequestOptions {
    * `Authorization` header, and retries the request exactly once. If the
    * second attempt also returns 401 (or any other failure), the error
    * propagates to the caller.
-   */
+  */
   refreshToken?: () => Promise<string>;
+  /** Optional caller-owned cancellation signal. */
+  signal?: AbortSignal;
 }
 
 const DEFAULT_TIMEOUT_MS = 30000;
+
+function callerAbortedError(): ApiError {
+  return new ApiError('ABORTED', 'Request was cancelled', 499);
+}
+
+function malformedResponseError(): ApiError {
+  return new ApiError('MALFORMED_RESPONSE', 'Received an invalid response', 502);
+}
+
+function isSignalAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function awaitCallerAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) return promise;
+  if (signal.aborted) return Promise.reject(callerAbortedError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      cleanup();
+      reject(callerAbortedError());
+    };
+    const cleanup = (): void => {
+      signal.removeEventListener('abort', onAbort);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    void promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error instanceof Error ? error : new Error('Request failed'));
+      }
+    );
+  });
+}
 
 export async function apiRequest<T>(
   baseUrl: string,
@@ -76,10 +119,18 @@ async function performRequest<T>(
   options: RequestOptions,
   retried: boolean
 ): Promise<T> {
-  const { method = 'GET', body, headers = {}, timeout = DEFAULT_TIMEOUT_MS, refreshToken } = options;
+  const { method = 'GET', body, headers = {}, timeout = DEFAULT_TIMEOUT_MS, refreshToken, signal } = options;
+
+  if (isSignalAborted(signal)) {
+    throw callerAbortedError();
+  }
 
   // AbortController for timeout handling
   const controller = new AbortController();
+  const abortFromCaller = (): void => {
+    controller.abort();
+  };
+  signal?.addEventListener('abort', abortFromCaller, { once: true });
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, timeout);
@@ -96,10 +147,12 @@ async function performRequest<T>(
     requestHeaders['Content-Type'] = 'application/json';
   }
 
+  const requestSignal =
+    signal === undefined ? controller.signal : AbortSignal.any([controller.signal, signal]);
   const fetchOptions: RequestInit = {
     method,
     headers: requestHeaders,
-    signal: controller.signal,
+    signal: requestSignal,
     // Disable caching to always get fresh data
     cache: 'no-store',
   };
@@ -113,19 +166,23 @@ async function performRequest<T>(
     response = await fetch(url, fetchOptions);
   } catch (err) {
     // Rethrow with clearer message for abort/timeout errors
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (typeof err === 'object' && err !== null && 'name' in err && err.name === 'AbortError') {
+      if (isSignalAborted(signal)) {
+        throw callerAbortedError();
+      }
       throw new ApiError('TIMEOUT', 'Request timed out. Please check your connection and try again.', 408);
     }
     throw err;
   } finally {
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortFromCaller);
   }
 
   // 401 silent-refresh retry: if a refreshToken callback is provided and this
   // is the first attempt, fetch a fresh token and retry exactly once. The
   // retry inherits the same `cache: 'no-store'` option set above.
   if (response.status === 401 && !retried && refreshToken !== undefined) {
-    const newToken = await refreshToken();
+    const newToken = await awaitCallerAbort(refreshToken(), signal);
     return await performRequest<T>(baseUrl, path, newToken, options, true);
   }
 
@@ -146,32 +203,44 @@ async function performRequest<T>(
   }
 
   // Validate response structure defensively
-  if (
-    typeof json !== 'object' ||
-    json === null ||
-    !('success' in json)
-  ) {
+  const rawJson = json as Record<string, unknown>;
+  if (!isPlainRecord(json) || !Object.hasOwn(rawJson, 'success') || typeof rawJson['success'] !== 'boolean') {
     // Some endpoints return Fastify's default error format without the `success` envelope
     const raw = json as Record<string, unknown>;
-    if (typeof raw['message'] === 'string' && typeof raw['statusCode'] === 'number') {
+    if (!Object.hasOwn(raw, 'success') && typeof raw['message'] === 'string' && typeof raw['statusCode'] === 'number') {
       throw new ApiError(
         'UNKNOWN',
         raw['message'],
         raw['statusCode']
       );
     }
-    throw new ApiError('UNKNOWN', 'Invalid response format', response.status);
+    throw malformedResponseError();
   }
 
-  const data = json as ApiResponse<T>;
+  const data = json as unknown as ApiResponse<T>;
+
+  if (data.success && !Object.hasOwn(json, 'data')) {
+    throw malformedResponseError();
+  }
 
   if (!data.success) {
-    const errorResponse = json as Partial<ApiErrorResponse>;
-    const error = errorResponse.error;
-    if (error === undefined) {
-      throw new ApiError('UNKNOWN', 'An unexpected error occurred', response.status);
+    const error = rawJson['error'];
+    if (
+      !isPlainRecord(error)
+      || !Object.hasOwn(error, 'code')
+      || !Object.hasOwn(error, 'message')
+      || typeof error['code'] !== 'string'
+      || typeof error['message'] !== 'string'
+      || (Object.hasOwn(error, 'details') && !isPlainRecord(error['details']))
+    ) {
+      throw malformedResponseError();
     }
-    throw new ApiError(error.code, error.message, response.status, error.details);
+    throw new ApiError(
+      error['code'],
+      error['message'],
+      response.status,
+      isPlainRecord(error['details']) ? error['details'] : undefined
+    );
   }
 
   return data.data;

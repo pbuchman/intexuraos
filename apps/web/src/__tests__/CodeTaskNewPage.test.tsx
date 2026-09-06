@@ -8,6 +8,11 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { CodeTaskNewPage } from '../pages/CodeTaskNewPage.js';
 import type { LinearIssueOption } from '../hooks/useLinearIssueOptions.js';
 import { submitCodeTask } from '../services/codeAgentApi.js';
+import type { WorkerSettingsResponse } from '../services/workerSettingsApi.types.js';
+
+const mockWorkerSettings = vi.hoisted((): { current: WorkerSettingsResponse | null } => ({
+  current: null,
+}));
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -75,6 +80,34 @@ vi.mock('@/hooks', () => ({
   }),
   findRecentTask: vi.fn(),
   useTimeTick: (): number => 0,
+}));
+
+vi.mock('@/hooks/useWorkerSettings', () => ({
+  useWorkerSettings: (): {
+    settings: WorkerSettingsResponse | null;
+    loading: boolean;
+    refreshing: boolean;
+    error: null;
+    addWorker: () => Promise<void>;
+    updateWorker: () => Promise<void>;
+    deleteWorker: () => Promise<void>;
+    testConnectivity: () => Promise<never>;
+    reorderWorkers: () => Promise<void>;
+    updateDefaultWorkerType: () => Promise<void>;
+    refresh: () => Promise<void>;
+  } => ({
+    settings: mockWorkerSettings.current,
+    loading: false,
+    refreshing: false,
+    error: null,
+    addWorker: vi.fn().mockResolvedValue(undefined),
+    updateWorker: vi.fn().mockResolvedValue(undefined),
+    deleteWorker: vi.fn().mockResolvedValue(undefined),
+    testConnectivity: vi.fn().mockRejectedValue(new Error('not implemented')),
+    reorderWorkers: vi.fn().mockResolvedValue(undefined),
+    updateDefaultWorkerType: vi.fn().mockResolvedValue(undefined),
+    refresh: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 // Mock @uiw/react-md-editor
@@ -231,6 +264,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    mockWorkerSettings.current = null;
   });
 
   const getLinkExistingButton = (): HTMLElement =>
@@ -241,14 +275,14 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('should reset linearMode to create when modal cancelled without selection', () => {
     render(<CodeTaskNewPage />);
 
-    // Initially, "Create New" is active (border-blue-500)
+    // Initially, "Create new" is active (border-blue-500)
     expect(getCreateNewButton().className).toContain('border-blue-500');
     expect(getLinkExistingButton().className).not.toContain('border-blue-500');
 
-    // Click "Link Existing" to switch mode and open the modal
+    // Click "Link existing" to switch mode and open the modal
     fireEvent.click(getLinkExistingButton());
 
-    // Modal is open and "Link Existing" is now the active mode
+    // Modal is open and "Link existing" is now the active mode
     expect(screen.getByTestId('issue-selector-modal')).toBeInTheDocument();
     expect(getLinkExistingButton().className).toContain('border-blue-500');
     expect(getCreateNewButton().className).not.toContain('border-blue-500');
@@ -267,7 +301,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('should keep linearMode as link when issue is selected before modal closes', () => {
     render(<CodeTaskNewPage />);
 
-    // Click "Link Existing"
+    // Click "Link existing"
     fireEvent.click(getLinkExistingButton());
     expect(screen.getByTestId('issue-selector-modal')).toBeInTheDocument();
 
@@ -285,7 +319,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('should retain linearMode as link and keep selected issue when reopened via pencil then cancelled', () => {
     render(<CodeTaskNewPage />);
 
-    // Click "Link Existing" and select an issue
+    // Click "Link existing" and select an issue
     fireEvent.click(getLinkExistingButton());
     fireEvent.click(screen.getByTestId('modal-select-btn'));
 
@@ -309,18 +343,18 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     expect(screen.getByText('INT-123')).toBeInTheDocument();
   });
 
-  it('should stay in create mode when Create New is clicked after a cancelled Link Existing', () => {
+  it('should stay in create mode when Create new is clicked after a cancelled Link existing', () => {
     render(<CodeTaskNewPage />);
 
-    // Click "Link Existing" and cancel the modal
+    // Click "Link existing" and cancel the modal
     fireEvent.click(getLinkExistingButton());
     fireEvent.click(screen.getByTestId('modal-cancel-btn'));
 
-    // After cancel, "Create New" should be active (mode reset)
+    // After cancel, "Create new" should be active (mode reset)
     expect(getCreateNewButton().className).toContain('border-blue-500');
     expect(getLinkExistingButton().className).not.toContain('border-blue-500');
 
-    // Clicking "Create New" again retains 'create' mode
+    // Clicking "Create new" again retains 'create' mode
     fireEvent.click(getCreateNewButton());
     expect(getCreateNewButton().className).toContain('border-blue-500');
     expect(getLinkExistingButton().className).not.toContain('border-blue-500');
@@ -337,20 +371,14 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sonnet' }));
     expect(screen.getByText('Anthropic\'s daily coding model with the best balance of speed and intelligence')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'MiniMax' }));
-    expect(screen.getByText('MiniMax\'s coding and agent model with strong reasoning at lower cost')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'GLM' }));
-    expect(screen.getByText('Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Qwen' }));
-    expect(screen.getByText('Advanced Qwen model with thinking enabled')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Kimi' }));
-    expect(screen.getByText('Moonshot\'s latest recommended model with image understanding')).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }));
     expect(screen.getByText('OpenAI Codex runtime for code-task execution with persisted thread resume')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Codex XHigh' }));
+    expect(screen.getByText('High-effort Codex preset for deeper reviews, investigations, and complex implementation tasks')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'OpenRouter Free' }));
+    expect(screen.getByText('Free-tier code worker routed only through OpenRouter')).toBeInTheDocument();
   });
 
   it('renders task mode selector with Planning and Execution options', () => {
@@ -360,7 +388,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     expect(screen.getByRole('button', { name: /execution/i })).toBeInTheDocument();
   });
 
-  it('defaults to Planning mode when linear mode is Create New', () => {
+  it('defaults to Planning mode when linear mode is Create new', () => {
     render(<CodeTaskNewPage />);
 
     const planningButton = screen.getByRole('button', { name: /planning/i });
@@ -385,7 +413,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('allows user to override task mode back to Planning after linking issue', () => {
     render(<CodeTaskNewPage />);
 
-    // Switch to Link Existing (sets taskMode to execution)
+    // Switch to Link existing (sets taskMode to execution)
     fireEvent.click(getLinkExistingButton());
 
     const planningButton = screen.getByRole('button', { name: /planning/i });
@@ -412,6 +440,125 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
         'Describe what you want to build. The selected worker will analyze the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.'
       );
     }
+  });
+});
+
+describe('CodeTaskNewPage - default worker selection', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mockWorkerSettings.current = null;
+  });
+
+  const configureWorkerSettings = (
+    settings: Partial<Pick<WorkerSettingsResponse, 'defaultExecutionWorkerType' | 'defaultPlanningWorkerType'>>,
+  ): void => {
+    mockWorkerSettings.current = {
+      workers: [],
+      ...settings,
+    };
+  };
+
+  it('selects the saved planning default on initial load', async () => {
+    configureWorkerSettings({ defaultPlanningWorkerType: 'opus' });
+
+    render(<CodeTaskNewPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Opus' }).className).toContain('border-blue-500');
+    });
+    expect(screen.getByRole('button', { name: 'Auto' }).className).not.toContain('border-blue-500');
+  });
+
+  it('selects the execution default when switching from planning to execution', async () => {
+    configureWorkerSettings({
+      defaultPlanningWorkerType: 'opus',
+      defaultExecutionWorkerType: 'codex',
+    });
+
+    render(<CodeTaskNewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /execution/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Codex' }).className).toContain('border-blue-500');
+    });
+    expect(screen.getByRole('button', { name: 'Opus' }).className).not.toContain('border-blue-500');
+  });
+
+  it('returns to the planning default when switching back from execution', async () => {
+    configureWorkerSettings({
+      defaultPlanningWorkerType: 'opus',
+      defaultExecutionWorkerType: 'codex',
+    });
+
+    render(<CodeTaskNewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /execution/i }));
+    fireEvent.click(screen.getByRole('button', { name: /planning/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Opus' }).className).toContain('border-blue-500');
+    });
+    expect(screen.getByRole('button', { name: 'Codex' }).className).not.toContain('border-blue-500');
+  });
+
+  it('submits the selected default worker type in the request', async () => {
+    configureWorkerSettings({ defaultPlanningWorkerType: 'opus' });
+
+    render(<CodeTaskNewPage />);
+
+    const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'default worker task' } });
+
+    const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+    fireEvent.click(submitButtons[0] as HTMLElement);
+    fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+    await waitFor(() => {
+      expect(submitCodeTask).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(submitCodeTask).mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(payload['workerType']).toBe('opus');
+  });
+
+  it('keeps a manual worker selection when worker settings refresh for the current mode', async () => {
+    configureWorkerSettings({ defaultPlanningWorkerType: 'opus' });
+
+    const { rerender } = render(<CodeTaskNewPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Opus' }).className).toContain('border-blue-500');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sonnet' }));
+    expect(screen.getByRole('button', { name: 'Sonnet' }).className).toContain('border-blue-500');
+
+    configureWorkerSettings({ defaultPlanningWorkerType: 'codex' });
+    rerender(<CodeTaskNewPage />);
+
+    expect(screen.getByRole('button', { name: 'Sonnet' }).className).toContain('border-blue-500');
+
+    const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'manual worker task' } });
+
+    const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+    fireEvent.click(submitButtons[0] as HTMLElement);
+    fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+    await waitFor(() => {
+      expect(submitCodeTask).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(submitCodeTask).mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(payload['workerType']).toBe('sonnet');
   });
 });
 

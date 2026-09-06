@@ -7,11 +7,14 @@
 import type { FastifyPluginCallback } from 'fastify';
 import type { Logger } from '@intexuraos/common-core';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
+import { getOpenRouterRawId, RESEARCH_SYNTHESIS_MODELS } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import {
   OPENROUTER_ALLOWED_MODELS,
   buildModelInfo,
-  type CatalogEntry,
+  createOpenRouterCatalogClient,
+  createOpenRouterCatalogEntryMap,
+  type OpenRouterCatalogClient,
   type OpenRouterModelInfo,
 } from '@intexuraos/infra-openrouter';
 
@@ -26,8 +29,24 @@ interface CacheEntry {
 
 let cache: CacheEntry | null = null;
 let cacheExpiry = 0;
+let catalogClient: OpenRouterCatalogClient | null = null;
+let catalogClientApiKey: string | null = null;
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const RECOMMENDED_OPENROUTER_MODEL_IDS = RESEARCH_SYNTHESIS_MODELS.map(getOpenRouterRawId);
+const RECOMMENDED_OPENROUTER_MODEL_ID_SET = new Set(RECOMMENDED_OPENROUTER_MODEL_IDS);
+const ORDERED_OPENROUTER_ALLOWED_MODELS = [
+  // The endpoint test enforces that every recommended synthesis model belongs to the allowlist.
+  ...RECOMMENDED_OPENROUTER_MODEL_IDS.map(
+    (modelId) => OPENROUTER_ALLOWED_MODELS.find((entry) => entry.id === modelId)
+  ).filter(
+    (model): model is (typeof OPENROUTER_ALLOWED_MODELS)[number] => model !== undefined
+  ),
+  ...OPENROUTER_ALLOWED_MODELS.filter(
+    (entry) => !RECOMMENDED_OPENROUTER_MODEL_ID_SET.has(entry.id)
+  ),
+];
 
 /**
  * Reset the in-memory cache (for testing).
@@ -35,63 +54,16 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export function resetOpenRouterCache(): void {
   cache = null;
   cacheExpiry = 0;
+  catalogClient = null;
+  catalogClientApiKey = null;
 }
 
-/**
- * Fetch the full OpenRouter model catalog once and return a map of modelId -> catalog entry.
- * This avoids the N+1 problem where each model triggered a separate full catalog fetch.
- */
-async function fetchOpenRouterCatalog(
-  apiKey: string,
-  logger: Logger
-): Promise<Map<string, CatalogEntry> | null> {
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/models', {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://intexuraos.cloud',
-        'X-Title': 'IntexuraOS',
-      },
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as {
-      data: {
-        id: string;
-        pricing?: {
-          prompt?: string;
-          completion?: string;
-        };
-        context_length?: number;
-      }[];
-    };
-
-    const catalogMap = new Map<string, CatalogEntry>();
-    for (const model of data.data) {
-      // pricing is optional in the API response type; skip models without it
-      if (model.pricing === undefined) {
-        continue;
-      }
-
-      catalogMap.set(model.id, {
-        pricing: {
-          inputPricePerMillion: parseFloat(model.pricing.prompt ?? '0') * 1_000_000,
-          outputPricePerMillion: parseFloat(model.pricing.completion ?? '0') * 1_000_000,
-        },
-        contextLength: model.context_length ?? 102400,
-      });
-    }
-
-    return catalogMap;
-  } catch (error) {
-    /* v8 ignore start -- upstream: nock-based tests cannot trigger uncaught fetch exceptions in this code path @preserve */
-    logger.warn({ err: error }, 'Failed to fetch OpenRouter catalog, using fallback pricing');
-    /* v8 ignore stop @preserve */
-    return null;
+function getCatalogClient(apiKey: string, logger: Logger): OpenRouterCatalogClient {
+  if (catalogClient === null || catalogClientApiKey !== apiKey) {
+    catalogClient = createOpenRouterCatalogClient({ apiKey, logger });
+    catalogClientApiKey = apiKey;
   }
+  return catalogClient;
 }
 
 export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -126,10 +98,12 @@ export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
     }
 
     // Fetch full catalog once (avoids N+1 problem of 14 separate catalog fetches)
-    const catalog = await fetchOpenRouterCatalog(apiKey, request.log as Logger);
+    const catalogSnapshot = await getCatalogClient(apiKey, request.log).getCatalog();
+    const catalog =
+      catalogSnapshot === null ? null : createOpenRouterCatalogEntryMap(catalogSnapshot.catalog);
 
     // Build model info for each allowlisted model, enriching with live catalog data
-    const modelsWithPricing: OpenRouterModelInfo[] = OPENROUTER_ALLOWED_MODELS.map((entry) => {
+    const modelsWithPricing: OpenRouterModelInfo[] = ORDERED_OPENROUTER_ALLOWED_MODELS.map((entry) => {
       const catalogEntry = catalog?.get(entry.id);
       return buildModelInfo(entry, catalogEntry);
     });

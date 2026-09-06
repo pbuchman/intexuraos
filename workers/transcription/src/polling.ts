@@ -6,6 +6,7 @@
  */
 import type { SpeechTranscriptionPort } from './providers/transcription-provider.js';
 import type { WorkerLogger as Logger } from './__shims__/common-worker.js';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 
 /**
  * Configuration for polling behavior.
@@ -98,7 +99,12 @@ export async function pollUntilComplete(
 
     if (pollResult.value.status === 'rejected') {
       logger.warn(
-        { event: 'transcription_poll_rejected', jobId, error: pollResult.value.error },
+        {
+          event: 'transcription_poll_rejected',
+          jobId,
+          error: pollResult.value.error,
+          [SKIP_SENTRY_KEY]: true,
+        },
         'Transcription job rejected'
       );
       const result: PollResult = { status: 'rejected' };

@@ -87,8 +87,73 @@ describe('routes/code/schemas', () => {
       dedupKey: 'd',
       callbackReceived: false,
       createdAt: '2024-01-01T00:00:00Z',
+      statusChangedAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     };
+    expect(validate(task)).toBe(true);
+
+    const missingLifecycleTime = { ...task } as Record<string, unknown>;
+    delete missingLifecycleTime['statusChangedAt'];
+    expect(validate(missingLifecycleTime)).toBe(false);
+  });
+
+  it('codeTaskSchema accepts terminal completion and keeps active completion optional or nullable', () => {
+    const validate = ajv.compile(codeTaskSchema);
+    const activeTask = {
+      id: 'task_1',
+      userId: 'u_1',
+      prompt: 'p',
+      sanitizedPrompt: 'p',
+      systemPromptHash: 'h',
+      workerType: 'auto',
+      workerLocation: 'pending',
+      repository: 'org/repo',
+      baseBranch: 'development',
+      traceId: 't',
+      status: 'running',
+      dedupKey: 'd',
+      callbackReceived: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      statusChangedAt: '2024-01-01T00:01:00Z',
+      updatedAt: '2024-01-01T00:02:00Z',
+    };
+
+    expect(validate(activeTask)).toBe(true);
+    expect(validate({ ...activeTask, completedAt: null })).toBe(true);
+    expect(validate({
+      ...activeTask,
+      status: 'failed',
+      completedAt: '2024-01-01T00:01:00Z',
+    })).toBe(true);
+  });
+
+  it('codeTaskSchema accepts structured rebaseResult and merge-ready result fields', () => {
+    const validate = ajv.compile(codeTaskSchema);
+    const task = {
+      id: 'task_1',
+      userId: 'u_1',
+      prompt: 'p',
+      sanitizedPrompt: 'p',
+      systemPromptHash: 'h',
+      workerType: 'auto',
+      workerLocation: 'pending',
+      repository: 'org/repo',
+      baseBranch: 'development',
+      traceId: 't',
+      status: 'implemented',
+      dedupKey: 'd',
+      callbackReceived: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      statusChangedAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      result: {
+        summary: 'No changes needed',
+        rebaseResult: { attempted: false, reason: 'not_required' },
+        merge_ready: '1',
+        merge_ready_reason: 'pull_request_no_changes_rebase_clean',
+      },
+    };
+
     expect(validate(task)).toBe(true);
   });
 
@@ -96,6 +161,59 @@ describe('routes/code/schemas', () => {
     const validate = ajv.compile(executionMemoryContextSchema);
     expect(validate({ status: 'matched' })).toBe(true);
     expect(validate({ status: 'not-a-status' })).toBe(false);
+  });
+
+  it('executionMemoryContextSchema accepts single-artifact and historical planning memory types', () => {
+    const validate = ajv.compile(executionMemoryContextSchema);
+    const context = {
+      status: 'matched',
+      matchedMemories: [
+        {
+          memoryId: 'mem_single',
+          title: 'Single plan artifact',
+          memoryType: 'single_artifact_planning',
+          score: 0.91,
+          appliesWhen: 'Planning must produce one execution task',
+          action: 'Keep one issue, one plan document, and one implementation task',
+          avoid: 'Creating Linear subtasks',
+          verification: 'Check the planned issue has one execution task',
+        },
+        {
+          memoryId: 'mem_decomp',
+          title: 'Historical decomposition',
+          memoryType: 'decomposition_pattern',
+          score: 0.82,
+          appliesWhen: 'Old stored memory is retrieved',
+          action: 'Accept for compatibility',
+          avoid: 'Rejecting historical rows',
+          verification: 'Schema parse succeeds',
+        },
+      ],
+      topCandidates: [
+        {
+          memoryId: 'mem_single',
+          title: 'Single plan artifact',
+          memoryType: 'single_artifact_planning',
+          vectorScore: 0.88,
+          rerankScore: 0.86,
+          componentOverlap: 0.5,
+          effectiveness: 0.7,
+          passedThreshold: true,
+        },
+        {
+          memoryId: 'mem_decomp',
+          title: 'Historical decomposition',
+          memoryType: 'decomposition_pattern',
+          vectorScore: 0.77,
+          rerankScore: 0.75,
+          componentOverlap: 0.4,
+          effectiveness: 0.6,
+          passedThreshold: true,
+        },
+      ],
+    };
+
+    expect(validate(context)).toBe(true);
   });
 
   it('executionMemoryPostRunSchema restricts skipReason to the enum', () => {

@@ -190,7 +190,7 @@ Handled reliability-path noise is reduced in Sentry. Expected HTTP 4xx route log
 
 ### v3.6.0 Release
 
-Key changes since v3.5.0: Execution memory pipeline simplification (memory_acknowledgment downgraded to soft warning), robust memory_acknowledgment recovery for stalled code-review tasks, log cap raised to 8MB, the default task timeout extended to 5 hours with per-task overrides, StatusUpdateClient for redundant terminal status delivery, Docker RFC3339 timestamp stripping fix, validation model chain support for resume summaries and compliance review, mimo-pro worker type, test_quality review scope, inactivity restart tracking, and `retriedFrom` field on task schema.
+Key changes since v3.5.0: execution memory pipeline simplification, robust memory-acknowledgment recovery, an 8MB log cap, a five-hour default task timeout, redundant status delivery, validation model chain support, the `test_quality` review scope, inactivity restart tracking, and `retriedFrom` on the task schema.
 
 ### Execution Memory Pipeline Simplification (INT-1403)
 
@@ -206,7 +206,7 @@ The log forwarding cap was raised from 4MB to 8MB per task to prevent log trunca
 
 ### StatusUpdateClient (INT-1413)
 
-A new `StatusUpdateClient` commits terminal task status directly to code-agent via `PATCH /internal/code-tasks/:id/status` as a secondary delivery path alongside webhook-based completion. This provides redundancy when webhook delivery encounters transient network issues. The client uses the same HMAC signing scheme as the heartbeat manager, retries with exponential backoff (1s, 3s, 9s), and surfaces 4xx errors immediately without retry.
+A new `StatusUpdateClient` commits terminal task status directly to code-agent via `PATCH /internal/code-tasks/status` as a secondary delivery path alongside webhook-based completion. The body carries `taskId`. The client uses the same HMAC signing scheme as the heartbeat manager, retries with exponential backoff (1s, 3s, 9s), and surfaces 4xx errors immediately without retry.
 
 ### Docker RFC3339 Timestamp Stripping (INT-1411)
 
@@ -214,15 +214,11 @@ Fixed the `stripDockerHeaders()` function in the log formatter to properly strip
 
 ### Validation Model Chain for Resume Summaries and Compliance (INT-1371)
 
-Resume-summary extraction and Agent Compliance Validation use the configured validation model chain instead of a hardcoded Gemini model. This is controlled by `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS`, which accepts a comma-separated list of model IDs. Models prefixed with `or:` are routed through OpenRouter; unprefixed models use Gemini. Completion verification itself remains deterministic and does not call LLMs.
+Resume-summary extraction and Agent Compliance Validation use the configured OpenRouter validation model chain. `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` accepts a comma-separated list of `or:` model IDs; direct provider model IDs are rejected. Completion verification itself remains deterministic and does not call LLMs.
 
-### Gemini Client Usage Mapping (INT-1369)
+### Validation Client Usage Mapping (INT-1369)
 
-Mapped the Gemini client for user model standardization. The validation model clients now use `HttpWebhookUsageSink` for LLM usage reporting, sending usage data to code-agent via the usage webhook URL for cost tracking and analytics.
-
-### Worker Type Addition: mimo-pro
-
-Added `mimo-pro` worker type routing through Xiaomi MiMo Pro 2.5's Anthropic-compatible API at `token-plan-sgp.xiaomimimo.com/anthropic` with model `mimo-v2.5-pro`. Uses a dedicated `MIMO_API_KEY` credential validated at startup.
+Validation model clients use `HttpWebhookUsageSink` for LLM usage reporting, sending usage data to code-agent via the usage webhook URL for cost tracking and analytics.
 
 ### Review Scope Addition: test_quality
 
@@ -253,7 +249,7 @@ Added `inactivityRestartCount` to the Task model, tracking lifetime inactivity r
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
 | POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`/`410`                   |
-| GET    | `/health`              | None        | -                                   | `200 { healthContractVersion, status, capacity, running, available, workerAuths, providerApiKeys }` |
+| GET    | `/health`              | None        | -                                   | `200 { healthContractVersion: 2, admissionFrozen, pendingAdmissions, admissionActivityTotal, status, capacity, running, available, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain }` |
 | GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`                  |
@@ -270,12 +266,30 @@ Dispatch requests require three headers:
 
 Verification rejects requests with timestamps older than 5 minutes and replayed nonces (10-minute TTL cache).
 
+The root-owned persistent marker `/var/lib/intexuraos-orchestrator-admission.freeze` freezes every
+task-mutating route (`POST /tasks`, `DELETE /tasks/:id`, and `POST /tasks/:id/message`) with `503`.
+Reads and health remain available. `pendingAdmissions` counts a mutation from before its marker
+check through response, error, or abort; `admissionActivityTotal` increments for every mutation
+that reaches the boundary, including one rejected while frozen, and must remain unchanged across a
+complete drain witness sequence. This lets a restart controller close admission, detect a
+still-active external producer, and wait until every request that crossed the boundary is finished.
+Marker inspection fails closed: only a provably absent marker under the trusted root-owned `/var/lib`
+parent reports `admissionFrozen: false`.
+
+`logForwarderDrain` is a privacy-safe process aggregate. It reports buffer, partial-line, queue,
+batch, chunk, active-flush, open-upload-request, and detached-retry gauges plus process-lifetime
+dropped-chunk/activity counters. Top-level drain ownership also reports every Docker worker
+container, persisted or in-flight terminal callbacks, and a monotonic terminal-callback activity
+counter. It contains no task ID, callback URL, log content, or secret. A drain verifier must treat
+`null` ownership as UNKNOWN and require unchanged process identity, `counterEpochId`, and monotonic
+counters; zero gauges from a restarted process are not proof of continuity.
+
 ### CreateTaskRequest Schema
 
 ```typescript
 {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -343,7 +357,7 @@ stateDiagram-v2
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   runtime?: 'claude' | 'codex';
   runtimeSessionId?: string;
   prompt: string;
@@ -501,7 +515,7 @@ Performs post-completion transcript analysis for execution tasks:
 - Reads session transcripts via `readSessionTranscript()` from JSONL files
 - Formats transcripts into numbered `MSG-NNN` format via `formatTranscript()`
 - Builds compliance prompts comparing agent claims (from `ExecutionAgentData`) against transcript evidence
-- Sends the prompt to an independent LLM through the configured validation model chain (default: `or:google/gemma-4-31b-it,gemini-2.5-flash`)
+- Sends the prompt to an independent LLM through the configured OpenRouter validation model chain (default: `or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash`)
 - Validates the response against `AgentComplianceReportSchema` (Zod) with auto-repair on parse failure
 - Report covers: claim verification (CI called? PR created? commit count? summary accurate?), contract compliance (skills invoked? correct order? code reviewer dispatched?), anomaly detection (fabrication, hallucination, protocol violation), execution metrics
 - Posts formatted PR comments via `gh pr comment` with severity indicators (Critical, Warning, Minor, Pass)
@@ -679,16 +693,11 @@ Collects per-task resource and token metrics after completion:
 | `INTEXURAOS_GITHUB_INSTALLATION_ID`         | Yes      | -                                  |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | -                                  |
 | `INTEXURAOS_LINEAR_API_KEY`                 | Yes      | -                                  |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`              | Yes      | -                                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY`             | Yes      | -                                  |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
-| `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
-| `INTEXURAOS_KIMI_APP_API_KEY`               | Yes      | -                                  |
+| `INTEXURAOS_ERROR_HUB_HOST`                 | Yes      | -                                  |
 | `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
-| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | `or:google/gemma-4-31b-it,gemini-2.5-flash` |
-| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | (required by the default validation chain) |
+| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | `or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash` |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | Yes      | -                                  |
 | `INTEXURAOS_REPOSITORY_PATH`                | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`                | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`        | No       | `3`                                |
@@ -715,7 +724,7 @@ Collects per-task resource and token metrics after completion:
 - **State file is a single JSON blob:** All tasks are stored in one file. Very high task volumes could cause write contention.
 - **Container preservation is selective:** Only execution and planning containers are preserved on completion. Review, pull request, and remediation containers are destroyed immediately. One preserved container per PR is enforced.
 - **macOS metrics are zero:** `TurnMetricsCollector` relies on cgroup v2. macOS Docker does not expose cgroup paths, so CPU and memory metrics are always zero.
-- **Default validation requires OpenRouter key:** The default validation model chain starts with `or:google/gemma-4-31b-it`, so `INTEXURAOS_OPENROUTER_APP_API_KEY` must be configured unless `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` is overridden to Gemini-only models. The same key also powers the Agent Compliance Validator.
+- **Validation requires OpenRouter:** Every validation model ID must use the `or:` prefix, and `INTEXURAOS_OPENROUTER_APP_API_KEY` is required. The same key also powers the Agent Compliance Validator.
 - **Ask Agent skips resume preamble:** When a completed ask_agent task is resumed via `sendMessage()`, the user's message is sent directly without the standard orchestrator context wrapper.
 - **Codex auth is separate:** Codex uses ChatGPT device-auth, managed independently from Claude OAuth. Both must be configured for their respective worker types to function.
 - **Fatal exit code detection reads tail only:** The orchestrator scans only the last portion of raw logs for fatal exit codes to prevent false positives from mid-session crash output.

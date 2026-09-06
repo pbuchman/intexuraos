@@ -2,6 +2,8 @@
  * Type definitions for backend issue grouping.
  * Operates on serialized API-shaped tasks with ISO string dates.
  */
+import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
+import type { CodeTaskDispatchStatus } from '../models/codeTask.js';
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';
@@ -18,6 +20,26 @@ export interface PipelineState {
   pr: { url: string; number: string; status: 'open' | 'merged' | 'closed' | 'mergeable' } | null;
   failedAttempts: number;
   archivedCount: number;
+}
+
+export interface SerializedDispatchStatus {
+  state: CodeTaskDispatchStatus['state'];
+  reason: CodeTaskDispatchStatus['reason'];
+  terminal: boolean;
+  severity: CodeTaskDispatchStatus['severity'];
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  nextAction: CodeTaskDispatchStatus['nextAction'];
+  lastAttemptAt?: string;
+  attemptCount?: number;
+  expiresAt?: string;
+  terminalCause?: Omit<NonNullable<CodeTaskDispatchStatus['terminalCause']>, 'lastSeenAt'> & {
+    lastSeenAt: string;
+  };
+  workerHealthDetails?: CodeTaskDispatchStatus['workerHealthDetails'];
 }
 
 /**
@@ -39,9 +61,11 @@ export interface SerializedTask {
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
+  statusChangedAt: string;
   updatedAt: string;
   dispatchedAt?: string;
   completedAt?: string;
+  dispatchStatus?: SerializedDispatchStatus;
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
@@ -59,7 +83,10 @@ export interface SerializedTask {
     summary?: string;
     ciFailed?: boolean;
     partialWork?: boolean;
-    rebaseResult?: 'success' | 'conflict' | 'skipped';
+    rebaseResult?: CodeTaskRebaseResult;
+    pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
+    merge_ready?: '1';
+    merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
     review_comments_posted?: string;
     review_types?: string;
     requirements_tracker_updated?: string;
@@ -96,6 +123,12 @@ export interface IssueGroup {
   tasks: SerializedTask[];
   pipeline: PipelineState;
   latestTask: SerializedTask;
+  /** Most recent lifecycle transition across the group. */
+  lastActivityAt: string;
+  lastActivityStatus: string;
+  lastActivityTaskId: string;
+  /** Most recent technical write across the group. */
+  lastModifiedAt: string;
   aggregateStatus: GroupStatus;
   mostRecentDispatchedAt?: string;
   isImportant?: boolean;

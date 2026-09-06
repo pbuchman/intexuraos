@@ -28,7 +28,12 @@ describe('internalRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('completed');
       expect(body.data.message).toContain('Internal Note');
-      expect(body.data.resourceUrl).toMatch(/^\/#\/notes\//);
+      const createdNote = ctx.noteRepository.getAll()[0];
+      expect(createdNote).toBeDefined();
+      if (createdNote === undefined) {
+        throw new Error('Expected note to be created');
+      }
+      expect(body.data.resourceUrl).toBe(`https://intexuraos.cloud/#/notes/${createdNote.id}`);
     });
 
     it('returns 401 with invalid internal auth', async () => {

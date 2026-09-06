@@ -601,10 +601,10 @@ Linear sends issue and comment events to `POST /webhooks`. The service:
 
 | Service              | Why Needed                     | Failure Behavior                     |
 | -------------------- | ------------------------------ | ------------------------------------ |
-| user-service         | LLM API key for extraction     | Returns `NOT_CONNECTED` on failure   |
-| app-settings-service | LLM pricing context at startup | Startup fails if unreachable         |
-| code-agent           | Auto-trigger on assignment     | Logged and dropped (fire-and-forget) |
-| code-agent           | Group summary recomputes       | Logged and dropped (best-effort)     |
-| Linear API           | Issue CRUD, team data          | Returns error to caller              |
-| Gemini API           | Issue pruning classification   | Pruning fails gracefully             |
-| Firestore            | Local issue/comment storage    | Returns `INTERNAL_ERROR`             |
+| user-service         | Resolve LLM client for extraction/pruning | Returns `NOT_CONNECTED` on failure   |
+| llm-usage-service    | LLM usage attribution                    | Tracking failure is non-blocking     |
+| code-agent           | Auto-trigger on assignment               | Logged and dropped (fire-and-forget) |
+| code-agent           | Group summary recomputes                 | Logged and dropped (best-effort)     |
+| Linear API           | Issue CRUD, team data                    | Returns error to caller              |
+| Resolved LLM         | Extraction, titles, pruning              | Pruning fails gracefully             |
+| Firestore            | Local issue/comment storage              | Returns `INTERNAL_ERROR`             |

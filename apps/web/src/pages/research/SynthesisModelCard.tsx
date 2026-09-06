@@ -1,58 +1,49 @@
+import { getOpenRouterRawId } from '@intexuraos/llm-contract';
 import { Loader2 } from 'lucide-react';
-import { Card, PROVIDER_MODELS } from '@/components';
-import { getProviderForModel } from '@/services/researchAgentApi.types';
-import type { LlmProvider, SupportedModel } from '@/services/researchAgentApi.types';
+import { Card } from '@/components';
+import type { OpenRouterModelInfo, SupportedModel } from '@/services/researchAgentApi.types';
+import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames.js';
 
 interface SynthesisModelCardProps {
   synthesisCapableModels: readonly SupportedModel[];
   synthesisModel: SupportedModel | null;
   onSelect: (model: SupportedModel) => void;
-  configuredProviders: LlmProvider[];
-  failedProviders: Map<LlmProvider, string>;
-  keysLoading: boolean;
+  availableModels: OpenRouterModelInfo[];
+  hasOpenRouterAccess: boolean;
+  loading: boolean;
   submitting: boolean;
   savingDraft: boolean;
 }
 
-export function SynthesisModelCard(props: SynthesisModelCardProps): React.JSX.Element {
-  const {
-    synthesisCapableModels,
-    synthesisModel,
-    onSelect,
-    configuredProviders,
-    failedProviders,
-    keysLoading,
-    submitting,
-    savingDraft,
-  } = props;
+export function SynthesisModelCard({
+  synthesisCapableModels,
+  synthesisModel,
+  onSelect,
+  availableModels,
+  hasOpenRouterAccess,
+  loading,
+  submitting,
+  savingDraft,
+}: SynthesisModelCardProps): React.JSX.Element {
+  const availableIds = new Set(availableModels.map((model) => model.id));
 
   return (
     <Card title="Synthesis Model">
-      <p className="text-sm text-slate-500 mb-4 dark:text-slate-400">
-        Select which model synthesizes the results
+      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+        Select the OpenRouter model that synthesizes the results.
       </p>
-      {keysLoading ? (
-        <div className="flex items-center gap-2 text-slate-400 text-sm dark:text-slate-500">
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-slate-400 dark:text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading API key status...</span>
+          Loading OpenRouter models...
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {synthesisCapableModels.map((model) => {
+            const rawId = getOpenRouterRawId(model);
             const isSelected = synthesisModel === model;
-            const modelConfig = PROVIDER_MODELS.flatMap((p) => p.models).find(
-              (m) => m.id === model
-            );
-            const provider = getProviderForModel(model);
-            const hasKey = configuredProviders.includes(provider);
-            const hasFailed = failedProviders.has(provider);
-            const isDisabled = !hasKey || hasFailed || submitting || savingDraft;
-            const disabledReason = !hasKey
-              ? 'API key not configured'
-              : hasFailed
-                ? 'API key test failed'
-                : undefined;
-
+            const isAvailable = hasOpenRouterAccess && availableIds.has(rawId);
+            const isDisabled = submitting || savingDraft || !isAvailable;
             return (
               <button
                 key={model}
@@ -61,17 +52,21 @@ export function SynthesisModelCard(props: SynthesisModelCardProps): React.JSX.El
                   onSelect(model);
                 }}
                 disabled={isDisabled}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                className={`rounded-lg border-2 p-4 text-left transition-all ${
                   isSelected
-                    ? 'bg-green-600 text-white'
-                    : hasKey && !hasFailed
-                      ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
-                      : 'bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500'
+                    ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/30'
+                    : isDisabled
+                      ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-60 dark:border-slate-700 dark:bg-slate-800/50'
+                      : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600'
                 }`}
-                title={disabledReason}
+                title={isAvailable ? undefined : 'Model is not available in the OpenRouter catalog'}
               >
-                {modelConfig?.name ?? model}
-                {!hasKey ? ' (no key)' : hasFailed ? ' (test failed)' : ''}
+                <span className="font-medium text-slate-900 dark:text-slate-100">
+                  {resolveOpenRouterModelName(rawId)}
+                </span>
+                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  {rawId}
+                </span>
               </button>
             );
           })}

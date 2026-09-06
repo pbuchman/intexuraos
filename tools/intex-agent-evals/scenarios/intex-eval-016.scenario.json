@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1",
+  "id": "intex-eval-016",
+  "title": "Read saved preferences",
+  "description": "Uses the read-only preference tool and reports its synthetic result without mutation confirmation.",
+  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "timeZone": "Europe/Warsaw",
+  "turns": [
+    {
+      "kind": "message",
+      "text": "Show my saved Intex Agent preferences for INTEX-EVAL-016.",
+      "sourceType": "whatsapp_text"
+    }
+  ],
+  "expected": {
+    "turns": [
+      {
+        "turnIndex": 0,
+        "requiredToolCalls": [
+          {
+            "toolName": "get_user_preferences",
+            "count": 1,
+            "argumentAssertions": []
+          }
+        ],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "query_calendar_events",
+          "update_calendar_event",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": {
+          "action": "started"
+        },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": [
+            "session_started",
+            "user_message",
+            "tool_call_completed",
+            "assistant_message"
+          ],
+          "forbiddenEventTypes": [
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": [
+            {
+              "eventType": "session_started",
+              "assertions": [
+                {
+                  "path": "reason",
+                  "operator": "equals",
+                  "value": "no_active_session"
+                }
+              ]
+            },
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "get_user_preferences"
+                }
+              ]
+            }
+          ]
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Answers the read-only request for saved Intex Agent preferences.",
+              "Reports the current preferences or clearly says that none are saved.",
+              "Does not ask for mutation confirmation or claim that a preference was changed."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

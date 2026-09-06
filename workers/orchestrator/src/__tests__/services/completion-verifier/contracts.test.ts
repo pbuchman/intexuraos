@@ -11,6 +11,7 @@ import {
   reviewPrompt,
   remediationPrompt,
   pullRequestPrompt,
+  sentryPrompt,
 } from '../../../services/system-prompt.js';
 import type { SystemPromptParams } from '../../../services/prompts/prompt-shared.js';
 
@@ -21,6 +22,7 @@ describe('contracts — canonical field table', () => {
     'review',
     'remediation',
     'pull_request',
+    'sentry',
   ];
 
   it('has a contract for every verifiable agent type', () => {
@@ -41,7 +43,8 @@ describe('contracts — canonical field table', () => {
       expect(requiredNames).toContain('summary');
       if (agent === 'planning') {
         expect(requiredNames).toContain('linear_issue');
-        expect(c.fields.map((f) => f.name)).toContain('parallel_breakdown_proof');
+        expect(c.fields.map((f) => f.name)).toContain('plan_doc');
+        expect(c.fields.map((f) => f.name)).toContain('plan_pr');
         expect(c.fields.map((f) => f.name)).toContain('clarification_message');
       } else if (agent === 'pull_request') {
         const linearIssueField = c.fields.find((f) => f.name === 'linear_issue');
@@ -56,6 +59,13 @@ describe('contracts — canonical field table', () => {
       } else if (agent === 'review') {
         expect(requiredNames).toContain('pr');
         expect(requiredNames).toContain('review_id');
+      } else if (agent === 'sentry') {
+        expect(requiredNames).toContain('outcome');
+        expect(requiredNames).toContain('pr');
+        expect(requiredNames).toContain('sentry_issue');
+        expect(requiredNames).toContain('linear_issue');
+        expect(requiredNames).toContain('verification');
+        expect(requiredNames).toContain('reproduction');
       } else {
         expect(requiredNames).toContain('outcome');
         expect(requiredNames).toContain('pr');
@@ -80,13 +90,8 @@ describe('contracts — canonical field table', () => {
       'opus',
       'sonnet',
       'auto',
-      'glm',
-      'minimax',
       'codex',
       'codex-xhigh',
-      'kimi',
-      'qwen',
-      'mimo-pro',
       'openrouter-free',
     ] as const;
     for (const w of workerTypes) {
@@ -95,7 +100,7 @@ describe('contracts — canonical field table', () => {
     expect(TIER_BY_WORKER.opus).toBe('required');
     expect(TIER_BY_WORKER.sonnet).toBe('required');
     expect(TIER_BY_WORKER.auto).toBe('required');
-    expect(TIER_BY_WORKER.glm).toBe('optional');
+    expect(TIER_BY_WORKER['openrouter-free']).toBe('optional');
   });
 
   it('execution contract accepts `execution_memory_*` aliases for dual-read compatibility', () => {
@@ -122,6 +127,17 @@ describe('contracts — canonical field table', () => {
       'Total PR comments posted'
     );
   });
+
+  it('planning contract no longer requires complex or subtask fields', () => {
+    const fieldNames = AGENT_CONTRACTS.planning.fields.map((field) => field.name);
+
+    expect(fieldNames).toContain('outcome');
+    expect(fieldNames).toContain('plan_doc');
+    expect(fieldNames).toContain('plan_pr');
+    expect(fieldNames).not.toContain('complex_task');
+    expect(fieldNames).not.toContain('subtask_urls');
+    expect(fieldNames).not.toContain('parallel_breakdown_proof');
+  });
 });
 
 /**
@@ -144,6 +160,7 @@ describe('contracts — round-trip with every agent prompt', () => {
     { agent: 'review', build: () => reviewPrompt.build(baseParams) },
     { agent: 'remediation', build: () => remediationPrompt.build(baseParams) },
     { agent: 'pull_request', build: () => pullRequestPrompt.build(baseParams) },
+    { agent: 'sentry', build: () => sentryPrompt.build(baseParams) },
   ];
 
   it.each(cases)(

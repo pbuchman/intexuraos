@@ -20,9 +20,24 @@
  * GET    /whatsapp/private/senders    → ./privateReadRoutes.ts
  * GET    /whatsapp/private/messages   → ./privateReadRoutes.ts
  * GET    /whatsapp/private/sender-days → ./privateReadRoutes.ts
+ * GET    /whatsapp/private/messages/:messageId/media      → ./privateMediaRoutes.ts
+ * GET    /whatsapp/private/messages/:messageId/thumbnail  → ./privateMediaRoutes.ts
+ * GET    /whatsapp/private/media-access                   → ./privateMediaRoutes.ts
+ * POST   /internal/whatsapp/private/media         → ./privateMediaRoutes.ts
+ * GET    /internal/whatsapp/private/matrix-delivery-status/:userId → ./privateMatrixOutboundRoutes.ts
+ * POST   /internal/whatsapp/private/outbound-matrix-messages → ./privateMatrixOutboundRoutes.ts
+ * GET    /internal/whatsapp/private/messages/:messageId/media → ./privateMediaRoutes.ts
+ * POST   /internal/whatsapp/private/conversation-context → ./privateSyncRoutes.ts
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
  * POST   /internal/whatsapp/webhooks/retry-pending → ./internalRoutes.ts
  * POST   /internal/whatsapp/private/events        → ./privateSyncRoutes.ts
+ * POST   /internal/whatsapp/private/accounts/:sourceAccountId/erasure → ./privateErasureRoutes.ts
+ * GET    /internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId → ./privateErasureRoutes.ts
+ * POST   /internal/whatsapp/private/digest-source/validate → ./privateDigestSourceRoutes.ts
+ * POST   /internal/whatsapp/private/digest-source/messages/query → ./privateDigestSourceRoutes.ts
+ * POST   /internal/whatsapp/delivery-readiness/get → ./outboundDeliveryRoutes.ts
+ * POST   /internal/whatsapp/outbound-deliveries/get → ./outboundDeliveryRoutes.ts
+ * POST   /internal/whatsapp/outbound-deliveries/retry → ./outboundDeliveryRoutes.ts
  * ─────────────────────────────────────────────────────────────
  */
 

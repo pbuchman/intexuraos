@@ -22,6 +22,23 @@ describe('FakeFirestore', () => {
     });
   });
 
+  describe('transactions', () => {
+    it('commits parent and nested subcollection documents to their exact paths', async () => {
+      const parent = db.collection('parents').doc('parent-1');
+      const child = parent.collection('children').doc('child-1');
+
+      await db.runTransaction(async (transaction) => {
+        transaction.set(parent, { kind: 'parent' });
+        transaction.set(child, { kind: 'child' });
+      });
+
+      await expect(parent.get()).resolves.toMatchObject({ exists: true });
+      expect((await parent.get()).data()).toEqual({ kind: 'parent' });
+      await expect(child.get()).resolves.toMatchObject({ exists: true });
+      expect((await child.get()).data()).toEqual({ kind: 'child' });
+    });
+  });
+
   describe('collection operations', () => {
     it('creates collection reference', () => {
       const col = db.collection('users');
@@ -137,6 +154,20 @@ describe('FakeFirestore', () => {
 
         const snapshot = await docRef.get();
         expect(snapshot.data()?.['tags']).toEqual(['first', 'second']);
+      });
+
+      it('resolves serverTimestamp transforms to native Firestore Timestamps', async () => {
+        const docRef = db.collection('users').doc('user-server-time');
+        const before = Timestamp.now().toMillis();
+
+        await docRef.set({ capturedAt: FieldValue.serverTimestamp() });
+
+        const capturedAt = (await docRef.get()).data()?.['capturedAt'];
+        expect(capturedAt).toBeInstanceOf(Timestamp);
+        expect((capturedAt as Timestamp).toMillis()).toBeGreaterThanOrEqual(before);
+        expect((capturedAt as Timestamp).toMillis()).toBeLessThanOrEqual(
+          Timestamp.now().toMillis()
+        );
       });
     });
 
@@ -362,6 +393,64 @@ describe('FakeFirestore', () => {
         expect(snapshot.size).toBe(3);
       });
 
+      it('filters nested dotted field paths with in operator', async () => {
+        await db
+          .collection('users')
+          .doc('user-1')
+          .set(
+            {
+              profile: {
+                teamId: 'alpha',
+              },
+            },
+            { merge: true }
+          );
+        await db
+          .collection('users')
+          .doc('user-2')
+          .set(
+            {
+              profile: {
+                teamId: 'beta',
+              },
+            },
+            { merge: true }
+          );
+
+        const snapshot = await db
+          .collection('users')
+          .where('profile.teamId', 'in', ['alpha'])
+          .orderBy('profile.teamId', 'asc')
+          .get();
+
+        expect(snapshot.docs.map((doc) => doc.id)).toEqual(['user-1']);
+      });
+
+      it('filters nested escaped field paths with in operator', async () => {
+        await db
+          .collection('users')
+          .doc('user-1')
+          .set(
+            {
+              raw: {
+                content: {
+                  'm.relates_to': {
+                    event_id: '$target-event',
+                  },
+                },
+              },
+            },
+            { merge: true }
+          );
+
+        const snapshot = await db
+          .collection('users')
+          .where('raw.content.`m.relates_to`.event_id', 'in', ['$target-event'])
+          .get();
+
+        expect(snapshot.docs.map((doc) => doc.id)).toEqual(['user-1']);
+      });
+
       it('in operator returns empty for no matches', async () => {
         const snapshot = await db
           .collection('users')
@@ -434,6 +523,26 @@ describe('FakeFirestore', () => {
         const snapshot = await db.collection('users').orderBy('age', 'desc').get();
         const ages = snapshot.docs.map((d) => d.data()?.['age']);
         expect(ages).toEqual([35, 30, 25, 25]);
+      });
+
+      it('excludes documents that do not contain every ordered field', async () => {
+        await db
+          .collection('ordered-items')
+          .doc('complete')
+          .set({ rank: 1, nested: { tie: 2 } });
+        await db
+          .collection('ordered-items')
+          .doc('missing-primary')
+          .set({ nested: { tie: 1 } });
+        await db.collection('ordered-items').doc('missing-secondary').set({ rank: 2 });
+
+        const snapshot = await db
+          .collection('ordered-items')
+          .orderBy('rank', 'asc')
+          .orderBy('nested.tie', 'asc')
+          .get();
+
+        expect(snapshot.docs.map((document) => document.id)).toEqual(['complete']);
       });
     });
 
@@ -556,6 +665,22 @@ describe('FakeFirestore', () => {
 
       const snapshot = await db.collection('users').get();
       expect(snapshot.size).toBe(2);
+    });
+  });
+
+  describe('transactions', () => {
+    it('resolves serverTimestamp transforms when a transaction commits', async () => {
+      const docRef = db.collection('captures').doc('capture-1');
+
+      await db.runTransaction(async (transaction) => {
+        transaction.set(docRef, {
+          status: 'queued',
+          capturedAt: FieldValue.serverTimestamp(),
+        });
+      });
+
+      const capturedAt = (await docRef.get()).data()?.['capturedAt'];
+      expect(capturedAt).toBeInstanceOf(Timestamp);
     });
   });
 

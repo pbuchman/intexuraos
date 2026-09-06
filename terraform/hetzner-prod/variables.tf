@@ -135,14 +135,17 @@ variable "provisioner_sa_key_path" {
   }
 }
 
-variable "runtime_sa_key_path" {
-  description = "Local path to the Hetzner runtime service account key copied to the VM during Terraform bootstrap."
-  type        = string
-  default     = "~/.config/intexuraos/hetzner/runtime-sa-key.json"
+variable "prod_secret_package_version" {
+  description = "Exact positive numeric PROD secret-package version used during a full VM bootstrap. Keep aligned with the protected GitHub Actions PROD_SECRET_PACKAGE_VERSION variable."
+  type        = number
+  default     = 1
 
   validation {
-    condition     = length(trimspace(var.runtime_sa_key_path)) > 0
-    error_message = "runtime_sa_key_path must be non-empty."
+    condition = (
+      var.prod_secret_package_version >= 1 &&
+      floor(var.prod_secret_package_version) == var.prod_secret_package_version
+    )
+    error_message = "prod_secret_package_version must be a positive integer."
   }
 }
 
@@ -174,12 +177,6 @@ variable "web_source_ips" {
     condition     = alltrue([for source in var.web_source_ips : can(cidrhost(source, 0))])
     error_message = "web_source_ips must contain valid CIDR ranges."
   }
-}
-
-variable "cloudflare_dns_api_token_secret_id" {
-  description = "Retained GCP Secret Manager secret ID for the Cloudflare DNS API token used by certbot DNS-01."
-  type        = string
-  default     = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
 }
 
 variable "labels" {

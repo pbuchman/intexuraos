@@ -6,6 +6,41 @@
  */
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 
+export const rebaseResultSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      properties: {
+        attempted: { type: 'boolean', const: false },
+        reason: { type: 'string', enum: ['not_required'] },
+      },
+      required: ['attempted', 'reason'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        attempted: { type: 'boolean', const: true },
+        success: { type: 'boolean' },
+        conflictFiles: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['attempted', 'success'],
+      additionalProperties: false,
+    },
+    {
+      type: 'string',
+      enum: ['success', 'conflict', 'skipped'],
+    },
+  ],
+} as const;
+
+export const nullableRebaseResultSchema = {
+  anyOf: [
+    rebaseResultSchema,
+    { type: 'null' },
+  ],
+} as const;
+
 const linearIssueForDisplaySchema = {
   type: 'object',
   properties: {
@@ -69,7 +104,7 @@ const executionMemoryContextSchema = {
         properties: {
           memoryId: { type: 'string' },
           title: { type: 'string' },
-          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'single_artifact_planning', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
           score: { type: 'number' },
           appliesWhen: { type: 'string' },
           action: { type: 'string' },
@@ -87,7 +122,7 @@ const executionMemoryContextSchema = {
         properties: {
           memoryId: { type: 'string' },
           title: { type: 'string' },
-          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'single_artifact_planning', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
           vectorScore: { type: 'number' },
           rerankScore: { type: 'number' },
           componentOverlap: { type: 'number' },
@@ -236,14 +271,16 @@ const codeTaskSchema = {
     callbackReceived: { type: 'boolean' },
     callbackState: callbackStateSchema,
     createdAt: { type: 'string', format: 'date-time' },
+    statusChangedAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
     dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
+    completedAt: { type: 'string', format: 'date-time', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
     linearIssue: {
       ...linearIssueForDisplaySchema,
       nullable: true,
     },
-    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent'] },
+    agentType: { type: 'string', enum: ['planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry'] },
     prNumber: { type: 'number', nullable: true },
     implementationTaskId: { type: 'string' },
     fanOutChildTaskIds: { type: 'array', items: { type: 'string' } },
@@ -259,11 +296,22 @@ const codeTaskSchema = {
         summary: { type: 'string' },
         ciFailed: { type: 'boolean', nullable: true },
         partialWork: { type: 'boolean', nullable: true },
-        rebaseResult: { type: 'string', enum: ['success', 'conflict', 'skipped'], nullable: true },
+        rebaseResult: nullableRebaseResultSchema,
+        pull_request_outcome_label: { type: 'string', enum: ['commits_pushed', 'no_changes_needed'], nullable: true },
+        merge_ready: { type: 'string', enum: ['1'], nullable: true },
+        merge_ready_reason: {
+          type: 'string',
+          enum: ['review_no_remediation', 'pull_request_no_changes_rebase_clean', 'remediation_already_completed', 'review_skipped'],
+          nullable: true,
+        },
         review_comments_posted: { type: 'string', nullable: true },
         review_types: { type: 'string', nullable: true },
         requirements_tracker_updated: { type: 'string', nullable: true },
         needs_remediation: { type: 'string', nullable: true },
+        sentry_issue_url: { type: 'string', nullable: true },
+        sentry_linear_issue: { type: 'string', nullable: true },
+        sentry_outcome: { type: 'string', enum: ['fixed', 'suppressed'], nullable: true },
+        sentry_verification: { type: 'string', nullable: true },
       },
     },
     error: {
@@ -303,6 +351,7 @@ const codeTaskSchema = {
     'dedupKey',
     'callbackReceived',
     'createdAt',
+    'statusChangedAt',
     'updatedAt',
   ],
 } as const;

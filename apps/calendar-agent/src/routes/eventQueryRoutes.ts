@@ -100,7 +100,10 @@ export const eventQueryRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
         return await handleCalendarError(result.error, reply);
       }
 
-      return await reply.ok({ events: result.value });
+      return await reply.ok({
+        events: result.value.events,
+        truncated: result.value.truncated,
+      });
     }
   );
 

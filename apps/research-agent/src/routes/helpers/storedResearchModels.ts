@@ -1,12 +1,19 @@
-import { getOpenRouterRawId, isOpenRouterModel, isValidModel } from '@intexuraos/llm-contract';
+import {
+  getOpenRouterRawId,
+  isOpenRouterModel,
+} from '@intexuraos/llm-contract';
 import { isAllowedModel } from '@intexuraos/infra-openrouter';
+import { SYNTHESIS_MODELS } from '@intexuraos/llm-prompts';
 
 export function isRetryableStoredResearchModel(model: string): boolean {
-  if (isOpenRouterModel(model)) {
-    return isAllowedModel(getOpenRouterRawId(model));
-  }
+  return isOpenRouterModel(model) && isAllowedModel(getOpenRouterRawId(model));
+}
 
-  return isValidModel(model);
+export function isExecutableSynthesisModel(model: string): boolean {
+  return (
+    isRetryableStoredResearchModel(model) &&
+    SYNTHESIS_MODELS.some((synthesisModel) => synthesisModel === model)
+  );
 }
 
 export function getUnsupportedHistoricalModels(models: readonly string[]): string[] {

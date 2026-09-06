@@ -127,25 +127,23 @@ describe('flushAndCloseLogForwarder', () => {
     mockLogger.warn.mockReset();
   });
 
-  it('flushes then closes the log forwarder', async () => {
+  it('atomically flushes and stops the log forwarder', async () => {
     const lf = createMockLogForwarder();
-    lf.flush.mockResolvedValueOnce(undefined);
+    lf.flushAndStop.mockResolvedValueOnce(undefined);
     await flushAndCloseLogForwarder(lf as never, mockLogger as never, 'task-1');
-    expect(lf.flush).toHaveBeenCalledWith('task-1');
-    expect(lf.close).toHaveBeenCalledWith('task-1');
+    expect(lf.flushAndStop).toHaveBeenCalledWith('task-1');
+    expect(lf.flush).not.toHaveBeenCalled();
+    expect(lf.close).not.toHaveBeenCalled();
   });
 
-  it('swallows close errors and warns', async () => {
+  it('swallows atomic flush-and-stop errors and warns', async () => {
     const lf = createMockLogForwarder();
-    lf.flush.mockResolvedValueOnce(undefined);
-    const closeErr = new Error('close failed');
-    lf.close.mockImplementationOnce(() => {
-      throw closeErr;
-    });
+    const closeErr = new Error('flush-and-stop failed');
+    lf.flushAndStop.mockRejectedValueOnce(closeErr);
     await flushAndCloseLogForwarder(lf as never, mockLogger as never, 'task-2');
     expect(mockLogger.warn).toHaveBeenCalledWith(
       { taskId: 'task-2', error: closeErr },
-      'Failed to close log forwarder after compliance validation'
+      'Failed to flush and stop log forwarder after compliance validation'
     );
   });
 });

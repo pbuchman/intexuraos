@@ -6,7 +6,7 @@ import type { PromptBuilder } from '@intexuraos/llm-prompts';
 import type { CodeTask } from '../../models/codeTask.js';
 
 export const DISTILLATION_VERSION = 'execution-memory-distiller@2.1.0';
-export const PLANNING_DISTILLATION_VERSION = 'planning-memory-distiller@1.1.0';
+export const PLANNING_DISTILLATION_VERSION = 'planning-memory-distiller@2.0.0';
 export const REVIEW_DISTILLATION_VERSION = 'review-memory-distiller@1.1.0';
 export const EVALUATION_VERSION = 'execution-memory-evaluator@2.0.0';
 export const MAX_LOG_LINES = 350;
@@ -24,12 +24,15 @@ export const EvaluationSchema = z.object({
 
 export const DistillationSchema = z.object({
   decision: z.enum(['create', 'skip']),
-  skipReason: z.enum(['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson', 'planning_unclear']).optional(),
+  skipReason: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['infra_only', 'insufficient_signal', 'already_completed', 'no_reusable_lesson', 'planning_unclear']).optional()
+  ),
   evidenceSummary: z.string().min(1),
   memories: z.array(z.object({
     memoryType: z.enum([
       'implementation_pattern', 'verification_pattern', 'pitfall_pattern',
-      'decomposition_pattern', 'planning_decision', 'review_finding',
+      'single_artifact_planning', 'decomposition_pattern', 'planning_decision', 'review_finding',
     ]),
     title: z.string().min(1),
     appliesWhen: z.string().min(1),
@@ -52,7 +55,7 @@ export const DISTILLATION_SCHEMA_BLOCK = [
   '  "evidenceSummary": "string (non-empty, summarize what happened)",',
   '  "memories": [  // empty array when decision is "skip"',
   '    {',
-  '      "memoryType": "implementation_pattern" | "verification_pattern" | "pitfall_pattern" | "decomposition_pattern" | "planning_decision" | "review_finding",',
+  '      "memoryType": "implementation_pattern" | "verification_pattern" | "pitfall_pattern" | "single_artifact_planning" | "decomposition_pattern" | "planning_decision" | "review_finding",',
   '      "title": "string (short descriptive title)",',
   '      "appliesWhen": "string (when this memory should be applied)",',
   '      "action": "string (what to do)",',
@@ -253,13 +256,12 @@ function renderPlanningDistillationPrompt(
   turnMetrics: unknown[],
   issueContext: { description: string | null; comments: { body: string; createdAt: string }[] }
 ): string {
-  const subtaskCount = (task.result?.planning_subtask_urls ?? '').split(',').filter((u) => u.trim() !== '').length;
   return [
     `Version: ${PLANNING_DISTILLATION_VERSION}`,
     `Task status: ${task.status}`,
     `Planning outcome: ${task.result?.planning_outcome_label ?? ''}`,
-    `Complexity classification: ${task.result?.planning_is_complex === '1' ? 'COMPLEX' : 'SIMPLE_OR_PLAN_DOC'}`,
-    `Subtask count: ${String(subtaskCount)}`,
+    'Planning execution model: single issue, single execution task',
+    `Plan document present: ${task.result?.planning_has_plan_doc === '1' ? 'yes' : 'no'}`,
     `Used writing-plans skill: ${task.result?.planning_superpowers_writing_plans_used ?? ''}`,
     `Planning PR URL: ${task.result?.planning_pr_url ?? ''}`,
     `Linear description: ${issueContext.description ?? ''}`,
@@ -268,21 +270,20 @@ function renderPlanningDistillationPrompt(
     `Turn metrics:\n${JSON.stringify(turnMetrics)}`,
     [
       'You are a planning memory distiller. Analyze this completed planning task and extract',
-      'reusable patterns about how issues should be planned and decomposed.',
+      'reusable patterns about how issues should be prepared for one execution task.',
       '',
       'Focus on:',
-      '1. DECOMPOSITION PATTERNS: How was the issue broken into subtasks? What service boundaries',
-      '   were identified? What parallelization strategy was used? Were subtasks properly scoped',
-      '   to single services/workers?',
-      '2. PLANNING DECISIONS: What indicators led to the complexity classification? What made this',
-      '   issue SIMPLE vs COMPLEX? What signals in the Linear issue description predicted the',
-      '   outcome?',
+      '1. SINGLE-ARTIFACT PLANNING PATTERNS: How was the original issue prepared for one execution task?',
+      '   What plan-document structure, label normalization, or execution-handoff guidance made',
+      '   the plan implementable without Linear subtasks?',
+      '2. PLANNING DECISIONS: What indicators led to a direct implementation handoff versus a',
+      '   plan-document handoff? What signals in the Linear issue description predicted the outcome?',
       '3. Any verification or pitfall patterns that emerged during planning (e.g., missing',
-      '   composite indexes, cross-service dependencies that blocked parallelization).',
+      '   composite indexes, cross-service dependencies that required explicit sequencing).',
       '',
       'Memory types to use:',
-      '- "decomposition_pattern": How complex issues should be broken into subtasks',
-      '- "planning_decision": Complexity classification heuristics and indicators',
+      '- "single_artifact_planning": How planning prepared one issue, one plan document, and one execution task',
+      '- "planning_decision": Handoff heuristics and indicators',
       '- "implementation_pattern": Reusable if planning uncovered an implementation approach',
       '- "verification_pattern": Reusable if planning identified verification requirements',
       '- "pitfall_pattern": Reusable if planning identified risks or common mistakes',
@@ -341,7 +342,7 @@ export const distillationPrompt: PromptBuilder<DistillationPromptInput> = {
   name: 'execution-memory-distillation',
   description:
     'Routes a completed code task to the appropriate distillation prompt (execution, planning, or review)',
-  version: '1.0.0',
+  version: '2.0.0',
 
   build(input: DistillationPromptInput): string {
     const { task, logs, turnMetrics, issueContext } = input;

@@ -33,6 +33,8 @@ export type CallType =
   | 'generate'
   /** Image generation operations */
   | 'image_generation'
+  /** Vector embedding generation */
+  | 'embedding'
   /** Tool calling / function calling agent loops */
   | 'tool_calling';
 

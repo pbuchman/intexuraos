@@ -6,6 +6,7 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
@@ -16,9 +17,11 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { randomUUID } from 'node:crypto';
 import { hasCodeTaskLabel, getWorkerTypeFromLabels } from '../../domain/utils/labelUtils.js';
+import { resolveDefaultWorkerType } from '../../domain/utils/defaultWorkerTypeResolution.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { sanitizePromptForInjection } from '../../domain/utils/promptInjectionSanitizer.js';
 import { generateWebhookSecret } from '../utils/secrets.js';
+import { buildCodeTaskUrl } from '../utils/taskUrls.js';
 import { backLinkPlanningTask } from './backLinkPlanningTask.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
@@ -32,7 +35,7 @@ const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'system-prompt-hash-v1';
 export interface SubmitDirectCodeTaskRequest {
   userId: string;
   prompt: string;
-  workerType: WorkerType;
+  workerType?: WorkerType;
   taskMode?: 'planning' | 'execution';
   linearIssueId?: string;
   repository?: string;
@@ -118,7 +121,17 @@ export async function submitDirectCodeTask(
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
 
   if (enabledWorkers.length === 0) {
-    logger.warn({ userId }, 'User has no workers configured');
+    logger.warn(
+      {
+        userId,
+        workerType: workerType ?? 'auto',
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 0,
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'User has no workers configured'
+    );
     return err({
       code: 'worker_not_configured',
       message: 'Please configure your workers in Settings before submitting code tasks',
@@ -159,14 +172,20 @@ export async function submitDirectCodeTask(
     hasChildren,
   } = issueResult;
 
+  const effectiveAgentType: 'planning' | 'execution' =
+    request.taskMode ?? (hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning');
+
   // Resolution chain: Linear label > request workerType > user setting > 'auto'
   const labelWorkerType = getWorkerTypeFromLabels(linearIssueLabels);
-  let effectiveWorkerType: WorkerType = labelWorkerType ?? workerType;
-  if (effectiveWorkerType === 'auto') {
-    if (settings?.defaultPlanningWorkerType !== undefined) {
-      effectiveWorkerType = settings.defaultPlanningWorkerType;
-      logger.info({ userId, defaultPlanningWorkerType: effectiveWorkerType }, 'Using user default planning worker type');
-    }
+  const workerResolution = resolveDefaultWorkerType({
+    agentType: effectiveAgentType,
+    labelWorkerType,
+    requestWorkerType: workerType,
+    settings,
+  });
+  const effectiveWorkerType = workerResolution.workerType;
+  if (workerResolution.source === 'default' && workerResolution.defaultField !== undefined) {
+    logger.info({ userId, [workerResolution.defaultField]: effectiveWorkerType }, 'Using user default worker type');
   }
 
   logger.info(
@@ -180,9 +199,6 @@ export async function submitDirectCodeTask(
     },
     'Linear issue processed'
   );
-
-  const effectiveAgentType: 'planning' | 'execution' =
-    request.taskMode ?? (hasCodeTaskLabel(linearIssueLabels) ? 'execution' : 'planning');
 
   // Step 3b: Fan-out check (INT-962) — if parent issue has children with code-task labels,
   // create separate child tasks instead of dispatching the parent.
@@ -316,7 +332,7 @@ export async function submitDirectCodeTask(
 
       return ok({
         codeTaskId: fanOutResult.value.primaryChildTaskId,
-        resourceUrl: `/#/code-tasks/${fanOutResult.value.primaryChildTaskId}`,
+        resourceUrl: buildCodeTaskUrl(fanOutResult.value.primaryChildTaskId),
         workerLocation: 'queued' as WorkerLocation,
       });
     }
@@ -324,7 +340,7 @@ export async function submitDirectCodeTask(
     // Fan-out succeeded or fell back to normal enqueue — return the parent task ID
     return ok({
       codeTaskId: parentTask.id,
-      resourceUrl: `/#/code-tasks/${parentTask.id}`,
+      resourceUrl: buildCodeTaskUrl(parentTask.id),
       workerLocation: 'queued' as WorkerLocation,
     });
   }
@@ -417,13 +433,16 @@ export async function submitDirectCodeTask(
   try {
     await deps.metricsClient.incrementTasksSubmitted(effectiveWorkerType, source);
   } catch (error: unknown) {
-    logger.error({ error, taskId: task.id, workerType: effectiveWorkerType, source }, 'Failed to record task submission metric');
+    logger.error(
+      { error, taskId: task.id, workerType: effectiveWorkerType, source, [SKIP_SENTRY_KEY]: true },
+      'Failed to record task submission metric'
+    );
   }
 
   // Step 8: Return success — task is in queue, drainTaskQueue will dispatch it
   return ok({
     codeTaskId: task.id,
-    resourceUrl: `/#/code-tasks/${task.id}`,
+    resourceUrl: buildCodeTaskUrl(task.id),
     workerLocation: 'queued' as WorkerLocation,
   });
 }

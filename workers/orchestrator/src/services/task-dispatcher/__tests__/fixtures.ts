@@ -98,7 +98,7 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
 
   const ctx: DispatcherContext = {
     logger,
-    config: { capacity: 5 } as never,
+    config: { capacity: 5, logBasePath: '/tmp/orchestrator-test/logs' } as never,
     isolation: {
       provider: {
         isHealthy: vi.fn().mockReturnValue(true),
@@ -118,11 +118,7 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
       getSecrets: vi.fn().mockReturnValue({
         ANTHROPIC_API_KEY: 'a',
         LINEAR_API_KEY: 'l',
-        SENTRY_AUTH_TOKEN: 's',
-        MINIMAX_API_KEY: 'm',
-        MIMO_API_KEY: 'mi',
-        DASHSCOPE_API_KEY: 'd',
-        KIMI_API_KEY: 'k',
+        ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
         OPENROUTER_API_KEY: 'o',
       }),
       gcpSaKeyPath: '/tmp/gcp.key',

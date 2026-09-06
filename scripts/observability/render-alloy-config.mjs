@@ -128,6 +128,7 @@ loki.process "pm2_logs" {
 
 loki.write "grafana_cloud" {
   endpoint {
+    name     = "pm2_grafana_cloud"
     url      = sys.env("INTEXURAOS_GRAFANA_CLOUD_LOKI_URL")
 
     basic_auth {

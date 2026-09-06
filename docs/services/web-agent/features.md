@@ -45,9 +45,9 @@ Given a batch of URLs, Web Agent fetches OpenGraph metadata from each page and r
 
 Batch requests support partial success — if one URL in a set fails, the rest still return. Each result carries its own status, so the calling agent knows exactly which links succeeded and which did not.
 
-### Works without user API keys
+### Centralized fallback
 
-Summarization uses the user's own LLM credentials when available, keeping costs under the user's control. But if no API key is configured, the platform provides a Gemini 2.5 Flash fallback automatically. New users get working summaries from day one, with no setup required.
+Summarization respects supported user preferences and uses the platform OpenRouter default when none can be resolved. Operators can inspect fallback traffic and spend in one provider dashboard.
 
 ## Key Benefits
 

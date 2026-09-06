@@ -1,4 +1,4 @@
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
@@ -55,7 +55,7 @@ describe('usageLogger', () => {
   const baseParams: UsageLogParams = {
     userId: 'user-123',
     provider: LlmProviders.Google,
-    model: LlmModels.Gemini25Flash,
+    model: LegacyGoogleModels.Gemini25Flash,
     callType: 'research' as const,
     usage: {
       inputTokens: 100,
@@ -152,7 +152,7 @@ describe('usageLogger', () => {
           expect.objectContaining({
             userId: 'user-123',
             provider: LlmProviders.Google,
-            model: LlmModels.Gemini25Flash,
+            model: LegacyGoogleModels.Gemini25Flash,
             callType: 'research',
             inputTokens: 100,
             outputTokens: 200,
@@ -223,6 +223,10 @@ describe('usageLogger', () => {
     // valid UsageSink MUST be a subclass instance (never an ad-hoc object).
     it('NoopUsageSink is instanceof UsageSink', () => {
       expect(new NoopUsageSink()).toBeInstanceOf(UsageSink);
+    });
+
+    it('exposes the inherited nominal brand to sanctioned subclasses', () => {
+      expect(new NoopUsageSink().__brand).toBe('UsageSink');
     });
 
     it('custom subclass of UsageSink is instanceof UsageSink', () => {

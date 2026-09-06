@@ -16,6 +16,18 @@ describe('CreateTaskRequestSchema.taskId', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts deterministic task ids emitted by code-agent reservation flows', () => {
+    const deterministicTaskIds = [
+      'task_review_3575a69848b633cd68c25a0688a6c6d1',
+      'task_github_0123456789abcdef0123456789abcdef01234567',
+    ];
+
+    for (const taskId of deterministicTaskIds) {
+      const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, taskId });
+      expect(result.success).toBe(true);
+    }
+  });
+
   it('rejects empty string', () => {
     const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, taskId: '' });
     expect(result.success).toBe(false);

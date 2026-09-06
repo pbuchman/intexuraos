@@ -1,13 +1,13 @@
 locals {
   hetzner_scheduler_jobs = {
-    mobile_notifications_digest_yesterday = {
-      job_name             = "mobile-notifications-digest-yesterday-prod-hetzner"
-      description          = "Daily WhatsApp digest aggregation via Hetzner edge"
-      schedule             = "0 1 * * *"
+    message_digest_tick = {
+      job_name             = "intexuraos-message-digest-tick-prod-hetzner"
+      description          = "Dispatch due WhatsApp Message Digests every five minutes via Hetzner edge"
+      schedule             = "*/5 * * * *"
       time_zone            = "UTC"
-      path                 = "/internal/notifications/digest/run-yesterday"
-      body                 = null
-      headers              = {}
+      path                 = "/internal/message-digests/scheduler/tick"
+      body                 = base64encode("{}")
+      headers              = { "Content-Type" = "application/json" }
       retry_count          = 3
       max_retry_duration   = null
       min_backoff_duration = "30s"
@@ -52,6 +52,19 @@ locals {
       min_backoff_duration = "5s"
       max_backoff_duration = "30s"
     }
+    calendar_schedule_tick = {
+      job_name             = "intexuraos-calendar-schedule-tick-prod-hetzner"
+      description          = "Process due Calendar Agent schedules every 15 minutes via Hetzner edge"
+      schedule             = "*/15 * * * *"
+      time_zone            = "UTC"
+      path                 = "/internal/calendar/schedules/tick"
+      body                 = null
+      headers              = {}
+      retry_count          = 1
+      max_retry_duration   = "60s"
+      min_backoff_duration = "5s"
+      max_backoff_duration = "30s"
+    }
     drain_task_queue = {
       job_name             = "intexuraos-drain-task-queue-prod-hetzner"
       description          = "Drain queued code tasks when workers become available via Hetzner edge"
@@ -68,7 +81,7 @@ locals {
     merge_conflict_reconcile = {
       job_name             = "intexuraos-merge-conflict-reconcile-prod-hetzner"
       description          = "Check mergeability and dispatch conflict resolution tasks via Hetzner edge"
-      schedule             = "*/1 * * * *"
+      schedule             = "*/5 * * * *"
       time_zone            = "UTC"
       path                 = "/internal/merge-conflicts/reconcile"
       body                 = null

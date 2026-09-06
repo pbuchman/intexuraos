@@ -2,19 +2,50 @@
  * Tests for Linear API client.
  * Tests the factory function and uses FakeLinearApiClient for behavior testing.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeLinearApiClient } from '../fakes.js';
 import type { LinearTeam } from '../../domain/models.js';
+import { clearClientCache, createLinearApiClient } from '../../infra/linear/linearApiClient.js';
+
+const mocks = vi.hoisted(() => ({
+  issues: vi.fn(),
+  issue: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+
+vi.mock('@linear/sdk', () => ({
+  LinearClient: vi.fn(function LinearClient() {
+    return {
+      issues: mocks.issues,
+      issue: mocks.issue,
+    };
+  }),
+}));
+
+vi.mock('@intexuraos/infra-sentry', () => ({
+  createAppLogger: vi.fn(() => ({
+    info: mocks.info,
+    warn: mocks.warn,
+    error: mocks.error,
+    debug: mocks.debug,
+  })),
+}));
 
 describe('LinearApiClient', () => {
   let fakeClient: FakeLinearApiClient;
 
   beforeEach(() => {
     fakeClient = new FakeLinearApiClient();
+    clearClientCache();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
     fakeClient.reset();
+    clearClientCache();
   });
 
   describe('validateAndGetTeams', () => {
@@ -185,6 +216,34 @@ describe('LinearApiClient', () => {
 
       expect(result.ok).toBe(false);
     });
+
+    it('returns UPSTREAM_UNAVAILABLE and warns when Linear list retries exhaust transient 502 errors', async () => {
+      vi.useFakeTimers();
+      mocks.issues.mockRejectedValue(new Error('GraphQL Error (Code: 502) - Bad gateway'));
+      const client = createLinearApiClient();
+
+      try {
+        const resultPromise = client.listIssues('api-key', 'team-1');
+        await vi.advanceTimersByTimeAsync(1_500);
+        const result = await resultPromise;
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toEqual({
+            code: 'UPSTREAM_UNAVAILABLE',
+            message: 'Linear API temporarily unavailable',
+          });
+        }
+        expect(mocks.issues).toHaveBeenCalledTimes(3);
+        expect(mocks.warn).toHaveBeenCalledWith(
+          { teamId: 'team-1', _skipSentry: true },
+          'Linear API transiently unavailable while listing issues'
+        );
+        expect(mocks.error).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('getIssue', () => {
@@ -231,6 +290,34 @@ describe('LinearApiClient', () => {
       const result = await fakeClient.getIssue('api-key', 'issue-123');
 
       expect(result.ok).toBe(false);
+    });
+
+    it('returns null when the Linear SDK reports that the issue does not exist', async () => {
+      mocks.issue.mockRejectedValueOnce(new Error('Entity not found: Issue'));
+      const client = createLinearApiClient();
+
+      const result = await client.getIssue('api-key', 'stable-idempotent-issue-id');
+
+      expect(result).toEqual({ ok: true, value: null });
+      expect(mocks.error).not.toHaveBeenCalled();
+      expect(mocks.info).toHaveBeenCalledWith(
+        { issueId: 'stable-idempotent-issue-id' },
+        'Issue not found by ID'
+      );
+    });
+
+    it('does not hide a mapping failure for an issue that was found', async () => {
+      mocks.issue.mockResolvedValueOnce({
+        state: Promise.resolve(null),
+        children: vi.fn().mockResolvedValue({ nodes: [] }),
+        parent: Promise.reject(new Error('Entity not found: Issue')),
+      });
+      const client = createLinearApiClient();
+
+      const result = await client.getIssue('api-key', 'existing-issue-id');
+
+      expect(result.ok).toBe(false);
+      expect(mocks.error).toHaveBeenCalled();
     });
   });
 

@@ -1,6 +1,6 @@
 /**
  * Firestore repository for Linear prune candidates.
- * Stores candidates classified by Gemini so users can review before confirming deletion.
+ * Stores candidates classified by an LLM so users can review before confirming deletion.
  *
  * All candidates are stored globally (not per-user) since pruning operates across
  * the entire Linear workspace. Document IDs use the Linear issue UUID.

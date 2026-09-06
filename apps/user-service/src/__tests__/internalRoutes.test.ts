@@ -3,12 +3,18 @@
  * - GET /internal/users/:uid/llm-keys
  * - GET /internal/users/:uid/settings
  */
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
+  LegacyGoogleModels,
+  LlmModels,
+} from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -142,13 +148,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
         };
       };
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
       expect(body.data.perplexity).toBeNull();
@@ -187,13 +192,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
         };
       };
-      expect(body.data.google).toBe(googleKey);
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBe(anthropicKey);
       expect(body.data.perplexity).toBeNull();
@@ -216,13 +220,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
         };
       };
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
       expect(body.data.perplexity).toBeNull();
@@ -244,20 +247,19 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('returns undefined for keys when decryption fails', async () => {
+    it('returns null for an executable provider key when decryption fails', async () => {
       const userId = 'user-decrypt-fail';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      // Make the first decryption fail (for google)
       fakeEncryptor.setFailNextDecrypt(true);
 
       app = await buildServer();
@@ -274,13 +276,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
         };
       };
-      // Google key should be null due to decryption failure
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
+      expect(body.data.openai).toBeNull();
     });
   });
 
@@ -290,7 +291,7 @@ describe('Internal Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/users/user-123/llm-keys/google/last-used',
+        url: '/internal/users/user-123/llm-keys/openai/last-used',
       });
 
       expect(response.statusCode).toBe(401);
@@ -652,12 +653,44 @@ describe('Internal Routes', () => {
       expect(body.error.message).toContain('auth failed');
     });
 
-    it('returns user llmPreferences when valid auth header', async () => {
+    it('marks invalid internal-auth endpoint warnings as non-Sentry', async () => {
+      app = await buildServer();
+      const warnSpy = vi.fn();
+      await app.addHook('onRequest', async (request) => {
+        const log = request.log as unknown as { warn: (...args: unknown[]) => void };
+        const originalWarn = log.warn.bind(request.log);
+        log.warn = ((...args: unknown[]): void => {
+          warnSpy(...args);
+          originalWarn(...args);
+        });
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/settings',
+        headers: {
+          'x-internal-auth': 'invalid-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const endpointWarn = warnSpy.mock.calls.find(
+        (call) => call[1] === 'Internal auth failed for users/:uid/settings endpoint'
+      );
+      expect(endpointWarn?.[0]).toEqual(
+        expect.objectContaining({
+          reason: 'token_mismatch',
+          [SKIP_SENTRY_KEY]: true,
+        })
+      );
+    });
+
+    it('normalizes a stored legacy Google preference for internal consumers', async () => {
       const userId = 'user-with-settings';
       fakeSettingsRepo.setSettings({
         userId,
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -680,7 +713,7 @@ describe('Internal Routes', () => {
           llmPreferences?: { defaultModel: string };
         };
       };
-      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.llmPreferences?.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
 
     it('returns fallbackModel in internal settings when present', async () => {
@@ -689,7 +722,7 @@ describe('Internal Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
           fallbackModel: orFallback,
         },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -713,8 +746,72 @@ describe('Internal Routes', () => {
           llmPreferences?: { defaultModel: string; fallbackModel?: string };
         };
       };
-      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.llmPreferences?.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
       expect(body.data.llmPreferences?.fallbackModel).toBe(orFallback);
+    });
+
+    it('preserves an absent default while normalizing a stored legacy fallback', async () => {
+      const userId = 'user-with-only-legacy-fallback-model';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: {
+          fallbackModel: LegacyGoogleModels.Gemini25Flash,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          llmPreferences?: { defaultModel?: string; fallbackModel?: string };
+        };
+      };
+      expect(body.data.llmPreferences).not.toHaveProperty('defaultModel');
+      expect(body.data.llmPreferences?.fallbackModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
+    });
+
+    it('normalizes a legacy Google fallback while preserving a supported default', async () => {
+      const userId = 'user-with-legacy-fallback-model';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: {
+          defaultModel: LlmModels.GPT4oMini,
+          fallbackModel: LegacyGoogleModels.Gemini25Flash,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          llmPreferences?: { defaultModel: string; fallbackModel?: string };
+        };
+      };
+      expect(body.data.llmPreferences?.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
+      expect(body.data.llmPreferences?.fallbackModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
 
     it('returns undefined llmPreferences when user has no settings', async () => {
@@ -1100,5 +1197,202 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
+  });
+
+  describe('GET /internal/users/:uid/settings/intex-agent-runtime', () => {
+    it('checks internal auth before availability and repository calls', async () => {
+      const availability = vi.fn(async () => true);
+      const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+      const timezoneRead = vi.spyOn(fakeSettingsRepo, 'getTimezonePreference');
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: availability,
+        },
+      });
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/runtime-user/settings/intex-agent-runtime',
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(availability).not.toHaveBeenCalled();
+      expect(selectorRead).not.toHaveBeenCalled();
+      expect(timezoneRead).not.toHaveBeenCalled();
+    });
+
+    it('returns the unavailable platform default and UTC without decoding corrupt selector state', async () => {
+      const userId = 'runtime-unavailable-user';
+      fakeSettingsRepo.setRawIntexAgentModelState(userId, { intexAgentModelRevision: -1 });
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => false,
+        },
+      });
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { data: unknown };
+      expect(body.data).toEqual({
+        status: 'unavailable',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        source: 'platform_default',
+        timeZone: 'UTC',
+      });
+    });
+
+    it('returns the available selector projection with its stored timezone', async () => {
+      const userId = 'runtime-available-user';
+      fakeSettingsRepo.setSettings({
+        userId,
+        timezone: 'Europe/Warsaw',
+        llmPreferences: {
+          intexAgentModel: IntexAgentModels.MiniMaxM3,
+          intexAgentModelRevision: 4,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => true,
+        },
+      });
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { data: unknown };
+      expect(body.data).toEqual({
+        status: 'available',
+        effectiveModel: IntexAgentModels.MiniMaxM3,
+        explicitModel: IntexAgentModels.MiniMaxM3,
+        source: 'explicit',
+        revision: 4,
+        timeZone: 'Europe/Warsaw',
+      });
+    });
+
+    it('projects available default-absent state and maps timezone and selector failures statically', async () => {
+      const userId = 'runtime-default-absent-user';
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => true,
+        },
+      });
+      app = await buildServer();
+      const request = async (): Promise<import('fastify').LightMyRequestResponse> =>
+        await app.inject({
+          method: 'GET',
+          url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        });
+
+      const absent = await request();
+      expect(absent.statusCode).toBe(200);
+      expect((JSON.parse(absent.body) as { data: unknown }).data).toEqual({
+        status: 'available',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        explicitModel: null,
+        source: 'default_absent',
+        revision: 0,
+        timeZone: 'UTC',
+      });
+
+      fakeSettingsRepo.setFailNextGetIntexAgentModelState(true);
+      const selectorFailure = await request();
+      expect((JSON.parse(selectorFailure.body) as { error: unknown }).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to load Intex Agent runtime settings',
+      });
+
+      fakeSettingsRepo.setRawIntexAgentModelState(userId, { intexAgentModelRevision: -1 });
+      const invalid = await request();
+      expect((JSON.parse(invalid.body) as { error: unknown }).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Intex Agent model selector state is invalid',
+      });
+
+      fakeSettingsRepo.setFailNextGetTimezonePreference(true);
+      const timezoneFailure = await request();
+      expect((JSON.parse(timezoneFailure.body) as { error: unknown }).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to load Intex Agent runtime settings',
+      });
+    });
+
+    it('reads only timezone for an unavailable runtime projection', async () => {
+      const userId = 'runtime-only-timezone-user';
+      const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+      const timezoneRead = vi.spyOn(fakeSettingsRepo, 'getTimezonePreference');
+      fakeSettingsRepo.setSettings({
+        userId,
+        timezone: 'America/Chicago',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => false,
+        },
+      });
+      app = await buildServer();
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(timezoneRead).toHaveBeenCalledWith(userId);
+      expect(selectorRead).not.toHaveBeenCalled();
+    });
+
+    it.each([true, false])(
+      'rejects corrupt timezone for selector availability %s without coercing it',
+      async (available) => {
+        const userId = `runtime-corrupt-timezone-${String(available)}`;
+        const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+        fakeSettingsRepo.setRawTimezonePreference(userId, 42);
+        setServices({
+          intexAgentModelAvailability: {
+            start: () => Promise.resolve(),
+            isAvailableForUser: async () => available,
+          },
+        });
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        });
+
+        expect(response.statusCode).toBe(500);
+        expect((JSON.parse(response.body) as { error: unknown }).error).toEqual({
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to load Intex Agent runtime settings',
+        });
+        if (!available) {
+          expect(selectorRead).not.toHaveBeenCalled();
+        }
+      }
+    );
   });
 });

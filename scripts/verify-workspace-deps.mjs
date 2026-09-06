@@ -12,6 +12,7 @@
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
+import { discoverWorkspaceDirectories } from './lib/workspace-discovery.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 
@@ -150,25 +151,13 @@ function checkWorkspace(workspacePath, workspaceName) {
 function main() {
   console.log('Verifying workspace dependencies...\n');
 
-  const appsDir = join(repoRoot, 'apps');
-  const packagesDir = join(repoRoot, 'packages');
-
-  if (existsSync(appsDir)) {
-    for (const app of readdirSync(appsDir)) {
-      const appPath = join(appsDir, app);
-      if (statSync(appPath).isDirectory()) {
-        checkWorkspace(appPath, `apps/${app}`);
-      }
-    }
-  }
-
-  if (existsSync(packagesDir)) {
-    for (const pkg of readdirSync(packagesDir)) {
-      const pkgPath = join(packagesDir, pkg);
-      if (statSync(pkgPath).isDirectory()) {
-        checkWorkspace(pkgPath, `packages/${pkg}`);
-      }
-    }
+  const workspacePaths = discoverWorkspaceDirectories(repoRoot, [
+    'apps/*',
+    'packages/*',
+    'tools/intex-agent-evals',
+  ]);
+  for (const workspacePath of workspacePaths) {
+    checkWorkspace(workspacePath, relative(repoRoot, workspacePath));
   }
 
   if (errors.length > 0) {

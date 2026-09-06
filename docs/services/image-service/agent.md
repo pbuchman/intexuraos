@@ -10,7 +10,7 @@
 | --------- | ------------------------------------------------------------------------------------ |
 | **Name**  | image-service                                                                        |
 | **Role**  | AI image generation and prompt enhancement service                                   |
-| **Goal**  | Generate cover images and optimized prompts using GPT Image 1 and Gemini Flash Image |
+| **Goal**  | Generate cover images and optimized prompts using GPT Image 1 and GPT-4.1            |
 
 ---
 
@@ -27,7 +27,7 @@
 ```typescript
 interface GeneratePromptInput {
   text: string;   // Content to visualize (10–60000 characters)
-  model: 'gpt-4.1' | 'gemini-2.5-pro';  // LLM for prompt generation
+  model: 'gpt-4.1';  // LLM for prompt generation
   userId: string;  // User ID for API key lookup
 }
 ```
@@ -54,7 +54,7 @@ interface ThumbnailPrompt {
 // Request
 {
   "text": "Research about artificial intelligence and machine learning trends",
-  "model": "gemini-2.5-pro",
+  "model": "gpt-4.1",
   "userId": "user_abc123"
 }
 
@@ -86,7 +86,7 @@ interface ThumbnailPrompt {
 ```typescript
 interface GenerateImageInput {
   prompt: string;  // Image generation prompt (10–2000 characters)
-  model: 'gpt-image-1' | 'gemini-2.5-flash-image';  // Image generation model
+  model: 'gpt-image-1';  // Image generation model
   userId: string;  // User ID for API key lookup and ownership
   title?: string;  // Optional title for slug-based filename (max 100 chars)
 }
@@ -166,7 +166,7 @@ interface DeleteImageOutput {
 
 **Do NOT:**
 
-- Call image generation without first ensuring the user has the required provider API key (or platform fallback keys are configured)
+- Call image generation without resolved OpenRouter access
 - Send prompt text under 10 characters or over 60000 characters
 - Send image generation prompts under 10 characters or over 2000 characters
 - Expect image editing, inpainting, or variation generation — only new image creation is supported
@@ -175,7 +175,7 @@ interface DeleteImageOutput {
 **Requires:**
 
 - `X-Internal-Auth` header must be set with valid internal token on all requests
-- User must have the required provider API key configured in user-service, OR the platform Gemini fallback key must be set (`INTEXURAOS_GEMINI_APP_API_KEY`)
+- OpenRouter access must resolve from the user key or platform fallback
 - GCS bucket must be accessible for upload/delete operations
 
 ---
@@ -194,13 +194,12 @@ interface DeleteImageOutput {
 7. When research is unshared: DELETE /internal/images/:id
 ```
 
-### Pattern 2: Provider Failover (Caller-Side)
+### Pattern 2: Prompt and Image Generation
 
 ```
-1. Try POST /internal/images/generate with model "gemini-2.5-flash-image"
-2. If DOWNSTREAM_ERROR or INVALID_REQUEST (missing key):
-   Retry with model "gpt-image-1" (or vice versa)
-3. Failover logic lives in the caller (e.g., research-agent), not image-service
+1. Call POST /internal/images/prompts/generate with model "gpt-4.1"
+2. Pass the returned prompt to POST /internal/images/generate with model "gpt-image-1"
+3. If OpenRouter is unavailable, surface the provider error
 ```
 
 ### Pattern 3: Prompt-Only Workflow
@@ -229,7 +228,7 @@ interface DeleteImageOutput {
 | Error Code         | HTTP Status | Meaning                      | Recovery Action                             |
 | ------------------ | ----------- | ---------------------------- | ------------------------------------------- |
 | `UNAUTHORIZED`     | 401         | Invalid internal auth header | Fix X-Internal-Auth header value            |
-| `INVALID_REQUEST`  | 400         | Missing API key for provider | User must add API key or configure fallback |
+| `INVALID_REQUEST`  | 400         | Missing OpenRouter access    | Check the user key and platform fallback    |
 | `RATE_LIMITED`     | 429         | Provider rate limit exceeded | Retry with exponential backoff              |
 | `DOWNSTREAM_ERROR` | 502         | Provider or service failure  | Check provider/service status, retry        |
 | `INTERNAL_ERROR`   | 500         | Firestore save failed        | GCS image cleaned up; retry full operation  |
@@ -241,10 +240,9 @@ interface DeleteImageOutput {
 
 No service-level rate limits. Provider limits apply:
 
-| Provider | Limit Type         | Notes                      |
-| -------- | ------------------ | -------------------------- |
-| OpenAI   | Per-account limits | Configured via API keys    |
-| Google   | Per-project quotas | Configured via GCP project |
+| Provider   | Limit Type         | Notes                   |
+| ---------- | ------------------ | ----------------------- |
+| OpenRouter | Per-account limits | Configured via API keys |
 
 ---
 
@@ -256,14 +254,13 @@ None. Image-service does not publish Pub/Sub events.
 
 ## Dependencies
 
-| Service           | Why Needed                            | Failure Behavior                                 |
-| ----------------- | ------------------------------------- | ------------------------------------------------ |
-| user-service      | Fetch encrypted API keys per provider | Rejects request with 502 DOWNSTREAM_ERROR        |
-| GCS               | Store generated images and thumbnails | Returns STORAGE_ERROR; image generation reverted |
-| Firestore         | Persist image metadata for tracking   | Cleans up GCS image, returns 500 INTERNAL_ERROR  |
-| OpenAI API        | GPT Image 1 generation, GPT-4.1       | Returns DOWNSTREAM_ERROR to caller               |
-| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro    | Returns DOWNSTREAM_ERROR to caller               |
+| Service      | Why Needed                            | Failure Behavior                                 |
+| ------------ | ------------------------------------- | ------------------------------------------------ |
+| user-service | Resolve OpenRouter user/platform key  | Rejects request with 502 DOWNSTREAM_ERROR        |
+| GCS          | Store generated images and thumbnails | Returns STORAGE_ERROR; image generation reverted |
+| Firestore    | Persist image metadata for tracking   | Cleans up GCS image, returns 500 INTERNAL_ERROR  |
+| OpenRouter API | GPT Image 1 generation, GPT-4.1     | Returns DOWNSTREAM_ERROR to caller               |
 
 ---
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-08-12

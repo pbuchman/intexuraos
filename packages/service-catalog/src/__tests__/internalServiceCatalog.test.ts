@@ -6,6 +6,16 @@ import {
 } from '../internalServiceCatalog.js';
 
 describe('buildInternalApiOpenApiSources', () => {
+  it('registers the Message Digest internal service and OpenAPI environment contract', () => {
+    expect(INTERNAL_API_SERVICE_CATALOG).toContainEqual({
+      key: 'message-digest-service',
+      name: 'Message Digest Service',
+      apiDocsName: 'Message Digest Service API',
+      baseUrlEnvVar: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL',
+      openApiUrlEnvVar: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL',
+    });
+  });
+
   it('does not include removed agent services', () => {
     const catalogKeys = INTERNAL_API_SERVICE_CATALOG.map((entry) => entry.key);
     const retiredKeys = ['todo', 'chat', 'cron', 'command', 'action'].map(

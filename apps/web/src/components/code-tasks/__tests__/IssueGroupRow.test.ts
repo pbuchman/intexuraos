@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CodeTask } from '@/types';
 import type { IssueGroup } from '@/types/issueGroups';
 import { IssueGroupRow } from '../IssueGroupRow.js';
@@ -23,6 +23,7 @@ function createTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
     dedupKey: 'dedup-123',
     callbackReceived: false,
     createdAt: '2026-03-06T12:00:00.000Z',
+    statusChangedAt: '2026-03-06T12:05:00.000Z',
     updatedAt: '2026-03-06T12:05:00.000Z',
     agentType: 'planning',
     ...rest,
@@ -30,6 +31,10 @@ function createTask(overrides: Partial<CodeTask> & { id: string }): CodeTask {
 }
 
 describe('IssueGroupRow', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders parent breadcrumbs for subtask linear issues', () => {
     const task = createTask({
       id: 'task-123',
@@ -54,6 +59,10 @@ describe('IssueGroupRow', () => {
       pipeline: { steps: [], pr: null, failedAttempts: 0, archivedCount: 0 },
       latestTask: task,
       aggregateStatus: 'active',
+      lastActivityAt: task.statusChangedAt,
+      lastActivityStatus: task.status,
+      lastActivityTaskId: task.id,
+      lastModifiedAt: task.updatedAt,
     };
 
     const html = renderToStaticMarkup(createElement(IssueGroupRow, {
@@ -70,5 +79,52 @@ describe('IssueGroupRow', () => {
     expect(html).toContain('href="https://linear.app/pbuchman/issue/INT-1154"');
     expect(html).not.toContain('href="https://linear.app/pbuchman/issue/INT-1121"');
     expect(html).toContain('→');
+  });
+
+  it('shows the group lifecycle event on desktop and mobile without moving on metadata writes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-27T14:35:00.000Z'));
+
+    const task = createTask({
+      id: 'task-failed',
+      status: 'failed',
+      statusChangedAt: '2026-07-27T14:28:15.885Z',
+      completedAt: '2026-07-27T14:28:15.885Z',
+      updatedAt: '2026-07-27T15:35:09.634Z',
+    });
+    const baseGroup: IssueGroup = {
+      linearIssueId: null,
+      linearIssue: undefined,
+      tasks: [task],
+      pipeline: { steps: [], pr: null, failedAttempts: 1, archivedCount: 0 },
+      latestTask: task,
+      aggregateStatus: 'failed',
+      lastActivityAt: '2026-07-27T14:28:15.885Z',
+      lastActivityStatus: 'failed',
+      lastActivityTaskId: task.id,
+      lastModifiedAt: '2026-07-27T15:35:09.634Z',
+    };
+    const renderGroup = (group: IssueGroup): string => renderToStaticMarkup(createElement(IssueGroupRow, {
+      group,
+      timeTick: 1,
+      onAction: (): void => { /* stub */ },
+      onArchiveGroup: (): void => { /* stub */ },
+      onDeleteGroup: (): void => { /* stub */ },
+      onOpenLogs: (): void => { /* stub */ },
+    }));
+
+    const beforeMetadataWrite = renderGroup(baseGroup);
+    const afterMetadataWrite = renderGroup({
+      ...baseGroup,
+      lastModifiedAt: '2026-07-27T16:00:00.000Z',
+      latestTask: { ...task, updatedAt: '2026-07-27T16:00:00.000Z' },
+    });
+
+    expect(beforeMetadataWrite.match(/dateTime="2026-07-27T14:28:15.885Z"/g)).toHaveLength(2);
+    expect(afterMetadataWrite.match(/dateTime="2026-07-27T14:28:15.885Z"/g)).toHaveLength(2);
+    expect(beforeMetadataWrite).not.toContain('dateTime="2026-07-27T15:35:09.634Z"');
+    expect(afterMetadataWrite).not.toContain('dateTime="2026-07-27T16:00:00.000Z"');
+    expect(beforeMetadataWrite).not.toContain('Updated');
+    expect(afterMetadataWrite).not.toContain('Updated');
   });
 });

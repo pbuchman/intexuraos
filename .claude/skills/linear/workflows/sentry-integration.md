@@ -1,136 +1,63 @@
-# Sentry Integration Workflow
+# SentryBox Integration Workflow
 
-**Trigger:** User calls `/linear https://<sentry-url>`
+**Trigger:** `/linear` receives a private SentryBox issue URL.
 
-> **Note:** For comprehensive Sentry triage, AI analysis, and batch processing, use the dedicated `/sentry` skill. This workflow focuses specifically on creating Linear issues from Sentry errors.
+This workflow creates one Linear issue from SentryBox evidence. It never queries
+Legacy Sentry SaaS or a second error provider.
 
----
+## Steps
 
-## Verbose Transition Logging (MANDATORY)
+1. Require an HTTPS URL whose host is exactly the configured `ERROR_HUB_HOST`
+   and whose path matches `/organizations/intexuraos/issues/<id>/`.
+2. Verify the `error_hub` and Linear MCP servers are available. Do not fall back
+   to a server named `sentry` or to a REST token.
+3. Call the `error_hub` server's `execute_sentry_tool` tool with
+   `name`: `get_issue_details` and
+   `arguments`: `{ issueUrl: <exact issue URL> }`.
+   Extract the title, project, environment, release, occurrence count,
+   timestamps, and stack evidence returned by SentryBox.
+4. Search Linear for an existing issue with the same SentryBox issue URL or
+   title. If a match exists, report it instead of creating a duplicate.
+5. Create one unassigned Linear issue in team `IntexuraOS`, state `Backlog`,
+   titled `[sentry] <short error title>`.
+6. Include the private SentryBox URL, environment, project, release, occurrence
+   count, error summary, and relevant stack excerpt in the description. Never
+   copy credentials or an entire downloaded event payload.
+7. Stop after creation unless the user explicitly requested implementation.
 
-```
-🔍 FETCH: Parsing Sentry URL...
-🔍 FETCH: Getting Sentry issue details (org: intexuraos, issue: 12345)
-📋 CREATED: INT-789 "[sentry] TypeError: null is not an object"
-📍 STATE: Backlog
-🔀 ROUTING: Creation complete. No execution keywords detected. Stopping.
-```
+## Required output
 
----
-
-## Delegation to Sentry Skill
-
-For advanced operations, delegate to the Sentry skill:
-
-| Operation                  | Use                                     |
-| -------------------------- | --------------------------------------- |
-| Single issue investigation | `/sentry <sentry-url>`                  |
-| AI root cause analysis     | `/sentry analyze <sentry-url>`          |
-| Batch triage               | `/sentry` or `/sentry triage --limit N` |
-| Create Linear issue only   | This workflow (below)                   |
-
-**Full Sentry documentation:** `.claude/skills/sentry/`
-
----
-
-## Steps (Create Linear Issue)
-
-### 1. Parse Sentry URL
-
-- Extract organization slug
-- Extract issue ID
-
-### 2. Verify Tools
-
-Required tools:
-
-- Linear MCP
-- GitHub CLI
-- Sentry MCP (`mcp__sentry__whoami`)
-- GCloud (for investigation)
-
-### 3. Fetch Sentry Details
-
-```
-- Call mcp__sentry__get_issue_details with issueUrl
-- Extract: title, stacktrace, frequency, affected users
+```text
+FETCH: Read SentryBox issue <id> through error_hub
+CREATED: INT-XXX "[sentry] <error>"
+STATE: Backlog
+ROUTING: Creation complete
 ```
 
-### 4. Search for Existing Linear Issue
-
-```
-- Call mcp__linear__list_issues with Sentry title query
-- If match found: Ask to use existing or create new
-```
-
-### 5. Create Linear Issue
-
-```
-- Call mcp__linear__create_issue
-- Format: [sentry] <short-error-message>
-- Team: "IntexuraOS"
-- State: "Backlog"
-- Description includes:
-  - Sentry issue link
-  - Error context summary
-  - Stacktrace excerpt
-```
-
-### 6. Add Comment to Sentry Issue (Optional)
-
-If possible, add comment linking to Linear issue.
-
-### 7. Execution Intent Detection
-
-**Check if user's input contains explicit execution keywords:**
-
-| Keywords Found                                | Action                                                                                         |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| "fix now", "implement", "work on", "fix this" | Ask: "Start working immediately?" → If yes, transition to [work-existing.md](work-existing.md) |
-| No execution keywords                         | **STOP.** Issue created. Do not offer to work on it.                                           |
-
-**Output:**
-
-```
-📋 CREATED: INT-XXX "[sentry] <error>"
-📍 STATE: Backlog
-🔀 ROUTING: Creation complete. No execution keywords detected. Stopping.
-```
-
-## Sentry Issue Description Template
+## Description template
 
 ```markdown
-## Sentry Error
+## SentryBox Error
 
-**Sentry Issue:** [ISSUE-ID](SENTRY_URL)
+**Issue:** [<issue-id>](private-sentrybox-url)
 
-### Error Summary
+- **Project:** <project>
+- **Environment:** <environment>
+- **Release:** <release-or-unknown>
+- **Occurrences:** <count>
 
-<short description of the error>
+### Error summary
 
-### Stacktrace
+<concise summary>
+
+### Relevant stack
+
+<small relevant excerpt>
+
+## Test Requirements (MANDATORY - implement first)
+
+<specific regression tests derived from the failure>
 ```
 
-<relevant stacktrace excerpt>
-```
-
-### Context
-
-- **Frequency:** X events in Y period
-- **Affected Users:** Z users
-- **Environment:** production/staging
-
-## Investigation Notes
-
-<space for investigation findings>
-```
-
-## Naming Convention
-
-Always use `[sentry]` prefix regardless of error type:
-
-| Example                                          |
-| ------------------------------------------------ |
-| `[sentry] TypeError: null is not an object`      |
-| `[sentry] ReferenceError: x is not defined`      |
-| `[sentry] Network request failed in AuthService` |
+The `[sentry]` prefix and existing `sentry_*` task result fields remain protocol
+names; they do not indicate a Legacy Sentry dependency.

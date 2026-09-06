@@ -8,7 +8,7 @@
 | --------- | ----------------------------------------------------------------------------------- |
 | Name      | research-agent                                                                      |
 | Role      | Orchestrate parallel LLM research calls and synthesize results into a single report |
-| Goal      | Produce a cross-validated, attributed research document from multiple AI providers  |
+| Goal      | Produce a cross-validated report from up to six OpenRouter models                    |
 
 ## Capabilities
 
@@ -25,7 +25,7 @@
 ```typescript
 interface SubmitResearchInput {
   prompt: string;                  // Research question (min 1 char)
-  selectedModels: ResearchModel[]; // Models to use for research (native or or:-prefixed OpenRouter)
+  selectedModels: ResearchModel[]; // Executable model IDs; Google models must use or:google/...
   synthesisModel: ResearchModel;   // Model to use for synthesis
   inputContexts?: {
     content: string;               // Max 60,000 chars per context
@@ -35,6 +35,8 @@ interface SubmitResearchInput {
   originalPrompt?: string;         // Original prompt before improvement
 }
 ```
+
+`selectedModels` contains at most six unique executable `or:` IDs.
 
 **Output Schema:**
 
@@ -57,8 +59,12 @@ interface SubmitResearchOutput {
 // Request
 {
   "prompt": "Compare PostgreSQL vs MongoDB for a SaaS product",
-  "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6", "or:x-ai/grok-4.20-beta"],
-  "synthesisModel": "gemini-2.5-pro"
+  "selectedModels": [
+    "or:google/gemini-3.6-flash",
+    "or:anthropic/claude-sonnet-4.6",
+    "or:x-ai/grok-4.20-beta"
+  ],
+  "synthesisModel": "or:google/gemini-3.6-flash"
 }
 
 // Response
@@ -68,10 +74,14 @@ interface SubmitResearchOutput {
     "id": "res_abc123",
     "status": "pending",
     "title": "",
-    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6", "or:x-ai/grok-4.20-beta"],
+    "selectedModels": [
+      "or:google/gemini-3.6-flash",
+      "or:anthropic/claude-sonnet-4.6",
+      "or:x-ai/grok-4.20-beta"
+    ],
     "llmResults": [
-      { "model": "gemini-2.5-pro", "status": "pending" },
-      { "model": "claude-sonnet-4-6", "status": "pending" },
+      { "model": "or:google/gemini-3.6-flash", "status": "pending" },
+      { "model": "or:anthropic/claude-sonnet-4.6", "status": "pending" },
       { "model": "or:x-ai/grok-4.20-beta", "status": "pending" }
     ],
     "startedAt": "2026-03-15T10:00:00.000Z"
@@ -125,7 +135,7 @@ type ResearchStatus =
   | 'failed';
 
 interface LlmResult {
-  provider: string;       // google, openai, anthropic, perplexity, openrouter
+  provider: string;       // openrouter for or:* calls; reads may expose historical values
   model: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   result?: string;
@@ -296,7 +306,7 @@ interface OpenRouterModelInfo {
 }
 ```
 
-**Note:** OpenRouter models are prefixed with `or:` when used in `selectedModels` (e.g., `or:qwen/qwen3.5-plus-02-15`). The endpoint returns raw model IDs without the prefix.
+**Note:** OpenRouter models are prefixed with `or:` when used in `selectedModels` (e.g., `or:qwen/qwen3.5-plus-02-15`). The endpoint returns raw model IDs without the prefix. Google/Gemini execution is available only through `or:google/...`; raw `gemini-*` IDs are rejected.
 
 ---
 
@@ -343,12 +353,13 @@ interface ServiceFeedback {
 - Expect `synthesizedResult` to be populated until `status === 'completed'`
 - Retry a research that is not in `failed` status
 - Use OpenRouter model IDs without the `or:` prefix in `selectedModels`
+- Submit raw `gemini-*` model IDs or configure a Google LLM API key; use an allowlisted `or:google/...` model and the OpenRouter credential instead
 
 **Requires:**
 
-- User must have LLM API keys configured in user-service for the selected models
-- OpenRouter models require an OpenRouter API key configured in user-service
-- Synthesis model API key must be present — missing key causes immediate `failed` status
+- The selected route must resolve a credential through user-service
+- OpenRouter models use the user's OpenRouter key when present, otherwise the platform OpenRouter fallback
+- The synthesis model credential must resolve — a missing credential causes immediate `failed` status
 - Notion export requires `POST /settings/notion` to be configured first
 
 ## Usage Patterns
@@ -395,9 +406,9 @@ interface ServiceFeedback {
 ### Pattern 5: OpenRouter Model Discovery
 
 ```
-1. GET /openrouter/models -> list of 15 curated models with pricing
+1. GET /openrouter/models -> list of 16 curated models with pricing
 2. Select models by id, prefix with 'or:' for selectedModels array
-3. POST / with or:-prefixed model IDs alongside native models
+3. POST / with the or:-prefixed model IDs
 ```
 
 ## Error Handling
@@ -407,7 +418,7 @@ interface ServiceFeedback {
 | 400         | Invalid input (missing fields, bad model name, context limit) | Fix request payload                       |
 | 401         | Missing or expired JWT / invalid internal auth token          | Refresh token or check X-Internal-Auth    |
 | 403         | Research belongs to a different user                          | Verify userId matches token               |
-| 404         | Research not found / OpenRouter key not configured            | Verify ID exists or configure API key     |
+| 404         | Research not found / OpenRouter credential unavailable        | Verify ID or credential resolution        |
 | 409         | Status conflict (e.g., enhance on non-completed)              | Check status before calling               |
 | 500         | Internal error                                                | Retry with backoff; check Sentry          |
 
@@ -423,9 +434,9 @@ interface ServiceFeedback {
 
 | Service           | Why Needed                                            | Failure Behavior                               |
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------- |
-| user-service      | Fetch API keys; report LLM success analytics          | Research fails if keys unavailable             |
+| user-service      | Resolve OpenRouter credential; report LLM analytics    | Research fails if credential is unavailable     |
 | llm-usage-service | Report LLM token usage and cost per call              | Usage not recorded; research unaffected        |
-| image-service     | Generate cover image for share page                   | Skipped with provider failover; graceful       |
+| image-service     | Generate cover image through OpenRouter                | Skipped gracefully when generation is unavailable |
 | notion-service    | Validate Notion page IDs; execute Notion export       | Export skipped if unavailable; fire-and-forget |
 | whatsapp-service  | Send completion and failure notifications via Pub/Sub | Notification dropped; research unaffected      |
 | OpenRouter API    | Route LLM calls; fetch live pricing catalog           | Call fails; pricing falls back to allowlist    |

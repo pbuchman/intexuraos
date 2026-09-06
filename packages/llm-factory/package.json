@@ -16,7 +16,6 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/infra-claude": "workspace:*",
-    "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
     "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",

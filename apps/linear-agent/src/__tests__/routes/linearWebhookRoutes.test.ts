@@ -204,6 +204,23 @@ describe('Linear Webhook Routes', () => {
       expect(response.statusCode).toBe(401);
     });
 
+    it('rejects an empty webhook body without a signature before ignoring it', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+        },
+        payload: '{}',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const storedIssues = await issueRepo.listByUserId(userId);
+      const storedComments = await commentRepo.listByIssueId('missing-issue');
+      expect(storedIssues.ok && storedIssues.value.length).toBe(0);
+      expect(storedComments.ok && storedComments.value.length).toBe(0);
+    });
+
     it('rejects webhook with invalid signature', async () => {
       const payload = createLinearWebhookPayload();
 
@@ -239,7 +256,7 @@ describe('Linear Webhook Routes', () => {
       expect(body.data.message).toBe('Ignored');
     });
 
-    it('returns 200 for unconnected teams', async () => {
+    it('rejects a webhook for an unconnected team whose signature cannot be verified', async () => {
       const payload = createLinearWebhookPayload({
         data: { team: { id: 'unknown-team', key: 'UNK' } },
       });
@@ -255,12 +272,12 @@ describe('Linear Webhook Routes', () => {
         payload: JSON.stringify(payload),
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.data.message).toBe('Team not connected');
+      expect(response.statusCode).toBe(401);
+      const storedIssues = await issueRepo.listByUserId(userId);
+      expect(storedIssues.ok && storedIssues.value.length).toBe(0);
     });
 
-    it('returns 200 when team connected but webhook secret not configured', async () => {
+    it('rejects a webhook when the team has no configured signing secret', async () => {
       // Create a second connection without webhook secret
       const connectionRepo2 = new FakeLinearConnectionRepository();
       connectionRepo2.seedConnection({
@@ -309,9 +326,7 @@ describe('Linear Webhook Routes', () => {
         payload: JSON.stringify(payload),
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.data.message).toBe('Webhook not configured');
+      expect(response.statusCode).toBe(401);
     });
 
     it('rejects webhook with wrong signature for configured secret', async () => {
@@ -613,12 +628,7 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
-        // Empty teamId now returns "Webhook not configured" instead of bypassing validation
-        expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body);
-        expect(body.success).toBe(true);
-        expect(body.data.message).toBe('Webhook not configured');
-        expect(body.data.action).toBe('ignored');
+        expect(response.statusCode).toBe(401);
       });
 
       it('returns 500 when webhook secret lookup fails for comment', async () => {
@@ -1083,7 +1093,7 @@ describe('Linear Webhook Routes', () => {
         expect(body.success).toBe(true);
       });
 
-      it('returns 200 for non-Issue non-Comment webhook type (isCommentData false branch)', async () => {
+      it('rejects a signed non-Issue webhook when no team secret can be resolved', async () => {
         const payload = {
           action: 'create',
           type: 'Label',
@@ -1106,9 +1116,7 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
-        expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body);
-        expect(body.data.message).toBe('Ignored');
+        expect(response.statusCode).toBe(401);
       });
 
       it('returns 500 when issueRepository.findById fails for comment webhook', async () => {
@@ -1147,7 +1155,7 @@ describe('Linear Webhook Routes', () => {
         expect(body.error.code).toBe('INTERNAL_ERROR');
       });
 
-      it('returns 200 with Issue not found when issue does not exist for comment webhook', async () => {
+      it('rejects a comment webhook when its issue cannot resolve a team secret', async () => {
         // issueRepo is empty, so findById returns null
 
         const payload = {
@@ -1177,12 +1185,10 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
-        expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body);
-        expect(body.data.message).toBe('Issue not found');
+        expect(response.statusCode).toBe(401);
       });
 
-      it('returns 200 ignored when comment webhook issue has no webhookSecret configured', async () => {
+      it('rejects a comment webhook when its team has no signing secret', async () => {
         // Seed issue with a teamId that has no webhook secret
         issueRepo.seedIssue({
           id: 'issue-uuid-nosecret',
@@ -1231,7 +1237,6 @@ describe('Linear Webhook Routes', () => {
             updatedAt: '2025-01-01T00:00:00.000Z',
           },
         };
-        // No valid signature needed - we expect it to be ignored before signature check
         const response = await app.inject({
           method: 'POST',
           url: '/webhooks',
@@ -1241,10 +1246,7 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
-        expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body);
-        expect(body.data.message).toBe('Webhook not configured');
-        expect(body.data.action).toBe('ignored');
+        expect(response.statusCode).toBe(401);
       });
 
       it('falls back to issue.userId when findUserIdsByIssueId returns empty array', async () => {
@@ -1364,7 +1366,7 @@ describe('Linear Webhook Routes', () => {
         expect(body.success).toBe(true);
       });
 
-      it('returns 200 Ignored for Issue type with unrecognized data shape (covers isCommentData FALSE branch)', async () => {
+      it('rejects an unsigned Issue webhook with an unrecognized data shape', async () => {
         // type='Issue' passes the early type guard, but data has neither 'team' (isIssueData)
         // nor 'issueId' (isCommentData) fields → falls through to unknown data structure handler
         const payload = {
@@ -1383,9 +1385,7 @@ describe('Linear Webhook Routes', () => {
           payload: JSON.stringify(payload),
         });
 
-        expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body);
-        expect(body.data.message).toBe('Unknown data structure');
+        expect(response.statusCode).toBe(401);
       });
 
       it('returns 500 when syncCommentFromWebhook fails (commentRepo save fails)', async () => {

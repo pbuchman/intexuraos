@@ -8,11 +8,11 @@ Fishing knowledge in IntexuraOS is split across manually saved notes, WhatsApp d
 
 ## How It Helps
 
-The service stores per-user knowledge folders and pages, indexes page chunks with embeddings, persists chat sessions and messages, and retrieves supporting evidence before generating a cited answer. It also exposes digest browsing endpoints backed by mobile-notifications-service data.
+The service stores per-user knowledge folders and pages, indexes page chunks with embeddings, persists chat sessions and messages, and retrieves supporting evidence before generating a cited answer. Its compatibility digest views read canonical history from `message-digest-service`, while supporting source-message evidence comes from the scoped private WhatsApp API.
 
 ## Release 3.7.0 Highlights
 
-- Added the Fishing Assistant RAG foundation: knowledge folders, knowledge pages, page chunking, OpenAI embeddings, Firestore vector search, and chat endpoints. (PRs #2038, #2054)
+- Added the Fishing Assistant RAG foundation: knowledge folders, knowledge pages, page chunking, OpenRouter embeddings, Firestore vector search, and chat endpoints. The persisted embedding alias remains `text-embedding-3-small`. (PRs #2038, #2054)
 - Added persisted chat history retrieval through `/chats`, `/chats/:chatId`, and `/chats/:chatId/messages`; new answers receive recent chat messages in the prompt. (PR #2091)
 - Strengthened citation validation by aliasing prompt source IDs and remapping citations back to canonical source IDs before storing assistant messages. (PR #2074)
 - Prioritized knowledge-base evidence over digest/raw-message context and requires a knowledge-page citation when knowledge evidence is available. (PR #2104)
@@ -42,7 +42,7 @@ The service stores per-user knowledge folders and pages, indexes page chunks wit
 
 ### Browse Digest Context
 
-**User Goal:** Inspect recent fishing digest material from subscribed groups.
+**User Goal:** Inspect the migrated Fishing group history from the canonical Message Digest store.
 
 **Steps:**
 1. List digest groups with `/digest-groups`.
@@ -61,7 +61,7 @@ The service stores per-user knowledge folders and pages, indexes page chunks wit
 
 ## Limitations
 
-**OpenRouter key required for chat** - Chat generation uses the user's OpenRouter API key from user-service. Missing keys return a `NO_API_KEY` error.
+**OpenRouter access required for chat** - Chat generation uses the user's OpenRouter key when present and the platform fallback otherwise. Missing access returns a `NO_API_KEY` error.
 
 **Knowledge indexing depends on embeddings** - Knowledge pages can be stored with `indexingStatus: failed` when embedding generation fails.
 

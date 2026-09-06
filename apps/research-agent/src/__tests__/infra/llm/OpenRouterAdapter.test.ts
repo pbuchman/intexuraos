@@ -61,37 +61,34 @@ describe('OpenRouterAdapter', () => {
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: EXPECTED_RAW_MODEL,
+        evidenceModelId: TEST_MODEL,
         userId: 'test-user-id',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
     });
 
-    it('passes non-OpenRouter model directly without stripping prefix', () => {
+    it('rejects a model without the OpenRouter evidence prefix', () => {
       mockCreateOpenRouterClient.mockClear();
       const nonOpenRouterModel = 'google/gemini-2.0-flash';
-      new OpenRouterAdapter(
-        'test-key',
-        nonOpenRouterModel,
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
-        model: nonOpenRouterModel,
-        userId: 'test-user-id',
-        logger: mockLogger,
-        usageSink: fakeUsageSink,
-      });
+      expect(
+        () =>
+          new OpenRouterAdapter(
+            'test-key',
+            nonOpenRouterModel,
+            'test-user-id',
+            mockLogger,
+            fakeUsageSink
+          )
+      ).toThrow('OpenRouter model ID must start with or:');
+      expect(mockCreateOpenRouterClient).not.toHaveBeenCalled();
     });
 
-    it('strips or: prefix for google/gemini-3-flash-preview', () => {
+    it('strips or: prefix for google/gemini-3.6-flash', () => {
       mockCreateOpenRouterClient.mockClear();
       new OpenRouterAdapter(
         'test-key',
-        'or:google/gemini-3-flash-preview',
+        'or:google/gemini-3.6-flash',
         'test-user-id',
         mockLogger,
         fakeUsageSink
@@ -99,7 +96,8 @@ describe('OpenRouterAdapter', () => {
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'google/gemini-3-flash-preview',
+        model: 'google/gemini-3.6-flash',
+        evidenceModelId: 'or:google/gemini-3.6-flash',
         userId: 'test-user-id',
         logger: mockLogger,
         usageSink: fakeUsageSink,
@@ -649,6 +647,41 @@ describe('OpenRouterAdapter', () => {
         }),
         'OpenRouter title generation failed'
       );
+    });
+  });
+
+  describe('generateContextLabel', () => {
+    it('generates a trimmed label through OpenRouter', async () => {
+      const usage = { inputTokens: 12, outputTokens: 3, totalTokens: 15, costUsd: 0.0002 };
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: '  Platform routing  ', usage },
+      });
+
+      const result = await adapter.generateContextLabel('Long context');
+
+      expect(result).toEqual({
+        ok: true,
+        value: { label: 'Platform routing', usage },
+      });
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-context-label-generation' }
+      );
+    });
+
+    it('maps OpenRouter errors when context-label generation fails', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: false,
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+      });
+
+      const result = await adapter.generateContextLabel('Long context');
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+      });
     });
   });
 });

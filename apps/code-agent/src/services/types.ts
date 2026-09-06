@@ -9,7 +9,6 @@ import type { Firestore } from '@google-cloud/firestore';
 import type { Result } from '@intexuraos/common-core';
 import type { PRTriagePublisher } from '@intexuraos/pr-triage-pubsub-client';
 import type { ToolCallingClient } from '@intexuraos/llm-contract';
-import type { EmbeddingClient } from '@intexuraos/infra-gpt';
 import type { UserServiceClient, UsageServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
@@ -53,6 +52,8 @@ import type { TaskEnqueueService } from '../domain/services/taskEnqueueService.j
 import type { MergeQueueWatchRepository } from '../domain/repositories/mergeQueueWatchRepository.js';
 import type { TaskGroupSummaryRepository } from '../domain/ports/taskGroupSummaryRepository.js';
 import type { CodeTaskDispatchNotificationRepository } from '../domain/repositories/codeTaskDispatchNotificationRepository.js';
+import type { SentryIssueEventRepository } from '../domain/repositories/sentryIssueEventRepository.js';
+import type { ExecutionMemoryEmbeddingClient } from '../domain/usecases/prepareExecutionMemoryContext.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -98,7 +99,7 @@ export interface ServiceContainer {
   mergeQueueWatchRepo: MergeQueueWatchRepository;
   executionMemoryRepo?: ExecutionMemoryRepository;
   executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;
-  executionMemoryEmbeddingClient?: EmbeddingClient;
+  executionMemoryEmbeddingClient?: ExecutionMemoryEmbeddingClient;
   usageServiceClient?: UsageServiceClient;
   // The fields below are optional so existing `setServices({fakes})` call
   // sites in tests don't need updating when these services are added to the
@@ -109,6 +110,7 @@ export interface ServiceContainer {
     logger: Logger,
     request: CreateRemediationTaskRequest,
   ) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
+  sentryIssueEventRepo?: SentryIssueEventRepository;
 }
 
 // Configuration required to initialize services
@@ -120,7 +122,6 @@ export interface ServiceConfig {
   whatsappSendTopic: string;
   prTriageTopic: string;
   linearAgentUrl: string;
-  webhookVerifySecret: string;
   orchestratorSecret: string;
   serviceUrl: string;
   codeTaskCallbackBaseUrl: string;
@@ -128,6 +129,5 @@ export interface ServiceConfig {
   userServiceUrl: string;
   // GitHub Agent (INT-743)
   openRouterAppApiKey: string;
-  openaiAppApiKey: string;
   llmUsageServiceUrl: string;
 }

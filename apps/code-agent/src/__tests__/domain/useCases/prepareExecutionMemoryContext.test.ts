@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { ExecutionMemoryMatch } from '../../../domain/models/executionMemory.js';
 import {
@@ -132,7 +132,7 @@ describe('prepareExecutionMemoryContext', () => {
         verificationGoals: ['cover callback route', 'verify task detail serialization'],
         summary: 'Auth callback route changes with logging and route verification work',
       }),
-      usage: { model: LlmModels.Gemini25Flash },
+      usage: { model: LegacyGoogleModels.Gemini25Flash },
     }));
 
     embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
@@ -224,7 +224,7 @@ describe('prepareExecutionMemoryContext', () => {
         verificationGoals: ['route coverage'],
         summary: 'Auth callback logging work',
       }),
-      usage: { model: LlmModels.Gemini25Flash },
+      usage: { model: LegacyGoogleModels.Gemini25Flash },
     }));
     executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-error' }));
 
@@ -307,7 +307,7 @@ describe('prepareExecutionMemoryContext', () => {
         verificationGoals: [],
         summary: 'Auth callback logging work',
       }),
-      usage: { model: LlmModels.Gemini25Flash },
+      usage: { model: LegacyGoogleModels.Gemini25Flash },
     }));
     embeddingClient.embed.mockResolvedValue(err({ message: 'embedding failed' }));
     executionMemoryApplicationRepo.create.mockResolvedValue(err({ message: 'firestore unavailable' }));
@@ -340,7 +340,7 @@ describe('prepareExecutionMemoryContext', () => {
         verificationGoals: [],
         summary: 'Auth callback logging work',
       }),
-      usage: { model: LlmModels.Gemini25Flash },
+      usage: { model: LegacyGoogleModels.Gemini25Flash },
     }));
     embeddingClient.embed.mockResolvedValue(err({ message: 'embedding failed' }));
     executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-embedding-error' }));
@@ -591,7 +591,7 @@ describe('prepareExecutionMemoryContext', () => {
         verificationGoals: [],
         summary: 'Unrelated topic',
       }),
-      usage: { model: LlmModels.Gemini25Flash },
+      usage: { model: LegacyGoogleModels.Gemini25Flash },
     }));
 
     embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
@@ -644,7 +644,7 @@ describe('prepareExecutionMemoryContext', () => {
         verificationGoals: [],
         summary: 'Auth route logging verification',
       }),
-      usage: { model: LlmModels.Gemini25Flash },
+      usage: { model: LegacyGoogleModels.Gemini25Flash },
     }));
 
     embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
@@ -743,7 +743,7 @@ describe('prepareExecutionMemoryContext', () => {
           verificationGoals: [],
           summary: 'Auth route logging',
         }),
-        usage: { model: LlmModels.Gemini25Flash },
+        usage: { model: LegacyGoogleModels.Gemini25Flash },
       }));
 
       embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
@@ -812,7 +812,7 @@ describe('prepareExecutionMemoryContext', () => {
           verificationGoals: [],
           summary: 'Unrelated',
         }),
-        usage: { model: LlmModels.Gemini25Flash },
+        usage: { model: LegacyGoogleModels.Gemini25Flash },
       }));
 
       embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
@@ -892,7 +892,7 @@ describe('prepareExecutionMemoryContext', () => {
           verificationGoals: [],
           summary: 'Route logging verification',
         }),
-        usage: { model: LlmModels.Gemini25Flash },
+        usage: { model: LegacyGoogleModels.Gemini25Flash },
       }));
 
       embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
@@ -951,7 +951,7 @@ describe('prepareExecutionMemoryContext', () => {
           verificationGoals: [],
           summary: 'Route logging verification',
         }),
-        usage: { model: LlmModels.Gemini25Flash },
+        usage: { model: LegacyGoogleModels.Gemini25Flash },
       }));
 
       embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
@@ -996,7 +996,7 @@ describe('prepareExecutionMemoryContext', () => {
           verificationGoals: [],
           summary: 'Route logging verification',
         }),
-        usage: { model: LlmModels.Gemini25Flash },
+        usage: { model: LegacyGoogleModels.Gemini25Flash },
       }));
 
       embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));

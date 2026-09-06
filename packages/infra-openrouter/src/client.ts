@@ -33,7 +33,15 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { LlmProviders, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
+import {
+  LlmProviders,
+  type GenerateChatOptions,
+  type GenerateChatResult,
+  type GenerateChatStreamEvent,
+  type GenerateResult,
+  type LlmChatMessage,
+  type NormalizedUsage,
+} from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type {
@@ -67,6 +75,23 @@ export interface OpenRouterClient {
   ) => Promise<Result<GenerateResult, OpenRouterError>>;
 
   /**
+   * Generates a chat completion using application-facing chat messages.
+   */
+  generateChat: (
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ) => Promise<Result<GenerateChatResult, OpenRouterError>>;
+
+  /**
+   * Streams a chat completion using application-facing chat messages.
+   */
+  generateChatStream: (
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions,
+    onEvent: (event: GenerateChatStreamEvent) => void
+  ) => Promise<Result<GenerateChatResult, OpenRouterError>>;
+
+  /**
    * Validate an OpenRouter API key using the lightweight /api/v1/key endpoint.
    * This is a free, no-token-cost introspection call.
    */
@@ -82,22 +107,33 @@ const DEFAULT_TIMEOUT_MS = 840_000;
 /** Application name sent to OpenRouter */
 const APP_TITLE = 'IntexuraOS';
 const RESEARCH_PROMPT_TYPE = 'research-web-search';
+const INVALID_COMPLETION_RESPONSE_MESSAGE = 'OpenRouter returned an invalid completion response';
 
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
+function nonNegativeProviderCost(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+async function withRequestTimeout<T>(
+  timeoutMs: number,
+  operation: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
 
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await operation(controller.signal);
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function resolveRequestTimeoutMs(timeoutMs: number, deadlineAtMs?: number): number {
+  if (deadlineAtMs === undefined) return timeoutMs;
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) throw new Error('OpenRouter request deadline timeout');
+  return Math.min(timeoutMs, remainingMs);
 }
 
 class OpenRouterApiError extends Error {
@@ -108,6 +144,68 @@ class OpenRouterApiError extends Error {
     super(message);
     this.name = 'OpenRouterApiError';
   }
+}
+
+function readOpenRouterErrorEnvelope(value: unknown): OpenRouterApiError | undefined {
+  if (!isRecord(value)) return undefined;
+  const error = value['error'];
+  if (!isRecord(error)) return undefined;
+  const rawStatus = error['code'];
+  const status =
+    typeof rawStatus === 'number' &&
+    Number.isInteger(rawStatus) &&
+    rawStatus >= 400 &&
+    rawStatus <= 599
+      ? rawStatus
+      : 500;
+  const rawMessage = error['message'];
+  const message =
+    typeof rawMessage === 'string' && rawMessage.trim().length > 0
+      ? rawMessage
+      : 'OpenRouter returned an error response';
+  return new OpenRouterApiError(status, message);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toOpenRouterUsageErrorCategory(error: unknown): string {
+  if (error instanceof OpenRouterApiError) {
+    return `OPENROUTER_HTTP_${String(error.status)}`;
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return 'OPENROUTER_TIMEOUT';
+  }
+  const message = getErrorMessage(error).toLowerCase();
+  if (
+    message.includes('timeout') ||
+    message.includes('fetch failed') ||
+    message.includes('aborted')
+  ) {
+    return 'OPENROUTER_TIMEOUT';
+  }
+  return 'OPENROUTER_CLIENT_ERROR';
+}
+
+interface OpenRouterStreamChunk {
+  choices?: { delta?: { content?: string }; error?: { message?: string } }[];
+  usage?: OpenRouterUsage;
+  error?: { message?: string };
+}
+
+function toOpenRouterReasoning(
+  reasoning: GenerateChatOptions['reasoning']
+): Record<string, unknown> | undefined {
+  if (reasoning === undefined) {
+    return undefined;
+  }
+  return {
+    ...(reasoning.enabled !== undefined && { enabled: reasoning.enabled }),
+    ...(reasoning.effort !== undefined && { effort: reasoning.effort }),
+    ...(reasoning.maxTokens !== undefined && { max_tokens: reasoning.maxTokens }),
+    ...(reasoning.exclude !== undefined && { exclude: reasoning.exclude }),
+  };
 }
 
 /**
@@ -125,12 +223,64 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     model,
     userId,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxAttempts = 3,
+    deadlineAtMs,
     logger,
     usageSink,
     ownerType,
+    providerRouting,
+    evidenceModelId = model,
   } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
+  const requireParameters = providerRouting?.requireParameters;
+  const providerOrder = providerRouting?.order;
+  const allowFallbacks = providerRouting?.allowFallbacks;
+  const providerRequest =
+    requireParameters === undefined && providerOrder === undefined && allowFallbacks === undefined
+      ? undefined
+      : {
+          ...(requireParameters !== undefined && { require_parameters: requireParameters }),
+          ...(providerOrder !== undefined && { order: [...providerOrder] }),
+          ...(allowFallbacks !== undefined && { allow_fallbacks: allowFallbacks }),
+        };
+
+  function providerRequestFor(
+    responseFormat: GenerateChatOptions['responseFormat']
+  ): Record<string, unknown> | undefined {
+    if (responseFormat?.type !== 'json_schema') return providerRequest;
+    return {
+      ...(providerRequest ?? {}),
+      require_parameters: true,
+    };
+  }
+
+  async function postChatCompletion<T>(requestBody: Record<string, unknown>): Promise<T> {
+    return await withRequestTimeout(
+      resolveRequestTimeoutMs(timeoutMs, deadlineAtMs),
+      async (signal) => {
+        const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://intexuraos.cloud',
+            'X-Title': APP_TITLE,
+          },
+          body: JSON.stringify(requestBody),
+          signal,
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new OpenRouterApiError(response.status, errorText);
+        }
+        const data: unknown = await response.json();
+        const providerError = readOpenRouterErrorEnvelope(data);
+        if (providerError !== undefined) throw providerError;
+        return data as T;
+      }
+    );
+  }
 
   function trackUsage(
     callType: CallType,
@@ -145,7 +295,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     void usageLogger.log({
       userId,
       provider: LlmProviders.OpenRouter,
-      model,
+      model: evidenceModelId,
       callType,
       usage,
       success,
@@ -162,22 +312,58 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   function extractUsage(usage?: OpenRouterUsage): {
     normalized: NormalizedUsage;
     providerReportedUsd: number | null;
+    cachedTokens?: number;
+    cacheWriteTokens?: number;
   } {
-    /* v8 ignore start -- upstream: cannot verify usage is present in all API responses @preserve */
     if (usage === undefined) {
       return {
         normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
         providerReportedUsd: null,
       };
     }
-    /* v8 ignore stop @preserve */
-    const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
+    const providerReportedUsd = nonNegativeProviderCost(usage.cost);
+    const cachedTokens =
+      typeof usage.prompt_tokens_details?.cached_tokens === 'number'
+        ? usage.prompt_tokens_details.cached_tokens
+        : undefined;
+    const cacheWriteTokens =
+      typeof usage.prompt_tokens_details?.cache_write_tokens === 'number'
+        ? usage.prompt_tokens_details.cache_write_tokens
+        : undefined;
     const normalized = normalizeUsage(
       usage.prompt_tokens,
       usage.completion_tokens,
       providerReportedUsd ?? undefined
     );
-    return { normalized, providerReportedUsd };
+    if (cachedTokens !== undefined) {
+      normalized.cacheTokens = cachedTokens;
+    }
+    return {
+      normalized,
+      providerReportedUsd,
+      ...(cachedTokens !== undefined && { cachedTokens }),
+      ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+    };
+  }
+
+  function toGenerateChatUsage(input: {
+    normalized: NormalizedUsage;
+    providerReportedUsd?: number | null;
+    cachedTokens?: number;
+    cacheWriteTokens?: number;
+  }): GenerateChatResult['usage'] {
+    return {
+      inputTokens: input.normalized.inputTokens,
+      outputTokens: input.normalized.outputTokens,
+      totalTokens: input.normalized.totalTokens,
+      costUsd: input.normalized.costUsd,
+      ...(input.providerReportedUsd !== undefined &&
+        input.providerReportedUsd !== null && {
+          providerReportedUsd: input.providerReportedUsd,
+        }),
+      ...(input.cachedTokens !== undefined && { cachedTokens: input.cachedTokens }),
+      ...(input.cacheWriteTokens !== undefined && { cacheWriteTokens: input.cacheWriteTokens }),
+    };
   }
 
   return {
@@ -206,68 +392,14 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           temperature: 0.2,
         };
 
-        const response = await fetchWithTimeout(
-          `${API_BASE_URL}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://intexuraos.cloud',
-              'X-Title': APP_TITLE,
-            },
-            body: JSON.stringify(requestBody),
-          },
-          timeoutMs
-        );
-
-        if (!response.ok) {
-          const durationMs = Date.now() - start;
-          const errorText = await response.text();
-          const apiError = new OpenRouterApiError(response.status, errorText);
-          const errorMsg = getErrorMessage(apiError);
-          const emptyUsage: NormalizedUsage = {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
-            costUsd: 0,
-          };
-          trackUsage(
-            'research',
-            emptyUsage,
-            false,
-            durationMs,
-            errorMsg,
-            undefined,
-            options?.promptType ?? RESEARCH_PROMPT_TYPE,
-            options?.correlation
-          );
-          return err(mapOpenRouterError(apiError));
-        }
-
-        const data = (await response.json()) as OpenRouterResponse;
-        const content = data.choices[0]?.message.content ?? '';
+        const data = await postChatCompletion<OpenRouterResponse>(requestBody);
+        const rawContent = data.choices[0]?.message.content;
+        const content = typeof rawContent === 'string' ? rawContent : '';
         const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
-        // Extract sources from annotations (OpenRouter returns web search citations as annotations)
-        const sources: string[] = [];
-        if (data.annotations !== undefined && Array.isArray(data.annotations)) {
-          for (const annotation of data.annotations) {
-            if (typeof annotation === 'string') {
-              sources.push(annotation);
-            }
-            // Check for object annotations (non-string annotations)
-            if (typeof annotation === 'object') {
-              // Annotation is an object - could have url field, but structure varies by API response
-              /* v8 ignore start -- upstream: cannot verify annotation URL structure in all responses @preserve */
-              const ann = annotation as { url?: string };
-              if (ann.url !== undefined) {
-                sources.push(ann.url);
-              }
-              /* v8 ignore stop @preserve */
-            }
-          }
-        }
+        // OpenRouter's current Chat Completions schema nests url_citation annotations
+        // in the assistant message. Keep the legacy top-level shape as a fallback.
+        const sources = extractResearchSources(data);
 
         trackUsage(
           'research',
@@ -283,7 +415,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         return ok({ content, sources, usage: normalized });
       } catch (error) {
         const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -295,7 +426,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           emptyUsage,
           false,
           durationMs,
-          errorMsg,
+          toOpenRouterUsageErrorCategory(error),
           undefined,
           options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
@@ -309,33 +440,52 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       options: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
       return await withRetry(() => generateOnce(prompt, options), {
-        maxAttempts: 3,
+        maxAttempts,
         baseDelayMs: 500,
+        ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
       });
+    },
+
+    async generateChat(
+      messages: LlmChatMessage[],
+      options: GenerateChatOptions
+    ): Promise<Result<GenerateChatResult, OpenRouterError>> {
+      return await withRetry(() => generateChatOnce(messages, options), {
+        maxAttempts,
+        baseDelayMs: 500,
+        ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
+      });
+    },
+
+    async generateChatStream(
+      messages: LlmChatMessage[],
+      options: GenerateChatOptions,
+      onEvent: (event: GenerateChatStreamEvent) => void
+    ): Promise<Result<GenerateChatResult, OpenRouterError>> {
+      return await generateChatStreamOnce(messages, options, onEvent);
     },
 
     async validateKey(key: string): Promise<Result<OpenRouterKeyInfo, OpenRouterError>> {
       try {
-        const response = await fetchWithTimeout(
-          `${API_BASE_URL}/key`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${key}`,
-              'HTTP-Referer': 'https://intexuraos.cloud',
-              'X-Title': APP_TITLE,
-            },
-          },
-          10_000 // 10 second timeout for lightweight key check
+        const data = await withRequestTimeout(
+          resolveRequestTimeoutMs(10_000, deadlineAtMs),
+          async (signal) => {
+            const response = await fetch(`${API_BASE_URL}/key`, {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${key}`,
+                'HTTP-Referer': 'https://intexuraos.cloud',
+                'X-Title': APP_TITLE,
+              },
+              signal,
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new OpenRouterApiError(response.status, errorText);
+            }
+            return (await response.json()) as OpenRouterKeyInfo;
+          }
         );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          const apiError = new OpenRouterApiError(response.status, errorText);
-          return err(mapOpenRouterError(apiError));
-        }
-
-        const data = (await response.json()) as OpenRouterKeyInfo;
         return ok(data);
       } catch (error) {
         return err(mapOpenRouterError(error));
@@ -347,6 +497,55 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     prompt: string,
     options: GenerateOptions
   ): Promise<Result<GenerateResult, OpenRouterError>> {
+    const messages: LlmChatMessage[] = [{ role: 'user', content: prompt }];
+    const chatResult = await generateChatOnce(messages, {
+      promptType: options.promptType,
+      ...(options.responseFormat !== undefined && {
+        responseFormat: options.responseFormat,
+      }),
+      ...(options.correlation !== undefined && { correlation: options.correlation }),
+      temperature: 0.2,
+    });
+    if (!chatResult.ok) {
+      return chatResult;
+    }
+
+    const usage = {
+      inputTokens: chatResult.value.usage.inputTokens,
+      outputTokens: chatResult.value.usage.outputTokens,
+      totalTokens: chatResult.value.usage.totalTokens,
+      costUsd: chatResult.value.usage.costUsd,
+      ...(chatResult.value.usage.providerReportedUsd !== undefined && {
+        providerReportedUsd: chatResult.value.usage.providerReportedUsd,
+      }),
+      ...(chatResult.value.usage.cachedTokens !== undefined && {
+        cacheTokens: chatResult.value.usage.cachedTokens,
+      }),
+    };
+    return ok({
+      content: chatResult.value.content,
+      usage,
+      ...(options.matrixCorpusContext === undefined
+        ? {}
+        : {
+            providerCall: {
+              context: options.matrixCorpusContext,
+              modelId: evidenceModelId,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+              ...(usage.providerReportedUsd === undefined
+                ? {}
+                : { providerReportedUsd: usage.providerReportedUsd }),
+            },
+          }),
+    });
+  }
+
+  async function generateChatOnce(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions
+  ): Promise<Result<GenerateChatResult, OpenRouterError>> {
     const start = Date.now();
     try {
       const { result, durationMs } = await measureLlmCall(
@@ -354,58 +553,45 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           content: string;
           normalized: NormalizedUsage;
           providerReportedUsd: number | null;
+          cachedTokens?: number;
+          cacheWriteTokens?: number;
         }> => {
+          const requestProvider = providerRequestFor(options.responseFormat);
           const requestBody = {
             model, // No :online suffix for synthesis
-            messages: [
-              {
-                role: 'user',
-                content: prompt,
-              },
-            ],
-            temperature: 0.2,
+            messages,
+            temperature: options.temperature ?? 0.2,
+            ...(options.sessionId !== undefined && { session_id: options.sessionId }),
             ...(options.responseFormat !== undefined && {
               response_format: options.responseFormat,
             }),
+            ...(requestProvider !== undefined && { provider: requestProvider }),
+            ...(toOpenRouterReasoning(options.reasoning) !== undefined && {
+              reasoning: toOpenRouterReasoning(options.reasoning),
+            }),
           };
 
-          const response = await fetchWithTimeout(
-            `${API_BASE_URL}/chat/completions`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://intexuraos.cloud',
-                'X-Title': APP_TITLE,
-              },
-              body: JSON.stringify(requestBody),
-            },
-            timeoutMs
-          );
-
-          // Throw on HTTP error so measureLlmCall rethrows errors. The outer
-          // catch below maps the error and logs usage with measured duration.
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new OpenRouterApiError(response.status, errorText);
-          }
-
-          const data = (await response.json()) as OpenRouterResponse;
+          const data = await postChatCompletion<OpenRouterResponse>(requestBody);
           const firstChoice = data.choices[0];
-          // Handle case where choices array is empty (upstream API may return this)
-          if (firstChoice === undefined) {
-            /* v8 ignore start -- upstream: cannot verify firstChoice message structure when choices is empty @preserve */
-            return {
-              content: '',
-              normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
-              providerReportedUsd: null,
-            };
-            /* v8 ignore stop @preserve */
+          if (
+            firstChoice === undefined ||
+            firstChoice.finish_reason === 'error' ||
+            firstChoice.error !== undefined ||
+            typeof firstChoice.message.content !== 'string'
+          ) {
+            throw new OpenRouterApiError(500, INVALID_COMPLETION_RESPONSE_MESSAGE);
           }
           const content = firstChoice.message.content;
-          const { normalized, providerReportedUsd } = extractUsage(data.usage);
-          return { content, normalized, providerReportedUsd };
+          const { normalized, providerReportedUsd, cachedTokens, cacheWriteTokens } = extractUsage(
+            data.usage
+          );
+          return {
+            content,
+            normalized,
+            providerReportedUsd,
+            ...(cachedTokens !== undefined && { cachedTokens }),
+            ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+          };
         }
       );
 
@@ -420,10 +606,11 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         options.correlation
       );
 
-      return ok({ content: result.content, usage: result.normalized });
+      const usage = toGenerateChatUsage(result);
+
+      return ok({ content: result.content, usage });
     } catch (error) {
       const durationMs = Date.now() - start;
-      const errorMsg = getErrorMessage(error);
       const emptyUsage: NormalizedUsage = {
         inputTokens: 0,
         outputTokens: 0,
@@ -435,7 +622,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         emptyUsage,
         false,
         durationMs,
-        errorMsg,
+        toOpenRouterUsageErrorCategory(error),
         undefined,
         options.promptType,
         options.correlation
@@ -443,6 +630,182 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       return err(mapOpenRouterError(error));
     }
   }
+
+  async function generateChatStreamOnce(
+    messages: LlmChatMessage[],
+    options: GenerateChatOptions,
+    onEvent: (event: GenerateChatStreamEvent) => void
+  ): Promise<Result<GenerateChatResult, OpenRouterError>> {
+    const start = Date.now();
+    try {
+      const requestProvider = providerRequestFor(options.responseFormat);
+      const requestBody = {
+        model,
+        messages,
+        stream: true,
+        temperature: options.temperature ?? 0.2,
+        ...(options.sessionId !== undefined && { session_id: options.sessionId }),
+        ...(options.responseFormat !== undefined && {
+          response_format: options.responseFormat,
+        }),
+        ...(requestProvider !== undefined && { provider: requestProvider }),
+        ...(toOpenRouterReasoning(options.reasoning) !== undefined && {
+          reasoning: toOpenRouterReasoning(options.reasoning),
+        }),
+      };
+
+      const streamResult = await withRequestTimeout(
+        resolveRequestTimeoutMs(timeoutMs, deadlineAtMs),
+        async (signal) => {
+          const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://intexuraos.cloud',
+              'X-Title': APP_TITLE,
+            },
+            body: JSON.stringify(requestBody),
+            signal,
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new OpenRouterApiError(response.status, errorText);
+          }
+          return await processChatStream(response, onEvent);
+        }
+      );
+      const durationMs = Date.now() - start;
+      trackUsage(
+        'generate',
+        streamResult.normalized,
+        true,
+        durationMs,
+        undefined,
+        streamResult.providerReportedUsd,
+        options.promptType,
+        options.correlation
+      );
+
+      return ok({
+        content: streamResult.content,
+        usage: toGenerateChatUsage(streamResult),
+      });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        toOpenRouterUsageErrorCategory(error),
+        undefined,
+        options.promptType,
+        options.correlation
+      );
+      return err(mapOpenRouterError(error));
+    }
+  }
+
+  async function processChatStream(
+    response: Response,
+    onEvent: (event: GenerateChatStreamEvent) => void
+  ): Promise<{
+    content: string;
+    normalized: NormalizedUsage;
+    providerReportedUsd: number | null;
+    cachedTokens?: number;
+    cacheWriteTokens?: number;
+  }> {
+    if (response.body === null) {
+      throw new Error('Response body is empty');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let content = '';
+    let buffer = '';
+    let usageResult: ReturnType<typeof extractUsage> | undefined;
+
+    for (;;) {
+      const readResult = await reader.read();
+      if (readResult.done) {
+        break;
+      }
+      const value = readResult.value as Uint8Array | undefined; // @allow-result-access -- ReadableStreamReadResult is not a Result type
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer =
+        /* v8 ignore start -- ts-type: split always returns at least one item @preserve */
+        lines.pop() ?? '';
+      /* v8 ignore stop @preserve */
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed === '' || trimmed.startsWith(':')) {
+          continue;
+        }
+        if (!trimmed.startsWith('data:')) {
+          continue;
+        }
+
+        const data = trimmed.slice(5).trimStart();
+        if (data === '[DONE]') {
+          continue;
+        }
+
+        const chunk = JSON.parse(data) as OpenRouterStreamChunk;
+        const errorMessage = chunk.error?.message ?? chunk.choices?.[0]?.error?.message;
+        if (errorMessage !== undefined) {
+          throw new OpenRouterApiError(500, errorMessage);
+        }
+
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (typeof delta === 'string' && delta.length > 0) {
+          content += delta;
+          onEvent({ type: 'delta', text: delta });
+        }
+
+        if (chunk.usage !== undefined) {
+          usageResult = extractUsage(chunk.usage);
+          onEvent({ type: 'usage', usage: toGenerateChatUsage(usageResult) });
+        }
+      }
+    }
+
+    return {
+      content,
+      ...(usageResult ?? {
+        normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+        providerReportedUsd: null,
+      }),
+    };
+  }
+}
+
+function extractResearchSources(data: OpenRouterResponse): string[] {
+  const annotations = [
+    ...(data.choices[0]?.message.annotations ?? []),
+    ...(data.annotations ?? []),
+  ];
+  const sources = new Set<string>();
+  for (const annotation of annotations) {
+    if (typeof annotation === 'string') {
+      sources.add(annotation);
+      continue;
+    }
+    const url = annotation.url_citation?.url ?? annotation.url;
+    if (typeof url === 'string' && url.length > 0) {
+      sources.add(url);
+    }
+  }
+  return [...sources];
 }
 
 function mapOpenRouterError(error: unknown): OpenRouterError {
@@ -450,8 +813,11 @@ function mapOpenRouterError(error: unknown): OpenRouterError {
     const message = error.message;
     if (error.status === 401) return { code: 'INVALID_KEY', message };
     if (error.status === 429) return { code: 'RATE_LIMITED', message };
-    if (error.status === 503) return { code: 'OVERLOADED', message };
+    if (error.status >= 500) return { code: 'OVERLOADED', message };
     return { code: 'API_ERROR', message };
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return { code: 'TIMEOUT', message: error.message };
   }
   const message = getErrorMessage(error);
   // Check for timeout indicators in the error message

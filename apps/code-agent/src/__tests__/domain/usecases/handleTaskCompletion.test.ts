@@ -17,6 +17,7 @@ import {
 import { resetServices, setServices, type ServiceContainer } from '../../../services.js';
 import type { TaskFormatterEntry } from '../../../domain/services/webhookHelpers.js';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { createMockLogger } from '../../helpers/mockLogger.js';
 
 // Mock heavy downstream use cases — we only need to verify they are invoked.
@@ -260,13 +261,509 @@ describe('handleTaskCompletion', () => {
     });
   });
 
+  describe('completed path — pull_request agent merge-ready persistence', () => {
+    it('stores structured rebaseResult and marks merge-ready for no-changes clean rebase completion', async () => {
+      const update = vi
+        .fn()
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const addComment = vi.fn().mockResolvedValue(ok({ commentId: 'c-1' }));
+      const updateIssueState = vi.fn().mockResolvedValue(ok(undefined));
+      const markInReview = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'pull_request',
+            linearIssueId: 'INT-1',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        linearAgentClient: {
+          validateIssue,
+          addComment,
+          updateIssueState,
+        } as never,
+        linearIssueService: { markInReview } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-pull-request',
+        status: 'completed',
+        result: {
+          prUrl: 'https://github.com/a/b/pull/42',
+          summary: 'No changes needed',
+          comment_replied: true,
+          pull_request_outcome_label: 'no_changes_needed',
+          rebaseResult: { attempted: false, reason: 'not_required' },
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenNthCalledWith(
+        1,
+        't-pull-request',
+        expect.objectContaining({
+          status: 'implemented',
+          result: expect.objectContaining({
+            rebaseResult: { attempted: false, reason: 'not_required' },
+            pull_request_outcome_label: 'no_changes_needed',
+          }),
+          callbackReceived: true,
+        }),
+      );
+      expect(update).toHaveBeenNthCalledWith(
+        2,
+        't-pull-request',
+        {
+          result: expect.objectContaining({
+            prUrl: 'https://github.com/a/b/pull/42',
+            rebaseResult: { attempted: false, reason: 'not_required' },
+            merge_ready: '1',
+            merge_ready_reason: 'pull_request_no_changes_rebase_clean',
+          }),
+        },
+      );
+    });
+
+    it('drops invalid rebaseResult payloads at the webhook boundary', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const addComment = vi.fn().mockResolvedValue(ok({ commentId: 'c-1' }));
+      const updateIssueState = vi.fn().mockResolvedValue(ok(undefined));
+      const markInReview = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'pull_request',
+            linearIssueId: 'INT-1',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        linearAgentClient: {
+          validateIssue,
+          addComment,
+          updateIssueState,
+        } as never,
+        linearIssueService: { markInReview } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-pull-request-invalid-rebase',
+        status: 'completed',
+        result: {
+          prUrl: 'https://github.com/a/b/pull/42',
+          summary: 'No changes needed',
+          rebaseResult: { attempted: true },
+        } as unknown as NonNullable<TaskCompleteWebhookBody['result']>,
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-pull-request-invalid-rebase',
+        expect.objectContaining({
+          result: expect.not.objectContaining({
+            rebaseResult: expect.anything(),
+          }),
+        }),
+      );
+    });
+
+  });
+
   describe('completed path — review agent (remediation decision recorded)', () => {
+    it('records the commit captured by the review task instead of the newer current PR head', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const upsert = vi.fn().mockResolvedValue(ok(undefined));
+      const getOAuthToken = vi.fn().mockResolvedValue(ok({ accessToken: 'token' }));
+      const getPullRequestDetails = vi.fn().mockResolvedValue(ok({ headSha: 'newer-current-head' }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            reviewCommitSha: 'commit-actually-reviewed',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)) } as never,
+        metricsClient: { incrementTasksCompleted: vi.fn().mockResolvedValue(undefined) } as never,
+        automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+        gitHubPRSummaryRepo: { upsert } as never,
+        userServiceClient: { getOAuthToken } as never,
+        gitHubPRClient: { getPullRequestDetails } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-captured-commit',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '1',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+        repository: 'a/b',
+        pullRequestNumber: 42,
+        lastReviewedCommitSha: 'commit-actually-reviewed',
+      }));
+      expect(getOAuthToken).not.toHaveBeenCalled();
+      expect(getPullRequestDetails).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the current PR head for legacy review tasks without a captured commit', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const upsert = vi.fn().mockResolvedValue(ok(undefined));
+      const getOAuthToken = vi.fn().mockResolvedValue(ok({ accessToken: 'token' }));
+      const getPullRequestDetails = vi.fn().mockResolvedValue(ok({ headSha: 'legacy-current-head' }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)) } as never,
+        metricsClient: { incrementTasksCompleted: vi.fn().mockResolvedValue(undefined) } as never,
+        automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+        gitHubPRSummaryRepo: { upsert } as never,
+        userServiceClient: { getOAuthToken } as never,
+        gitHubPRClient: { getPullRequestDetails } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-legacy-commit',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '1',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+        repository: 'a/b',
+        pullRequestNumber: 42,
+        lastReviewedCommitSha: 'legacy-current-head',
+      }));
+      expect(getOAuthToken).toHaveBeenCalledOnce();
+      expect(getPullRequestDetails).toHaveBeenCalledOnce();
+    });
+
+    it('persists merge-ready evidence when an execution-origin review passes', async () => {
+      const update = vi
+        .fn()
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const updateIssueMetadata = vi.fn().mockResolvedValue(ok({ droppedLabels: [] }));
+      const markInReview = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok({
+            id: 'origin-task',
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'implemented',
+            agentType: 'execution',
+            linearIssueId: 'INT-1',
+          })),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        gitHubPRSummaryRepo: {
+          findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+          upsert: vi.fn().mockResolvedValue(ok(undefined)),
+        } as never,
+        userServiceClient: {
+          getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'No GitHub token' })),
+        } as never,
+        linearAgentClient: {
+          validateIssue,
+          updateIssueMetadata,
+        } as never,
+        linearIssueService: { markInReview } as never,
+        gitHubPRClient: {
+          getPullRequestDetails: vi.fn(),
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-pass',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '0',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '0',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenNthCalledWith(
+        2,
+        't-review-pass',
+        {
+          result: expect.objectContaining({
+            prUrl: 'https://github.com/a/b/pull/42',
+            needs_remediation: '0',
+            merge_ready: '1',
+            merge_ready_reason: 'review_no_remediation',
+          }),
+        },
+      );
+    });
+
+    it('persists merge-ready evidence even when the Linear label update fails', async () => {
+      const update = vi
+        .fn()
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const updateIssueMetadata = vi.fn().mockResolvedValue(err({ code: 'UNAVAILABLE', message: 'label write failed' }));
+      const markInReview = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok({
+            id: 'origin-task',
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'implemented',
+            agentType: 'execution',
+            linearIssueId: 'INT-1',
+          })),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        gitHubPRSummaryRepo: {
+          findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+          upsert: vi.fn().mockResolvedValue(ok(undefined)),
+        } as never,
+        userServiceClient: {
+          getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'No GitHub token' })),
+        } as never,
+        linearAgentClient: {
+          validateIssue,
+          updateIssueMetadata,
+        } as never,
+        linearIssueService: { markInReview } as never,
+        gitHubPRClient: {
+          getPullRequestDetails: vi.fn(),
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-pass-label-fail',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '0',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '0',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenNthCalledWith(
+        2,
+        't-review-pass-label-fail',
+        {
+          result: expect.objectContaining({
+            prUrl: 'https://github.com/a/b/pull/42',
+            needs_remediation: '0',
+            merge_ready: '1',
+            merge_ready_reason: 'review_no_remediation',
+          }),
+        },
+      );
+      expect(updateIssueMetadata).toHaveBeenCalled();
+    });
+
+    it('preserves prior task result fields when adding review merge-ready evidence', async () => {
+      const update = vi
+        .fn()
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const updateIssueMetadata = vi.fn().mockResolvedValue(ok({ droppedLabels: [] }));
+      const markInReview = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+            result: { summary: 'existing summary' },
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok({
+            id: 'origin-task',
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'implemented',
+            agentType: 'execution',
+            linearIssueId: 'INT-1',
+          })),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        gitHubPRSummaryRepo: {
+          findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+          upsert: vi.fn().mockResolvedValue(ok(undefined)),
+        } as never,
+        userServiceClient: {
+          getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'No GitHub token' })),
+        } as never,
+        linearAgentClient: {
+          validateIssue,
+          updateIssueMetadata,
+        } as never,
+        linearIssueService: { markInReview } as never,
+        gitHubPRClient: {
+          getPullRequestDetails: vi.fn(),
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-pass-existing-result',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '0',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '0',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenNthCalledWith(
+        2,
+        't-review-pass-existing-result',
+        {
+          result: expect.objectContaining({
+            summary: 'existing summary',
+            prUrl: 'https://github.com/a/b/pull/42',
+            needs_remediation: '0',
+            merge_ready: '1',
+            merge_ready_reason: 'review_no_remediation',
+          }),
+        },
+      );
+    });
+
     it('records a required remediation decision when a review completes with needs_remediation=1', async () => {
       const update = vi.fn().mockResolvedValue(ok(undefined));
       const automationRecord = vi.fn().mockResolvedValue(undefined);
       const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
       const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
       const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const markInReview = vi.fn().mockResolvedValue(undefined);
 
       setServices({
         codeTaskRepo: {
@@ -287,7 +784,7 @@ describe('handleTaskCompletion', () => {
         automationLog: { record: automationRecord } as never,
         linearIssueService: {
           removeLabel: vi.fn().mockResolvedValue(undefined),
-          markInReview: vi.fn().mockResolvedValue(undefined),
+          markInReview,
         } as never,
         logger: createMockLogger() as never,
         // No createRemediationTaskFn → the branch that records the decision
@@ -323,6 +820,636 @@ describe('handleTaskCompletion', () => {
         source: 'review_result',
       });
       expect(remediationCall?.[0]).toMatchObject({ repository: 'a/b', prNumber: 42 });
+      expect(markInReview).toHaveBeenCalledWith('u1', 'INT-1');
+    });
+
+    it('keeps a returned remediation creation failure out of Sentry after the callee reports it', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+            prNumber: 42,
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: {
+          incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
+          recordTaskDuration: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        automationLog: { record: automationRecord } as never,
+        linearIssueService: {
+          removeLabel: vi.fn().mockResolvedValue(undefined),
+          markInReview: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        logger: requestLog as never,
+        createRemediationTaskFn: vi.fn().mockResolvedValue(err({
+          code: 'task_creation_failed',
+          message: 'Active task exists for Linear issue',
+        })),
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), {
+        ...buildInput({
+          taskId: 't-review-remediation-failure',
+          status: 'completed',
+          result: {
+            review_id: 'rev-1',
+            review_comments_posted: '1',
+            review_types: 'code_quality',
+            needs_remediation: '1',
+          },
+        }),
+        requestLog,
+      });
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-review-remediation-failure',
+          prNumber: 42,
+          error: expect.objectContaining({ code: 'task_creation_failed' }),
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Failed to create remediation task from review task-complete (best-effort)',
+      );
+      expect(requestLog.warn).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'Unexpected error during remediation task creation (best-effort)',
+      );
+    });
+
+    it('keeps an unexpected thrown remediation creation failure reportable to Sentry', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const requestLog = createMockLogger();
+      const remediationError = new Error('unexpected failure');
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+            prNumber: 42,
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: {
+          incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
+          recordTaskDuration: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        automationLog: { record: automationRecord } as never,
+        linearIssueService: {
+          removeLabel: vi.fn().mockResolvedValue(undefined),
+          markInReview: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        logger: requestLog as never,
+        createRemediationTaskFn: vi.fn().mockRejectedValue(remediationError),
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), {
+        ...buildInput({
+          taskId: 't-review-remediation-throw',
+          status: 'completed',
+          result: {
+            review_id: 'rev-1',
+            review_comments_posted: '1',
+            review_types: 'code_quality',
+            needs_remediation: '1',
+          },
+        }),
+        requestLog,
+      });
+
+      expect(result).toEqual({ kind: 'received' });
+      const unexpectedWarning = vi.mocked(requestLog.warn).mock.calls.find(
+        (call) => call[1] === 'Unexpected error during remediation task creation (best-effort)',
+      );
+      expect(unexpectedWarning).toBeDefined();
+      expect(unexpectedWarning?.[0]).toEqual(expect.objectContaining({
+        taskId: 't-review-remediation-throw',
+        prNumber: 42,
+        error: remediationError,
+      }));
+      expect(unexpectedWarning?.[0]).not.toHaveProperty(SKIP_SENTRY_KEY);
+    });
+
+    it('marks the no-Linear-issue review label skip warning as non-Sentry', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        gitHubPRSummaryRepo: {
+          findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        userServiceClient: {
+          getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'No GitHub token' })),
+        } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: requestLog as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), {
+        ...buildInput({
+          taskId: 't-review-no-linear-issue',
+          status: 'completed',
+          result: {
+            review_id: 'rev-1',
+            review_comments_posted: '0',
+            review_types: 'code_quality',
+            prUrl: 'https://github.com/a/b/pull/42',
+            needs_remediation: '0',
+          },
+        }),
+        requestLog,
+      });
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-review-no-linear-issue',
+          prNumber: 42,
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'No Linear issue available for review-outcome label — skipping'
+      );
+    });
+
+    it.each([
+      ['merged', { prMergedAt: Timestamp.fromDate(new Date('2026-06-29T04:39:58Z')) }],
+      ['closed', { prClosedAt: Timestamp.fromDate(new Date('2026-06-29T04:39:58Z')) }],
+    ])('records the review decision but skips remediation creation when the PR is already %s', async (_state, prLifecycle) => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const createRemediationTaskFn = vi.fn().mockResolvedValue(ok({ taskId: 'remed-1' }));
+      const findOriginTaskByPR = vi.fn().mockResolvedValue(ok(null));
+      const removeLabel = vi.fn().mockResolvedValue(undefined);
+      const markInReview = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+            prNumber: 42,
+            ...prLifecycle,
+          })),
+          update,
+          findOriginTaskByPR,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        linearIssueService: {
+          removeLabel,
+          markInReview,
+        } as never,
+        logger: createMockLogger() as never,
+        createRemediationTaskFn,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-closed',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '1',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(createRemediationTaskFn).not.toHaveBeenCalled();
+      expect(findOriginTaskByPR).not.toHaveBeenCalled();
+      expect(removeLabel).not.toHaveBeenCalled();
+      expect(markInReview).not.toHaveBeenCalled();
+      const remediationCall = automationRecord.mock.calls.find((call) => {
+        const event = call[1] as { type?: string; required?: boolean; signal?: string; taskId?: string };
+        return event.type === 'remediation_decision';
+      });
+      expect(remediationCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        signal: '1',
+        source: 'review_result',
+      });
+      expect(remediationCall?.[1]).not.toHaveProperty('taskId');
+    });
+  });
+
+  describe('completed path — remediation agent merge-ready restoration', () => {
+    it('persists merge-ready evidence when remediation concludes already_completed without re-review', async () => {
+      const update = vi
+        .fn()
+        .mockResolvedValueOnce(ok(undefined))
+        .mockResolvedValueOnce(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const updateIssueMetadata = vi.fn().mockResolvedValue(ok({ droppedLabels: [] }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'remediation',
+            linearIssueId: 'INT-1',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok({
+            id: 'origin-task',
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'implemented',
+            agentType: 'execution',
+            linearIssueId: 'INT-1',
+          })),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        gitHubPRSummaryRepo: {
+          findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        userServiceClient: {
+          getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'No GitHub token' })),
+        } as never,
+        linearAgentClient: {
+          validateIssue,
+          updateIssueMetadata,
+        } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        gitHubPRClient: {
+          getPullRequestDetails: vi.fn(),
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-remediation-pass',
+        status: 'completed',
+        result: {
+          prUrl: 'https://github.com/a/b/pull/42',
+          summary: 'Already fixed',
+          requires_re_review: '0',
+          execution_outcome_label: 'already_completed',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenNthCalledWith(
+        2,
+        't-remediation-pass',
+        {
+          result: expect.objectContaining({
+            prUrl: 'https://github.com/a/b/pull/42',
+            requires_re_review: '0',
+            execution_outcome_label: 'already_completed',
+            merge_ready: '1',
+            merge_ready_reason: 'remediation_already_completed',
+          }),
+        },
+      );
+    });
+  });
+
+  describe('completed path — Sentry agent', () => {
+    const sentryIssue = {
+      organizationSlug: 'intexura',
+      projectSlug: 'code-agent',
+      issueId: '123456',
+      issueUrl: 'https://intexura.sentry.io/issues/123456/',
+      title: 'TypeError',
+      action: 'created',
+      receivedAt: '2026-06-28T12:00:00.000Z',
+    };
+
+    const sentryTask = {
+      userId: 'u1',
+      repository: 'a/b',
+      workerType: 'codex-xhigh',
+      status: 'running',
+      agentType: 'sentry',
+      linearIssueId: 'INT-123',
+      sentryIssue,
+    };
+
+    const sentryResult = {
+      prUrl: 'https://github.com/a/b/pull/77',
+      sentry_issue_url: 'https://intexura.sentry.io/issues/123456/',
+      sentry_linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+      sentry_outcome: 'fixed' as const,
+      sentry_verification: 'pnpm test',
+    };
+
+    function installSentryCompletion(overrides: {
+      task?: Record<string, unknown>;
+      update?: ReturnType<typeof vi.fn>;
+    } = {}): ReturnType<typeof vi.fn> {
+      const update = overrides.update ?? vi.fn().mockResolvedValue(ok(undefined));
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            ...sentryTask,
+            ...overrides.task,
+          })),
+          update,
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+      return update;
+    }
+
+    it('rejects a successful Sentry completion without a PR URL', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'codex-xhigh',
+            status: 'running',
+            agentType: 'sentry',
+            linearIssueId: 'INT-123',
+            sentryIssue: {
+              organizationSlug: 'intexura',
+              projectSlug: 'code-agent',
+              issueId: '123456',
+              issueUrl: 'https://intexura.sentry.io/issues/123456/',
+              title: 'TypeError',
+              action: 'created',
+              receivedAt: '2026-06-28T12:00:00.000Z',
+            },
+          })),
+          update,
+        } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-no-pr',
+        status: 'completed',
+        result: {
+          sentry_issue_url: 'https://intexura.sentry.io/issues/123456/',
+          sentry_linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+          sentry_outcome: 'fixed',
+          sentry_verification: 'pnpm test',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-no-pr',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry enforcement requires result.prUrl',
+          }),
+          callbackReceived: true,
+        }),
+      );
+    });
+
+    it('rejects a completed Sentry callback without a result payload', async () => {
+      const update = installSentryCompletion();
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-no-result',
+        status: 'completed',
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-no-result',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message: 'Sentry completion missing result payload',
+          }),
+          callbackReceived: true,
+        }),
+      );
+    });
+
+    it('returns fail when persisting a missing-result Sentry rejection fails', async () => {
+      installSentryCompletion({
+        update: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' })),
+      });
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-no-result-write-fails',
+        status: 'completed',
+      }));
+
+      expect(result).toEqual({ kind: 'fail', code: 'INTERNAL_ERROR', message: 'write failed' });
+    });
+
+    it.each([
+      {
+        name: 'missing Sentry issue context',
+        task: { sentryIssue: undefined },
+        result: sentryResult,
+        message: 'Sentry enforcement requires task.sentryIssue context',
+      },
+      {
+        name: 'missing routed Linear issue',
+        task: { linearIssueId: undefined },
+        result: sentryResult,
+        message: 'Sentry enforcement requires routed linearIssueId',
+      },
+      {
+        name: 'invalid outcome',
+        task: {},
+        result: { ...sentryResult, sentry_outcome: 'ignored' },
+        message: 'Sentry enforcement requires result.sentry_outcome fixed or suppressed',
+      },
+      {
+        name: 'missing Sentry URL',
+        task: {},
+        result: { ...sentryResult, sentry_issue_url: '' },
+        message: 'Sentry enforcement requires result.sentry_issue_url',
+      },
+      {
+        name: 'mismatched Sentry URL',
+        task: {},
+        result: { ...sentryResult, sentry_issue_url: 'https://intexura.sentry.io/issues/999999/' },
+        message: 'Sentry enforcement requires result.sentry_issue_url to match the task Sentry issue',
+      },
+      {
+        name: 'missing Linear issue URL',
+        task: {},
+        result: { ...sentryResult, sentry_linear_issue: '' },
+        message: 'Sentry enforcement requires result.sentry_linear_issue',
+      },
+      {
+        name: 'missing verification evidence',
+        task: {},
+        result: { ...sentryResult, sentry_verification: undefined },
+        message: 'Sentry enforcement requires result.sentry_verification',
+      },
+      {
+        name: 'blank verification evidence',
+        task: {},
+        result: { ...sentryResult, sentry_verification: '   ' },
+        message: 'Sentry enforcement requires result.sentry_verification',
+      },
+    ])('rejects Sentry completion with $name', async ({ task, result: resultPayload, message }) => {
+      const update = installSentryCompletion({ task });
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-invariant',
+        status: 'completed',
+        result: resultPayload as NonNullable<TaskCompleteWebhookBody['result']>,
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-invariant',
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.objectContaining({
+            code: 'SENTRY_AGENT_ENFORCEMENT_FAILED',
+            message,
+          }),
+          callbackReceived: true,
+        }),
+      );
+    });
+
+    it('returns fail when persisting a Sentry enforcement rejection fails', async () => {
+      installSentryCompletion({
+        update: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' })),
+      });
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-invariant-write-fails',
+        status: 'completed',
+        result: {
+          ...sentryResult,
+          sentry_outcome: 'ignored' as never,
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'fail', code: 'INTERNAL_ERROR', message: 'write failed' });
+    });
+
+    it('stores Sentry completion evidence when a Sentry task opens a PR', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const resultPayload = {
+        prUrl: 'https://github.com/a/b/pull/77',
+        branch: 'task_sentry_123456',
+        summary: 'Fixed the Sentry issue.',
+        sentry_issue_url: 'https://intexura.sentry.io/issues/123456/',
+        sentry_linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
+        sentry_outcome: 'fixed' as const,
+        sentry_verification: 'pnpm --dir apps/code-agent test -- sentry',
+      };
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'codex-xhigh',
+            status: 'running',
+            agentType: 'sentry',
+            linearIssueId: 'INT-123',
+            sentryIssue: {
+              organizationSlug: 'intexura',
+              projectSlug: 'code-agent',
+              issueId: '123456',
+              issueUrl: 'https://intexura.sentry.io/issues/123456/',
+              title: 'TypeError',
+              action: 'created',
+              receivedAt: '2026-06-28T12:00:00.000Z',
+            },
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-sentry-fixed',
+        status: 'completed',
+        result: resultPayload,
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(update).toHaveBeenCalledWith(
+        't-sentry-fixed',
+        expect.objectContaining({
+          status: 'implemented',
+          prNumber: 77,
+          prBranch: 'task_sentry_123456',
+          result: expect.objectContaining(resultPayload),
+          error: null,
+          callbackReceived: true,
+        }),
+      );
+      expect(incrementTasksCompleted).toHaveBeenCalledWith('codex-xhigh', 'implemented');
+      expect(notifyTaskComplete).toHaveBeenCalled();
     });
   });
 
@@ -432,6 +1559,123 @@ describe('handleTaskCompletion', () => {
 
       expect(result).toEqual({ kind: 'received' });
       expect(recordTaskDuration).toHaveBeenCalledWith('claude-opus', 123);
+    });
+  });
+
+  // INT-1763: best-effort Cloud Monitoring writes may fail with
+  // `monitoring.timeSeries.create denied` until the IAM role grant
+  // (terraform/modules/iam/main.tf: code_agent_monitoring_metric_writer) is
+  // propagated or has been pending permission setup. These warnings are
+  // expected best-effort telemetry — they stay in stdout/Cloud Logging for
+  // debugging but must not generate new Sentry issues.
+  describe('metrics telemetry is annotated as non-Sentry (INT-1763)', () => {
+    it('marks the task-completion metric warn payload with _skipSentry when incrementTasksCompleted rejects', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi
+        .fn()
+        .mockRejectedValue(new Error('Permission monitoring.timeSeries.create denied'));
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const addComment = vi.fn().mockResolvedValue(ok({ commentId: 'c-1' }));
+      const updateIssueState = vi.fn().mockResolvedValue(ok(undefined));
+      const updateIssueMetadata = vi.fn().mockResolvedValue(ok({ droppedLabels: [] }));
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+            linearIssueId: 'INT-1',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        linearAgentClient: {
+          validateIssue, addComment, updateIssueState, updateIssueMetadata,
+        } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: requestLog as never,
+      } as unknown as ServiceContainer);
+
+      await handleTaskCompletion(requestLog, {
+        ...buildInput({
+          taskId: 't-metrics-skip-sentry',
+          status: 'completed',
+          result: {
+            execution_outcome_label: 'already_completed',
+            prUrl: 'https://github.com/a/b/pull/9',
+            summary: 'Work already complete',
+          },
+        }),
+        requestLog,
+      });
+
+      // Allow the queued catch() callbacks to run.
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-metrics-skip-sentry',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Failed to record task completion metric'
+      );
+    });
+
+    it('marks the task-duration metric warn payload with _skipSentry when recordTaskDuration rejects', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const notifyTaskFailed = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi
+        .fn()
+        .mockRejectedValue(new Error('Permission monitoring.timeSeries.create denied'));
+      const requestLog = createMockLogger();
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+          })),
+          update,
+        } as never,
+        whatsappNotifier: { notifyTaskFailed } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        logger: requestLog as never,
+      } as unknown as ServiceContainer);
+
+      await handleTaskCompletion(requestLog, {
+        ...buildInput({
+          taskId: 't-duration-skip-sentry',
+          status: 'interrupted',
+          duration: 42,
+        }),
+        requestLog,
+      });
+
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(requestLog.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 't-duration-skip-sentry',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Failed to record task duration metric'
+      );
     });
   });
 });

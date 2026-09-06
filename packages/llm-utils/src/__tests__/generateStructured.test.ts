@@ -310,4 +310,77 @@ describe('generateStructured', () => {
       extraField: 'forward-me',
     });
   });
+
+  it('records every provider call before parsing and assigns per-attempt options', async () => {
+    const contexts = [
+      {
+        version: 1 as const,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'intent_classification' as const,
+        callOrdinal: 1,
+      },
+      {
+        version: 1 as const,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'response_schema_repair' as const,
+        callOrdinal: 1,
+      },
+    ];
+    const providerCalls = contexts.map((context) => ({
+      context,
+      modelId: 'or:deepseek/deepseek-v4-flash',
+      inputTokens: 10,
+      outputTokens: 20,
+      totalTokens: 30,
+      providerReportedUsd: 0.001,
+    }));
+    const capturedOptions: Record<string, unknown>[] = [];
+    const order: string[] = [];
+    let attempt = 0;
+    const client: StructuredClient = {
+      async generate(_prompt, options) {
+        capturedOptions.push(options);
+        const current = attempt;
+        attempt += 1;
+        const providerCall = providerCalls[current];
+        if (providerCall === undefined) throw new Error('Test fixture exhausted provider calls');
+        return ok({
+          content: current === 0 ? '{"answer":"invalid"}' : '{"answer":"yes","score":1}',
+          usage: zeroUsage,
+          providerCall,
+        });
+      },
+    };
+
+    const result = await generateStructured({
+      client,
+      prompt: 'q',
+      schema,
+      promptType: 'test',
+      repairBuilder: () => {
+        order.push('repair');
+        return 'repair prompt';
+      },
+      optionsForAttempt: (currentAttempt) => ({
+        matrixCorpusContext: contexts[currentAttempt],
+      }),
+      onProviderCall: async (call) => {
+        order.push(`record:${call.context.stage}`);
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { repairAttempts: 1 } });
+    expect(capturedOptions.map((options) => options['matrixCorpusContext'])).toEqual(contexts);
+    expect(order).toEqual([
+      'record:intent_classification',
+      'repair',
+      'record:response_schema_repair',
+    ]);
+  });
 });

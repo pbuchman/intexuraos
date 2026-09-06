@@ -16,7 +16,7 @@ import type { WorkerLocation } from '../../models/worker.js';
  * comments) at run time for the actual requirements.
  */
 export const EXECUTION_AGENT_PROMPT =
-  'Implement the requirements defined in the linked Linear issue and its comments (newest first). Follow the test plan, write code, run CI, and create a PR.';
+  'Implement the requirements defined in the linked Linear issue, its comments (newest first), and the referenced plan document if present. Deliver the plan in one branch and one PR. Use internal subagents for consecutive plan tasks; do not create Linear child issues or split the plan into multiple code tasks.';
 
 /**
  * Request to start Execution Agent implementation.
@@ -38,8 +38,6 @@ export interface SubmitToExecutionAgentResult {
   resourceUrl: string;
   workerLocation: WorkerLocation;
   implementationOf: string;
-  /** Child task IDs created by fan-out for complex tasks */
-  childTaskIds?: string[];
 }
 
 /**
@@ -51,7 +49,6 @@ export type SubmitToExecutionAgentErrorCode =
   | 'no_linear_issue'
   | 'already_implemented'
   | 'active_task_exists'
-  | 'complex_task_no_qualifying_children'
   | 'label_not_ready'
   | 'worker_not_configured'
   | 'queue_full'

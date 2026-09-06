@@ -9,8 +9,10 @@ import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
 import { useLinearIssueOptions, useWorkersStatus, findRecentTask, useTimeTick } from '@/hooks';
+import { useWorkerSettings } from '@/hooks/useWorkerSettings';
 import type { CodeTaskWorkerType, TaskMode, SubmitCodeTaskRequest } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
+import type { WorkerSettingsResponse } from '@/services/workerSettingsApi.types';
 import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks, submitCodeTask } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
@@ -37,8 +39,8 @@ const EXECUTION_DEFAULT_PROMPT =
   'Implement exactly as described in the linked Linear issue. Follow the acceptance criteria and design, run CI, and create a PR.';
 
 const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: React.ReactNode }[] = [
-  { id: 'create', name: 'Create New', description: 'Auto-generate title from task description', icon: <Sparkles className="h-4 w-4" /> },
-  { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
+  { id: 'create', name: 'Create new', description: 'Auto-generate title from task description', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'link', name: 'Link existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
 ];
 
 interface TaskModeOption { id: TaskMode; name: string; description: string; icon: React.ReactNode }
@@ -61,10 +63,24 @@ const TASK_MODES: TaskModeOption[] = [
 /** Delay after which loading text changes to reassure users */
 const LONG_SUBMIT_DELAY_MS = 10000;
 
+function isCodeTaskWorkerType(workerType: string | undefined): workerType is CodeTaskWorkerType {
+  return workerType !== undefined && (CODE_TASK_WORKER_TYPES as readonly string[]).includes(workerType);
+}
+
+function getDefaultWorkerType(settings: WorkerSettingsResponse | null, taskMode: TaskMode): CodeTaskWorkerType {
+  const defaultWorkerType =
+    taskMode === 'execution'
+      ? settings?.defaultExecutionWorkerType
+      : settings?.defaultPlanningWorkerType;
+
+  return isCodeTaskWorkerType(defaultWorkerType) ? defaultWorkerType : 'auto';
+}
+
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { getAccessToken } = useAuth();
   const { groupedOptions, loading: linearLoading, error: linearError } = useLinearIssueOptions();
+  const { settings: workerSettings } = useWorkerSettings();
 
   const [prompt, setPrompt] = useState('');
   const [workerType, setWorkerType] = useState<CodeTaskWorkerType>('auto');
@@ -87,6 +103,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [showIssueSelectorModal, setShowIssueSelectorModal] = useState(false);
   const longSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const promptManuallyEdited = useRef(false);
+  const workerTypeManuallySelected = useRef(false);
+  const previousTaskMode = useRef<TaskMode>(taskMode);
 
   /** Clear the phased loading timer */
   const clearLongSubmitTimer = useCallback((): void => {
@@ -112,6 +130,18 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  useEffect(() => {
+    const modeChanged = previousTaskMode.current !== taskMode;
+    if (modeChanged) {
+      previousTaskMode.current = taskMode;
+      workerTypeManuallySelected.current = false;
+    }
+
+    if (!workerTypeManuallySelected.current) {
+      setWorkerType(getDefaultWorkerType(workerSettings, taskMode));
+    }
+  }, [workerSettings, taskMode]);
 
   // Compute all enabled workers sorted by priority.
   const allWorkers = useMemo(() => {
@@ -352,13 +382,14 @@ export function CodeTaskNewPage(): React.JSX.Element {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">Worker Type</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">Worker type</label>
             <div className="flex flex-wrap gap-3">
               {WORKER_TYPES.map((type) => (
                 <button
                   key={type.id}
                   type="button"
                   onClick={(): void => {
+                    workerTypeManuallySelected.current = true;
                     setWorkerType(type.id);
                   }}
                   disabled={submitting}
@@ -379,7 +410,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">Task Mode</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">Task mode</label>
             <div className="flex flex-wrap gap-3">
               {TASK_MODES.map((mode) => (
                 <button
@@ -540,7 +571,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
             {linearMode === 'link' && selectedIssue === null && (
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Click &quot;Link Existing&quot; to select a Linear issue.
+                Click &quot;Link existing&quot; to select a Linear issue.
               </p>
             )}
 
@@ -550,10 +581,10 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium text-blue-900 dark:text-blue-200 mb-1">
-                      Auto-generate Issue Title
+                      Auto-generate issue title
                     </p>
                     <p className="text-xs text-blue-700 dark:text-blue-300">
-                      A Linear issue will be created with a title generated by our Product Owner persona AI. It analyzes your task description to create a clear, actionable title focused on value or problem statement.
+                      A Linear issue will be created with a title generated by our product owner persona AI. It analyzes your task description to create a clear, actionable title focused on value or problem statement.
                     </p>
                   </div>
                 </div>
@@ -582,7 +613,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
           loadingText={loadingText}
         >
           <Play className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Submit Task</span>
+          <span className="hidden sm:inline">Submit task</span>
         </Button>
         <Button
           variant="secondary"

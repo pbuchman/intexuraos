@@ -216,6 +216,12 @@
       .event.bookmark-summarize {
         border-left-color: #ec4899;
       }
+      .event.message-digest-runs {
+        border-left-color: #f59e0b;
+      }
+      .event.intexuraos-runtime-credential-canary-dev {
+        border-left-color: #06b6d4;
+      }
 
       .event-header {
         display: flex;
@@ -280,6 +286,14 @@
       .bookmark-summarize .event-badge {
         background: #ec4899;
         color: white;
+      }
+      .message-digest-runs .event-badge {
+        background: #f59e0b;
+        color: #0f172a;
+      }
+      .intexuraos-runtime-credential-canary-dev .event-badge {
+        background: #06b6d4;
+        color: #0f172a;
       }
 
       .event-time {
@@ -488,13 +502,20 @@
               <option value="whatsapp-send-message">whatsapp-send-message</option>
               <option value="whatsapp-media-cleanup">whatsapp-media-cleanup</option>
               <option value="whatsapp-webhook-process">whatsapp-webhook-process</option>
-              <option value="whatsapp-transcription">whatsapp-transcription</option>
+              <option value="whatsapp-audio-stored">whatsapp-audio-stored</option>
+              <option value="whatsapp-transcription-completed">
+                whatsapp-transcription-completed
+              </option>
               <option value="intex-message-ingest">intex-message-ingest</option>
               <option value="research-process">research-process</option>
               <option value="llm-analytics">llm-analytics</option>
               <option value="llm-call">llm-call</option>
               <option value="bookmark-enrich">bookmark-enrich</option>
               <option value="bookmark-summarize">bookmark-summarize</option>
+              <option value="message-digest-runs">message-digest-runs</option>
+              <option value="intexuraos-runtime-credential-canary-dev">
+                intexuraos-runtime-credential-canary-dev
+              </option>
             </select>
           </div>
 
@@ -544,12 +565,23 @@
           phoneNumberId: '1234567890',
           receivedAt: '{timestamp}',
         },
-        'whatsapp-transcription': {
-          type: 'whatsapp.audio.transcribe',
+        'whatsapp-audio-stored': {
+          type: 'whatsapp.audio.stored',
           messageId: 'msg-{timestamp}',
           userId: '{userId}',
+          mediaId: 'media-{timestamp}',
           gcsPath: 'whatsapp/{userId}/audio-{timestamp}.ogg',
           mimeType: 'audio/ogg',
+          timestamp: '{timestamp}',
+        },
+        'whatsapp-transcription-completed': {
+          type: 'srt.transcription.completed',
+          userId: '{userId}',
+          messageId: 'msg-{timestamp}',
+          jobId: 'job-{timestamp}',
+          status: 'completed',
+          transcript: 'This is a test voice message transcript.',
+          timestamp: '{timestamp}',
         },
         'intex-message-ingest': {
           type: 'intex.message.ingest',
@@ -593,6 +625,19 @@
           type: 'bookmarks.summarize',
           bookmarkId: 'bookmark-{timestamp}',
           userId: '{userId}',
+        },
+        'message-digest-runs': {
+          type: 'message-digest.run',
+          version: 1,
+          userId: '{userId}',
+          definitionId: 'md_test-digest-001',
+          runId: 'mdr_test-run-001',
+          requestedAt: '{isoTimestamp}',
+        },
+        'intexuraos-runtime-credential-canary-dev': {
+          type: 'runtime.credential.canary',
+          canary: 'manual-local',
+          requestedAt: '{isoTimestamp}',
         },
       };
 
@@ -763,6 +808,7 @@
         const data = JSON.parse(
           JSON.stringify(template)
             .replace(/{userId}/g, userId)
+            .replace(/{isoTimestamp}/g, new Date(timestamp).toISOString())
             .replace(/{timestamp}/g, String(timestamp))
         );
 

@@ -1,6 +1,6 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { err, ok, type Logger } from '@intexuraos/common-core';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
@@ -158,8 +158,20 @@ async function submit(
 }
 
 describe('submitDirectCodeTask', () => {
+  let originalWebAppUrl: string | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   it('returns internal_error when worker settings cannot be fetched', async () => {
@@ -183,12 +195,50 @@ describe('submitDirectCodeTask', () => {
     );
   });
 
+  it('keeps the handled no-worker outcome out of Sentry', async () => {
+    const { deps, workerSettingsRepo, logger } = createDeps();
+    vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+      ok({
+        userId: 'user-1',
+        workers: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    );
+
+    const result = await submit(deps, { workerType: 'codex-xhigh' });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'worker_not_configured',
+        message: 'Please configure your workers in Settings before submitting code tasks',
+      },
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        workerType: 'codex-xhigh',
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 0,
+        _skipSentry: true,
+      },
+      'User has no workers configured'
+    );
+  });
+
   it('creates and enqueues a direct planning task with default source metrics', async () => {
     const { deps, codeTaskRepo, taskEnqueueService, metricsClient } = createDeps();
 
     const result = await submit(deps);
 
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
+    }
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',
@@ -206,6 +256,20 @@ describe('submitDirectCodeTask', () => {
       userId: 'user-1',
     });
     expect(metricsClient.incrementTasksSubmitted).toHaveBeenCalledWith('auto', 'web');
+  });
+
+  it('uses a configured web app URL with trailing slash normalization in the returned resourceUrl', async () => {
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+    const { deps } = createDeps();
+
+    const result = await submit(deps);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.resourceUrl).toBe(
+        `https://dev.intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
+    }
   });
 
   it('uses code-task labels to submit execution tasks when taskMode is omitted', async () => {
@@ -243,7 +307,7 @@ describe('submitDirectCodeTask', () => {
             enabled: true,
           },
         ],
-        defaultPlanningWorkerType: 'glm',
+        defaultPlanningWorkerType: 'openrouter-free',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })
@@ -252,8 +316,40 @@ describe('submitDirectCodeTask', () => {
     const result = await submit(deps, { source: 'whatsapp' });
 
     expect(result.ok).toBe(true);
-    expect(codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({ workerType: 'glm' }));
-    expect(metricsClient.incrementTasksSubmitted).toHaveBeenCalledWith('glm', 'whatsapp');
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({ workerType: 'openrouter-free' }));
+    expect(metricsClient.incrementTasksSubmitted).toHaveBeenCalledWith('openrouter-free', 'whatsapp');
+  });
+
+  it('uses user default execution worker type when taskMode resolves to execution and request worker type is auto', async () => {
+    const { deps, workerSettingsRepo, codeTaskRepo } = createDeps();
+    vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+      ok({
+        userId: 'user-1',
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://worker.example.com',
+            cfAccessClientId: 'client-id',
+            cfAccessClientSecret: 'client-secret',
+            dispatchSigningSecret: 'dispatch-secret',
+            enabled: true,
+          },
+        ],
+        defaultExecutionWorkerType: 'codex',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    );
+
+    const result = await submit(deps, { taskMode: 'execution' });
+
+    expect(result.ok).toBe(true);
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentType: 'execution',
+        workerType: 'codex',
+      })
+    );
   });
 
   it('returns internal_error when a user-provided Linear issue cannot be validated', async () => {
@@ -415,6 +511,11 @@ describe('submitDirectCodeTask', () => {
     const result = await submit(deps, { taskMode: 'execution', linearIssueId: 'INT-1' });
 
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
+    }
     expect(codeTaskRepo.update).toHaveBeenCalledWith(expect.stringMatching(/^task_/), { status: 'queued' });
     expect(taskEnqueueService.enqueue).toHaveBeenCalledWith({
       taskId: expect.stringMatching(/^task_/),
@@ -627,6 +728,9 @@ describe('submitDirectCodeTask', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.codeTaskId).toMatch(/^task_/);
+      expect(result.value.resourceUrl).toBe(
+        `https://intexuraos.cloud/#/code-tasks/${result.value.codeTaskId}`
+      );
       expect(result.value.workerLocation).toBe('queued');
     }
     expect(logger.warn).not.toHaveBeenCalledWith(

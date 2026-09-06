@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { err } from '@intexuraos/common-core';
-
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(),
-}));
+import { err, ok } from '@intexuraos/common-core';
 
 import { buildServer } from '../../server.js';
 import { setServices, resetServices } from '../../services.js';
@@ -186,6 +182,139 @@ describe('internalIssuesRoutes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
+    });
+
+    it('returns the same Linear issue for the same creation idempotency key', async () => {
+      const createIssue = vi.spyOn(fakeLinearClient, 'createIssue');
+      const request = {
+        method: 'POST' as const,
+        url: '/internal/issues',
+        headers: {
+          ...internalAuthHeader,
+          'x-user-id': testUserId,
+        },
+        payload: {
+          title: 'Idempotent issue',
+          description: 'Created from one Sentry transition',
+          idempotencyKey: 'sentry:org:project:issue:event:event-1',
+        },
+      };
+
+      const first = await app.inject(request);
+      const second = await app.inject(request);
+      const firstBody = JSON.parse(first.body) as { data: { id: string; identifier: string } };
+      const secondBody = JSON.parse(second.body) as { data: { id: string; identifier: string } };
+      const issues = await fakeLinearClient.listIssues(testApiKey, testConnection.teamId);
+
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      expect(secondBody.data).toEqual(firstBody.data);
+      expect(issues.ok && issues.value).toHaveLength(1);
+      expect(createIssue.mock.calls[0]?.[1].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+      );
+    });
+
+    it('returns the Linear lookup error before idempotent creation', async () => {
+      fakeLinearClient.setFailure(true, { code: 'API_ERROR', message: 'Linear API error' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/issues',
+        headers: {
+          ...internalAuthHeader,
+          'x-user-id': testUserId,
+        },
+        payload: {
+          title: 'Idempotent issue',
+          description: 'Created from one Sentry transition',
+          idempotencyKey: 'sentry:org:project:issue:event:event-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { error: { code: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
+    it('reads back the winning issue when idempotent creation loses a race', async () => {
+      const winningIssue: LinearIssue = {
+        id: 'winning-stable-id',
+        identifier: 'ENG-200',
+        title: 'Idempotent issue',
+        description: 'Created from one Sentry transition',
+        priority: 0,
+        state: { id: 'state-1', name: 'Backlog', type: 'backlog' },
+        url: 'https://linear.app/team/issue/ENG-200',
+        createdAt: '2026-07-29T10:00:00.000Z',
+        updatedAt: '2026-07-29T10:00:00.000Z',
+        completedAt: null,
+        childCount: 0,
+        children: [],
+        labels: [],
+      };
+      const getIssue = vi.spyOn(fakeLinearClient, 'getIssue')
+        .mockResolvedValueOnce(ok(null))
+        .mockResolvedValueOnce(ok(winningIssue));
+      vi.spyOn(fakeLinearClient, 'createIssue').mockResolvedValueOnce(err({
+        code: 'API_ERROR',
+        message: 'Issue ID already exists',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/issues',
+        headers: {
+          ...internalAuthHeader,
+          'x-user-id': testUserId,
+        },
+        payload: {
+          title: 'Idempotent issue',
+          description: 'Created from one Sentry transition',
+          idempotencyKey: 'sentry:org:project:issue:event:event-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: { id: string; identifier: string; title: string; url: string };
+      };
+      expect(body.data).toEqual({
+        id: winningIssue.id,
+        identifier: winningIssue.identifier,
+        title: winningIssue.title,
+        url: winningIssue.url,
+      });
+      expect(getIssue).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns the creation error when an idempotent race has no winning issue', async () => {
+      const getIssue = vi.spyOn(fakeLinearClient, 'getIssue')
+        .mockResolvedValueOnce(ok(null))
+        .mockResolvedValueOnce(ok(null));
+      vi.spyOn(fakeLinearClient, 'createIssue').mockResolvedValueOnce(err({
+        code: 'API_ERROR',
+        message: 'Linear API error',
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/issues',
+        headers: {
+          ...internalAuthHeader,
+          'x-user-id': testUserId,
+        },
+        payload: {
+          title: 'Idempotent issue',
+          description: 'Created from one Sentry transition',
+          idempotencyKey: 'sentry:org:project:issue:event:event-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as { error: { code: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(getIssue).toHaveBeenCalledTimes(2);
     });
   });
 

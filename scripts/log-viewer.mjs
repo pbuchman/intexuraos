@@ -57,6 +57,8 @@ const NAME_MAP = {
   'app-settings-service': 'settings',
   'mobile-n': 'notifs',
   'mobile-notifications-service': 'notifs',
+  'message-': 'digests',
+  'message-digest-service': 'digests',
   web: 'web',
 };
 

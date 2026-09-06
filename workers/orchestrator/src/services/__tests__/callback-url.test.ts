@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildRequiredTaskCallbackUrl,
   buildTaskCallbackUrl,
   deriveCallbackBaseUrl,
   normalizeInternalCallbackUrl,
@@ -18,6 +19,12 @@ describe('task callback URLs', () => {
   it('normalizes legacy prod root-internal callback URLs to public API callback URLs', () => {
     expect(
       normalizeInternalCallbackUrl('https://intexuraos.cloud/internal/webhooks/task-complete')
+    ).toBe('https://intexuraos.cloud/api/code/internal/webhooks/task-complete');
+  });
+
+  it('canonicalizes a trailing-dot public host while normalizing root-internal callbacks', () => {
+    expect(
+      normalizeInternalCallbackUrl('https://INTEXURAOS.CLOUD./internal/webhooks/task-complete')
     ).toBe('https://intexuraos.cloud/api/code/internal/webhooks/task-complete');
   });
 
@@ -83,19 +90,64 @@ describe('task callback URLs', () => {
     );
   });
 
-  it('falls back when webhook URL has no internal marker', () => {
+  it('keeps the public production owner when webhook URL has no internal marker', () => {
     expect(
       deriveCallbackBaseUrl(
         'https://intexuraos.cloud/webhooks/task-complete',
         'http://localhost:8128/'
       )
-    ).toBe('http://localhost:8128');
+    ).toBe('https://intexuraos.cloud/api/code');
   });
 
-  it('falls back when webhook URL is malformed', () => {
-    expect(deriveCallbackBaseUrl('not a url', 'http://localhost:8128/')).toBe(
-      'http://localhost:8128'
+  it('keeps the canonical public production owner for a trailing-dot host without a marker', () => {
+    expect(
+      deriveCallbackBaseUrl(
+        'https://INTEXURAOS.CLOUD./webhooks/task-complete',
+        'http://localhost:8128/'
+      )
+    ).toBe('https://intexuraos.cloud/api/code');
+  });
+
+  it('keeps an arbitrary callback origin when webhook URL has no internal marker', () => {
+    expect(
+      deriveCallbackBaseUrl('https://task-owner.example/webhook', 'http://localhost:8128/')
+    ).toBe('https://task-owner.example');
+  });
+
+  it('fails closed when a provided webhook URL is malformed', () => {
+    expect(() => deriveCallbackBaseUrl('not a url', 'http://localhost:8128/')).toThrow(
+      'Task webhook URL is present but invalid'
     );
+  });
+
+  it('fails closed when a provided webhook URL uses a non-HTTP protocol', () => {
+    expect(() => deriveCallbackBaseUrl('file:///tmp/callback', 'http://localhost:8128/')).toThrow(
+      'Task webhook URL is present but invalid'
+    );
+  });
+
+  it('fails closed when a required caller supplies an empty webhook URL', () => {
+    expect(() => deriveCallbackBaseUrl('', 'http://localhost:8128/')).toThrow(
+      'Task webhook URL is present but invalid'
+    );
+  });
+
+  it.each([
+    ['empty', ''],
+    ['non-string', undefined as unknown as string],
+  ])('fails closed when a required callback URL is %s', (_label, webhookUrl) => {
+    expect(() => buildRequiredTaskCallbackUrl(webhookUrl, '/internal/logs')).toThrow(
+      'Required task webhook URL is missing'
+    );
+  });
+
+  it('builds a required callback URL when the owner is present', () => {
+    expect(
+      buildRequiredTaskCallbackUrl(
+        'https://intexuraos.cloud/api/code/internal/webhooks/task-complete',
+        '/internal/logs'
+      )
+    ).toBe('https://intexuraos.cloud/api/code/internal/logs');
   });
 
   it('adds a leading slash to task callback paths', () => {

@@ -30,12 +30,15 @@ RUN printf '#!/bin/sh\nif [ -f "/secrets/github-token" ]; then\n  export GITHUB_
 # Install pnpm (required for CI commands in tests)
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# Exercise the same pinned Sentry MCP binary as the production worker image.
+RUN npm install -g @sentry/mcp-server@0.37.0
+
 # Create non-root user (use UID 1001 matching production image)
 RUN addgroup -S claude && adduser -S claude -G claude -u 1001
 
 # Set up directories
-RUN mkdir -p /repo /secrets /tmp /home/claude/.claude \
-    && chown -R claude:claude /repo /secrets /tmp /home/claude
+RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /opt/codex-home/.codex \
+    && chown -R claude:claude /repo /secrets /tmp /home/claude /opt/codex-home
 
 # Copy claude stub instead of installing real Claude CLI
 COPY test-fixtures/claude-stub.sh /usr/local/bin/claude
@@ -47,6 +50,7 @@ RUN chmod +x /usr/local/bin/codex
 
 # Bake Claude default config to skip onboarding (same as production)
 COPY --chown=claude:claude config-defaults/claude.json /opt/claude-defaults/.claude.json
+COPY --chown=claude:claude config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml
 
 # Copy entrypoint (same as production)
 COPY --chown=claude:claude entrypoint.sh /entrypoint.sh
@@ -58,7 +62,6 @@ RUN rm -f /usr/bin/wget /usr/bin/nc 2>/dev/null || true
 # Set environment
 ENV HOME=/home/claude
 ENV NODE_ENV=test
-ENV GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
 
 # Switch to non-root user
 USER claude
