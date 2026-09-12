@@ -203,11 +203,11 @@ The Calendar settings card must include:
 - Wire new env vars through:
   - `apps/calendar-agent/src/index.ts`
   - `apps/whatsapp-service/src/index.ts`
-  - `terraform/environments/dev/main.tf`
+  - `terraform/shared-gcp/main.tf`
   - `ecosystem.config.cjs`
 - Add the Hetzner Cloud Scheduler job in `terraform/hetzner-prod/scheduler.tf` that calls `POST /internal/calendar/schedules/tick` every 15 minutes with OIDC auth and no request body.
 - Add `/internal/calendar/schedules/tick` to `terraform/hetzner-prod/main.tf` `internal_route_owners` with owner `calendar-agent`, so the public Hetzner route can forward to the service.
-- Keep `terraform/environments/dev/main.tf` updates scoped to env vars and retained GCP resources that are still owned by that root.
+- Keep `terraform/shared-gcp/main.tf` updates scoped to env vars and retained GCP resources that are still owned by that root.
 - Verify the deployed route path before wiring Terraform. If the current public nginx/API route exposes Calendar Agent under `/api/calendar`, use that route and set the scheduler audience to the existing IntexuraOS domain convention.
 - Do not put Matrix adapter credentials in frontend-accessible configuration.
 

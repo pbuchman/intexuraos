@@ -471,7 +471,7 @@ git commit -m "feat(internal-clients): Google OIDC verifier via jose (INT-1531)"
 - Modify: test fixtures for these files
 - Modify: `apps/code-agent/src/index.ts` `REQUIRED_ENV` (add `INTEXURAOS_CODE_AGENT_SERVICE_URL` if missing)
 - Modify: `apps/commands-agent/src/index.ts` `REQUIRED_ENV`
-- Modify: `terraform/environments/dev/main.tf` (pass service's own URL as env var)
+- Modify: `terraform/shared-gcp/main.tf` (pass service's own URL as env var)
 - Modify: `ecosystem.config.cjs` (same env var for dev)
 
 - [ ] **Step 1: Write a failing test in `code-agent`**
@@ -568,7 +568,7 @@ Search with Grep for `authenticateInternalScheduler(` under each app's routes. E
 
 Add `INTEXURAOS_CODE_AGENT_SERVICE_URL` to:
 - `apps/code-agent/src/index.ts` `REQUIRED_ENV`
-- `terraform/environments/dev/main.tf` (pass `google_cloud_run_v2_service.code_agent.uri`)
+- `terraform/shared-gcp/main.tf` (pass `google_cloud_run_v2_service.code_agent.uri`)
 - `ecosystem.config.cjs` (dev stub `http://localhost:<port>`)
 
 Repeat for commands-agent.
@@ -1130,7 +1130,7 @@ git commit -m "feat(infra-otel): assertOtelActive + Pino traceId/spanId mixin (I
 - Modify: `apps/web/src/config.ts` (import manifest; derive URL map)
 - Modify: `apps/web/cloudbuild.yaml` (read from manifest via a build step OR generator emits the yaml fragment)
 - Modify: `ecosystem.config.cjs` (source ports/URLs from manifest via generator)
-- Modify: `terraform/environments/dev/main.tf` — generator emits a `.auto.tfvars.json` consumed by Terraform
+- Modify: `terraform/shared-gcp/main.tf` — generator emits a `.auto.tfvars.json` consumed by Terraform
 - Add `pnpm run generate:wiring` script + pre-commit check that outputs are up to date
 
 - [ ] **Step 1: Define manifest shape**
@@ -1154,7 +1154,7 @@ Add a JSON Schema validating `name` = kebab-case, `envVar` = `INTEXURAOS_*_URL`,
 Emit:
 - `apps/web/src/config.generated.ts` — consumed by `config.ts`.
 - `ecosystem.generated.cjs` — imported from `ecosystem.config.cjs`.
-- `terraform/environments/dev/service-urls.auto.tfvars.json`.
+- `terraform/shared-gcp/service-urls.auto.tfvars.json`.
 
 - [ ] **Step 4: Add drift-check script**
 

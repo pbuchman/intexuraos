@@ -30,7 +30,7 @@ describe('artifact registry prevention config', () => {
   it('defines active delete cleanup policies and aggressive env retention settings', () => {
     const moduleMain = readRepoFile('terraform/modules/artifact-registry/main.tf');
     const moduleVariables = readRepoFile('terraform/modules/artifact-registry/variables.tf');
-    const environmentMain = readRepoFile('terraform/environments/dev/main.tf');
+    const environmentMain = readRepoFile('terraform/shared-gcp/main.tf');
 
     expect(moduleMain).toContain('cleanup_policy_dry_run');
     expect(moduleMain).toContain('action = "DELETE"');

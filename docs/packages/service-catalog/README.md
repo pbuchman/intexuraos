@@ -84,7 +84,7 @@ const response = await fetch(`${codeAgent.url}/internal/tasks/${id}`, ...);
 ## Adding a New Service
 
 1. Append an `InternalApiServiceCatalogEntry` to `INTERNAL_API_SERVICE_CATALOG` in `internalServiceCatalog.ts`.
-2. Wire the same `baseUrlEnvVar` (and `openApiUrlEnvVar` if the service exposes OpenAPI) in `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`, and the consuming service's `REQUIRED_ENV` list (`apps/<consumer>/src/index.ts`).
+2. Wire the same `baseUrlEnvVar` (and `openApiUrlEnvVar` if the service exposes OpenAPI) in `terraform/shared-gcp/main.tf`, `ecosystem.config.cjs`, and the consuming service's `REQUIRED_ENV` list (`apps/<consumer>/src/index.ts`).
 3. CI's env-var validator iterates the catalog and fails the build if any binding is missing.
 
 ## Layering

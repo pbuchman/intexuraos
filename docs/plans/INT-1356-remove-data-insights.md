@@ -17,7 +17,7 @@
 The core backend feature lives in `apps/data-insights-agent/`, with its own routes, Firestore repositories, Gemini prompt flow, Dockerfile, Cloud Build trigger, and Terraform service definition. That service owns four Firestore collections recorded in `firestore-collections.json`: `custom_data_sources`, `composite_feeds`, `composite_feed_snapshots`, and `visualizations`.
 
 This means removal is feasible as a full service deletion, but only if the same change also removes:
-- service URLs and OpenAPI URLs from `terraform/environments/dev/main.tf`
+- service URLs and OpenAPI URLs from `terraform/shared-gcp/main.tf`
 - dev process wiring from `ecosystem.config.cjs`
 - Cloud Build and deploy scripts under `cloudbuild/` and `.github/workflows/`
 - service catalog entries consumed by shared packages and internal tooling
@@ -73,7 +73,7 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `apps/code-agent/src/routes/internalUsageWebhookRoute.ts`
 - Modify: `packages/llm-prompts/src/generation/titlePrompt.ts`
 - Modify: `firestore-collections.json`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `terraform/modules/iam/main.tf`
 - Modify: `terraform/modules/iam/outputs.tf`
 - Modify: `terraform/modules/cloud-build/main.tf`
@@ -263,7 +263,7 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 ### Task 4: Remove infrastructure, deployment, and Firestore ownership for the retired service
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `terraform/modules/iam/main.tf`
 - Modify: `terraform/modules/iam/outputs.tf`
 - Modify: `terraform/modules/cloud-build/main.tf`

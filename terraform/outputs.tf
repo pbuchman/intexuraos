@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 # Root outputs are intentionally minimal.
-# Environment-level outputs live in `terraform/environments/dev/main.tf`.
+# Environment-level outputs live in `terraform/shared-gcp/main.tf`.
 
 output "project_id" {
   description = "GCP project ID"

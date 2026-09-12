@@ -8,7 +8,6 @@ import {
   parseArgs as parseGeneratorArgs,
   renderConfigGenerated,
   renderEcosystemGenerated,
-  renderTerraformServiceUrls,
 } from './generate-service-wiring.mjs';
 
 function readRequiredFile(filePath, label) {
@@ -101,10 +100,6 @@ function main() {
     const ecosystemPath = resolve(root, 'ecosystem.config.cjs');
     const generatedConfigPath = resolve(root, 'apps/web/src/config.generated.ts');
     const generatedEcosystemPath = resolve(root, 'ecosystem.generated.cjs');
-    const generatedTerraformPath = resolve(
-      root,
-      'terraform/environments/dev/service-urls.auto.tfvars.json'
-    );
 
     const manifest = loadServiceManifest(manifestPath);
     const wiring = generateServiceWiring(manifest);
@@ -146,11 +141,6 @@ function main() {
         renderEcosystemGenerated(wiring),
         generatedEcosystemPath,
         'ecosystem.generated.cjs'
-      ),
-      ...compareGeneratedFile(
-        renderTerraformServiceUrls(wiring),
-        generatedTerraformPath,
-        'terraform/environments/dev/service-urls.auto.tfvars.json'
       ),
     ];
 

@@ -6,11 +6,10 @@ Local is a first-class active developer runtime: services run on `localhost` wit
 use shared GCP/Auth0 resources for data and actual secrets, read non-secret configuration from the
 repository, and use a host-local Pub/Sub emulator.
 
-Home Dev is a production-owned worker host, not an always-running DEV application environment. The
-retained DEV configuration and application profile are normally hibernated there and may be started
-only by the explicitly authorized resume procedure in
-[the DEV hibernation runbook](../operations/dev-hibernation.md). Every command in this guide targets
-the current developer machine; it neither starts nor authorizes a Home Dev resume.
+Home Dev retains the production-serving workers and orchestrator. The application
+stack is available only as a manual localhost process; there is no hosted DEV
+application, public DEV hostname, or application autostart. Commands below start
+the local stack on the current machine.
 
 ## 1. Prerequisites
 
@@ -128,8 +127,7 @@ Rules:
 - The file must be mode `0600`; `~/.intexuraos` must be mode `0700`.
 - It must contain at least two Auth0 accounts using `kontakt+...@pbuchman.com`.
 - The same credentials are intended to work on local and production because they use the shared
-  Auth0 tenant/configuration. They may also be used during an explicitly authorized retained DEV
-  recovery drill, but a hibernated DEV URL is not a routine test target.
+  Auth0 tenant/configuration.
 - Never commit the file or paste passwords into logs/chats.
 
 The browser/e2e login path uses the SPA Auth0 client and Universal Login. Do not use Resource Owner Password Grant as the required verification path for the SPA client; Auth0 blocks that grant for the browser client.

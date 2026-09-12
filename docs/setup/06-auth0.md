@@ -245,7 +245,7 @@ container; add a version rather than creating a second container.
 export PROJECT_ID=your-gcp-project-id
 
 # After updating config/environments/common.json, validate without printing values
-node scripts/render-runtime-config.mjs --environment dev --format shell-export >/dev/null
+node scripts/render-runtime-config.mjs --environment local --format shell-export >/dev/null
 node scripts/render-runtime-config.mjs --environment prod --format dotenv >/dev/null
 
 # Generate the only secret in this section

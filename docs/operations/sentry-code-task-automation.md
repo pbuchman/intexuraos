@@ -17,12 +17,9 @@ Register the code-agent webhook URL with SentryBox:
 | Environment           | Webhook URL                                                   |
 | --------------------- | ------------------------------------------------------------- |
 | Production            | `https://intexuraos.cloud/api/code/webhooks/sentry`           |
-| Retained DEV recovery | `https://dev.intexuraos.cloud/api/code/webhooks/sentry`       |
 
-Only production forwarding is supported during normal operation. DEV forwarding remains disabled
-while the retained runtime is hibernated; the recovery URL returns `503`. Enable it only inside a
-separately authorized recovery drill, then disable it again before re-hibernation. Keep the DEV
-ingest configuration and signing secret for reversibility; do not delete either one.
+Forward actionable SentryBox events to production. Local tests use fixtures;
+remove obsolete DEV forwarding entries while preserving stored signing secrets.
 
 The compatibility route remains `/webhooks/sentry` and accepts SentryBox
 deliveries with:

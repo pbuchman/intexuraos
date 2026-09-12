@@ -151,7 +151,7 @@ describe('final secret-package integrations', () => {
     expect(plan).toContain('# Secret Exposure Final Cutover Plan (Historical Archive)');
     expect(plan).toContain('Status: historical archive; do not execute.');
     expect(plan).toContain('## Historical Autonomous Agent Goal Template — Do Not Create');
-    expect(plan).toContain('[current DEV hibernation runbook](./dev-hibernation.md)');
+    expect(plan).toContain('[Runtime Environments](./runtime-environments.md)');
     expect(plan).toContain('[Secret Packages Operations](./secret-packages.md)');
     expect(plan).toContain('superseded and must not be used for\na current change');
     expect(plan).not.toContain('\n## Autonomous Agent Goal\n');

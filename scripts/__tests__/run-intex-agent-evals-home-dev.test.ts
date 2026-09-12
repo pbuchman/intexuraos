@@ -71,28 +71,6 @@ finish() {
   exit "$1"
 }
 emit "__INTEX_AGENT_EVAL_\${frame_id}_BEGIN__"
-if [ "\${2-}" != 'matrix-corpus' ]; then
-  mode_record='/var/lib/intexuraos-dev/runtime-mode.env'
-  if [ ! -r "$mode_record" ]; then
-    emit 'dev_runtime_mode_unavailable'
-    finish 2
-  fi
-  if ! runtime_mode=$(sed -n 's/^MODE=//p' "$mode_record"); then
-    emit 'dev_runtime_mode_unavailable'
-    finish 2
-  fi
-  case $runtime_mode in
-    active-pre-cutover|active-post-cutover) ;;
-    hibernated)
-      emit 'DEV_RUNTIME_HIBERNATED'
-      finish 2
-      ;;
-    *)
-      emit 'dev_runtime_mode_unavailable'
-      finish 2
-      ;;
-  esac
-fi
 if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
   emit 'remote_environment_unavailable'
   finish 2
@@ -227,28 +205,13 @@ function framedOutput(payload: string, status: number): string {
   return `__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_BEGIN__\n${payload}__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_END_${String(status)}__\n`;
 }
 
-function runRemoteModeGate(
-  mode: string | undefined,
-  selector = 'endpoint'
-): ReturnType<typeof spawnSync> {
+function runRemotePrecheck(selector: string): ReturnType<typeof spawnSync> {
   const tempRoot = createTempDirectory();
-  const modeRecord = path.join(tempRoot, 'runtime-mode.env');
-  if (mode !== undefined) {
-    fs.writeFileSync(modeRecord, `MODE=${mode}\n`, { encoding: 'utf8', mode: 0o600 });
-  }
-  const remoteProgram = REMOTE_PROGRAM.replace(
-    "mode_record='/var/lib/intexuraos-dev/runtime-mode.env'",
-    `mode_record=${shellSingleQuote(modeRecord)}`
-  );
-  if (remoteProgram === REMOTE_PROGRAM) {
-    throw new Error('remote mode record fixture replacement failed');
-  }
-
   return spawnSync(
     '/bin/sh',
     [
       '-c',
-      `exec 3>&1\n${remoteProgram}`,
+      `exec 3>&1\n${REMOTE_PROGRAM}`,
       'intex-agent-evals-home-dev',
       FRAME_PLACEHOLDER,
       VALID_SHA,
@@ -947,9 +910,6 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       ]);
       expect(remoteCommand).toContain('exec 3>&1; exec zsh -lic ');
       expect(remoteCommand).toContain("'\\''remote_environment_unavailable'\\''");
-      expect(remoteCommand).toContain("'\\''DEV_RUNTIME_HIBERNATED'\\''");
-      expect(remoteCommand).toContain('/var/lib/intexuraos-dev/runtime-mode.env');
-      expect(REMOTE_PROGRAM).toContain('[ "${2-}" != \'matrix-corpus\' ]');
       expect(remoteCommand).toContain('$HOME/deploy/intexuraos');
       expect(remoteCommand).not.toContain(run.localHome);
       expect(remoteCommand).toContain('git rev-parse --verify');
@@ -977,42 +937,18 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     }
   );
 
-  it.each([
-    { label: 'missing', mode: undefined, expected: 'dev_runtime_mode_unavailable' },
-    { label: 'hibernated', mode: 'hibernated', expected: 'DEV_RUNTIME_HIBERNATED' },
-    { label: 'draining', mode: 'draining', expected: 'dev_runtime_mode_unavailable' },
-    { label: 'resuming', mode: 'resuming', expected: 'dev_runtime_mode_unavailable' },
-    {
-      label: 'active-pre-cutover',
-      mode: 'active-pre-cutover',
-      expected: 'remote_environment_unavailable',
-    },
-    {
-      label: 'active-post-cutover',
-      mode: 'active-post-cutover',
-      expected: 'remote_environment_unavailable',
-    },
-  ])('executes the embedded POSIX mode gate for $label mode', ({ mode, expected }) => {
-    const result = runRemoteModeGate(mode);
-
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(2);
-    expect(result.stderr).toBe('');
-    expect(result.stdout).toBe(
-      `__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_BEGIN__\n${expected}\n__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_END_2__\n`
-    );
-  });
-
-  it('keeps the production matrix-corpus transport independent from DEV runtime mode', () => {
-    const result = runRemoteModeGate(undefined, 'matrix-corpus');
-
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(2);
-    expect(result.stderr).toBe('');
-    expect(result.stdout).toBe(
-      `__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_BEGIN__\nremote_environment_unavailable\n__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_END_2__\n`
-    );
-  });
+  it.each(['endpoint', 'matrix-corpus'])(
+    'checks the remote checkout without a host mode record for %s',
+    (selector) => {
+      const result = runRemotePrecheck(selector);
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toBe(
+        `__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_BEGIN__\nremote_environment_unavailable\n__INTEX_AGENT_EVAL_${FRAME_PLACEHOLDER}_END_2__\n`
+      );
+    }
+  );
 
   it.each([0, 1, 2] as const)(
     'preserves remote status %i and only the validated framed CLI payload',
@@ -1119,8 +1055,6 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
   });
 
   it.each([
-    'DEV_RUNTIME_HIBERNATED',
-    'dev_runtime_mode_unavailable',
     'revision_mismatch',
     'remote_environment_unavailable',
     'remote_implementation_paths_dirty',

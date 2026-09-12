@@ -14,12 +14,12 @@ output "retained_gcp_project_number" {
 }
 
 output "retained_firestore_database_id" {
-  description = "Retained Firestore database ID. The database remains owned by terraform/environments/dev."
+  description = "Retained Firestore database ID. The database remains owned by terraform/shared-gcp."
   value       = local.retained_gcp.firestore_database_id
 }
 
 output "retained_gcp_inventory" {
-  description = "Read-only inventory of retained GCP resources that remain owned by terraform/environments/dev."
+  description = "Read-only inventory of retained GCP resources that remain owned by terraform/shared-gcp."
   value       = local.retained_gcp_inventory
 }
 
@@ -135,7 +135,7 @@ output "cutover_activation_contract" {
     order = [
       "apply this root with activate_hetzner_async_consumers=false to create staged Hetzner resources: Pub/Sub pushes use the staging filter and Scheduler jobs are paused",
       "verify the Hetzner edge auth/routing contract for every /internal/* path",
-      "coordinate terraform/environments/dev ownership before changing the old Cloud Run consumers so later dev-root applies cannot recreate or unpause them",
+      "coordinate terraform/shared-gcp ownership before changing the old Cloud Run consumers so later dev-root applies cannot recreate or unpause them",
       "quiesce async publishers/traffic, then clear push config, detach, delete, or gate the listed Cloud Run-targeted Pub/Sub subscriptions",
       "pause or remove the listed old app-targeted Cloud Scheduler jobs",
       "activate DNS / traffic cutover so https://intexuraos.cloud reaches the Hetzner edge while staged async consumers remain inactive",
@@ -148,9 +148,9 @@ output "cutover_activation_contract" {
 output "cutover_old_root_ownership_contract" {
   description = "State-ownership guard for legacy Cloud Run consumers managed outside this root."
   value = {
-    old_root                   = "terraform/environments/dev"
+    old_root                   = "terraform/shared-gcp"
     required_control           = "coordinate old-root ownership before clearing push config, detaching, deleting, or gating old Cloud Run-targeted Pub/Sub subscriptions, and before pausing or removing old app-targeted Scheduler jobs"
-    reapply_risk               = "a later apply of terraform/environments/dev can recreate or unpause old Cloud Run async consumers unless that root is coordinated first"
+    reapply_risk               = "a later apply of terraform/shared-gcp can recreate or unpause old Cloud Run async consumers unless that root is coordinated first"
     retained_gcp_transcription = "do not pause or remove the retained audio-stored -> transcription Cloud Function subscription as part of the Cloud Run consumer cleanup"
   }
 }

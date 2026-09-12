@@ -41,7 +41,7 @@ individual application secret for it.
 | File | Purpose |
 | --- | --- |
 | `config/environments/common.json` | Shared non-secret values |
-| `config/environments/dev.json` | DEV-only non-secret values |
+| `config/environments/local.json` | Localhost non-secret values |
 | `config/environments/prod.json` | PROD-only non-secret values |
 | `config/environments/policy.json` | Classification, scope, and retired-name policy |
 | `config/environments/secret-packages.json` | Package IDs, exact env/file members, native exceptions, and promoted numeric versions |
@@ -53,7 +53,7 @@ exactly; unknown and missing members fail validation.
 Validate the repository-backed portion without fetching secrets:
 
 ```bash
-node scripts/render-runtime-config.mjs --environment dev --format shell-export >/dev/null
+node scripts/render-runtime-config.mjs --environment local --format shell-export >/dev/null
 node scripts/render-runtime-config.mjs --environment prod --format dotenv >/dev/null
 pnpm run verify:secret-packages
 ```
@@ -65,8 +65,7 @@ Validation output must contain names/counts/results only.
 | Consumer | Source | Allowed projection |
 | --- | --- | --- |
 | Local PM2/Vite | exact DEV numeric version plus versioned config | mode-`0600` `.envrc` and approved local files |
-| home-dev PM2 (retained DEV recovery) | exact DEV numeric version plus versioned config | staged mode-`0600` `.envrc`, filtered per-service env; normally stopped |
-| home-dev orchestrator (production-owned) | host-rendered DEV projection with production callback ownership | strict env allowlist plus GitHub App PEM; retained while DEV is hibernated |
+| home-dev orchestrator (production-owned) | host-rendered DEV projection with production callback ownership | strict env allowlist plus GitHub App PEM |
 | code-worker | orchestrator projection | task-specific env/files only; no package or Secret Manager access |
 | Grafana/Alloy | exact DEV numeric version | dedicated observability env projection |
 | Hetzner services/web/nginx/TLS | exact PROD numeric version plus versioned config | target-specific files from the production renderer |
@@ -107,20 +106,11 @@ direnv allow
 pnpm run services:restart
 ```
 
-On Home Dev, the same exact version may be staged during an approved change, but staging is not a
-runtime resume:
-
-```bash
-SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
-  ./scripts/sync-secrets.sh --version <dev-numeric-version>
-direnv allow
-```
-
-Do not start or restart the retained DEV PM2 stack while the mode is `draining` or `hibernated`.
-Only an explicitly authorized `intexuraos-dev-mode resume` transaction may start that stack, and it
-must follow [the DEV hibernation runbook](./dev-hibernation.md). The production-owned Home Dev
-orchestrator is a separate retained service and is not evidence that the DEV application runtime is
-active.
+The historical `dev` package name remains the local/worker secret identity.
+The runtime renderer selects `local`; the secret renderer still selects `dev`.
+No secret version, package format, IAM, or telemetry tag changes for this naming
+cleanup. Package rendering does not start application services. The host-owned
+orchestrator remains a separate production-serving process.
 
 The loader validates CRC32C, schema, environment, exact membership, and file
 shape, then stages one immutable projection containing the package files,
@@ -234,13 +224,13 @@ must be separately protected and rotated.
 
 ## Rotation
 
-Every rotation creates a complete immutable candidate. Stop affected writers, publish and deploy it
-to production by exact numeric version, and stage that same reviewed revision for retained DEV
-recovery. Verify the Home Dev projection without starting the DEV application stack. If live DEV
-verification is required, perform an explicitly authorized resume-and-rehibernate drill. Then
-revoke the old credential and destroy every superseded package version. There is no rollback,
-dual-key runtime, or compatibility reader. A failed gate leaves the affected service stopped and is
-repaired forward.
+Every rotation creates a complete immutable candidate. Stop affected writers,
+publish and deploy it to production by exact numeric version, and update the
+local/worker projection at the same reviewed revision. Verify the retained
+orchestrator separately from any manually started localhost stack. Then revoke
+the old credential and destroy superseded versions as part of that separately
+scoped rotation. The hosted-DEV retirement preserves all existing versions.
+A failed rotation leaves affected services stopped and is repaired forward.
 
 For encryption keys, a one-time offline migrator may hold the old and new key
 while all writers are stopped. Runtime receives only the new key. Delete the
@@ -261,4 +251,4 @@ old key and migrator immediately after the complete rescan passes.
 
 The [Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md) is a historical
 archive of the completed migration, not current execution authority. New package changes follow
-this policy plus the applicable current deployment or hibernation runbook.
+this policy plus the applicable current deployment runbook.

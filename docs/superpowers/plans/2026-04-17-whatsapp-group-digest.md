@@ -108,7 +108,7 @@ These rules come from `apps/.claude/CLAUDE.md` and apply to every task in this p
 | `apps/mobile-notifications-service/src/__tests__/domain/usecases/yesterdayCet.test.ts`      | Create           | DST and boundary cases.                                                   |
 | `firestore-collections.json`                                                                | Modify           | Add `notification_digest_backfill_runs`.                                  |
 | `migrations/20260417000000_notification_digest_indexes.mjs`                                 | Create           | Composite indexes.                                                        |
-| `terraform/environments/dev/main.tf`                                                        | Modify           | Cloud Scheduler resource + env var.                                       |
+| `terraform/shared-gcp/main.tf`                                                        | Modify           | Cloud Scheduler resource + env var.                                       |
 | `ecosystem.config.cjs`                                                                      | Modify           | Add `INTEXURAOS_DIGEST_LLM_MODEL` to mobile-notifications-service entry.  |
 
 ### Phase 4 — Web UI mirroring Code Tasks
@@ -2957,7 +2957,7 @@ The `backfill` endpoint validates `req.user.sub === userId` (same-user check), g
 
 Append `'INTEXURAOS_DIGEST_LLM_MODEL'` to `REQUIRED_ENV`.
 
-- [ ] **Step 2: `terraform/environments/dev/main.tf`**
+- [ ] **Step 2: `terraform/shared-gcp/main.tf`**
 
 Find the existing `mobile-notifications-service` Cloud Run resource. Add to its env vars:
 
@@ -2979,14 +2979,14 @@ INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3-flash-preview',
 - [ ] **Step 4: Verify config + commit**
 
 ```bash
-git add apps/mobile-notifications-service/src/index.ts terraform/environments/dev/main.tf ecosystem.config.cjs
+git add apps/mobile-notifications-service/src/index.ts terraform/shared-gcp/main.tf ecosystem.config.cjs
 git commit -m "feat(infra): wire INTEXURAOS_DIGEST_LLM_MODEL across three locations"
 ```
 
 ### Task 3.8: Add Cloud Scheduler resource
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Append Cloud Scheduler job**
 
@@ -3018,7 +3018,7 @@ resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
 - [ ] **Step 2: `terraform validate`**
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform init -backend=false
 terraform validate
 ```

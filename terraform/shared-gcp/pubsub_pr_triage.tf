@@ -5,7 +5,7 @@
 # throttling and revision rollovers can no longer drop triage work).
 
 module "pubsub_pr_triage" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id     = var.project_id
   project_number = local.project_number

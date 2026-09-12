@@ -13,11 +13,11 @@ This guide covers creating a GitHub OAuth App and configuring the secrets for In
 1. Go to **https://github.com/settings/developers** → **OAuth Apps** → **New OAuth App**
 2. Fill in the form:
 
-| Field                      | Retained DEV recovery value                                           | Production value                                                  |
+| Field                      | Localhost value                                           | Production value                                                  |
 | -------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Application name           | `IntexuraOS Dev`                                                      | `IntexuraOS`                                                      |
-| Homepage URL               | `https://dev.intexuraos.cloud`                                        | `https://intexuraos.cloud`                                        |
-| Authorization callback URL | `https://dev.intexuraos.cloud/api/user-service/oauth/github/callback` | `https://intexuraos.cloud/api/user-service/oauth/github/callback` |
+| Application name           | `IntexuraOS Local`                                                      | `IntexuraOS`                                                      |
+| Homepage URL               | `http://localhost:3000`                                        | `https://intexuraos.cloud`                                        |
+| Authorization callback URL | `http://localhost:8110/oauth/github/callback` | `https://intexuraos.cloud/api/user-service/oauth/github/callback` |
 
 3. Click **Register application**
 4. Copy the **Client ID**
@@ -25,9 +25,8 @@ This guide covers creating a GitHub OAuth App and configuring the secrets for In
 
 > **Note:** GitHub OAuth Apps do not use refresh tokens. Access tokens do not expire unless the user revokes access.
 
-Keep the retained DEV recovery callback allow-listed so a reviewed resume remains possible, but
-do not use it for routine login or verification while DEV is hibernated. Normal OAuth traffic and
-all ordinary checks use production.
+Keep the production and localhost callbacks configured. Remove obsolete public
+DEV callbacks; local testing uses the manually started stack.
 
 ## Step 2: Configure Client ID And Secret
 
@@ -49,19 +48,16 @@ echo -n "YOUR_GITHUB_CLIENT_SECRET" | gcloud secrets versions add INTEXURAOS_GIT
 Use `versions add` rather than `create`; Terraform owns the secret container.
 Do not add a new Secret Manager version for the client ID.
 
-## Step 3: Stage The Retained DEV Recovery Configuration
+## Step 3: Render Local Configuration
 
-During an approved Home Dev staging window, regenerate the merged environment without starting the
-retained DEV application stack:
+Render the existing local/worker secret package without changing its version:
 
 ```bash
 ./scripts/sync-secrets.sh
 direnv allow
 ```
 
-Do not restart `user-service` while DEV is hibernated. If callback recovery must be exercised, use
-the DEV hibernation runbook's explicitly authorized resume transaction; its mode controller owns
-validation and service start order. A direct `pm2 restart` is not a resume procedure.
+Start the localhost stack manually with `pnpm dev` when needed.
 
 ## Step 4: Deploy The Versioned Configuration
 
@@ -73,7 +69,7 @@ client-secret container or its IAM policy changes.
 
 ```bash
 # Validate the versioned client ID without reading Secret Manager
-node scripts/render-runtime-config.mjs --environment dev --format dotenv \
+node scripts/render-runtime-config.mjs --environment local --format dotenv \
   --key INTEXURAOS_GITHUB_OAUTH_CLIENT_ID >/dev/null
 
 # Check only the client secret has an enabled version
@@ -92,6 +88,6 @@ Expected: response with `authorizationUrl` pointing to `https://github.com/login
 | ------------------------------------ | ---------------------------------------------------- |
 | `config/environments/common.json`    | Stores the versioned OAuth client ID                  |
 | `config/environments/policy.json`    | Enforces config-versus-secret classification          |
-| `terraform/environments/dev/main.tf` | Retains the OAuth client secret and its access policy |
+| `terraform/shared-gcp/main.tf` | Retains the OAuth client secret and its access policy |
 | `apps/user-service/src/index.ts`     | Lists in `REQUIRED_ENV` for startup validation       |
 | `ecosystem.config.cjs`               | Maps env vars for PM2 dev environment                |

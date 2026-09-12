@@ -48,7 +48,7 @@ Modify:
 - `apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts` - cover configured dev URL and trailing slash normalization.
 - `apps/code-agent/src/domain/usecases/mergeConflicts/notifyConflicts.ts` - use `INTEXURAOS_WEB_APP_URL` instead of `INTEXURAOS_WEB_URL`.
 - `apps/code-agent/src/__tests__/domain/usecases/mergeConflicts/notifyConflicts.test.ts` - update env-var tests to the canonical name.
-- `terraform/environments/dev/main.tf` - inject `INTEXURAOS_WEB_APP_URL = "https://${var.web_app_domain}"` into the code-agent Cloud Run module.
+- `terraform/shared-gcp/main.tf` - inject `INTEXURAOS_WEB_APP_URL = "https://${var.web_app_domain}"` into the code-agent Cloud Run module.
 
 Do not modify:
 
@@ -204,7 +204,7 @@ git commit -m "fix(INT-1638): use dev web URL in PM2 WhatsApp link env"
 - Modify: `apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts`
 - Modify: `apps/code-agent/src/domain/usecases/mergeConflicts/notifyConflicts.ts`
 - Modify: `apps/code-agent/src/__tests__/domain/usecases/mergeConflicts/notifyConflicts.test.ts`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Write failing WhatsApp notifier tests**
 
@@ -529,7 +529,7 @@ export function buildTaskUrl(taskId: string): string {
 
 - [ ] **Step 7: Add code-agent Terraform env wiring**
 
-In `terraform/environments/dev/main.tf`, add the public web app URL to `module "code_agent"` `env_vars`.
+In `terraform/shared-gcp/main.tf`, add the public web app URL to `module "code_agent"` `env_vars`.
 
 ```hcl
 env_vars = merge(local.common_service_env_vars, {
@@ -572,7 +572,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add apps/code-agent/src/index.ts apps/code-agent/src/config.ts apps/code-agent/src/services/types.ts apps/code-agent/src/services.ts apps/code-agent/src/infra/services/whatsappNotifierImpl.ts apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts apps/code-agent/src/domain/usecases/mergeConflicts/notifyConflicts.ts apps/code-agent/src/__tests__/domain/usecases/mergeConflicts/notifyConflicts.test.ts terraform/environments/dev/main.tf
+git add apps/code-agent/src/index.ts apps/code-agent/src/config.ts apps/code-agent/src/services/types.ts apps/code-agent/src/services.ts apps/code-agent/src/infra/services/whatsappNotifierImpl.ts apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts apps/code-agent/src/domain/usecases/mergeConflicts/notifyConflicts.ts apps/code-agent/src/__tests__/domain/usecases/mergeConflicts/notifyConflicts.test.ts terraform/shared-gcp/main.tf
 git commit -m "fix(INT-1638): build code task links from web app URL"
 ```
 
@@ -587,14 +587,14 @@ git commit -m "fix(INT-1638): build code task links from web app URL"
 - Verify: `apps/research-agent/src/`
 - Verify: `apps/web/src/App.tsx`
 - Verify: `ecosystem.config.cjs`
-- Verify: `terraform/environments/dev/main.tf`
+- Verify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Audit WhatsApp link builders**
 
 Run:
 
 ```bash
-rg -n "INTEXURAOS_WEB_APP_URL|INTEXURAOS_WEB_URL|http://localhost:3000|https://intexuraos.cloud|ctaUrl|View it here" apps/actions-agent/src apps/code-agent/src apps/mobile-notifications-service/src apps/research-agent/src ecosystem.config.cjs terraform/environments/dev/main.tf
+rg -n "INTEXURAOS_WEB_APP_URL|INTEXURAOS_WEB_URL|http://localhost:3000|https://intexuraos.cloud|ctaUrl|View it here" apps/actions-agent/src apps/code-agent/src apps/mobile-notifications-service/src apps/research-agent/src ecosystem.config.cjs terraform/shared-gcp/main.tf
 ```
 
 Expected findings after Tasks 1-2:
