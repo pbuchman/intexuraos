@@ -594,7 +594,7 @@ plan_and_apply_terraform() {
 forward_terraform_dev() {
   plan_and_apply_terraform \
     dev \
-    "${RELEASE_DIR}/terraform/environments/dev" \
+    "${RELEASE_DIR}/terraform/shared-gcp" \
     "${TERRAFORM_DATA_ROOT}/dev-forward" \
     "${TERRAFORM_PLAN_ROOT}/dev-forward.tfplan" \
     "${ATTEMPT_DIR}/terraform-dev-forward.apply-started" \
@@ -611,7 +611,21 @@ forward_terraform_prod() {
     "${PROD_TERRAFORM_TARGETS[@]}"
 }
 
+previous_shared_gcp_root() {
+  # Previous immutable releases keep their original Terraform directory layout.
+  local relative_root=""
+  for relative_root in terraform/shared-gcp terraform/environments/dev; do
+    if [[ -d "${PREVIOUS_RELEASE_DIR}/${relative_root}" ]]; then
+      printf '%s\n' "${PREVIOUS_RELEASE_DIR}/${relative_root}"
+      return 0
+    fi
+  done
+  fail "The previous release has no shared GCP Terraform root"
+}
+
 verify_inverse_terraform_plans() {
+  local previous_root=""
+  previous_root="$(previous_shared_gcp_root)" || return
   plan_terraform \
     prod-inverse-complete \
     "${PREVIOUS_RELEASE_DIR}/terraform/hetzner-prod" \
@@ -620,7 +634,7 @@ verify_inverse_terraform_plans() {
     "${PROD_TERRAFORM_TARGETS[@]}"
   plan_terraform \
     dev-inverse-complete \
-    "${PREVIOUS_RELEASE_DIR}/terraform/environments/dev" \
+    "${previous_root}" \
     "${TERRAFORM_DATA_ROOT}/dev-inverse-proof" \
     "${TERRAFORM_PLAN_ROOT}/dev-inverse-proof.tfplan" \
     "${DEV_TERRAFORM_TARGETS[@]}"
@@ -842,9 +856,11 @@ rollback_terraform_prod() {
 }
 
 rollback_terraform_dev() {
+  local previous_root=""
+  previous_root="$(previous_shared_gcp_root)" || return
   plan_and_apply_terraform \
     dev-inverse \
-    "${PREVIOUS_RELEASE_DIR}/terraform/environments/dev" \
+    "${previous_root}" \
     "${TERRAFORM_DATA_ROOT}/dev-inverse" \
     "${TERRAFORM_PLAN_ROOT}/dev-inverse.tfplan" \
     "" \

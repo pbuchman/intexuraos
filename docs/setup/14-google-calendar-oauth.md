@@ -42,19 +42,18 @@ While the app is in "Testing" status, add your Google account(s) as test users. 
 2. Click **Create Credentials** → **OAuth client ID**
 3. Fill in:
 
-| Field                    | Retained DEV recovery value                                             | Production value                                                    |
+| Field                    | Localhost value                                             | Production value                                                    |
 | ------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | Application type         | Web application                                                         | Web application                                                     |
-| Name                     | `IntexuraOS Dev`                                                        | `IntexuraOS`                                                        |
-| Authorized redirect URIs | `https://dev.intexuraos.cloud/api/user-service/oauth/google/callback`   | `https://intexuraos.cloud/api/user-service/oauth/google/callback`   |
+| Name                     | `IntexuraOS Local`                                                        | `IntexuraOS`                                                        |
+| Authorized redirect URIs | `http://localhost:8110/oauth/google/callback`   | `https://intexuraos.cloud/api/user-service/oauth/google/callback`   |
 
 4. Copy the **Client ID** and **Client Secret**
 
 > **Note:** Google OAuth uses refresh tokens. The `access_type: 'offline'` and `prompt: 'consent'` parameters ensure a refresh token is returned on first authorization.
 
-Keep the retained DEV recovery redirect allow-listed so a reviewed resume remains possible, but
-do not use it for routine authorization or verification while DEV is hibernated. Normal OAuth
-traffic and all ordinary checks use production.
+Keep the production and localhost callbacks configured. Remove obsolete public
+DEV callbacks; local testing uses the manually started stack.
 
 ## Step 3: Configure Client ID And Secret
 
@@ -77,19 +76,16 @@ echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets versions add INTEXURAOS_GOO
 Use `versions add` rather than `create`; Terraform owns the client-secret
 container. Do not add versions for the client ID or redirect URI.
 
-## Step 4: Stage The Retained DEV Recovery Configuration
+## Step 4: Render Local Configuration
 
-During an approved Home Dev staging window, regenerate the merged environment without starting the
-retained DEV application stack:
+Render the existing local/worker secret package without changing its version:
 
 ```bash
 ./scripts/sync-secrets.sh
 direnv allow
 ```
 
-Do not restart `user-service` while DEV is hibernated. If callback recovery must be exercised, use
-the DEV hibernation runbook's explicitly authorized resume transaction; its mode controller owns
-validation and service start order. A direct `pm2 restart` is not a resume procedure.
+Start the localhost stack manually with `pnpm dev` when needed.
 
 ## Step 5: Deploy The Versioned Configuration
 
@@ -109,7 +105,7 @@ gcloud services enable calendar-json.googleapis.com --project=intexuraos-dev-pbu
 
 ```bash
 # Validate the versioned client ID without reading Secret Manager
-node scripts/render-runtime-config.mjs --environment dev --format dotenv \
+node scripts/render-runtime-config.mjs --environment local --format dotenv \
   --key INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID >/dev/null
 
 # Check only the client secret has an enabled version
@@ -128,7 +124,7 @@ Expected: response with `authorizationUrl` pointing to `https://accounts.google.
 | ------------------------------------ | ----------------------------------------------------- |
 | `config/environments/common.json`    | Stores the versioned Google OAuth client ID            |
 | `config/environments/policy.json`    | Enforces config-versus-secret classification           |
-| `terraform/environments/dev/main.tf` | Retains the OAuth client secret and its access policy  |
+| `terraform/shared-gcp/main.tf` | Retains the OAuth client secret and its access policy  |
 | `apps/user-service/src/index.ts`     | Lists in `REQUIRED_ENV` for startup validation        |
 | `ecosystem.config.cjs`               | Maps env vars for PM2 dev environment                 |
 

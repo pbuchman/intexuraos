@@ -148,28 +148,6 @@ finish() {
   exit "$1"
 }
 emit "__INTEX_AGENT_EVAL_${frame_id}_BEGIN__"
-if [ "${2-}" != 'matrix-corpus' ]; then
-  mode_record='/var/lib/intexuraos-dev/runtime-mode.env'
-  if [ ! -r "$mode_record" ]; then
-    emit 'dev_runtime_mode_unavailable'
-    finish 2
-  fi
-  if ! runtime_mode=$(sed -n 's/^MODE=//p' "$mode_record"); then
-    emit 'dev_runtime_mode_unavailable'
-    finish 2
-  fi
-  case $runtime_mode in
-    active-pre-cutover|active-post-cutover) ;;
-    hibernated)
-      emit 'DEV_RUNTIME_HIBERNATED'
-      finish 2
-      ;;
-    *)
-      emit 'dev_runtime_mode_unavailable'
-      finish 2
-      ;;
-  esac
-fi
 if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
   emit 'remote_environment_unavailable'
   finish 2
@@ -344,7 +322,6 @@ filter_setup_stream() {
             'setup input matrix_outbound_auth_token_file' | 'setup input matrix_targets_file')
             printf '%s\n' "$line"
             ;;
-          'DEV_RUNTIME_HIBERNATED' | 'dev_runtime_mode_unavailable' | \
             'revision_mismatch' | 'remote_environment_unavailable')
             if [[ -z $payload_status ]]; then
               terminal_line=$line
@@ -690,7 +667,7 @@ extract_validated_payload() {
   [[ -n $payload && $payload == *$'\n' ]] || return 1
 
   if [[ $expected_status == 2 && \
-    ($payload == $'DEV_RUNTIME_HIBERNATED\n' || $payload == $'dev_runtime_mode_unavailable\n' || $payload == $'revision_mismatch\n' || $payload == $'remote_environment_unavailable\n' || $payload == $'remote_implementation_paths_dirty\n') ]]; then
+    ($payload == $'revision_mismatch\n' || $payload == $'remote_environment_unavailable\n' || $payload == $'remote_implementation_paths_dirty\n') ]]; then
     printf -v "$destination_name" '%s' "$payload"
     return 0
   fi

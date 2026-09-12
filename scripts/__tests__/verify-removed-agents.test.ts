@@ -58,7 +58,7 @@ module.exports = {
     );
     writeFixture(
       rootDir,
-      'terraform/environments/dev/main.tf',
+      'terraform/shared-gcp/main.tf',
       `
 resource "google_pubsub_subscription" "approval_reply" {
   push_endpoint = "/internal/actions/approval-reply"

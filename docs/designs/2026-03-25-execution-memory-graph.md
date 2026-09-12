@@ -219,7 +219,7 @@ Add:
 
 ## Environment and Config Changes
 
-Add these env vars to `apps/code-agent/src/index.ts`, `apps/code-agent/src/config.ts`, `terraform/environments/dev/main.tf`, and `ecosystem.config.cjs`:
+Add these env vars to `apps/code-agent/src/index.ts`, `apps/code-agent/src/config.ts`, `terraform/shared-gcp/main.tf`, and `ecosystem.config.cjs`:
 
 - `INTEXURAOS_EXECUTION_MEMORY_ENABLED`
 - `INTEXURAOS_OPENAI_APP_API_KEY`

@@ -419,14 +419,14 @@ env-var contract is manually maintained and drift is visible today.
 - **pnpm version drift across Dockerfiles and CI** (Medium) — 8, 9, 10, `@latest`
   all ship in the same repo.
 - **No `prod` Terraform environment despite documented prod tier** (High) — only
-  `terraform/environments/dev/` exists.
+  `terraform/shared-gcp/` exists.
 - **`deploy.yml` MONOLITH and INDIVIDUAL branches duplicate ~80 lines of web-config
   logic** (Medium).
 - **21 copy-paste Dockerfiles** (Medium) — byte-for-byte identical except service
   name; 21 near-identical deploy scripts.
 - **`ecosystem.config.cjs` drifts from Terraform for PubSub topic names** (Medium)
   — INT-1451 fixed whatsapp-service; not generalised.
-- **`terraform/environments/dev/main.tf` is a 2,988-line monolith** (Medium).
+- **`terraform/shared-gcp/main.tf` is a 2,988-line monolith** (Medium).
 - **Cloud Run `secrets` block re-declared per-service** (Low).
 
 ---

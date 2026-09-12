@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = resolve(__dirname, '..', '..');
 const validatorPath = resolve(repoRoot, 'scripts/hetzner/validate-prod-secret-candidate.sh');
 const loaderPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
-const terraformPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
+const terraformPath = resolve(repoRoot, 'terraform/shared-gcp/main.tf');
 const operationsPath = resolve(repoRoot, 'docs/operations/secret-packages.md');
 const pubsubUiPath = resolve(repoRoot, 'tools/pubsub-ui/index.html');
 const pubsubReadmePath = resolve(repoRoot, 'tools/pubsub-ui/README.md');
@@ -401,7 +401,7 @@ describe('PROD package candidate credential canary', () => {
     const topic = 'intexuraos-runtime-credential-canary-dev';
 
     expect(terraform).toContain('module "pubsub_runtime_credential_canary"');
-    expect(terraform).toContain('source = "../../modules/pubsub-topic"');
+    expect(terraform).toContain('source = "../modules/pubsub-topic"');
     expect(terraform).toContain('intexuraos-runtime-credential-canary-${var.environment}');
     expect(terraform).not.toMatch(/google_pubsub_subscription[^}]+runtime_credential_canary/su);
     expect(pubsubTopology).toContain(`name: '${topic}'`);

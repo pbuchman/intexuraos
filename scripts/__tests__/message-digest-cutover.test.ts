@@ -668,65 +668,69 @@ cat "$TRACE_FILE"
     }
   });
 
-  it('reviews complete inverse plans from the previous release after both forward applies', () => {
-    const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-inverse-proof-'));
-    const tracePath = resolve(directory, 'terraform-trace.txt');
-    const fixtureDirectory = resolve(directory, 'fixtures');
-    const currentRelease = resolve(directory, 'current-release');
-    const previousRelease = resolve(directory, 'previous-release');
-    const devAddresses = [
-      'google_pubsub_topic.message_digest_runs',
-      'google_pubsub_topic_iam_member.message_digest_publishes_runs',
-      'google_pubsub_topic_iam_member.message_digest_publishes_whatsapp',
-    ];
-    const prodAddresses = [
-      'google_pubsub_topic.hetzner_push_dlq["message_digest_runs"]',
-      'google_pubsub_subscription.hetzner_push_dlq_inspect["message_digest_runs"]',
-      'google_pubsub_topic_iam_member.hetzner_push_dlq_publisher["message_digest_runs"]',
-      'google_pubsub_subscription.hetzner_push["message_digest_runs"]',
-      'google_pubsub_subscription_iam_member.hetzner_push_dlq_subscriber["message_digest_runs"]',
-      'google_cloud_scheduler_job.hetzner_http["message_digest_tick"]',
-      'google_cloud_scheduler_job.hetzner_http["mobile_notifications_digest_yesterday"]',
-    ];
+  it.each(['terraform/shared-gcp', 'terraform/environments/dev'])(
+    'reviews inverse plans and rollback from a previous release using %s',
+    (previousRoot) => {
+      const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-inverse-proof-'));
+      const tracePath = resolve(directory, 'terraform-trace.txt');
+      const fixtureDirectory = resolve(directory, 'fixtures');
+      const currentRelease = resolve(directory, 'current-release');
+      const previousRelease = resolve(directory, 'previous-release');
+      const devAddresses = [
+        'google_pubsub_topic.message_digest_runs',
+        'google_pubsub_topic_iam_member.message_digest_publishes_runs',
+        'google_pubsub_topic_iam_member.message_digest_publishes_whatsapp',
+      ];
+      const prodAddresses = [
+        'google_pubsub_topic.hetzner_push_dlq["message_digest_runs"]',
+        'google_pubsub_subscription.hetzner_push_dlq_inspect["message_digest_runs"]',
+        'google_pubsub_topic_iam_member.hetzner_push_dlq_publisher["message_digest_runs"]',
+        'google_pubsub_subscription.hetzner_push["message_digest_runs"]',
+        'google_pubsub_subscription_iam_member.hetzner_push_dlq_subscriber["message_digest_runs"]',
+        'google_cloud_scheduler_job.hetzner_http["message_digest_tick"]',
+        'google_cloud_scheduler_job.hetzner_http["mobile_notifications_digest_yesterday"]',
+      ];
 
-    mkdirSync(fixtureDirectory, { recursive: true });
-    for (const root of [currentRelease, previousRelease]) {
-      mkdirSync(resolve(root, 'terraform/environments/dev'), { recursive: true });
-      mkdirSync(resolve(root, 'terraform/hetzner-prod'), { recursive: true });
-    }
-    writeFileSync(
-      resolve(fixtureDirectory, 'dev-forward.json'),
-      JSON.stringify({
-        resource_changes: devAddresses.map((address) => change(address, ['create'])),
-      })
-    );
-    writeFileSync(
-      resolve(fixtureDirectory, 'prod-forward.json'),
-      JSON.stringify({
-        resource_changes: prodAddresses.map((address, index) =>
-          change(address, [index === prodAddresses.length - 1 ? 'delete' : 'create'])
-        ),
-      })
-    );
-    writeFileSync(
-      resolve(fixtureDirectory, 'dev-inverse-proof.json'),
-      JSON.stringify({
-        resource_changes: devAddresses.map((address) => change(address, ['delete'])),
-      })
-    );
-    writeFileSync(
-      resolve(fixtureDirectory, 'prod-inverse-proof.json'),
-      JSON.stringify({
-        resource_changes: prodAddresses.map((address, index) =>
-          change(address, [index === prodAddresses.length - 1 ? 'create' : 'delete'])
-        ),
-      })
-    );
+      mkdirSync(fixtureDirectory, { recursive: true });
+      for (const root of [currentRelease, previousRelease]) {
+        mkdirSync(resolve(root, root === previousRelease ? previousRoot : 'terraform/shared-gcp'), {
+          recursive: true,
+        });
+        mkdirSync(resolve(root, 'terraform/hetzner-prod'), { recursive: true });
+      }
+      writeFileSync(
+        resolve(fixtureDirectory, 'dev-forward.json'),
+        JSON.stringify({
+          resource_changes: devAddresses.map((address) => change(address, ['create'])),
+        })
+      );
+      writeFileSync(
+        resolve(fixtureDirectory, 'prod-forward.json'),
+        JSON.stringify({
+          resource_changes: prodAddresses.map((address, index) =>
+            change(address, [index === prodAddresses.length - 1 ? 'delete' : 'create'])
+          ),
+        })
+      );
+      writeFileSync(
+        resolve(fixtureDirectory, 'dev-inverse-proof.json'),
+        JSON.stringify({
+          resource_changes: devAddresses.map((address) => change(address, ['delete'])),
+        })
+      );
+      writeFileSync(
+        resolve(fixtureDirectory, 'prod-inverse-proof.json'),
+        JSON.stringify({
+          resource_changes: prodAddresses.map((address, index) =>
+            change(address, [index === prodAddresses.length - 1 ? 'create' : 'delete'])
+          ),
+        })
+      );
 
-    try {
-      const result = runShellLibrary(
-        cutoverPath,
-        `
+      try {
+        const result = runShellLibrary(
+          cutoverPath,
+          `
 TRACE_FILE="$TEST_TRACE_FILE"
 SUPPORT_HELPER="$TEST_SUPPORT_HELPER"
 terraform_environment() {
@@ -750,7 +754,7 @@ terraform_environment() {
       case "$plan_file" in
         *dev-forward.tfplan) command cat "$TEST_FIXTURE_DIR/dev-forward.json" ;;
         *prod-forward.tfplan) command cat "$TEST_FIXTURE_DIR/prod-forward.json" ;;
-        *dev-inverse-proof.tfplan) command cat "$TEST_FIXTURE_DIR/dev-inverse-proof.json" ;;
+        *dev-inverse-proof.tfplan|*dev-inverse.tfplan) command cat "$TEST_FIXTURE_DIR/dev-inverse-proof.json" ;;
         *prod-inverse-proof.tfplan) command cat "$TEST_FIXTURE_DIR/prod-inverse-proof.json" ;;
         *) return 97 ;;
       esac
@@ -767,37 +771,41 @@ mkdir -p "$TERRAFORM_DATA_ROOT" "$TERRAFORM_PLAN_ROOT"
 forward_terraform_dev
 forward_terraform_prod
 verify_inverse_terraform_plans
+rollback_terraform_dev
 command cat "$TRACE_FILE"
 `,
-        {
-          RELEASE_DIR: currentRelease,
-          PREVIOUS_RELEASE_DIR: previousRelease,
-          TEST_ATTEMPT_DIR: directory,
-          TEST_FIXTURE_DIR: fixtureDirectory,
-          TEST_SUPPORT_HELPER: resolve(
-            repoRoot,
-            'scripts/hetzner/message-digest-cutover-support.mjs'
-          ),
-          TEST_TRACE_FILE: tracePath,
-        }
-      );
+          {
+            RELEASE_DIR: currentRelease,
+            PREVIOUS_RELEASE_DIR: previousRelease,
+            TEST_ATTEMPT_DIR: directory,
+            TEST_FIXTURE_DIR: fixtureDirectory,
+            TEST_SUPPORT_HELPER: resolve(
+              repoRoot,
+              'scripts/hetzner/message-digest-cutover-support.mjs'
+            ),
+            TEST_TRACE_FILE: tracePath,
+          }
+        );
 
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout.trim().split('\n')).toEqual([
-        `PLAN\t${currentRelease}/terraform/environments/dev\t${directory}/terraform-plans/dev-forward.tfplan`,
-        `APPLY\t${currentRelease}/terraform/environments/dev\t${directory}/terraform-plans/dev-forward.tfplan`,
-        `PLAN\t${currentRelease}/terraform/hetzner-prod\t${directory}/terraform-plans/prod-forward.tfplan`,
-        `APPLY\t${currentRelease}/terraform/hetzner-prod\t${directory}/terraform-plans/prod-forward.tfplan`,
-        `PLAN\t${previousRelease}/terraform/hetzner-prod\t${directory}/terraform-plans/prod-inverse-proof.tfplan`,
-        `PLAN\t${previousRelease}/terraform/environments/dev\t${directory}/terraform-plans/dev-inverse-proof.tfplan`,
-      ]);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout.trim().split('\n')).toEqual([
+          `PLAN\t${currentRelease}/terraform/shared-gcp\t${directory}/terraform-plans/dev-forward.tfplan`,
+          `APPLY\t${currentRelease}/terraform/shared-gcp\t${directory}/terraform-plans/dev-forward.tfplan`,
+          `PLAN\t${currentRelease}/terraform/hetzner-prod\t${directory}/terraform-plans/prod-forward.tfplan`,
+          `APPLY\t${currentRelease}/terraform/hetzner-prod\t${directory}/terraform-plans/prod-forward.tfplan`,
+          `PLAN\t${previousRelease}/terraform/hetzner-prod\t${directory}/terraform-plans/prod-inverse-proof.tfplan`,
+          `PLAN\t${previousRelease}/${previousRoot}\t${directory}/terraform-plans/dev-inverse-proof.tfplan`,
+          `PLAN\t${previousRelease}/${previousRoot}\t${directory}/terraform-plans/dev-inverse.tfplan`,
+          `APPLY\t${previousRelease}/${previousRoot}\t${directory}/terraform-plans/dev-inverse.tfplan`,
+        ]);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     }
-  });
+  );
 
   it('isolates the Message Digest WhatsApp publisher from broad module IAM dependencies', () => {
-    const terraform = readFileSync(resolve(repoRoot, 'terraform/environments/dev/main.tf'), 'utf8');
+    const terraform = readFileSync(resolve(repoRoot, 'terraform/shared-gcp/main.tf'), 'utf8');
     const iamModule = readFileSync(resolve(repoRoot, 'terraform/modules/iam/main.tf'), 'utf8');
     const iamOutputs = readFileSync(resolve(repoRoot, 'terraform/modules/iam/outputs.tf'), 'utf8');
     const moduleStart = terraform.indexOf('module "pubsub_whatsapp_send" {');

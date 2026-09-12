@@ -86,7 +86,7 @@ const COMMON_SERVICE_ENV = {
   GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
   GOOGLE_CLOUD_QUOTA_PROJECT: process.env.INTEXURAOS_GCP_PROJECT_ID,
   INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID,
-  INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'https://dev.intexuraos.cloud',
+  INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS:
     process.env.INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS ??
     'or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash',
@@ -117,7 +117,7 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
   INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://localhost:8124/openapi.json',
   INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
-  INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'https://dev.intexuraos.cloud/api/code/openapi.json',
+  INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'http://localhost:8128/openapi.json',
   INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://localhost:8126/openapi.json',
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://localhost:8127/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://localhost:8131/openapi.json',
@@ -196,8 +196,8 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_CONVERSATION_ASSISTANT_MODEL ?? 'or:minimax/minimax-m3',
   },
   'code-agent': {
-    INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/code',
-    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: 'https://dev.intexuraos.cloud/api/code',
+    INTEXURAOS_SERVICE_URL: 'http://localhost:8128',
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: 'http://localhost:8128',
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
@@ -221,7 +221,7 @@ const SERVICE_ENV_MAPPINGS = {
     // INTEXURAOS_ENABLE_METRICS: not set — Cloud Monitoring disabled on home-dev (no IAM role)
   },
   'linear-agent': {
-    INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/linear',
+    INTEXURAOS_SERVICE_URL: 'http://localhost:8126',
     INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
   },
   'bookmarks-agent': {

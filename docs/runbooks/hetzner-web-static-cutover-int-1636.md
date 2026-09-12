@@ -61,7 +61,7 @@ suffix is current production infrastructure naming.
 - [ ] Record GCP rollback values:
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform output web_app_load_balancer_ip
 terraform output web_app_bucket_name
 terraform output static_assets_bucket_name
@@ -113,7 +113,7 @@ URLs; this is a hard cutover with no alias or rewrite fallback.
 
 | System              | Setting                              | Required cutover value                                                                 | Notes |
 | ------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- | ----- |
-| Auth0 SPA app       | Allowed Callback URLs                | `https://intexuraos.cloud`                                                             | Keep `https://dev.intexuraos.cloud` only as the retained recovery callback; DEV is normally hibernated. No `*.run.app`. |
+| Auth0 SPA app       | Allowed Callback URLs                | `https://intexuraos.cloud`                                                             | Keep `http://localhost:3000` for local use. Remove the obsolete hosted DEV callback. No `*.run.app`. |
 | Auth0 SPA app       | Allowed Logout URLs                  | `https://intexuraos.cloud`                                                             | Same retained recovery-domain note as above. |
 | Auth0 SPA app       | Allowed Web Origins                  | `https://intexuraos.cloud`                                                             | Same retained recovery-domain note as above. |
 | Auth0 ChatGPT app   | Authorization URL                    | `https://intexuraos.cloud/api/user/auth/oauth/authorize`                               | Only if the ChatGPT Action app is active. |

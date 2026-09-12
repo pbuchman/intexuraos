@@ -118,7 +118,7 @@ HEADER
     config_args+=(--key "${config_name}")
   done
   if ! node "${RUNTIME_CONFIG_RENDERER}" \
-    --environment dev \
+    --environment local \
     --format dotenv \
     "${config_args[@]}" >> "${TEMP_ENV_FILE}"
   then

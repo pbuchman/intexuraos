@@ -9,7 +9,6 @@
  *   1. Manifest shape:
  *      { services: Array<{ name, envSuffix, apiPath, proxyTarget, serviceUrl }> }
  *      with regex-validated values.
- *   2. Generated Terraform service URL tfvars match manifest serviceUrl values.
  *   3. Obsolete GCP Cloud Build web configs and deploy.yml service arrays are gone.
  *   4. The PWA navigation fallback excludes retained bucket routes.
  *
@@ -24,10 +23,6 @@ const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 const cloudbuildPath = resolve(repoRoot, 'apps/web/cloudbuild.yaml');
 const monolithCloudbuildPath = resolve(repoRoot, 'cloudbuild/cloudbuild.yaml');
 const deployWorkflowPath = resolve(repoRoot, '.github/workflows/deploy.yml');
-const terraformServiceUrlsPath = resolve(
-  repoRoot,
-  'terraform/environments/dev/service-urls.auto.tfvars.json'
-);
 const viteConfigPath = resolve(repoRoot, 'apps/web/vite.config.ts');
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
@@ -107,31 +102,6 @@ function validateShape(manifest) {
   });
 }
 
-function validateTerraformServiceUrls(manifest) {
-  if (!existsSync(terraformServiceUrlsPath)) {
-    fail(`Terraform service URL tfvars not found: ${terraformServiceUrlsPath}`);
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(readFileSync(terraformServiceUrlsPath, 'utf8'));
-  } catch (err) {
-    fail(`Terraform service URL tfvars are not valid JSON: ${err.message}`);
-  }
-  const serviceUrls = parsed?.service_urls;
-  if (!serviceUrls || typeof serviceUrls !== 'object' || Array.isArray(serviceUrls)) {
-    fail('Terraform service URL tfvars must contain an object at service_urls');
-  }
-
-  for (const entry of manifest.services) {
-    const envVar = `INTEXURAOS_${entry.envSuffix}_URL`;
-    if (serviceUrls[envVar] !== entry.serviceUrl) {
-      fail(
-        `Terraform service URL tfvars mismatch for ${envVar}: expected ${entry.serviceUrl}, got ${serviceUrls[envVar]}`
-      );
-    }
-  }
-}
-
 function assertNoLiteralArray(filePath, label) {
   if (!existsSync(filePath)) {
     fail(`${label} not found: ${filePath}`);
@@ -172,7 +142,6 @@ function assertViteRetainedBucketDenylist() {
 function main() {
   const manifest = loadManifest();
   validateShape(manifest);
-  validateTerraformServiceUrls(manifest);
   assertMissingFile(cloudbuildPath, 'apps/web/cloudbuild.yaml');
   assertMissingFile(monolithCloudbuildPath, 'cloudbuild/cloudbuild.yaml');
   assertNoLiteralArray(deployWorkflowPath, '.github/workflows/deploy.yml');

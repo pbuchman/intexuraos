@@ -454,7 +454,7 @@ describe('runtime configuration cutover', () => {
         readFileSync(resolve(repoRoot, 'config/environments/common.json'), 'utf8')
       ) as Record<string, string>),
       ...(JSON.parse(
-        readFileSync(resolve(repoRoot, 'config/environments/dev.json'), 'utf8')
+        readFileSync(resolve(repoRoot, 'config/environments/local.json'), 'utf8')
       ) as Record<string, string>),
     };
     expect(merged).toMatchObject({ ...trackedConfig, ...packageEnv });
@@ -1642,7 +1642,7 @@ describe('runtime configuration cutover', () => {
     expect(
       readFileSync(resolve(repoRoot, 'config/environments/common.json'), 'utf8')
     ).not.toContain('INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI');
-    expect(readFileSync(resolve(repoRoot, 'config/environments/dev.json'), 'utf8')).not.toContain(
+    expect(readFileSync(resolve(repoRoot, 'config/environments/local.json'), 'utf8')).not.toContain(
       'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'
     );
     expect(readFileSync(resolve(repoRoot, 'config/environments/prod.json'), 'utf8')).not.toContain(

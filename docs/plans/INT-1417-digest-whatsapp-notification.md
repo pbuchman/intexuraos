@@ -41,7 +41,7 @@
 - `apps/mobile-notifications-service/src/__tests__/helpers/mockServices.ts` — include `digestNotifier` in the test container (default Noop).
 - `apps/mobile-notifications-service/src/__tests__/domain/usecases/runDigestForGroup.test.ts` — assert notifier is called exactly once on happy path, zero times on lock-held / save-failure paths, and that failures from the notifier do not fail the use case.
 - `apps/mobile-notifications-service/src/index.ts` — add `INTEXURAOS_WEB_APP_URL` and `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` to `REQUIRED_ENV`.
-- `terraform/environments/dev/main.tf` — extend the `module "mobile_notifications_service"` `env_vars` block with `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` and `INTEXURAOS_WEB_APP_URL`.
+- `terraform/shared-gcp/main.tf` — extend the `module "mobile_notifications_service"` `env_vars` block with `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` and `INTEXURAOS_WEB_APP_URL`.
 - `ecosystem.config.cjs` — extend `SERVICE_ENV_MAPPINGS['mobile-notifications-service']` with `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` (WEB_APP_URL already in `COMMON_SERVICE_ENV`).
 
 ---
@@ -793,7 +793,7 @@ const REQUIRED_ENV = [
 
 - [ ] **Step 2: Declare in Terraform dev env**
 
-Edit `terraform/environments/dev/main.tf`, inside `module "mobile_notifications_service"` (around line 997), extend the `env_vars` block:
+Edit `terraform/shared-gcp/main.tf`, inside `module "mobile_notifications_service"` (around line 997), extend the `env_vars` block:
 
 ```hcl
   env_vars = merge(local.common_service_env_vars, {
@@ -803,7 +803,7 @@ Edit `terraform/environments/dev/main.tf`, inside `module "mobile_notifications_
   })
 ```
 
-Note: `INTEXURAOS_WEB_APP_URL` is NOT part of `local.common_service_env_vars` (verified against `terraform/environments/dev/main.tf` lines 278-303) — it MUST be declared explicitly here, matching the pattern used by `research_agent` (line 1141) and `actions_agent` (line 1207).
+Note: `INTEXURAOS_WEB_APP_URL` is NOT part of `local.common_service_env_vars` (verified against `terraform/shared-gcp/main.tf` lines 278-303) — it MUST be declared explicitly here, matching the pattern used by `research_agent` (line 1141) and `actions_agent` (line 1207).
 
 - [ ] **Step 3: Declare in PM2 dev shell**
 
@@ -832,7 +832,7 @@ Expected: exits 0 (no missing / mismatched env vars). If it fails, read the outp
 
 ```bash
 git add apps/mobile-notifications-service/src/index.ts \
-        terraform/environments/dev/main.tf \
+        terraform/shared-gcp/main.tf \
         ecosystem.config.cjs
 git commit -m "chore(mobile-notifications-service): register WhatsApp send topic env var in 3 locations (INT-1417)"
 ```

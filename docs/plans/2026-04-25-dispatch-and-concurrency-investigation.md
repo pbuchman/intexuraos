@@ -354,7 +354,7 @@ if (!dispatchResult.ok) {
 **Evidence this fix helps:**
 
 * The transaction semantics of Firestore (`runTransaction`) guarantee linearizability on the document. Two replicas calling `claimForDispatch(taskId)` concurrently produce exactly one success and one `alreadyClaimed`.
-* Cloud Run's auto-scaling target for `code-agent` (per `terraform/environments/dev/main.tf` configuration) allows up to N replicas; today's flag-based guard does not extend across them.
+* Cloud Run's auto-scaling target for `code-agent` (per `terraform/shared-gcp/main.tf` configuration) allows up to N replicas; today's flag-based guard does not extend across them.
 
 **Test plan:**
 
