@@ -46,7 +46,7 @@ While the app is in "Testing" status, add your Google account(s) as test users. 
 | ------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | Application type         | Web application                                                         | Web application                                                     |
 | Name                     | `IntexuraOS Local`                                                        | `IntexuraOS`                                                        |
-| Authorized redirect URIs | `http://localhost:8110/oauth/google/callback`   | `https://intexuraos.cloud/api/user-service/oauth/google/callback`   |
+| Authorized redirect URIs | `http://localhost:8110/oauth/connections/google/callback`   | `https://intexuraos.cloud/oauth/connections/google/callback`   |
 
 4. Copy the **Client ID** and **Client Secret**
 
@@ -54,6 +54,13 @@ While the app is in "Testing" status, add your Google account(s) as test users. 
 
 Keep the production and localhost callbacks configured. Remove obsolete public
 DEV callbacks; local testing uses the manually started stack.
+
+The localhost callback above applies when initiating directly against
+`http://localhost:8110/oauth/connections/google/initiate`. User-service derives
+the callback origin from the forwarded host/protocol (or request host), so initiate
+against that same origin and open the returned `authorizationUrl`. Initiating through
+the Vite proxy on port 3000 produces a different callback origin; the direct-service
+callback above does not apply to that flow.
 
 ## Step 3: Configure Client ID And Secret
 
@@ -112,7 +119,7 @@ node scripts/render-runtime-config.mjs --environment local --format dotenv \
 gcloud secrets versions list INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET --project=intexuraos-dev-pbuchman
 
 # Test the OAuth initiation endpoint
-curl -X POST https://intexuraos.cloud/api/user-service/oauth/connections/google/initiate \
+curl -X POST https://intexuraos.cloud/api/user/oauth/connections/google/initiate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

@@ -17,7 +17,7 @@ This guide covers creating a GitHub OAuth App and configuring the secrets for In
 | -------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Application name           | `IntexuraOS Local`                                                      | `IntexuraOS`                                                      |
 | Homepage URL               | `http://localhost:3000`                                        | `https://intexuraos.cloud`                                        |
-| Authorization callback URL | `http://localhost:8110/oauth/github/callback` | `https://intexuraos.cloud/api/user-service/oauth/github/callback` |
+| Authorization callback URL | `http://localhost:8110/oauth/connections/github/callback` | `https://intexuraos.cloud/oauth/connections/github/callback` |
 
 3. Click **Register application**
 4. Copy the **Client ID**
@@ -27,6 +27,13 @@ This guide covers creating a GitHub OAuth App and configuring the secrets for In
 
 Keep the production and localhost callbacks configured. Remove obsolete public
 DEV callbacks; local testing uses the manually started stack.
+
+The localhost callback above applies when initiating directly against
+`http://localhost:8110/oauth/connections/github/initiate`. User-service derives
+the callback origin from the forwarded host/protocol (or request host), so initiate
+against that same origin and open the returned `authorizationUrl`. Initiating through
+the Vite proxy on port 3000 produces a different callback origin; the direct-service
+callback above does not apply to that flow.
 
 ## Step 2: Configure Client ID And Secret
 
@@ -76,7 +83,7 @@ node scripts/render-runtime-config.mjs --environment local --format dotenv \
 gcloud secrets versions list INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET --project=intexuraos-dev-pbuchman
 
 # Test the OAuth initiation endpoint
-curl -X POST https://intexuraos.cloud/api/user-service/oauth/connections/github/initiate \
+curl -X POST https://intexuraos.cloud/api/user/oauth/connections/github/initiate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

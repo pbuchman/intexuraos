@@ -12158,6 +12158,46 @@ describe('createIntexAgentRunner', () => {
       }
     });
 
+    it.each([undefined, '', 'UTC', 'GMT+oops', 'GMT+00'])('rejects an unavailable ICU offset %s', async (offsetName) => {
+      const nativeFormatToParts = Intl.DateTimeFormat.prototype.formatToParts;
+      const formatToParts = vi
+        .spyOn(Intl.DateTimeFormat.prototype, 'formatToParts')
+        .mockImplementation(function (this: Intl.DateTimeFormat, date) {
+          const parts = nativeFormatToParts.call(this, date);
+          const options = this.resolvedOptions();
+          if (options.timeZone !== 'UTC' || options.timeZoneName !== 'longOffset') return parts;
+          if (offsetName === undefined) return parts.filter((part) => part.type !== 'timeZoneName');
+          return parts.map((part) =>
+            part.type === 'timeZoneName' ? { ...part, value: offsetName } : part
+          );
+        });
+
+      try {
+        const { runner } = structuredCalendarUpdateHarness({
+          queryCall: timedCalendarUpdateQueryCall(),
+          queryResult: timedCalendarUpdateQueryResult(),
+          operations: [
+            timedCalendarUpdatePlanningOperation({
+              start: { dateTime: '2026-08-22T18:00:00Z', timeZone: 'UTC' },
+              end: { dateTime: '2026-08-22T19:00:00Z', timeZone: 'UTC' },
+            }),
+          ],
+        });
+
+        await expect(
+          runner.run({
+            session: session(),
+            events: [],
+            message: 'Move Calendar call to August 22 at 18:00 UTC.',
+            currentDateTime: CURRENT_DATE_TIME,
+            timeZone: 'Europe/Warsaw',
+          })
+        ).resolves.toMatchObject({ outcome: 'needs_clarification' });
+      } finally {
+        formatToParts.mockRestore();
+      }
+    });
+
     it('rejects a duration comparison against a mixed-kind lookup range', async () => {
       const calendarEvent = completeCalendarEvent('event-photos', 'Google Photos', 13, {
         start: { date: '2026-08-13' },
