@@ -1741,6 +1741,7 @@ export async function handleTaskCompletion(
           return { kind: 'fail' as const, code: 'INTERNAL_ERROR', message: updateResult.error.message };
         }
 
+        let terminalNotificationSent = false;
         // Auto-retry triage (INT-1375)
         // Skip triage for PLANNING_AGENT_UNCLEAR (already handled above with early return)
         if (taskError.code !== 'PLANNING_AGENT_UNCLEAR') {
@@ -1789,6 +1790,7 @@ export async function handleTaskCompletion(
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return { kind: 'received' as const };
           }
+          terminalNotificationSent = triageResult.terminalNotificationSent === true;
           // Fall through to permanent failure path
           requestLog.info(
             { taskId, reason: triageResult.reason },
@@ -1798,11 +1800,13 @@ export async function handleTaskCompletion(
 
         await cleanupLockIfPR();
 
-        await whatsappNotifier.notifyTaskFailed(
-          task.userId,
-          task,
-          taskError
-        );
+        if (!terminalNotificationSent) {
+          await whatsappNotifier.notifyTaskFailed(
+            task.userId,
+            task,
+            taskError
+          );
+        }
 
         metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((err) => {
           requestLog.warn(
