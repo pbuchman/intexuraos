@@ -30,6 +30,8 @@ export interface TriageResult {
   action: TriageAction;
   reason: string;
   retryTaskId?: string;
+  /** True when triage already delivered the terminal failure notification. */
+  terminalNotificationSent?: boolean;
 }
 
 export interface TriageFailedTaskDeps {
@@ -91,13 +93,14 @@ export async function triageFailedTask(
 
   if (!retryResult.ok) {
     if (retryResult.error.code === 'budget_exhausted') {
-      await whatsappNotifier.notifyTaskAutoRetryExhausted(task.userId, task, {
+      const notificationResult = await whatsappNotifier.notifyTaskAutoRetryExhausted(task.userId, task, {
         attempts: retryResult.error.attempts,
         errorMessage: taskError.message,
       });
       return {
         action: 'permanent_failure' as const,
         reason: `Auto-retry budget exhausted: ${retryResult.error.message}`,
+        terminalNotificationSent: notificationResult.ok,
       };
     }
     // Internal error — fall through to permanent failure

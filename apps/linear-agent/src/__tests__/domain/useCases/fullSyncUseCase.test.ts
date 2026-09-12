@@ -177,6 +177,34 @@ describe('fullSync', () => {
   });
 
   describe('error handling', () => {
+    it('keeps synced issues and reports a failed summary notification', async () => {
+      const notificationError = new Error('Summary service unavailable');
+      const notify = vi
+        .spyOn(codeAgentClient, 'notifyGroupSummaryRecompute')
+        .mockRejectedValueOnce(notificationError);
+      const warn = vi.spyOn(deps.logger, 'warn');
+      linearClient.seedIssue(
+        createTestApiIssue({
+          labels: [{ id: 'label-1', name: 'bug', color: '#ff0000' }],
+        })
+      );
+
+      const result = await fullSync(userId, deps);
+
+      expect(result.ok).toBe(true);
+      expect(issueRepo.count).toBe(1);
+      expect(notify).toHaveBeenCalledWith({
+        userId,
+        linearIssueId: 'INT-123',
+        labels: [{ id: 'label-1', name: 'bug' }],
+        sourceTimestamp: '2025-01-02T00:00:00.000Z',
+      });
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        { error: notificationError, linearIssueId: 'INT-123' },
+        'Failed to notify code-agent of label change'
+      );
+    });
+
     it('returns NOT_CONNECTED when user has no connection', async () => {
       connectionRepo.reset(); // Remove all connections
 
@@ -188,16 +216,25 @@ describe('fullSync', () => {
       }
     });
 
-    it('returns error when API call fails', async () => {
-      linearClient.setFailure(true, { code: 'API_ERROR', message: 'API unavailable' });
+    it.each(['API_ERROR', 'UPSTREAM_UNAVAILABLE'] as const)(
+      'reports failed syncs when the API returns %s',
+      async (code) => {
+        const error = { code, message: 'API unavailable' };
+        linearClient.setFailure(true, error);
+        const logError = vi.spyOn(deps.logger, 'error');
 
-      const result = await fullSync(userId, deps);
+        const result = await fullSync(userId, deps);
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe(code);
+        }
+        expect(logError).toHaveBeenCalledExactlyOnceWith(
+          { error, userId, teamId: 'team-1' },
+          'Failed to fetch issues from Linear'
+        );
       }
-    });
+    );
 
     it('returns error when connection repo fails', async () => {
       connectionRepo.setGetFullConnectionFailure(true);

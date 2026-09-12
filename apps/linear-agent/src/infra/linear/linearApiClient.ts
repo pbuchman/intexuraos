@@ -177,8 +177,16 @@ export function createLinearApiClient(): LinearApiClient {
               {
                 maxRetries: 2,
                 onRetry: ({ operationName, attempt, delayMs, error }) => {
+                  // Handled retries stay visible in logs without creating Sentry issues.
                   logger.warn(
-                    { teamId, operationName, attempt, delayMs, error: getErrorMessage(error) },
+                    {
+                      teamId,
+                      operationName,
+                      attempt,
+                      delayMs,
+                      error: getErrorMessage(error),
+                      _skipSentry: true,
+                    },
                     'Linear listIssues transient failure, retrying'
                   );
                 },

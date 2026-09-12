@@ -217,6 +217,56 @@ describe('LinearApiClient', () => {
       expect(result.ok).toBe(false);
     });
 
+    it.each(['GraphQL Error (Code: 502) - Bad gateway', 'fetch failed'])(
+      'keeps a recovered transient retry in logs without reporting it to Sentry: %s',
+      async (message) => {
+        mocks.issues.mockRejectedValueOnce(new Error(message)).mockResolvedValueOnce({
+          nodes: [],
+          pageInfo: { hasNextPage: false },
+        });
+
+        const result = await createLinearApiClient().listIssues('api-key', 'team-1');
+
+        expect(result).toEqual({ ok: true, value: [] });
+        expect(mocks.issues).toHaveBeenCalledTimes(2);
+        expect(mocks.warn).toHaveBeenCalledExactlyOnceWith(
+          {
+            teamId: 'team-1',
+            operationName: 'listIssues',
+            attempt: 1,
+            delayMs: expect.any(Number),
+            error: message,
+            _skipSentry: true,
+          },
+          'Linear listIssues transient failure, retrying'
+        );
+        expect(mocks.error).not.toHaveBeenCalled();
+      }
+    );
+
+    it('still reports a permanent failure after a transient retry to Sentry', async () => {
+      const permanentError = new Error('401 Unauthorized');
+      mocks.issues
+        .mockRejectedValueOnce(new Error('GraphQL Error (Code: 502) - Bad gateway'))
+        .mockRejectedValueOnce(permanentError);
+
+      const result = await createLinearApiClient().listIssues('api-key', 'team-1');
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'INVALID_API_KEY', message: 'Invalid Linear API key' },
+      });
+      expect(mocks.issues).toHaveBeenCalledTimes(2);
+      expect(mocks.warn).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ _skipSentry: true }),
+        'Linear listIssues transient failure, retrying'
+      );
+      expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+        { error: permanentError, teamId: 'team-1' },
+        'Failed to list Linear issues'
+      );
+    });
+
     it('returns UPSTREAM_UNAVAILABLE and warns when Linear list retries exhaust transient 502 errors', async () => {
       vi.useFakeTimers();
       mocks.issues.mockRejectedValue(new Error('GraphQL Error (Code: 502) - Bad gateway'));
@@ -235,6 +285,14 @@ describe('LinearApiClient', () => {
           });
         }
         expect(mocks.issues).toHaveBeenCalledTimes(3);
+        expect(mocks.warn).toHaveBeenCalledTimes(3);
+        for (const attempt of [1, 2]) {
+          expect(mocks.warn).toHaveBeenNthCalledWith(
+            attempt,
+            expect.objectContaining({ attempt, _skipSentry: true }),
+            'Linear listIssues transient failure, retrying'
+          );
+        }
         expect(mocks.warn).toHaveBeenCalledWith(
           { teamId: 'team-1', _skipSentry: true },
           'Linear API transiently unavailable while listing issues'
