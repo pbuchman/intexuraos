@@ -258,6 +258,49 @@ describe('irreversible PROD secret-package loader', () => {
     ).toBe(false);
   });
 
+  it('validates a successful candidate without publication and removes temporary secrets', () => {
+    const input = fixture();
+    const activeRelease = join(input.renderRoot, 'prod-v6-active000');
+    mkdirSync(activeRelease, { recursive: true, mode: 0o700 });
+    symlinkSync('prod-v6-active000', join(input.renderRoot, 'current'));
+    const activeMarker = join(activeRelease, 'environment.env');
+    const projectionMarker = join(input.projectionRoot, 'obsolete-release', 'environment.env');
+    writeFileSync(activeMarker, 'ACTIVE_RELEASE=previous\n', { mode: 0o600 });
+    writeFileSync(projectionMarker, 'PROJECTED_RELEASE=previous\n', { mode: 0o600 });
+    const activePaths = [
+      input.cloudflarePath,
+      input.outputPath,
+      input.internalPath,
+      input.metadataPath,
+      input.runtimePath,
+      input.tlsPath,
+      activeMarker,
+      projectionMarker,
+    ];
+    const snapshot = () => ({
+      files: activePaths.map((path) => ({ contents: readFileSync(path), mode: mode(path) })),
+      current: readlinkSync(join(input.renderRoot, 'current')),
+      releases: readdirSync(input.renderRoot).sort(),
+      activeRelease: readdirSync(activeRelease).sort(),
+      projections: readdirSync(input.projectionRoot, { recursive: true }).sort(),
+    });
+    const before = snapshot();
+
+    const result = runLoader(input, ['--validate-only', '--version', '7']);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(snapshot()).toEqual(before);
+    expect(result.stdout).toContain('Validated PROD secret package version 7 without publication');
+    expect(result.stdout).not.toContain('Activated PROD secret package');
+    expect(
+      readdirSync(input.root).filter(
+        (name) =>
+          name.startsWith('intexuraos-prod-validation.') ||
+          name.startsWith('intexuraos-prod-secrets.')
+      )
+    ).toEqual([]);
+  });
+
   it('contains no rollback, compatibility, or partial publication mode', () => {
     const script = readFileSync(loaderPath, 'utf8');
     expect(script).toContain('--validate-only');
