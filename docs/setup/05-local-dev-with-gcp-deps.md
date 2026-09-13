@@ -45,12 +45,13 @@ Edit `.envrc.local` only for developer-local overrides such as personal identifi
 
 ## 3. Render Configuration And Sync Secrets
 
-Generate the merged dev environment. The script renders versioned values from
-`config/environments/` and pulls only values classified as actual secrets from
-GCP Secret Manager:
+Generate the merged local environment. The script renders `local` configuration from
+`config/environments/` and loads the existing secret package historically named `dev`
+from GCP Secret Manager. Keep its version and credentials unchanged:
 
 ```bash
-./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman
+./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman \
+  --version "$(node -p "require('./config/environments/secret-packages.json').packages.dev.stableVersion")"
 direnv allow
 ```
 
@@ -77,19 +78,48 @@ Common sync issues:
 
 ## 4. Start Local Stack
 
-Simple all-in-one path:
+These commands start ordinary manual development with real shared GCP data and
+external integrations. They are not an isolated test: startup migrations, queued
+events, and background work can modify data or send messages.
+
+Before using a shared host, set `PM2_HOME` to a dedicated local application directory
+and `COMPOSE_PROJECT_NAME` to the intended local Compose project in `.envrc.local`.
+Use the same values in every terminal, including stop/restart commands. Keep the
+existing Compose project name when reusing its Message Digest volume; changing the
+name creates a different volume and does not import the old data automatically.
+The historical default Compose project is `docker`, even in a separate checkout.
+Never run these commands from the production-serving orchestrator checkout.
+
+For an automated health-only smoke, first establish a separately reviewed setup with
+a task-specific PM2 home, an explicitly isolated and empty Pub/Sub Compose project,
+the intended persistent Message Digest volume, and
+`INTEXURAOS_MATRIX_CORPUS_ENABLED=false`. A read-only scan must prove the Code Agent
+`code_tasks` startup migration is a no-op before starting services. Do not use the
+ordinary development commands below as an automated smoke recipe.
+
+Start the backend services and emulators:
 
 ```bash
+export PM2_HOME="${PM2_HOME:?Set a dedicated local PM2 directory in .envrc.local}"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:?Set the intended local Compose project in .envrc.local}"
 pnpm run dev
 ```
 
 This runs `scripts/dev-setup.mjs`, starts PM2 from `ecosystem.config.cjs` with `--update-env`, then tails logs.
+The PM2 ecosystem contains 19 backend services. Start Vite separately from the same
+checkout in a second terminal with the same loaded environment:
+
+```bash
+pnpm --dir apps/web dev
+```
 
 For verification or scripted startup, run the steps separately:
 
 ```bash
 node scripts/dev-setup.mjs
 pnpm run services:start
+# In a separate terminal:
+pnpm --dir apps/web dev
 ```
 
 What starts locally:
@@ -102,15 +132,22 @@ What starts locally:
 | Auto-reload           | PM2 watches service `src/` directories |
 | Pub/Sub               | Docker emulator on `localhost:8102`    |
 | Pub/Sub UI            | `http://localhost:8105`                |
-| Firestore             | Real retained GCP project              |
+| Firestore             | Real retained GCP project, except Message Digest |
+| Message Digest Firestore | Isolated emulator on `127.0.0.1:8101`, persistent Compose volume |
 | Cloud Storage         | Real retained GCP project              |
 | Runtime configuration | Versioned `config/environments/` files |
 | Secret Manager        | Actual secrets from retained GCP project |
 | Auth0                 | Shared Auth0 tenant                    |
 
 Local PM2 intentionally clears inherited `FIRESTORE_EMULATOR_HOST` and `STORAGE_EMULATOR_HOST`;
-localhost services must use real GCP Firestore/Storage. PM2 pins
+ordinary services use real GCP Firestore/Storage. Message Digest alone sets
+`FIRESTORE_EMULATOR_HOST=localhost:8101` and uses the isolated project
+`intexuraos-message-digest-mvp-local`. PM2 pins
 `PUBSUB_EMULATOR_HOST=localhost:8102` to the local-only Pub/Sub emulator.
+
+Message Digest imports its saved Firestore snapshot on startup and exports it during
+graceful shutdown. Keep the Compose volume and allow shutdown to finish; never add
+`-v` to the stop command when preserving local data.
 
 `scripts/dev-setup.mjs` also handles Docker Desktop configs that use `"credsStore": "desktop"` by creating a temporary Docker config for compose startup. It does not modify `~/.docker/config.json`.
 
@@ -150,17 +187,22 @@ curl -fsS http://localhost:8133/health | jq '.status'
 Expected:
 
 - PM2 services are `online`.
-- Service processes, except the Vite web process, have PM2 watch enabled.
-- Pub/Sub emulator and UI containers are running.
-- Health endpoints use real GCP Firestore/Storage and do not try `localhost:8101` Firestore.
+- Backend service processes have PM2 watch enabled; Vite runs separately.
+- Pub/Sub emulator, Pub/Sub UI, and Message Digest Firestore containers are running.
+- Message Digest uses the isolated Firestore emulator; other services use retained GCP data.
+
+Google/GitHub account-connection OAuth is a separate check from Auth0 login. The current
+Vite proxy does not forward `/oauth/connections/`, so those callback paths return the
+web shell instead of reaching User Service. Backend health does not prove those flows
+work through the localhost UI.
 
 To verify auto-reload, touch a service source file and check that PM2 restarts that service:
 
 ```bash
-pnpm exec pm2 jlist > /tmp/pm2-before.json
+pnpm exec pm2 jlist | jq 'map({name, restarts: .pm2_env.restart_time})' > /tmp/pm2-before.json
 touch apps/intex-agent/src/index.ts
 sleep 3
-pnpm exec pm2 jlist > /tmp/pm2-after.json
+pnpm exec pm2 jlist | jq 'map({name, restarts: .pm2_env.restart_time})' > /tmp/pm2-after.json
 ```
 
 ## 7. Stop Or Restart
@@ -171,6 +213,10 @@ pnpm run services:stop
 pnpm run services:delete
 pnpm run emulators:stop
 ```
+
+Stop the separate Vite terminal with Ctrl-C. On a shared host, run PM2 commands only
+with the `PM2_HOME` belonging to this local session; do not change other applications'
+PM2 state or use the production-serving orchestrator checkout for a smoke test.
 
 Use `services:restart` after changing `.envrc`, `.envrc.local`, or `ecosystem.config.cjs`; it deletes the local PM2 process list and starts from `ecosystem.config.cjs` with `--update-env`.
 
@@ -188,7 +234,8 @@ pnpm run emulators:stop
 ### Missing Env Vars
 
 ```bash
-./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman
+./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman \
+  --version "$(node -p "require('./config/environments/secret-packages.json').packages.dev.stableVersion")"
 direnv allow
 pnpm run services:restart
 ```
