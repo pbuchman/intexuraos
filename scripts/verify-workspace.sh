@@ -24,6 +24,8 @@ elif [ -d "$PROJECT_ROOT/packages/$WORKSPACE/src" ]; then
   SERVICE_DIR="packages/$WORKSPACE"
 elif [ "$WORKSPACE" = "intex-agent-evals" ] && [ -d "$PROJECT_ROOT/tools/$WORKSPACE/src" ]; then
   SERVICE_DIR="tools/$WORKSPACE"
+elif [ "$WORKSPACE" = "whatsapp-private-matrix-sync" ] && [ -d "$PROJECT_ROOT/tools/$WORKSPACE/src" ]; then
+  SERVICE_DIR="tools/$WORKSPACE"
 else
   echo "ERROR: Cannot find workspace directory for $WORKSPACE"
   echo "Looked in: apps/$WORKSPACE/src, workers/$WORKSPACE/src, packages/$WORKSPACE/src, tools/$WORKSPACE/src"
@@ -59,6 +61,19 @@ fi
 if [ "$SERVICE_DIR" = "tools/intex-agent-evals" ]; then
   echo "=== Targeted Verification: $WORKSPACE ==="
   pnpm --filter "@intexuraos/$WORKSPACE" --fail-if-no-match run validate
+  echo "=== All checks passed for $WORKSPACE ==="
+  exit 0
+fi
+
+# The Matrix adapter is a Node-only tool with native ESM source and node:test tests.
+if [ "$SERVICE_DIR" = "tools/whatsapp-private-matrix-sync" ]; then
+  echo "=== Targeted Verification: $WORKSPACE ==="
+
+  while IFS= read -r -d '' source_file; do
+    node --check "$source_file"
+  done < <(find "$SERVICE_DIR/src" -type f -name '*.mjs' -print0 | sort -z)
+
+  pnpm --filter "$WORKSPACE" --fail-if-no-match test
   echo "=== All checks passed for $WORKSPACE ==="
   exit 0
 fi
