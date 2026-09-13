@@ -15,7 +15,7 @@ function functionBody(script: string, name: string, nextName: string): string {
   return script.slice(script.indexOf(`${name}() {`), script.indexOf(`\n}\n\n${nextName}()`));
 }
 
-describe('irreversible PROD deployment', () => {
+describe('admission-gated PROD deployment', () => {
   it('is manual-only and pins every third-party action to an immutable SHA', () => {
     const workflow = read(workflowPath);
     const actionReferences = [...workflow.matchAll(/^\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gmu)].map(
@@ -58,17 +58,21 @@ describe('irreversible PROD deployment', () => {
     expect(main.indexOf('resolve_release')).toBeLessThan(main.indexOf('setup_ssh'));
   });
 
-  it('uses a destructive fix-forward admission boundary with no rollback path', () => {
+  it('validates the candidate before the destructive fix-forward boundary', () => {
     const script = read(deployPath);
     const deployment = functionBody(script, 'deploy_release', 'publish_deployment_metadata');
     const loaderIndex = deployment.indexOf('scripts/hetzner/load-secrets.sh --version');
 
-    expect(deployment).toContain('intentionally destructive');
+    expect(deployment).toContain('Candidate admission is complete');
     expect(deployment).toContain('pm2 delete all');
     expect(deployment).toContain('systemctl stop alloy.service');
+    expect(deployment).toContain('load-secrets.sh --validate-only --version');
+    expect(deployment.indexOf('--validate-only')).toBeLessThan(
+      deployment.indexOf('pm2 delete all')
+    );
     expect(loaderIndex).toBeGreaterThan(deployment.indexOf('pm2 delete all'));
     expect(deployment).toContain('SECRET_PACKAGE_VERSION');
-    expect(deployment).not.toMatch(/rollback|previous.release|stage.only/iu);
+    expect(deployment).not.toMatch(/rollback|stage.only/iu);
     expect(script).not.toMatch(/compensate_secret_projection|reload_previous_runtime/u);
   });
 
@@ -95,27 +99,23 @@ describe('irreversible PROD deployment', () => {
     expect(publicVerification).toContain('SECRET_PACKAGE_VERSION');
   });
 
-  it('deletes every obsolete code and web release after the new runtime is healthy', () => {
+  it('never deletes code or web release artifacts during deployment', () => {
     const script = read(deployPath);
     const deployment = functionBody(script, 'deploy_release', 'publish_deployment_metadata');
-    const cleanup = functionBody(script, 'delete_obsolete_releases', 'verify_public_runtime');
 
-    expect(deployment.indexOf('verify_remote_runtime')).toBeLessThan(
-      deployment.indexOf('delete_obsolete_releases')
-    );
-    expect(cleanup).toContain('rmSync(path, { recursive: true })');
-    expect(cleanup).toContain('if (name === keep) continue');
-    expect(cleanup).not.toMatch(/rollback|previous/iu);
+    expect(deployment).not.toContain('delete_obsolete_releases');
+    expect(script).not.toContain('prune-release-artifacts');
+    expect(script).not.toContain('rmSync(path, { recursive: true })');
   });
 
-  it('documents stopped-service fix-forward behavior instead of compensation', () => {
+  it('documents pre-shutdown rejection and current-package recovery boundaries', () => {
     const runbook = read(runbookPath).replace(/\s+/gu, ' ');
 
-    expect(runbook).toMatch(/fix forward/iu);
-    expect(runbook).toContain('There is no release rollback, secret projection rollback');
-    expect(runbook).toContain('Never restore an old package, key, release, projection');
-    expect(runbook).not.toMatch(
-      /\b(?:restore|select)\s+(?:the\s+)?(?:previous|old)\s+(?:release|package)\b/iu
-    );
+    expect(runbook).toMatch(/fix-forward/iu);
+    expect(runbook).toContain('candidate rejection changes neither the live runtime');
+    expect(runbook).toContain('Never restore an old package, key, projection');
+    expect(runbook).toContain('code and web artifacts remain available');
+    expect(runbook).toContain('deployment never prunes them');
+    expect(runbook).not.toMatch(/\b(?:restore|select)\s+(?:the\s+)?(?:previous|old)\s+package\b/iu);
   });
 });

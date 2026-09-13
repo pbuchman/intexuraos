@@ -116,9 +116,12 @@ sudo -n env \
 ## Production Deployment
 
 `scripts/hetzner/github-actions-deploy.sh` deploys the exact GitHub Actions SHA
-and exact protected package version. It stops PM2 and Alloy, runs the one-shot
-loader, installs static web and code, starts services, writes the deployment
-attestation, verifies health, and deletes prior releases.
+and exact protected package version. It validates an isolated secret candidate
+while the current runtime remains online, then stops PM2 and Alloy, publishes
+the admitted package, installs static web and code, starts services, writes the
+deployment attestation, verifies health, and retains existing code and web
+artifacts for recovery. It does not prune code or web releases; storage cleanup
+is a separate deliberate maintenance operation.
 
 The production loader may run manually only while PM2 and Alloy are stopped:
 
@@ -127,9 +130,10 @@ sudo -n INTEXURAOS_ENVIRONMENT=prod \
   bash scripts/hetzner/load-secrets.sh --version <numeric-version>
 ```
 
-It publishes a complete stable projection and has no partial, activation,
-previous-release, or rollback mode. Any failure leaves services stopped for a
-fix-forward repair.
+It publishes a complete stable projection and has no partial activation or
+secret rollback mode. `--validate-only` renders and checks an isolated candidate
+without changing active files. A publication failure leaves services stopped
+for a fix-forward repair.
 
 ## Runtime Ownership
 

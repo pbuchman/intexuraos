@@ -827,7 +827,7 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('"https://${PUBLIC_DOMAIN}/deployment.json"');
   });
 
-  it('publishes one complete release without a compatibility phase', () => {
+  it('admits the candidate before publishing one complete release', () => {
     const script = readRequired(githubActionsDeployPath);
     const deployFlow = script.slice(
       script.indexOf('deploy_release() {'),
@@ -835,11 +835,12 @@ describe('Hetzner web asset deployment', () => {
     );
 
     expect(deployFlow).toContain('scripts/hetzner/load-secrets.sh');
+    expect(deployFlow).toContain('--validate-only');
     expect(deployFlow).toContain('scripts/hetzner/deploy-web.sh');
     expect(deployFlow).toContain('scripts/hetzner/reload-pm2.sh');
     expect(deployFlow).toContain('INTEXURAOS_COMMIT_SHA=${commit_sha_quoted}');
     expect(deployFlow.indexOf('load-secrets.sh')).toBeLessThan(deployFlow.indexOf('reload-pm2.sh'));
-    expect(script).not.toMatch(/compatib|dual.read|previous.release/iu);
+    expect(script).not.toMatch(/compatib|dual.read/iu);
   });
 
   it('requires direct process and public endpoint health before completion', () => {
@@ -985,6 +986,7 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('rsync -az --delete');
     expect(script).toContain("--exclude '.git/'");
     expect(script).toContain('scripts/hetzner/load-secrets.sh --version ${package_version_quoted}');
+    expect(script).toContain('load-secrets.sh --validate-only --version');
     expect(script).not.toContain('--stage-only');
     expect(script).not.toContain('--activate');
     expect(script).not.toContain('--rollback');
@@ -1006,7 +1008,8 @@ describe('Hetzner web asset deployment', () => {
     );
     expect(script).toContain('verify_remote_runtime');
     expect(script).toContain('verify_public_runtime');
-    expect(script).toContain('delete_obsolete_releases');
+    expect(script).not.toContain('delete_obsolete_releases');
+    expect(script).not.toContain('prune-release-artifacts');
     expect(script.indexOf('scripts/observability/install-grafana-alloy.sh')).toBeGreaterThan(
       script.indexOf('scripts/hetzner/load-secrets.sh')
     );
@@ -1019,13 +1022,14 @@ describe('Hetzner web asset deployment', () => {
     expect(script).not.toContain('gcloud builds triggers run');
   });
 
-  it('has one destructive boundary and fix-forward-only deployment semantics', () => {
+  it('has one destructive boundary after candidate admission', () => {
     const script = readRequired(githubActionsDeployPath);
 
-    expect(script).toContain('This is intentionally destructive');
+    expect(script).toContain('Candidate admission is complete');
+    expect(script.indexOf('--validate-only')).toBeLessThan(script.indexOf('pm2 delete all'));
     expect(script).toContain('pm2 delete all');
     expect(script).toContain('systemctl stop alloy.service');
-    expect(script).not.toMatch(/compensat|previous.release|restore.previous/iu);
+    expect(script).not.toMatch(/compensat|restore.previous/iu);
   });
 
   it('allowlists native dependency build scripts needed by clean production installs', () => {

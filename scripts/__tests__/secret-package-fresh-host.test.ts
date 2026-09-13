@@ -109,10 +109,10 @@ describe('fresh-host PROD secret package', () => {
     }
   );
 
-  it('contains no rollback or previous-release loader mode', () => {
+  it('offers isolated validation without adding rollback or staged activation', () => {
     const loader = read(loaderPath);
 
-    expect(loader).toContain('This loader has no rollback, previous-release, or legacy mode');
+    expect(loader).toContain('--validate-only');
     expect(loader).not.toMatch(/--rollback|--activate|--stage-only/u);
   });
 });
