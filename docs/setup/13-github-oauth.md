@@ -32,6 +32,12 @@ The same client ID and secret serve production and localhost.
 
 ## Step 2: Configure Client ID And Secret
 
+For an existing installation, skip the provisioning instructions below. Verify the
+existing configuration using the Verification section; a callback-only update
+requires no client-ID change or secret upload. Keep all existing secret versions.
+
+### Initial Provisioning Only
+
 The client ID is non-secret repository-backed configuration. Update
 `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID` in
 `config/environments/common.json` and keep its classification in
@@ -62,6 +68,8 @@ direnv allow
 Start the localhost stack manually with `pnpm dev` when needed.
 
 ## Step 4: Deploy The Versioned Configuration
+
+Skip this step for a callback-only update; it changes no versioned configuration.
 
 Commit the `config/environments/` change with the application change and use
 the normal deployment workflow. Terraform is required only when the actual

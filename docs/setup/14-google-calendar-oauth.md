@@ -60,6 +60,12 @@ The same client ID and secret serve production and localhost.
 
 ## Step 3: Configure Client ID And Secret
 
+For an existing installation, skip the provisioning instructions below. Verify the
+existing configuration using the Verification section; a callback-only update
+requires no client-ID change or secret upload. Keep all existing secret versions.
+
+### Initial Provisioning Only
+
 Store `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID` in
 `config/environments/common.json`. The callback URL is derived by user-service
 from the request origin and is configured only in Google Console; there is no
@@ -91,6 +97,8 @@ direnv allow
 Start the localhost stack manually with `pnpm dev` when needed.
 
 ## Step 5: Deploy The Versioned Configuration
+
+Skip this step for a callback-only update; it changes no versioned configuration.
 
 Commit the `config/environments/` change and use the normal deployment
 workflow. Terraform is required only when the client-secret container or its
