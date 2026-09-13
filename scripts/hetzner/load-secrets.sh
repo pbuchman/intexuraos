@@ -36,6 +36,8 @@ STAGING_DIR=""
 HOST_LOCK_FD=""
 PORTABLE_LOCK_DIR=""
 PACKAGE_RELEASE_DIR=""
+VALIDATE_ONLY="0"
+VALIDATION_ROOT=""
 
 usage() {
   cat <<EOF
@@ -48,10 +50,11 @@ Options:
   --output <path>        Production dotenv path
   --render-dir <path>    Private package render root
   --payload-file <path>  Offline test payload
+  --validate-only        Validate an isolated candidate without publishing it
   -h, --help             Show this help
 
-This loader has no rollback, previous-release, or legacy mode. Services must be
-stopped before it runs. Failure leaves them stopped for fix-forward recovery.
+Validation-only mode is safe while services are running. Publication has no
+rollback, previous-release, or legacy mode and requires services to be stopped.
 EOF
 }
 
@@ -65,6 +68,7 @@ cleanup() {
   trap - EXIT
   set +e
   [[ -n "${STAGING_DIR}" && -d "${STAGING_DIR}" ]] && rm -rf -- "${STAGING_DIR}"
+  [[ -n "${VALIDATION_ROOT}" && -d "${VALIDATION_ROOT}" ]] && rm -rf -- "${VALIDATION_ROOT}"
   [[ -n "${PORTABLE_LOCK_DIR}" && -d "${PORTABLE_LOCK_DIR}" ]] && rmdir -- "${PORTABLE_LOCK_DIR}" 2>/dev/null
   exit "${status}"
 }
@@ -103,6 +107,7 @@ parse_args() {
         shift 2
         ;;
       --payload-file=*) SECRET_PACKAGE_PAYLOAD_FILE="${1#*=}"; shift ;;
+      --validate-only) VALIDATE_ONLY="1"; shift ;;
       -h|--help) usage; exit 0 ;;
       *) fail "Unknown argument: $1" ;;
     esac
@@ -114,6 +119,7 @@ require_preconditions() {
   [[ "${SECRET_PACKAGE_VERSION}" =~ ^[1-9][0-9]*$ ]] || fail 'SECRET_PACKAGE_VERSION must be an exact positive numeric version'
   [[ "${PROJECT_ID}" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] || fail 'Invalid GCP project ID'
   [[ "${SKIP_OWNERSHIP}" =~ ^[01]$ ]] || fail 'SKIP_OWNERSHIP must be 0 or 1'
+  [[ "${VALIDATE_ONLY}" =~ ^[01]$ ]] || fail 'VALIDATE_ONLY must be 0 or 1'
   [[ "${SKIP_RUNTIME_CREDENTIAL_SMOKE}" =~ ^[01]$ ]] || fail 'SKIP_RUNTIME_CREDENTIAL_SMOKE must be 0 or 1'
   [[ "${SKIP_CLOUDFLARE_CREDENTIAL_SMOKE}" =~ ^[01]$ ]] || fail 'SKIP_CLOUDFLARE_CREDENTIAL_SMOKE must be 0 or 1'
   if [[ ! "${SECRET_PACKAGE_FETCH_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]{0,2}$ ]] || (( SECRET_PACKAGE_FETCH_TIMEOUT_SECONDS > 120 )); then
@@ -139,6 +145,14 @@ require_preconditions() {
     command -v gcloud >/dev/null 2>&1 || fail 'gcloud is required'
     command -v timeout >/dev/null 2>&1 || fail 'timeout is required'
   fi
+}
+
+isolate_validation_render() {
+  [[ "${VALIDATE_ONLY}" == '1' ]] || return 0
+  VALIDATION_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/intexuraos-prod-validation.XXXXXX")"
+  chmod 700 "${VALIDATION_ROOT}"
+  SECRET_PACKAGE_RENDER_DIR="${VALIDATION_ROOT}/rendered"
+  SECRET_PROJECTION_ROOT="${VALIDATION_ROOT}/projections"
 }
 
 acquire_lock() {
@@ -334,9 +348,15 @@ main() {
   require_preconditions
   umask 077
   acquire_lock
+  isolate_validation_render
   render_package
   validate_rendered_package
   write_candidate
+  if [[ "${VALIDATE_ONLY}" == '1' ]]; then
+    printf 'Validated PROD secret package version %s without publication\n' \
+      "${SECRET_PACKAGE_VERSION}"
+    return 0
+  fi
   publish_candidate
   delete_local_rollback_state
   printf 'Activated PROD secret package version %s with no rollback release\n' \

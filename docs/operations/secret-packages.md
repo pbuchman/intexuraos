@@ -111,8 +111,16 @@ manually when needed.
 ## Render And Start PROD
 
 Production deployment passes the exact numeric version through the protected
-`PROD_SECRET_PACKAGE_VERSION` repository variable. The one-shot loader requires
-PM2 and Alloy to be stopped and publishes a complete stable projection:
+`PROD_SECRET_PACKAGE_VERSION` repository variable. Before shutdown it runs an
+isolated admission check that publishes nothing:
+
+```bash
+sudo -n INTEXURAOS_ENVIRONMENT=prod \
+  bash scripts/hetzner/load-secrets.sh --validate-only --version <prod-version>
+```
+
+After admission, the one-shot loader requires PM2 and Alloy to be stopped and
+publishes a complete stable projection:
 
 ```bash
 sudo -n INTEXURAOS_ENVIRONMENT=prod \
@@ -124,8 +132,8 @@ Required result:
 - `/etc/intexuraos/.env.prod` is complete and mode `0600`;
 - the internal-auth token, Cloudflare DNS token, runtime service-account JSON,
   TLS key, and deployment metadata pass their format and permission checks;
-- no package `current` link, prior render release, staging directory, or
-  rollback marker remains;
+- the package `current` link selects only the active render and no prior secret
+  render, staging directory, or rollback marker remains;
 - PM2, Alloy, nginx, and static web start only after all files are valid.
 
 The deployment workflow is manual-only and deploys the exact frozen

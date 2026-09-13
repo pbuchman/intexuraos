@@ -5,8 +5,10 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -108,7 +110,7 @@ function fixture(marker = 'candidate'): Fixture {
   return result;
 }
 
-function runLoader(input: Fixture, args: string[]) {
+function runLoader(input: Fixture, args: string[], env: Record<string, string> = {}) {
   return spawnSync(
     'bash',
     [
@@ -140,6 +142,7 @@ function runLoader(input: Fixture, args: string[]) {
         SKIP_RUNTIME_CREDENTIAL_SMOKE: '1',
         TLS_PRIVATE_KEY_FILE: input.tlsPath,
         TMPDIR: input.root,
+        ...env,
       },
     }
   );
@@ -217,8 +220,47 @@ describe('irreversible PROD secret-package loader', () => {
     expect(existsSync(input.projectionRoot)).toBe(true);
   });
 
+  it('rejects a validation-only candidate without changing active secrets or package state', () => {
+    const input = fixture();
+    const activeRelease = join(input.renderRoot, 'prod-v6-active000');
+    mkdirSync(activeRelease, { recursive: true, mode: 0o700 });
+    symlinkSync('prod-v6-active000', join(input.renderRoot, 'current'));
+    const validator = join(input.root, 'reject-candidate.sh');
+    writeFileSync(validator, '#!/usr/bin/env bash\nexit 23\n', { mode: 0o700 });
+
+    const before = {
+      cloudflare: readFileSync(input.cloudflarePath, 'utf8'),
+      current: readlinkSync(join(input.renderRoot, 'current')),
+      env: readFileSync(input.outputPath, 'utf8'),
+      internal: readFileSync(input.internalPath, 'utf8'),
+      metadata: readFileSync(input.metadataPath, 'utf8'),
+      releases: readdirSync(input.renderRoot).sort(),
+      runtime: readFileSync(input.runtimePath, 'utf8'),
+      tls: readFileSync(input.tlsPath, 'utf8'),
+    };
+
+    const result = runLoader(input, ['--validate-only', '--version', '7'], {
+      PROD_CANDIDATE_VALIDATOR: validator,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('PROD candidate credential validation failed');
+    expect(readFileSync(input.cloudflarePath, 'utf8')).toBe(before.cloudflare);
+    expect(readlinkSync(join(input.renderRoot, 'current'))).toBe(before.current);
+    expect(readFileSync(input.outputPath, 'utf8')).toBe(before.env);
+    expect(readFileSync(input.internalPath, 'utf8')).toBe(before.internal);
+    expect(readFileSync(input.metadataPath, 'utf8')).toBe(before.metadata);
+    expect(readdirSync(input.renderRoot).sort()).toEqual(before.releases);
+    expect(readFileSync(input.runtimePath, 'utf8')).toBe(before.runtime);
+    expect(readFileSync(input.tlsPath, 'utf8')).toBe(before.tls);
+    expect(
+      readdirSync(input.root).some((name) => name.startsWith('intexuraos-prod-validation.'))
+    ).toBe(false);
+  });
+
   it('contains no rollback, compatibility, or partial publication mode', () => {
     const script = readFileSync(loaderPath, 'utf8');
+    expect(script).toContain('--validate-only');
     expect(script).not.toContain('--stage-only');
     expect(script).not.toContain('--activate');
     expect(script).not.toContain('--rollback');
