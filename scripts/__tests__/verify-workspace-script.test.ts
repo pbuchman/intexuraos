@@ -4,21 +4,31 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 
 const script = readFileSync(new URL('../verify-workspace.sh', import.meta.url), 'utf8');
 
-function runMatrixVerification(pnpmExitCode = 0): {
+function createTemporaryWorkspace(prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  onTestFinished(() => rmSync(root, { recursive: true, force: true }));
+  return root;
+}
+
+function runMatrixVerification(
+  pnpmExitCode = 0,
+  nodeExitCode = 0
+): {
   status: number | null;
   output: string;
   commands: string[];
 } {
-  const root = mkdtempSync(join(tmpdir(), 'verify-workspace-matrix-'));
+  const root = createTemporaryWorkspace('verify-workspace-matrix-');
   const scriptsDirectory = join(root, 'scripts');
   const sourceDirectory = join(root, 'tools', 'whatsapp-private-matrix-sync', 'src');
   const binaryDirectory = join(root, 'bin');
@@ -32,9 +42,9 @@ function runMatrixVerification(pnpmExitCode = 0): {
   writeFileSync(join(sourceDirectory, 'server.test.mjs'), 'export const testValue = 2;\n');
 
   for (const [name, contents] of [
-    ['node', '#!/bin/sh\nprintf "node %s\\n" "$*" >> "$COMMAND_LOG"\n'],
+    ['node', `#!/bin/sh\nprintf "node %s\\n" "$*" >> "$COMMAND_LOG"\nexit ${nodeExitCode}\n`],
     ['pnpm', `#!/bin/sh\nprintf "pnpm %s\\n" "$*" >> "$COMMAND_LOG"\nexit ${pnpmExitCode}\n`],
-  ]) {
+  ] as const) {
     const path = join(binaryDirectory, name);
     writeFileSync(path, contents);
     chmodSync(path, 0o755);
@@ -86,8 +96,18 @@ describe('verify-workspace.sh', () => {
     expect(result.output).not.toContain('All checks passed for whatsapp-private-matrix-sync');
   });
 
+  it('stops before package tests when a Matrix adapter syntax check fails', () => {
+    const result = runMatrixVerification(0, 23);
+
+    expect(result.status).toBe(23);
+    expect(result.commands).toEqual([
+      'node --check tools/whatsapp-private-matrix-sync/src/server.mjs',
+    ]);
+    expect(result.output).not.toContain('All checks passed for whatsapp-private-matrix-sync');
+  });
+
   it('continues to reject unknown tool workspaces', () => {
-    const root = mkdtempSync(join(tmpdir(), 'verify-workspace-unknown-'));
+    const root = createTemporaryWorkspace('verify-workspace-unknown-');
     const scriptsDirectory = join(root, 'scripts');
     mkdirSync(join(root, 'tools', 'unknown-tool', 'src'), { recursive: true });
     mkdirSync(scriptsDirectory, { recursive: true });
