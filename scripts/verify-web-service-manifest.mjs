@@ -132,7 +132,7 @@ function assertViteRetainedBucketDenylist() {
   if (!content.includes('navigateFallbackDenylist')) {
     fail('apps/web/vite.config.ts must configure workbox navigateFallbackDenylist');
   }
-  for (const snippet of ['/^\\/share\\//', '/^\\/images\\//']) {
+  for (const snippet of ['/^\\/share\\//', '/^\\/images\\//', '/^\\/oauth\\/connections']) {
     if (!content.includes(snippet)) {
       fail(`apps/web/vite.config.ts navigateFallbackDenylist must include ${snippet}`);
     }

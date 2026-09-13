@@ -8,25 +8,27 @@ This guide covers creating a GitHub OAuth App and configuring the secrets for In
 - GCP Secret Manager access for the OAuth client secret
 - Terraform applied with GitHub OAuth secret resources
 
-## Step 1: Create GitHub OAuth App
+## Step 1: Configure The Existing GitHub OAuth App
 
-1. Go to **https://github.com/settings/developers** → **OAuth Apps** → **New OAuth App**
-2. Fill in the form:
+1. Go to **https://github.com/settings/developers** → **OAuth Apps** and open the
+   existing IntexuraOS app whose client ID matches
+   `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID`.
+2. Keep the production homepage and configure both callback URLs:
 
-| Field                      | Localhost value                                           | Production value                                                  |
-| -------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Application name           | `IntexuraOS Local`                                                      | `IntexuraOS`                                                      |
-| Homepage URL               | `http://localhost:3000`                                        | `https://intexuraos.cloud`                                        |
-| Authorization callback URL | `http://localhost:8110/oauth/github/callback` | `https://intexuraos.cloud/api/user-service/oauth/github/callback` |
+| Field                      | Required values                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Homepage URL               | `https://intexuraos.cloud`                                                                           |
+| Authorization callback URL | `http://localhost:3000/oauth/connections/github/callback`                                             |
+| Authorization callback URL | `https://intexuraos.cloud/oauth/connections/github/callback`                                         |
 
-3. Click **Register application**
-4. Copy the **Client ID**
-5. Click **Generate a new client secret** and copy the **Client Secret**
+Add the production and localhost URLs as exact entries. Remove only obsolete callbacks
+whose origin is `https://dev.intexuraos.cloud`; preserve unrelated callbacks and the
+existing legacy callback matching setting. Do not generate a new client secret.
 
-> **Note:** GitHub OAuth Apps do not use refresh tokens. Access tokens do not expire unless the user revokes access.
+> **Note:** Keep user-token expiration disabled for the existing app. The current
+> implementation stores a non-expiring token and does not implement GitHub refresh tokens.
 
-Keep the production and localhost callbacks configured. Remove obsolete public
-DEV callbacks; local testing uses the manually started stack.
+The same client ID and secret serve production and localhost.
 
 ## Step 2: Configure Client ID And Secret
 
@@ -76,7 +78,7 @@ node scripts/render-runtime-config.mjs --environment local --format dotenv \
 gcloud secrets versions list INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET --project=intexuraos-dev-pbuchman
 
 # Test the OAuth initiation endpoint
-curl -X POST https://intexuraos.cloud/api/user-service/oauth/connections/github/initiate \
+curl -X POST https://intexuraos.cloud/api/user/oauth/connections/github/initiate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

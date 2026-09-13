@@ -36,24 +36,27 @@ Add these scopes:
 
 While the app is in "Testing" status, add your Google account(s) as test users. Only test users can complete the OAuth flow until the app is published.
 
-## Step 2: Create OAuth Client ID
+## Step 2: Configure The Existing OAuth Client
 
 1. Go to **https://console.cloud.google.com/apis/credentials** (project: `intexuraos-dev-pbuchman`)
-2. Click **Create Credentials** → **OAuth client ID**
-3. Fill in:
+2. Open the existing Web application client whose client ID matches
+   `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`.
+3. Configure both authorized redirect URIs:
 
-| Field                    | Localhost value                                             | Production value                                                    |
-| ------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Application type         | Web application                                                         | Web application                                                     |
-| Name                     | `IntexuraOS Local`                                                        | `IntexuraOS`                                                        |
-| Authorized redirect URIs | `http://localhost:8110/oauth/google/callback`   | `https://intexuraos.cloud/api/user-service/oauth/google/callback`   |
+| Field                    | Required values                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Application type         | Web application                                                                                      |
+| Authorized redirect URI  | `http://localhost:3000/oauth/connections/google/callback`                                         |
+| Authorized redirect URI  | `https://intexuraos.cloud/oauth/connections/google/callback`                                     |
 
-4. Copy the **Client ID** and **Client Secret**
+Remove only redirect URIs and JavaScript origins whose origin is
+`https://dev.intexuraos.cloud`. Preserve the production and localhost entries and all
+unrelated entries. This server-side flow does not require adding a JavaScript origin.
+Do not create a client or rotate its secret.
 
 > **Note:** Google OAuth uses refresh tokens. The `access_type: 'offline'` and `prompt: 'consent'` parameters ensure a refresh token is returned on first authorization.
 
-Keep the production and localhost callbacks configured. Remove obsolete public
-DEV callbacks; local testing uses the manually started stack.
+The same client ID and secret serve production and localhost.
 
 ## Step 3: Configure Client ID And Secret
 
@@ -112,7 +115,7 @@ node scripts/render-runtime-config.mjs --environment local --format dotenv \
 gcloud secrets versions list INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET --project=intexuraos-dev-pbuchman
 
 # Test the OAuth initiation endpoint
-curl -X POST https://intexuraos.cloud/api/user-service/oauth/connections/google/initiate \
+curl -X POST https://intexuraos.cloud/api/user/oauth/connections/google/initiate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

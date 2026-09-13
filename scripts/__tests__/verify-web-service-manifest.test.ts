@@ -104,5 +104,6 @@ describe('migrated web deployment is not wired to GCP Cloud Build', () => {
     expect(content).toContain('navigateFallbackDenylist');
     expect(content).toContain('/^\\/share\\//');
     expect(content).toContain('/^\\/images\\//');
+    expect(content).toContain('/^\\/oauth\\/connections');
   });
 });
