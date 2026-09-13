@@ -1,10 +1,11 @@
 # GitHub OAuth App Setup
 
-This guide covers creating a GitHub OAuth App and configuring the secrets for IntexuraOS GitHub integration.
+This guide covers updating the existing GitHub OAuth App callback allowlist for the
+IntexuraOS GitHub integration.
 
 ## Prerequisites
 
-- GitHub account with permission to create OAuth Apps
+- GitHub account with permission to manage the existing OAuth App
 - GCP Secret Manager access for the OAuth client secret
 - Terraform applied with GitHub OAuth secret resources
 
@@ -30,31 +31,21 @@ existing legacy callback matching setting. Do not generate a new client secret.
 
 The same client ID and secret serve production and localhost.
 
-## Step 2: Configure Client ID And Secret
+## Step 2: Verify The Existing Client ID And Secret
 
-For an existing installation, skip the provisioning instructions below. Verify the
-existing configuration using the Verification section; a callback-only update
-requires no client-ID change or secret upload. Keep all existing secret versions.
+Verify that `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID` in
+`config/environments/common.json` matches the existing GitHub OAuth App opened in
+Step 1. Keep its classification in `config/environments/policy.json` unchanged.
 
-### Initial Provisioning Only
-
-The client ID is non-secret repository-backed configuration. Update
-`INTEXURAOS_GITHUB_OAUTH_CLIENT_ID` in
-`config/environments/common.json` and keep its classification in
-`config/environments/policy.json`.
-
-Only the client secret belongs in Secret Manager:
+Verify that the existing client secret has an enabled Secret Manager version:
 
 ```bash
-# Activate service account
-gcloud auth activate-service-account --key-file=$HOME/.config/gcloud/sa-key.json
-
-echo -n "YOUR_GITHUB_CLIENT_SECRET" | gcloud secrets versions add INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET \
-  --data-file=- --project=intexuraos-dev-pbuchman
+gcloud secrets versions list INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET \
+  --project=intexuraos-dev-pbuchman
 ```
 
-Use `versions add` rather than `create`; Terraform owns the secret container.
-Do not add a new Secret Manager version for the client ID.
+Changing callback URLs does not change either credential. Do not update the client ID,
+add a secret version, or rotate the secret.
 
 ## Step 3: Render Local Configuration
 
@@ -67,13 +58,11 @@ direnv allow
 
 Start the localhost stack manually with `pnpm dev` when needed.
 
-## Step 4: Deploy The Versioned Configuration
+## Step 4: Confirm No Versioned Configuration Change
 
-Skip this step for a callback-only update; it changes no versioned configuration.
-
-Commit the `config/environments/` change with the application change and use
-the normal deployment workflow. Terraform is required only when the actual
-client-secret container or its IAM policy changes.
+No application configuration commit or deployment is required when only the callback
+allowlist changes and the checks above match. Use the normal provisioning and deployment
+workflow only for a separate, explicitly approved credential change.
 
 ## Verification
 
