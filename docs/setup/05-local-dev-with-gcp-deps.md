@@ -191,10 +191,20 @@ Expected:
 - Pub/Sub emulator, Pub/Sub UI, and Message Digest Firestore containers are running.
 - Message Digest uses the isolated Firestore emulator; other services use retained GCP data.
 
-Google/GitHub account-connection OAuth is a separate check from Auth0 login. The current
-Vite proxy does not forward `/oauth/connections/`, so those callback paths return the
-web shell instead of reaching User Service. Backend health does not prove those flows
-work through the localhost UI.
+Google/GitHub account-connection OAuth is a separate check from Auth0 login. Vite
+forwards `/oauth/connections/` to User Service without rewriting the callback path.
+Use these routing-only probes before a browser authorization:
+
+```bash
+curl -sS -D - -o /dev/null \
+  'http://localhost:3000/oauth/connections/google/callback?error=access_denied'
+curl -sS -D - -o /dev/null \
+  'http://localhost:3000/oauth/connections/github/callback?error=access_denied'
+```
+
+Both responses must be `302`. Their `Location` headers must point to the matching
+localhost settings page with `oauth_error=access_denied`. These probes do not exchange
+tokens or write an OAuth connection.
 
 To verify auto-reload, touch a service source file and check that PM2 restarts that service:
 
