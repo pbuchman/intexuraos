@@ -10,6 +10,7 @@ This tool is intentionally placed under `tools/`, not `apps/`, because it is dep
 - This adapter runs a Matrix `/sync` loop with a stored `next_batch` token.
 - On the first successful sync it stores the batch token and skips historical events.
 - Later sync batches are mapped to the private WhatsApp ingest payload and posted to IntexuraOS.
+- Valid unstable Matrix poll responses are preserved in `rawMatrixEvent` and ingested as unknown messages without inventing text or reaction content.
 - For new Matrix image, audio, and video events, the adapter downloads media through the authenticated Matrix media API, uploads bytes to IntexuraOS, and only then posts the ingest event.
 - The adapter is read-only with respect to WhatsApp. It only observes Matrix events and posts ingest batches.
 
