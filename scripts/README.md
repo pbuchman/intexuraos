@@ -123,6 +123,11 @@ deployment attestation, verifies health, and retains existing code and web
 artifacts for recovery. It does not prune code or web releases; storage cleanup
 is a separate deliberate maintenance operation.
 
+Cloudflare checks use the live API to verify an active token, the expected zone
+and account, and DNS read access. They do not require a manually renewed
+permission attestation. DNS write permission is needed by certificate renewal;
+these read-only deployment checks do not prove it.
+
 The production loader may run manually only while PM2 and Alloy are stopped:
 
 ```bash

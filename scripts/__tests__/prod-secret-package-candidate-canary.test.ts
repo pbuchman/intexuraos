@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import {
-  chownSync,
   chmodSync,
   mkdtempSync,
   mkdirSync,
@@ -30,7 +29,6 @@ const cloudflareToken = 'cloudflare-token-secret-that-must-not-be-logged';
 const runtimeToken = 'runtime-token-secret-that-must-not-be-logged';
 
 interface Fixture {
-  attestationDirectory: string;
   cloudflareCredentialsPath: string;
   root: string;
   runtimeCredentialPath: string;
@@ -40,12 +38,10 @@ interface Fixture {
 function fixture(): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'prod-candidate-canary-'));
   const fakeBin = join(root, 'bin');
-  const attestationDirectory = join(root, 'attestations');
   const runtimeCredentialPath = join(root, 'runtime-sa-key.json');
   const cloudflareCredentialsPath = join(root, 'cloudflare.ini');
   const tracePath = join(root, 'trace.jsonl');
   mkdirSync(fakeBin, { mode: 0o700 });
-  mkdirSync(attestationDirectory, { mode: 0o700 });
   writeFileSync(
     runtimeCredentialPath,
     JSON.stringify({
@@ -57,24 +53,6 @@ function fixture(): Fixture {
   writeFileSync(cloudflareCredentialsPath, `dns_cloudflare_api_token = ${cloudflareToken}\n`, {
     mode: 0o600,
   });
-  writeFileSync(
-    join(attestationDirectory, 'prod-v17.json'),
-    `${JSON.stringify({
-      schemaVersion: 1,
-      environment: 'prod',
-      packageVersion: '17',
-      accountId,
-      zoneName: 'intexuraos.cloud',
-      permission: 'Zone DNS Edit',
-      resourceScope: 'exact-zone',
-      tokenId,
-      verifiedAt: new Date().toISOString(),
-      verifiedBy: 'release-operator@example.com',
-      evidenceReference: 'change-record-secret-package-prod-v17',
-    })}\n`,
-    { mode: 0o600 }
-  );
-
   writeFileSync(
     join(fakeBin, 'gcloud'),
     [
@@ -131,8 +109,9 @@ function fixture(): Fixture {
       "  response = process.env.CANARY_MISSING_MESSAGE_ID === '1' ? '{}' : JSON.stringify({ messageIds: ['message-id-canary'] });",
       "} else if (url.endsWith('/user/tokens/verify')) {",
       "  endpoint = 'cloudflare-verify';",
-      "  const id = process.env.CANARY_WRONG_TOKEN_ID === '1' ? 'f'.repeat(32) : process.env.CANARY_TOKEN_ID;",
-      "  response = JSON.stringify({ success: true, result: { id, status: 'active' } });",
+      '  const id = process.env.CANARY_TOKEN_ID;',
+      "  const status = process.env.CANARY_INACTIVE_TOKEN === '1' ? 'disabled' : 'active';",
+      '  response = JSON.stringify({ success: true, result: { id, status } });',
       "} else if (url.endsWith('/zones')) {",
       "  endpoint = 'cloudflare-zone';",
       "  response = JSON.stringify({ success: true, result: [{ id: process.env.CANARY_ZONE_ID, name: 'intexuraos.cloud', status: 'active', account: { id: process.env.CANARY_ACCOUNT_ID } }] });",
@@ -149,7 +128,6 @@ function fixture(): Fixture {
   );
 
   return {
-    attestationDirectory,
     cloudflareCredentialsPath,
     root,
     runtimeCredentialPath,
@@ -181,7 +159,6 @@ function runValidator(
         CANARY_TOKEN_ID: tokenId,
         CANARY_TRACE_PATH: input.tracePath,
         CANARY_ZONE_ID: zoneId,
-        CLOUDFLARE_DNS_EDIT_ATTESTATION_DIR: input.attestationDirectory,
         EXPECTED_CLOUDFLARE_ACCOUNT_ID: accountId,
         INTEXURAOS_ENVIRONMENT: 'prod',
         PATH: `${join(input.root, 'bin')}:${process.env.PATH ?? ''}`,
@@ -216,14 +193,8 @@ function trace(input: Fixture): {
     );
 }
 
-function replaceAttestationTimestamp(input: Fixture, verifiedAt: string): void {
-  const path = join(input.attestationDirectory, 'prod-v17.json');
-  const document = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-  writeFileSync(path, `${JSON.stringify({ ...document, verifiedAt })}\n`, { mode: 0o600 });
-}
-
 describe('PROD package candidate credential canary', () => {
-  it('proves the complete runtime matrix and read-only Cloudflare boundary without logging secrets', () => {
+  it('proves runtime and live Cloudflare credentials without a manual attestation or logging secrets', () => {
     const input = fixture();
     const result = runValidator(input);
 
@@ -299,54 +270,16 @@ describe('PROD package candidate credential canary', () => {
     expect(readdirSync(input.root)).not.toContain('trace.jsonl');
   });
 
-  it('requires a Pub/Sub message ID and binds Cloudflare verification to the reviewed token ID', () => {
+  it('requires a Pub/Sub message ID and an active Cloudflare token', () => {
     const missingMessageId = fixture();
     const publishFailure = runValidator(missingMessageId, { CANARY_MISSING_MESSAGE_ID: '1' });
     expect(publishFailure.status).not.toBe(0);
     expect(publishFailure.stderr).toContain('Pub/Sub publish proof failed');
 
     const wrongToken = fixture();
-    const cloudflareFailure = runValidator(wrongToken, { CANARY_WRONG_TOKEN_ID: '1' });
+    const cloudflareFailure = runValidator(wrongToken, { CANARY_INACTIVE_TOKEN: '1' });
     expect(cloudflareFailure.status).not.toBe(0);
     expect(cloudflareFailure.stderr).toContain('Cloudflare token verification proof failed');
-  });
-
-  it('requires a mode-0600 package-bound exact-zone DNS Edit attestation before network calls', () => {
-    const input = fixture();
-    const attestationPath = join(input.attestationDirectory, 'prod-v17.json');
-    chmodSync(attestationPath, 0o644);
-    const result = runValidator(input);
-
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('Cloudflare DNS Edit attestation is invalid');
-    expect(readdirSync(input.root)).not.toContain('trace.jsonl');
-  });
-
-  it('rejects a non-root-owned attestation directory or file before network calls', () => {
-    const input = fixture();
-    if (typeof process.getuid === 'function' && process.getuid() === 0) {
-      chownSync(input.attestationDirectory, 65_534, 65_534);
-      chownSync(join(input.attestationDirectory, 'prod-v17.json'), 65_534, 65_534);
-    }
-
-    const result = runValidator(input, { SKIP_OWNERSHIP: '0' });
-
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('Cloudflare DNS Edit attestation is invalid');
-    expect(readdirSync(input.root)).not.toContain('trace.jsonl');
-  });
-
-  it.each([
-    ['stale', new Date(Date.now() - 24 * 60 * 60 * 1000 - 1_000).toISOString()],
-    ['future', new Date(Date.now() + 5 * 60 * 1000 + 60_000).toISOString()],
-  ])('rejects a %s Cloudflare attestation before network calls', (_label, verifiedAt) => {
-    const input = fixture();
-    replaceAttestationTimestamp(input, verifiedAt);
-    const result = runValidator(input);
-
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('Cloudflare DNS Edit attestation is invalid');
-    expect(readdirSync(input.root)).not.toContain('trace.jsonl');
   });
 
   it('rejects a permissive or symlinked runtime credential before network calls', () => {

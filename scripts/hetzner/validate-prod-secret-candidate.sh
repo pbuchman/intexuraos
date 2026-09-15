@@ -10,7 +10,6 @@ RUNTIME_CREDENTIAL_CANARY_BUCKET="${RUNTIME_CREDENTIAL_CANARY_BUCKET:-intexuraos
 RUNTIME_CREDENTIAL_CANARY_TOPIC="${RUNTIME_CREDENTIAL_CANARY_TOPIC:-intexuraos-runtime-credential-canary-dev}"
 CLOUDFLARE_ZONE_NAME="${CLOUDFLARE_ZONE_NAME:-intexuraos.cloud}"
 EXPECTED_CLOUDFLARE_ACCOUNT_ID="${EXPECTED_CLOUDFLARE_ACCOUNT_ID:-}"
-CLOUDFLARE_DNS_EDIT_ATTESTATION_DIR="${CLOUDFLARE_DNS_EDIT_ATTESTATION_DIR:-/etc/intexuraos/cloudflare-dns-attestations}"
 SKIP_RUNTIME_CREDENTIAL_SMOKE="${SKIP_RUNTIME_CREDENTIAL_SMOKE:-0}"
 SKIP_CLOUDFLARE_CREDENTIAL_SMOKE="${SKIP_CLOUDFLARE_CREDENTIAL_SMOKE:-0}"
 SKIP_OWNERSHIP="${SKIP_OWNERSHIP:-0}"
@@ -20,7 +19,6 @@ GCLOUD_TOKEN_TIMEOUT_SECONDS="${GCLOUD_TOKEN_TIMEOUT_SECONDS:-15}"
 RUNTIME_CREDENTIAL_PATH=""
 CLOUDFLARE_CREDENTIALS_PATH=""
 PACKAGE_VERSION=""
-ATTESTATION_PATH=""
 TEMP_FILES=()
 
 usage() {
@@ -111,61 +109,6 @@ NODE
   )" || fail 'Expected Cloudflare account ID is unavailable'
 }
 
-validate_cloudflare_dns_edit_attestation() {
-  ATTESTATION_PATH="${CLOUDFLARE_DNS_EDIT_ATTESTATION_DIR}/prod-v${PACKAGE_VERSION}.json"
-  node --input-type=module - \
-    "${CLOUDFLARE_DNS_EDIT_ATTESTATION_DIR}" \
-    "${ATTESTATION_PATH}" \
-    "${PACKAGE_VERSION}" \
-    "${EXPECTED_CLOUDFLARE_ACCOUNT_ID}" \
-    "${CLOUDFLARE_ZONE_NAME}" \
-    "${SKIP_OWNERSHIP}" <<'NODE' \
-    || fail 'Cloudflare DNS Edit attestation is invalid'
-import { lstatSync, readFileSync } from 'node:fs';
-const [directoryPath, path, packageVersion, expectedAccountId, expectedZoneName, skipOwnership] =
-  process.argv.slice(2);
-let directoryStatus;
-let status;
-let document;
-try {
-  directoryStatus = lstatSync(directoryPath);
-  status = lstatSync(path);
-  document = JSON.parse(readFileSync(path, 'utf8'));
-} catch {
-  process.exit(1);
-}
-const verifiedAt = Date.parse(document?.verifiedAt);
-if (
-  !directoryStatus.isDirectory() ||
-  directoryStatus.isSymbolicLink() ||
-  (directoryStatus.mode & 0o7777) !== 0o700 ||
-  (skipOwnership !== '1' && (directoryStatus.uid !== 0 || directoryStatus.gid !== 0)) ||
-  !status.isFile() ||
-  status.isSymbolicLink() ||
-  (status.mode & 0o7777) !== 0o600 ||
-  (skipOwnership !== '1' && (status.uid !== 0 || status.gid !== 0)) ||
-  document?.schemaVersion !== 1 ||
-  document?.environment !== 'prod' ||
-  document?.packageVersion !== packageVersion ||
-  document?.accountId !== expectedAccountId ||
-  document?.zoneName !== expectedZoneName ||
-  document?.permission !== 'Zone DNS Edit' ||
-  document?.resourceScope !== 'exact-zone' ||
-  typeof document?.tokenId !== 'string' ||
-  !/^[0-9a-f]{32}$/u.test(document.tokenId) ||
-  !Number.isFinite(verifiedAt) ||
-  verifiedAt > Date.now() + 5 * 60 * 1000 ||
-  verifiedAt < Date.now() - 24 * 60 * 60 * 1000 ||
-  typeof document?.verifiedBy !== 'string' ||
-  document.verifiedBy.length === 0 ||
-  document.verifiedBy.length > 256 ||
-  typeof document?.evidenceReference !== 'string' ||
-  document.evidenceReference.length === 0 ||
-  document.evidenceReference.length > 256
-) process.exit(1);
-NODE
-}
-
 validate_runtime_credential_file() {
   node --input-type=module - "${RUNTIME_CREDENTIAL_PATH}" <<'NODE' \
     || fail 'Runtime credential is invalid or not mode 600'
@@ -235,7 +178,6 @@ require_preconditions() {
     load_expected_cloudflare_account_id
     [[ "${EXPECTED_CLOUDFLARE_ACCOUNT_ID}" =~ ^[0-9a-f]{32}$ ]] \
       || fail 'Expected Cloudflare account ID is invalid'
-    validate_cloudflare_dns_edit_attestation
   fi
 }
 
@@ -353,22 +295,19 @@ validate_cloudflare_credentials() {
     --header "@${authorization_header_file}" \
     'https://api.cloudflare.com/client/v4/user/tokens/verify' \
     || fail 'Cloudflare token verification proof failed'
-  node --input-type=module - "${verify_response_file}" "${ATTESTATION_PATH}" <<'NODE' \
+  node --input-type=module - "${verify_response_file}" <<'NODE' \
     || fail 'Cloudflare token verification proof failed'
 import { readFileSync } from 'node:fs';
-const [responsePath, attestationPath] = process.argv.slice(2);
+const [responsePath] = process.argv.slice(2);
 let response;
-let attestation;
 try {
   response = JSON.parse(readFileSync(responsePath, 'utf8'));
-  attestation = JSON.parse(readFileSync(attestationPath, 'utf8'));
 } catch {
   process.exit(1);
 }
 if (
   response?.success !== true ||
-  response?.result?.status !== 'active' ||
-  response?.result?.id !== attestation?.tokenId
+  response?.result?.status !== 'active'
 ) process.exit(1);
 NODE
 
