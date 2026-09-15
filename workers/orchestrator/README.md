@@ -738,3 +738,11 @@ cd ../../workers/orchestrator && pnpm test:e2e
 - Orchestrator pulls the worker image before each new task container.
 - Pull failure is fail-fast (no cached-image fallback) to prevent stale runtime behavior.
 - Startup logs include requested image ref and resolved digest.
+
+## SentryBox investigations
+
+The Sentry worker uses only `get_issue_details` and `search_issue_events` through
+`error_hub`. SentryBox does not provide log search, traces or attachments.
+Insufficient event evidence ends the task with `SENTRY_EVIDENCE_UNAVAILABLE`
+without automatic retries. Runtime/provider failures retain the existing retry
+policy; usage-limit messages retain the provider's reset time.

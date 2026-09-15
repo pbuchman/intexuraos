@@ -35,7 +35,10 @@ describe('sentryPrompt evidence provider routing', () => {
     expect(prompt).toContain('Selected evidence MCP: `error_hub`');
     expect(prompt).toContain('Use only the `error_hub` MCP for this task.');
     expect(prompt).not.toContain('Use only the `sentry` MCP for this task.');
-    expect(prompt).toContain('If `error_hub` is unavailable, finish with outcome `failed`.');
+    expect(prompt).toContain('SENTRY_EVIDENCE_UNAVAILABLE:');
+    expect(prompt).toContain('get_issue_details');
+    expect(prompt).toContain('search_issue_events');
+    expect(prompt).toContain('Do not invoke those functions');
     expect(prompt).not.toContain('GET /api/0/');
     expect(prompt).not.toContain('https://$ERROR_HUB_HOST');
     expect(prompt).toContain('### SentryBox Issue Context');
