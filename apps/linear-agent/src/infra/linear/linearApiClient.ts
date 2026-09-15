@@ -35,6 +35,7 @@ import {
   isTransientLinearError,
   retryOnTransient,
   linearFailureDiagnostics,
+  type RetryOnTransientOptions,
 } from './linearMappers.js';
 import {
   getOrCreateClient,
@@ -152,6 +153,23 @@ export function createLinearApiClient(): LinearApiClient {
           // Retry transient upstream failures (5xx, network errors) before
           // surfacing them to Sentry. INT-1801 reduced 114 transient
           // Cloudflare 502 alerts from scheduled `sync-all` runs.
+          const retryOptions: RetryOnTransientOptions = {
+            maxRetries: 2,
+            onRetry: ({ operationName, attempt, delayMs, error }) => {
+              // Handled retries stay visible in logs without creating Sentry issues.
+              logger.warn(
+                {
+                  teamId,
+                  operationName,
+                  attempt,
+                  delayMs,
+                  error: linearFailureDiagnostics(error, operation).message,
+                  _skipSentry: true,
+                },
+                'Linear listIssues transient failure, retrying'
+              );
+            },
+          };
           const fetchPage = async (afterCursor: string | undefined): Promise<{
             nodes: Issue[];
             endCursor?: string;
@@ -176,23 +194,7 @@ export function createLinearApiClient(): LinearApiClient {
               },
               'listIssues',
               Date.now(),
-              {
-                maxRetries: 2,
-                onRetry: ({ operationName, attempt, delayMs, error }) => {
-                  // Handled retries stay visible in logs without creating Sentry issues.
-                  logger.warn(
-                    {
-                      teamId,
-                      operationName,
-                      attempt,
-                      delayMs,
-                      error: linearFailureDiagnostics(error, operation).message,
-                      _skipSentry: true,
-                    },
-                    'Linear listIssues transient failure, retrying'
-                  );
-                },
-              }
+              retryOptions
             );
           };
 
@@ -211,7 +213,7 @@ export function createLinearApiClient(): LinearApiClient {
           logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
 
           operation = 'listIssues.mapIssuesWithBatchedStates';
-          const allMappedIssues = await mapIssuesWithBatchedStates(allIssues);
+          const allMappedIssues = await mapIssuesWithBatchedStates(allIssues, retryOptions);
 
           return filterIssuesByCompletionDate(allMappedIssues, completedSinceDays);
         });
