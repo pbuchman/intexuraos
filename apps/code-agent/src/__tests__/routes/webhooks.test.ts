@@ -4744,14 +4744,14 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
-    it('logs error and succeeds when validateIssue fails', async () => {
+    it.each([true, false])('keeps review completion successful when validation fails (already reported=%s)', async (alreadyReported) => {
       await createOriginTask({ traceId: 'trace_label_validate_fail', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_validate_fail_review' });
       const payload = makeLabelPayload(reviewTask.id);
 
       const { linearAgentClient: lac } = getServices();
       vi.mocked(lac.validateIssue).mockResolvedValueOnce(
-        err({ code: 'NOT_FOUND' as const, message: 'Issue not found' })
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear unavailable', alreadyReported })
       );
 
       const response = await sendLabelPayload(payload);

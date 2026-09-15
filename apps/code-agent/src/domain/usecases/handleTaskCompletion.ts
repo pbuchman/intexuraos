@@ -375,7 +375,7 @@ export async function handleTaskCompletion(
                   'Failed to set review-outcome label (best-effort)');
               }
             } else {
-              requestLog.warn({ taskId, prNumber, linearIssueId: targetLinearIssueId, error: issueValidation.error },
+              requestLog[issueValidation.error.alreadyReported === true ? 'info' : 'warn']({ taskId, prNumber, linearIssueId: targetLinearIssueId, code: issueValidation.error.code },
                 'Failed to validate issue for review-outcome label (best-effort)');
             }
           }
@@ -394,6 +394,17 @@ export async function handleTaskCompletion(
         // @allow-raw-send: external webhook callback contract requires simple acknowledgment
         return { kind: 'received' as const };
       }
+
+      // The validation client already reports these failures; enforcement still
+      // records the failed task, but must not create another Sentry incident.
+      let validationFailureReported = false;
+      const logEnforcementFailure = (details: Record<string, unknown>, message: string): void => {
+        if (validationFailureReported) {
+          requestLog.info({ taskId, code: 'LINEAR_VALIDATION_FAILED' }, message);
+        } else {
+          requestLog.error(details, message);
+        }
+      };
 
       const enforcePlanningOutcome = async (
         outcome: 'planned' | 'unclear',
@@ -424,6 +435,7 @@ export async function handleTaskCompletion(
           identifier: task.linearIssueId,
         });
         if (!originalIssueValidation.ok) {
+          validationFailureReported = originalIssueValidation.error.alreadyReported === true;
           return { ok: false, message: `Failed to validate original issue: ${originalIssueValidation.error.message}` };
         }
 
@@ -517,6 +529,7 @@ export async function handleTaskCompletion(
             identifier: task.linearIssueId,
           });
           if (!routedIssueValidation.ok) {
+            validationFailureReported = routedIssueValidation.error.alreadyReported === true;
             return {
               ok: false,
               code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
@@ -590,6 +603,7 @@ export async function handleTaskCompletion(
           identifier: task.linearIssueId,
         });
         if (!routedIssueValidation.ok) {
+          validationFailureReported = routedIssueValidation.error.alreadyReported === true;
           return {
             ok: false,
             code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
@@ -611,6 +625,7 @@ export async function handleTaskCompletion(
           identifier: reportedIdentifier,
         });
         if (!reportedIssueValidation.ok) {
+          validationFailureReported = reportedIssueValidation.error.alreadyReported === true;
           return {
             ok: false,
             code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED',
@@ -737,6 +752,7 @@ export async function handleTaskCompletion(
           identifier: task.linearIssueId,
         });
         if (!routedIssueValidation.ok) {
+          validationFailureReported = routedIssueValidation.error.alreadyReported === true;
           return {
             ok: false,
             code: 'PULL_REQUEST_AGENT_ENFORCEMENT_FAILED',
@@ -972,7 +988,7 @@ export async function handleTaskCompletion(
 
           const executionEnforcement = await enforceExecutionOutcome(result);
           if (!executionEnforcement.ok) {
-            requestLog.error(
+            logEnforcementFailure(
               {
                 taskId,
                 routedIssueId: task.linearIssueId,
@@ -1045,7 +1061,7 @@ export async function handleTaskCompletion(
 
           const pullRequestEnforcement = await enforcePullRequestOutcome(result);
           if (!pullRequestEnforcement.ok) {
-            requestLog.error(
+            logEnforcementFailure(
               {
                 taskId,
                 routedIssueId: task.linearIssueId,
@@ -1109,7 +1125,7 @@ export async function handleTaskCompletion(
           if (result.planning_outcome_label === 'planned') {
             const planningEnforcement = await enforcePlanningOutcome('planned', result);
             if (!planningEnforcement.ok) {
-              requestLog.error({ taskId, error: planningEnforcement.message }, 'Planning deterministic enforcement failed');
+              logEnforcementFailure({ taskId, error: planningEnforcement.message }, 'Planning deterministic enforcement failed');
               const failResult = await codeTaskRepo.update(taskId, {
                 status: 'failed',
                 completedAt,
@@ -1689,7 +1705,7 @@ export async function handleTaskCompletion(
         if (taskError.code === 'PLANNING_AGENT_UNCLEAR' && result?.planning_outcome_label === 'unclear') {
           const unclearEnforcement = await enforcePlanningOutcome('unclear', result, taskError);
           if (!unclearEnforcement.ok) {
-            requestLog.error({ taskId, error: unclearEnforcement.message }, 'Planning unclear deterministic enforcement failed');
+            logEnforcementFailure({ taskId, error: unclearEnforcement.message }, 'Planning unclear deterministic enforcement failed');
             const failResult = await codeTaskRepo.update(taskId, {
               status: 'failed',
               completedAt,

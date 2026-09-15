@@ -300,6 +300,8 @@ export async function submitDirectCodeTask(
       const isNoChildren = fanOutResult.error.code === 'no_qualifying_children';
       if (isNoChildren) {
         logger.info({ linearIssueId: finalLinearIssueId }, 'Fan-out found no qualifying children, falling back to normal dispatch');
+      } else if (!validateResult.ok && validateResult.error.alreadyReported === true) {
+        logger.info({ linearIssueId: finalLinearIssueId, code: validateResult.error.code }, 'Fan-out validation failed, falling back to normal dispatch');
       } else {
         logger.warn({ linearIssueId: finalLinearIssueId, error: fanOutResult.error }, 'Fan-out failed, falling back to normal dispatch');
       }
