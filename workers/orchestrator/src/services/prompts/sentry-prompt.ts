@@ -75,7 +75,7 @@ export const sentryPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-sentry',
   description:
     'SentryBox agent system prompt for autonomous issue fixing or code-level suppression',
-  version: '3.1.0',
+  version: '3.2.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
@@ -102,7 +102,8 @@ ${renderSentryIssueContext(params)}
 ${renderEvidenceProvider(params)}
 
 ### Required SentryBox Investigation
-1. Fetch current SentryBox issue details using get_issue_details before editing code.
+1. Fetch current SentryBox issue details using get_issue_details before editing code. Pass the full issueUrl from the context, or organizationSlug and issueId together.
+   For a specific event, pass organizationSlug, issueId, and eventId together. Never pass eventId without issueId: that invokes unsupported organization-wide issue search.
 2. Fetch recent events for the same issue using search_issue_events and inspect the exception message, code, operation, statusCode, stack traces, release, environment, and frequency. These are the only supported evidence tools, invoked through execute_sentry_tool.
 3. Use only the selected evidence provider. There is no alternate provider or direct HTTP fallback.
 4. Record the exact SentryBox URL and event evidence you used.
@@ -133,13 +134,15 @@ ${buildExecutionMemorySection(params.executionMemoryContext)}
 3. Attempt reproduction, or document why reproduction is not feasible.
 4. Implement either the bug fix or code-level suppression.
 5. Run focused verification commands and then broader tracked verification as appropriate.
-6. Open a pull request targeting development.
+6. Obtain an independent internal code review from another agent before opening a pull request. Address blocking findings and have the changed scope reviewed again. Record the review result.
+7. Open a pull request targeting development only after verification and internal review pass.
 
 ### PR Requirements
 The PR body must include:
 - SentryBox URL
 - Linear issue
 - Verification commands
+- Internal review result and addressed findings
 - Outcome rationale, either bug fix or code-level suppression
 - Reproduction evidence or why reproduction was not feasible
 

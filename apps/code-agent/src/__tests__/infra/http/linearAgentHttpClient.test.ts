@@ -517,12 +517,42 @@ describe('linearAgentHttpClient', () => {
         expect(result.error.code).toBe('NOT_FOUND');
         expect(result.error.message).toContain('INT-999');
         expect(mockLogger.warn).toHaveBeenCalledWith(
-          { identifier: 'INT-999', error: 'Issue not found' },
+          { identifier: 'INT-999', statusCode: 404 },
           'Linear issue not found or wrong team'
         );
       } else {
         expect.fail('Expected error result');
       }
+    });
+
+    it.each([
+      [{ success: false, error: { code: 'SERVICE_UNAVAILABLE', message: 'Linear API temporarily unavailable' } }, true],
+      ['private gateway HTML', false],
+      [{ success: false, error: { code: 'SERVICE_UNAVAILABLE' } }, false],
+      [{ success: false, error: { code: 'SERVICE_UNAVAILABLE', message: 503 } }, false],
+      [{ success: false, error: { code: 'UNKNOWN' } }, false],
+      [{ success: true, error: { code: 'SERVICE_UNAVAILABLE' } }, false],
+      [null, false],
+      [{ success: false, error: null }, false],
+      [{ success: false }, false],
+      [{ success: false, error: {} }, false],
+    ])('reports only unrecognized validation 503 responses: %j', async (body, alreadyReported) => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/INT-123/validate')
+        .query({ userId: 'test-user-123' })
+        .reply(503, body === null ? 'null' : body);
+      const result = await client.validateIssue({ userId: 'test-user-123', identifier: 'INT-123' });
+      expect(result).toMatchObject({ ok: false, error: { code: 'UNAVAILABLE' } });
+      expect(mockLogger.error).toHaveBeenCalledExactlyOnceWith(
+        {
+          err: new Error('linear-agent validateIssue failed (HTTP 503)'),
+          operation: 'validateIssue',
+          statusCode: 503,
+          ...(alreadyReported === true ? { _skipSentry: true } : {}),
+        },
+        'linear-agent validateIssue failed'
+      );
+      expect(JSON.stringify(mockLogger.error.mock.calls)).not.toContain('private gateway HTML');
     });
 
     it('should return UNAVAILABLE on non-404 error', async () => {
@@ -540,7 +570,7 @@ describe('linearAgentHttpClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('UNAVAILABLE');
         expect(mockLogger.error).toHaveBeenCalledWith(
-          { status: 500, error: 'Internal Server Error' },
+          { err: new Error('linear-agent validateIssue failed (HTTP 500)'), operation: 'validateIssue', statusCode: 500 },
           'linear-agent validateIssue failed'
         );
       } else {
@@ -585,12 +615,23 @@ describe('linearAgentHttpClient', () => {
         expect(result.error.code).toBe('UNKNOWN');
         expect(result.error.message).toContain('ECONNREFUSED');
         expect(mockLogger.error).toHaveBeenCalledWith(
-          expect.objectContaining({ error: expect.any(Error) }),
+          { err: new Error('ECONNREFUSED'), code: 'NETWORK_ERROR', operation: 'validateIssue' },
           'linear-agent validateIssue request failed'
         );
       } else {
         expect.fail('Expected error result');
       }
+    });
+
+    it('does not log private network error text', async () => {
+      nock(baseUrl).get('/internal/linear/issues/INT-123/validate')
+        .query({ userId: 'test-user-123' }).replyWithError('private credential payload');
+      await client.validateIssue({ userId: 'test-user-123', identifier: 'INT-123' });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { err: new Error('Network request failed'), code: 'NETWORK_ERROR', operation: 'validateIssue' },
+        'linear-agent validateIssue request failed'
+      );
+      expect(JSON.stringify(mockLogger.error.mock.calls)).not.toContain('private credential payload');
     });
 
     it('should return UNKNOWN on invalid response with success false', async () => {
@@ -609,7 +650,7 @@ describe('linearAgentHttpClient', () => {
         expect(result.error.code).toBe('UNKNOWN');
         expect(result.error.message).toBe('Invalid response from linear-agent');
         expect(mockLogger.error).toHaveBeenCalledWith(
-          { body: { success: false } },
+          { err: new Error('Invalid response from linear-agent'), code: 'INVALID_RESPONSE', operation: 'validateIssue' },
           'Invalid response from linear-agent'
         );
       } else {
@@ -1539,7 +1580,7 @@ describe('linearAgentHttpClient', () => {
         expect(result.error.code).toBe('UNKNOWN');
         expect(result.error.message).toBe('Invalid response from linear-agent');
         expect(mockLogger.error).toHaveBeenCalledWith(
-          { body: { success: false } },
+          { err: new Error('Invalid response from linear-agent'), code: 'INVALID_RESPONSE', operation: 'fetchIssueForDisplay' },
           'Invalid response from linear-agent'
         );
       } else {
@@ -1562,8 +1603,8 @@ describe('linearAgentHttpClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('UNAVAILABLE');
         expect(result.error.message).toBe('Internal Server Error');
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          { status: 500, error: 'Internal Server Error' },
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { err: new Error('linear-agent fetchIssueForDisplay failed (HTTP 500)'), operation: 'fetchIssueForDisplay', statusCode: 500 },
           'linear-agent fetchIssueForDisplay failed'
         );
       } else {
@@ -1586,10 +1627,12 @@ describe('linearAgentHttpClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('UNAVAILABLE');
         expect(result.error.message).toBe('Issue not found');
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          { status: 404, error: 'Issue not found' },
-          'linear-agent fetchIssueForDisplay failed'
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          { identifier: 'INT-999', statusCode: 404 },
+          'Linear issue not synchronized locally; using notification title fallback'
         );
+        expect(mockLogger.warn).not.toHaveBeenCalled();
+        expect(mockLogger.error).not.toHaveBeenCalled();
       } else {
         expect.fail('Expected error result');
       }
@@ -1612,7 +1655,7 @@ describe('linearAgentHttpClient', () => {
         expect(result.error.code).toBe('UNAVAILABLE');
         expect(result.error.message).toBe('Request timed out');
         expect(mockLogger.error).toHaveBeenCalledWith(
-          { timeoutMs: 5000 },
+          { err: new Error('linear-agent request timed out'), code: 'TIMEOUT', operation: 'fetchIssueForDisplay', timeoutMs: 5000 },
           'linear-agent request timed out'
         );
       } else {
@@ -1636,7 +1679,7 @@ describe('linearAgentHttpClient', () => {
         expect(result.error.code).toBe('UNKNOWN');
         expect(result.error.message).toContain('ECONNREFUSED');
         expect(mockLogger.error).toHaveBeenCalledWith(
-          expect.objectContaining({ error: expect.any(Error) }),
+          { err: new Error('ECONNREFUSED'), code: 'NETWORK_ERROR', operation: 'fetchIssueForDisplay' },
           'linear-agent fetchIssueForDisplay request failed'
         );
       } else {

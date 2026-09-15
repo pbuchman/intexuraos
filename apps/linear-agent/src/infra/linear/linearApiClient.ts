@@ -273,15 +273,30 @@ export function createLinearApiClient(): LinearApiClient {
     ): Promise<Result<LinearIssueWithTeam | null, LinearError>> {
       const dedupKey = createDedupKey('getIssueByIdentifier', apiKey.slice(0, 8), identifier);
 
+      const operation = 'getIssueByIdentifier';
       try {
         const mapped = await withDeduplication(dedupKey, async () => {
           logger.info({ identifier }, 'Fetching Linear issue by identifier');
 
           const client = getOrCreateClient(apiKey);
 
-          const issue = await client.issue(identifier);
-
-          return await mapSingleIssueWithTeam(issue);
+          return await retryOnTransient(
+            async () => {
+              const issue = await client.issue(identifier);
+              return await mapSingleIssueWithTeam(issue);
+            },
+            'getIssueByIdentifier',
+            Date.now(),
+            {
+              maxRetries: 2,
+              onRetry: ({ attempt, delayMs, error }) => {
+                logger.info(
+                  { attempt, delayMs, ...linearFailureDiagnostics(error, operation) },
+                  'Linear issue validation transient failure, retrying'
+                );
+              },
+            }
+          );
         });
 
         return ok(mapped);
@@ -291,8 +306,16 @@ export function createLinearApiClient(): LinearApiClient {
           logger.info({ identifier }, 'Issue not found by identifier');
           return ok(null);
         }
-        logger.error({ error, identifier }, 'Failed to fetch Linear issue by identifier');
-        return err(mapLinearError(error));
+        const diagnostics = linearFailureDiagnostics(error, operation);
+        // validateIssue owns the final report, including failures shared by deduplication.
+        logger.info({ identifier, ...diagnostics }, 'Failed to fetch Linear issue by identifier');
+        return err({
+          ...mapLinearError(error),
+          ...(isTransientLinearError(error)
+            ? { code: 'UPSTREAM_UNAVAILABLE' as const, message: 'Linear API temporarily unavailable' }
+            : {}),
+          diagnostics,
+        });
       }
     },
 
