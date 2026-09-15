@@ -1,6 +1,6 @@
 /**
- * Pure mapping functions for Linear API responses.
- * These functions transform Linear SDK types to our internal domain types.
+ * Mapping functions for Linear API responses.
+ * Resolve SDK relationships and transform them to our internal domain types.
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -40,31 +40,42 @@ interface IssueState {
 }
 
 /* istanbul ignore next -- @preserve Maps Linear SDK Issue objects that require real API response */
-export async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[]> {
+export async function mapIssuesWithBatchedStates(
+  issues: Issue[],
+  retryOptions: RetryOnTransientOptions
+): Promise<LinearIssue[]> {
+  // Retry each relationship independently so a transient failure does not
+  // repeat successful reads. Access lazy SDK getters inside each attempt
+  // to create a fresh request instead of awaiting a rejected promise again.
+  const fetchRelation = async <T>(name: string, fetch: () => Promise<T>): Promise<T> =>
+    await retryOnTransient(fetch, `listIssues.${name}`, Date.now(), retryOptions);
+
   // Batch fetch all states
   const statePromises = issues.map(async (issue) => {
-    const state = issue.state;
-    return state !== undefined ? await state : null;
+    return await fetchRelation('state', async () => {
+      const state = issue.state;
+      return state !== undefined ? await state : null;
+    });
   });
   const states = await Promise.all(statePromises);
 
   // Batch fetch all child counts
   const childrenPromises = issues.map(async (issue) => {
-    const children = await issue.children();
+    const children = await fetchRelation('children', async () => await issue.children());
     return children.nodes.length;
   });
   const childCounts = await Promise.all(childrenPromises);
 
   // Batch fetch all parents
   const parentPromises = issues.map(async (issue) => {
-    const parent = await issue.parent;
+    const parent = await fetchRelation('parent', async () => await issue.parent);
     return parent?.id ?? null;
   });
   const parentIds = await Promise.all(parentPromises);
 
   // Batch fetch all labels
   const labelsPromises = issues.map(async (issue) => {
-    const labelsConnection = await issue.labels();
+    const labelsConnection = await fetchRelation('labels', async () => await issue.labels());
     return labelsConnection.nodes.map((l) => ({
       id: l.id,
       name: l.name,
@@ -75,7 +86,7 @@ export async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<Linea
 
   // Batch fetch all assignees
   const assigneePromises = issues.map(async (issue) => {
-    const assignee = await issue.assignee;
+    const assignee = await fetchRelation('assignee', async () => await issue.assignee);
     return assignee ? { id: assignee.id, name: assignee.name } : null;
   });
   const allAssignees = await Promise.all(assigneePromises);
