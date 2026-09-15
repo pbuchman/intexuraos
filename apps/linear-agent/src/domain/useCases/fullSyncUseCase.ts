@@ -40,6 +40,23 @@ export async function fullSync(
   userId: string,
   deps: FullSyncDeps
 ): Promise<Result<SyncStats, LinearError>> {
+  const result = await runFullSync(userId, deps);
+  if (result.ok) return result;
+  const { code, message, diagnostics } = result.error;
+  deps.logger.error({
+    err: new Error(diagnostics?.message ?? `Linear fullSync failed: ${code}`),
+    code,
+    operation: diagnostics?.operation ?? 'fullSync',
+    ...(diagnostics?.statusCode === undefined ? {} : { statusCode: diagnostics.statusCode }),
+    userId,
+  }, 'Failed to sync Linear issues');
+  return err({ code, message });
+}
+
+async function runFullSync(
+  userId: string,
+  deps: FullSyncDeps
+): Promise<Result<SyncStats, LinearError>> {
   const { issueRepo, connectionRepo, linearClient, codeAgentClient, logger } = deps;
   const startTime = Date.now();
 
@@ -59,7 +76,6 @@ export async function fullSync(
   // Fetch all issues from Linear API
   const issuesResult = await linearClient.listIssues(connection.apiKey, connection.teamId);
   if (!issuesResult.ok) {
-    logger.error({ error: issuesResult.error, userId, teamId: connection.teamId }, 'Failed to fetch issues from Linear');
     return issuesResult;
   }
 
@@ -158,7 +174,7 @@ export async function fullSyncAllUsers(deps: FullSyncDeps & {
       continue;
     }
 
-    logger.error({ userId, error: result.error }, 'Failed to sync user');
+    logger.error({ userId, code: result.error.code, _skipSentry: true }, 'Failed to sync user');
     firstFailure ??= result.error;
     if (result.error.code === 'UPSTREAM_UNAVAILABLE') {
       transientFailure = result.error;

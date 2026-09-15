@@ -34,6 +34,7 @@ import {
   mapSingleIssueWithTeam,
   isTransientLinearError,
   retryOnTransient,
+  linearFailureDiagnostics,
 } from './linearMappers.js';
 import {
   getOrCreateClient,
@@ -140,6 +141,7 @@ export function createLinearApiClient(): LinearApiClient {
         teamId,
         String(completedSinceDays)
       );
+      let operation = 'listIssues.fetchPage';
 
       try {
         const issues = await withDeduplication(dedupKey, async () => {
@@ -184,7 +186,7 @@ export function createLinearApiClient(): LinearApiClient {
                       operationName,
                       attempt,
                       delayMs,
-                      error: getErrorMessage(error),
+                      error: linearFailureDiagnostics(error, operation).message,
                       _skipSentry: true,
                     },
                     'Linear listIssues transient failure, retrying'
@@ -208,6 +210,7 @@ export function createLinearApiClient(): LinearApiClient {
 
           logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
 
+          operation = 'listIssues.mapIssuesWithBatchedStates';
           const allMappedIssues = await mapIssuesWithBatchedStates(allIssues);
 
           return filterIssuesByCompletionDate(allMappedIssues, completedSinceDays);
@@ -216,18 +219,17 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
-        // Transient upstream failures (5xx from Cloudflare/Linear) are noise in
-        // logs and Sentry — they self-recover on the next sync tick. Log at
-        // warn level so they remain visible without generating exceptions.
+        // fullSync owns the final Sentry report; retain safe evidence for it.
+        const diagnostics = linearFailureDiagnostics(error, operation);
         if (isTransientLinearError(error)) {
           logger.warn(
             { teamId, _skipSentry: true },
             'Linear API transiently unavailable while listing issues'
           );
-          return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' });
+          return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable', diagnostics });
         }
-        logger.error({ error, teamId }, 'Failed to list Linear issues');
-        return err(mapLinearError(error));
+        logger.error({ error: diagnostics.message, teamId, _skipSentry: true }, 'Failed to list Linear issues');
+        return err({ ...mapLinearError(error), diagnostics });
       }
     },
 

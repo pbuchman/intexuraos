@@ -16,7 +16,8 @@ const mocks = vi.hoisted(() => ({
   debug: vi.fn(),
 }));
 
-vi.mock('@linear/sdk', () => ({
+vi.mock('@linear/sdk', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@linear/sdk')>(),
   LinearClient: vi.fn(function LinearClient() {
     return {
       issues: mocks.issues,
@@ -217,9 +218,12 @@ describe('LinearApiClient', () => {
       expect(result.ok).toBe(false);
     });
 
-    it.each(['GraphQL Error (Code: 502) - Bad gateway', 'fetch failed'])(
+    it.each([
+      ['GraphQL Error (Code: 502) - Bad gateway', 'Linear listIssues.fetchPage failed: UPSTREAM_UNAVAILABLE (HTTP 502)'],
+      ['fetch failed', 'Linear listIssues.fetchPage failed: fetch failed'],
+    ])(
       'keeps a recovered transient retry in logs without reporting it to Sentry: %s',
-      async (message) => {
+      async (message, diagnosticMessage) => {
         mocks.issues.mockRejectedValueOnce(new Error(message)).mockResolvedValueOnce({
           nodes: [],
           pageInfo: { hasNextPage: false },
@@ -235,7 +239,7 @@ describe('LinearApiClient', () => {
             operationName: 'listIssues',
             attempt: 1,
             delayMs: expect.any(Number),
-            error: message,
+            error: diagnosticMessage,
             _skipSentry: true,
           },
           'Linear listIssues transient failure, retrying'
@@ -244,7 +248,7 @@ describe('LinearApiClient', () => {
       }
     );
 
-    it('still reports a permanent failure after a transient retry to Sentry', async () => {
+    it('retains a permanent failure after a transient retry for fullSync to report', async () => {
       const permanentError = new Error('401 Unauthorized');
       mocks.issues
         .mockRejectedValueOnce(new Error('GraphQL Error (Code: 502) - Bad gateway'))
@@ -254,7 +258,7 @@ describe('LinearApiClient', () => {
 
       expect(result).toEqual({
         ok: false,
-        error: { code: 'INVALID_API_KEY', message: 'Invalid Linear API key' },
+        error: { code: 'INVALID_API_KEY', message: 'Invalid Linear API key', diagnostics: { operation: 'listIssues.fetchPage', message: 'Linear listIssues.fetchPage failed: INVALID_API_KEY (HTTP 401)', statusCode: 401 } },
       });
       expect(mocks.issues).toHaveBeenCalledTimes(2);
       expect(mocks.warn).toHaveBeenCalledExactlyOnceWith(
@@ -262,7 +266,7 @@ describe('LinearApiClient', () => {
         'Linear listIssues transient failure, retrying'
       );
       expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
-        { error: permanentError, teamId: 'team-1' },
+        { error: 'Linear listIssues.fetchPage failed: INVALID_API_KEY (HTTP 401)', teamId: 'team-1', _skipSentry: true },
         'Failed to list Linear issues'
       );
     });
@@ -282,6 +286,7 @@ describe('LinearApiClient', () => {
           expect(result.error).toEqual({
             code: 'UPSTREAM_UNAVAILABLE',
             message: 'Linear API temporarily unavailable',
+            diagnostics: { operation: 'listIssues.fetchPage', message: 'Linear listIssues.fetchPage failed: UPSTREAM_UNAVAILABLE (HTTP 502)', statusCode: 502 },
           });
         }
         expect(mocks.issues).toHaveBeenCalledTimes(3);

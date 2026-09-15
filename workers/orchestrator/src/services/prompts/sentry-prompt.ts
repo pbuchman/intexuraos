@@ -63,19 +63,19 @@ function renderEvidenceProvider(params: SystemPromptParams): string {
     return `### Evidence Provider (MANDATORY)
 Selected evidence MCP: \`error_hub\`
 Use only the \`error_hub\` MCP for this task. Do not query another MCP or call an evidence REST API directly.
-If \`error_hub\` is unavailable, finish with outcome \`failed\`.`;
+If \`error_hub\` is unavailable, finish with outcome \`failed\` and start failure_reason with \`SENTRY_EVIDENCE_UNAVAILABLE:\` followed by the concrete missing evidence.`;
   }
 
   return `### Evidence Provider (MANDATORY)
 Selected evidence MCP: none
-The issue URL host does not match the configured \`ERROR_HUB_HOST\`. Do not query any evidence MCP. Finish with outcome \`failed\` and report the provider mismatch.`;
+The issue URL host does not match the configured \`ERROR_HUB_HOST\`. Do not query any evidence MCP. Finish with outcome \`failed\` and failure_reason \`SENTRY_EVIDENCE_UNAVAILABLE: provider mismatch\`.`;
 }
 
 export const sentryPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-sentry',
   description:
     'SentryBox agent system prompt for autonomous issue fixing or code-level suppression',
-  version: '3.0.0',
+  version: '3.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
@@ -102,10 +102,12 @@ ${renderSentryIssueContext(params)}
 ${renderEvidenceProvider(params)}
 
 ### Required SentryBox Investigation
-1. Fetch current SentryBox issue details before editing code.
-2. Fetch recent events for the same SentryBox issue and inspect stack traces, tags, culprit, release, environment, and frequency.
+1. Fetch current SentryBox issue details using get_issue_details before editing code.
+2. Fetch recent events for the same issue using search_issue_events and inspect the exception message, code, operation, statusCode, stack traces, release, environment, and frequency. These are the only supported evidence tools, invoked through execute_sentry_tool.
 3. Use only the selected evidence provider. There is no alternate provider or direct HTTP fallback.
 4. Record the exact SentryBox URL and event evidence you used.
+5. SentryBox does not support log search, traces, attachments, or cross-issue search. Do not invoke those functions or treat their absence as an application defect.
+6. If the supported event evidence is insufficient for a justified fix or suppression, finish with outcome failed and start failure_reason with SENTRY_EVIDENCE_UNAVAILABLE: followed by exactly what is missing. Do not guess or repeatedly query unsupported endpoints.
 
 ### Reproduction
 You must attempt reproduction when feasible.

@@ -19,6 +19,23 @@ import {
 } from '../../infra/linear/linearApiClient.js';
 import type { LinearIssue } from '../../domain/index.js';
 import type { Team } from '@linear/sdk';
+import { linearFailureDiagnostics } from '../../infra/linear/linearMappers.js';
+
+describe('Linear failure evidence', () => {
+  it.each([
+    [new Error('GraphQL Error (Code: 502) - <html>private response</html>'), 'UPSTREAM_UNAVAILABLE (HTTP 502)'],
+    [new Error('fetch failed'), 'fetch failed'],
+    [new Error('ECONNRESET private-host'), 'ECONNRESET'],
+    [Object.assign(new Error('private query and token'), { type: 'Ratelimited', status: 429 }), 'Ratelimited (HTTP 429)'],
+    [Object.assign(new Error('private payload'), { type: 'invented', status: 999 }), 'API_ERROR'],
+    [Object.assign(new Error('private payload'), { status: '502' }), 'API_ERROR'],
+    [null, 'API_ERROR'],
+  ])('keeps only safe diagnostic facts for %s', (error, cause) => {
+    const result = linearFailureDiagnostics(error, 'listIssues.fetchPage');
+    expect(result.message).toBe(`Linear listIssues.fetchPage failed: ${cause}`);
+    expect(JSON.stringify(result)).not.toMatch(/private|token|html|invented/);
+  });
+});
 
 describe('linearApiClient helper functions', () => {
   beforeEach(() => {

@@ -4,7 +4,7 @@
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
-import { type Issue, type Team } from '@linear/sdk';
+import { type Issue, type Team, LinearErrorType } from '@linear/sdk';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type {
   LinearIssue,
@@ -235,6 +235,25 @@ export function mapLinearError(error: unknown): LinearError {
   }
 
   return { code: 'API_ERROR', message };
+}
+
+/** Keep evidence without copying SDK messages containing queries, variables or response bodies. */
+export function linearFailureDiagnostics(error: unknown, operation: string): NonNullable<LinearError['diagnostics']> {
+  const details = typeof error === 'object' && error !== null
+    ? error as { status?: unknown; type?: unknown }
+    : {};
+  const message = getErrorMessage(error, '');
+  const status = details.status ?? Number((/(?:\(Code:\s*|^)([1-5]\d{2})(?:\)|\s)/.exec(message))?.[1]);
+  const statusCode = typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+    ? status : undefined;
+  const type = Object.values(LinearErrorType).find((value) => value === details.type);
+  const networkCause = (/\b(ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|network request failed)\b/i.exec(message))?.[0];
+  const cause = type ?? networkCause ?? mapLinearError(error).code;
+  return {
+    operation,
+    message: `Linear ${operation} failed: ${cause}${statusCode === undefined ? '' : ` (HTTP ${String(statusCode)})`}`,
+    ...(statusCode === undefined ? {} : { statusCode }),
+  };
 }
 
 /**
