@@ -218,18 +218,19 @@ export function createIssueEndpoints(deps: IssueEndpointsDeps): IssueEndpoints {
             message: `Issue ${request.identifier} not found or belongs to different team`,
           });
         }
+        const alreadyReported = isReportedValidationFailure(result.status, result.errorText);
         logger.error(
           {
             err: new Error(`linear-agent validateIssue failed (HTTP ${String(result.status)})`),
             operation: 'validateIssue',
             statusCode: result.status,
-            ...(isReportedValidationFailure(result.status, result.errorText)
+            ...(alreadyReported
               ? { [SKIP_SENTRY_KEY]: true }
               : {}),
           },
           'linear-agent validateIssue failed'
         );
-        return err({ code: 'UNAVAILABLE', message: result.errorText });
+        return err({ code: 'UNAVAILABLE', message: result.errorText, ...(alreadyReported ? { alreadyReported: true } : {}) });
       }
 
       if (result.kind === 'invalid-body') {

@@ -552,6 +552,9 @@ describe('linearAgentHttpClient', () => {
         },
         'linear-agent validateIssue failed'
       );
+      if (!result.ok) {
+        expect(result.error.alreadyReported === true).toBe(alreadyReported);
+      }
       expect(JSON.stringify(mockLogger.error.mock.calls)).not.toContain('private gateway HTML');
     });
 

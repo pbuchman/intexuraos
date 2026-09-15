@@ -70,6 +70,8 @@ export type SubmitDirectCodeTaskErrorCode =
  * Error result from direct code task submission.
  */
 export interface SubmitDirectCodeTaskError {
+  /** Suppresses duplicate reporting of an upstream validation failure. */
+  alreadyReported?: boolean;
   code: SubmitDirectCodeTaskErrorCode;
   message: string;
   existingTaskId?: string;
@@ -158,10 +160,11 @@ export async function submitDirectCodeTask(
 
   // CRITICAL: If user provided an issue ID but we're in fallback mode, this is an error
   if (linearIssueId !== undefined && issueResult.linearFallback) {
-    logger.error({ linearIssueId }, 'User-provided Linear issue could not be validated');
+    logger[issueResult.linearFallbackAlreadyReported === true ? 'info' : 'error']({ linearIssueId }, 'User-provided Linear issue could not be validated');
     return err({
       code: 'internal_error',
       message: `The Linear issue "${linearIssueId}" could not be validated. Please check that it exists and you have access to it.`,
+      ...(issueResult.linearFallbackAlreadyReported === true ? { alreadyReported: true } : {}),
     });
   }
 

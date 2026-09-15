@@ -352,13 +352,14 @@ describe('submitDirectCodeTask', () => {
     );
   });
 
-  it('returns internal_error when a user-provided Linear issue cannot be validated', async () => {
-    const { deps, linearIssueService } = createDeps();
+  it.each([true, false, undefined])('returns internal_error without reporting an already-reported validation failure: %s', async (alreadyReported) => {
+    const { deps, logger, linearIssueService, codeTaskRepo, taskEnqueueService } = createDeps();
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
       linearIssueTitle: 'Fallback task',
       linearIssueLabels: [],
       hasChildren: false,
       linearFallback: true,
+      ...(alreadyReported !== undefined ? { linearFallbackAlreadyReported: alreadyReported } : {}),
     });
 
     const result = await submit(deps, { linearIssueId: 'INT-404' });
@@ -367,7 +368,17 @@ describe('submitDirectCodeTask', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('internal_error');
       expect(result.error.message).toContain('INT-404');
+      expect(result.error.alreadyReported === true).toBe(alreadyReported === true);
     }
+    expect(logger[alreadyReported === true ? 'info' : 'error']).toHaveBeenCalledWith(
+      { linearIssueId: 'INT-404' }, 'User-provided Linear issue could not be validated'
+    );
+    if (alreadyReported === true) {
+      expect(logger.error).not.toHaveBeenCalled();
+    }
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   it('maps repository duplicate and active-task errors from normal task creation', async () => {
