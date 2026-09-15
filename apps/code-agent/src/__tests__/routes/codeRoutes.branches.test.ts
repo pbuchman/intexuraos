@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
 import nock from 'nock';
 import { err, ok, type Result } from '@intexuraos/common-core';
+import * as directSubmission from '../../domain/usecases/submitDirectCodeTask.js';
 
 // Mock jose library for JWT validation
 vi.mock('jose', () => ({
@@ -1082,6 +1083,36 @@ describe('codeRoutes branch coverage', () => {
   // ============================================================
   // POST /internal/code/submit-phase2 error codes (lines 2920-2945)
   // ============================================================
+  it.each([
+    ['/internal/code/submit', true, 500, 'Failed to create internal code task'],
+    ['/internal/code/submit', false, 500, 'Failed to create internal code task'],
+    ['/internal/code/submit-phase2', true, 400, 'Submit-phase2 failed'],
+    ['/internal/code/submit-phase2', false, 400, 'Submit-phase2 failed'],
+  ] as const)('preserves validation reporting ownership at %s (reported=%s)', async (url, alreadyReported, status, message) => {
+    vi.spyOn(directSubmission, 'submitDirectCodeTask').mockResolvedValue(err({ code: 'internal_error', message: 'Validation failed', alreadyReported }));
+    mockedSubmitToExecutionAgent.mockResolvedValue(err({ code: 'label_not_ready', message: 'Validation failed', alreadyReported }));
+    const info = vi.fn();
+    const warn = vi.fn();
+    const error = vi.fn();
+    server.addHook('onRequest', async (request) => {
+      vi.spyOn(request.log, 'info').mockImplementation(info);
+      vi.spyOn(request.log, 'warn').mockImplementation(warn);
+      vi.spyOn(request.log, 'error').mockImplementation(error);
+    });
+    const response = await server.inject({
+      method: 'POST', url,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: url === '/internal/code/submit'
+        ? { userId: 'test-user-id', prompt: 'Fix validation', linearIssueId: 'INT-123' }
+        : { userId: 'test-user-id', taskId: 'task-123' },
+    });
+    expect(response.statusCode).toBe(status);
+    expect(alreadyReported ? info : warn).toHaveBeenCalledWith(expect.any(Object), message);
+    if (alreadyReported) expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(response.json().error).not.toHaveProperty('alreadyReported');
+  });
+
   describe('POST /internal/code/submit-phase2 error branches', () => {
     it('returns 404 for task_not_found error', async () => {
       mockedSubmitToExecutionAgent.mockResolvedValue(err({

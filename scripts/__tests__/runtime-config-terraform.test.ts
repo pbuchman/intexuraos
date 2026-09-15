@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
-const terraformPath = resolve(repoRoot, 'terraform', 'environments', 'dev', 'main.tf');
+const terraformPath = resolve(repoRoot, 'terraform', 'shared-gcp', 'main.tf');
 const retainedGcpTerraformPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'retained-gcp.tf');
 const iamTerraformPath = resolve(repoRoot, 'terraform', 'modules', 'iam', 'main.tf');
 const iamVariablesPath = resolve(repoRoot, 'terraform', 'modules', 'iam', 'variables.tf');
@@ -26,8 +26,7 @@ const githubWifVariablesPath = resolve(
 const devTfvarsExamplePath = resolve(
   repoRoot,
   'terraform',
-  'environments',
-  'dev',
+  'shared-gcp',
   'terraform.tfvars.example'
 );
 const cloudFunctionTerraformPath = resolve(
@@ -48,8 +47,7 @@ const monitoringTerraformPath = resolve(repoRoot, 'terraform', 'modules', 'monit
 const geminiSecurityTerraformPath = resolve(
   repoRoot,
   'terraform',
-  'environments',
-  'dev',
+  'shared-gcp',
   'gemini-security.tf'
 );
 const hetznerBootstrapPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'bootstrap.tf');
@@ -435,11 +433,9 @@ describe('versioned runtime configuration Terraform cutover', () => {
 
     expect(terraform).toContain('versioned_runtime_config = {');
     expect(terraform).toContain(
-      'common = jsondecode(file("${path.module}/../../../config/environments/common.json"))'
+      'common = jsondecode(file("${path.module}/../../config/environments/common.json"))'
     );
-    expect(terraform).toContain(
-      'dev    = jsondecode(file("${path.module}/../../../config/environments/dev.json"))'
-    );
+    expect(terraform).not.toContain('config/environments/dev.json');
 
     expect(migratedSecretTombstones).toHaveLength(27);
     for (const secretName of migratedSecretTombstones) {
@@ -772,7 +768,6 @@ describe('versioned runtime configuration Terraform cutover', () => {
     const allowedReferrers = replacement.match(/allowed_referrers\s*=\s*\[([^\]]+)\]/su)?.[1];
     expect([...(allowedReferrers ?? '').matchAll(/"([^"]+)"/gu)].map((match) => match[1])).toEqual([
       'https://intexuraos.cloud/*',
-      'https://dev.intexuraos.cloud/*',
       'http://localhost:3000/*',
     ]);
     expect([...replacement.matchAll(/service\s*=\s*"([^"]+)"/gu)].map((match) => match[1])).toEqual(
@@ -818,7 +813,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     );
 
     expect(transcriptionModule).toContain(
-      'INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.dev["INTEXURAOS_SENTRY_DSN_DEV"]'
+      'INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.common["INTEXURAOS_SENTRY_DSN_DEV"]'
     );
     expect(transcriptionModule).not.toContain(
       'INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'

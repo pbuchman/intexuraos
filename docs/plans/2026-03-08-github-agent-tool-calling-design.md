@@ -258,7 +258,7 @@ The GitHub Agent is a **platform-level operation** triggered by webhooks, not a 
 
 **New env var required:** `INTEXURAOS_GEMINI_APP_API_KEY` must be added to:
 1. `apps/code-agent/src/index.ts` `REQUIRED_ENV` array
-2. `terraform/environments/dev/main.tf` (code-agent service env vars)
+2. `terraform/shared-gcp/main.tf` (code-agent service env vars)
 3. `ecosystem.config.cjs` (code-agent app config)
 
 ## GitHub Agent (code-agent)
@@ -1485,7 +1485,7 @@ Verdict rules:
 | `apps/code-agent/src/routes/webhookRoutes.ts`                   | Add `review_*` fields to `TaskCompleteWebhookBody.result` type (line 40)                                        |
 | `apps/code-agent/src/infra/services/taskDispatcherImpl.ts`      | Add `'review'` to `CreateTaskRequestInput.agentType`                                                            |
 | `firestore.indexes.json`                                        | Add composite index: `code_tasks(repository, prNumber, agentType, status)` for `findActiveReviewForPR()`        |
-| `terraform/environments/dev/main.tf`                            | Add `INTEXURAOS_GEMINI_APP_API_KEY` to code-agent env vars (INTEXURAOS_GITHUB_BOT_TOKEN removed)                |
+| `terraform/shared-gcp/main.tf`                            | Add `INTEXURAOS_GEMINI_APP_API_KEY` to code-agent env vars (INTEXURAOS_GITHUB_BOT_TOKEN removed)                |
 | `ecosystem.config.cjs`                                          | Add `INTEXURAOS_GEMINI_APP_API_KEY` to code-agent config (INTEXURAOS_GITHUB_BOT_TOKEN removed)                  |
 
 ### Orchestrator Changes

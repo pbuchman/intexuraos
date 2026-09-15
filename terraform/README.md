@@ -7,8 +7,9 @@ service-account private key material.
 
 ## Environment Model
 
-`terraform/environments/dev/` is the retained GCP control plane for local,
-home-dev, production, and the retained workers. The legacy project name does
+`terraform/shared-gcp/` is the retained GCP control plane for local,
+production, and the retained workers. The backend bucket, state prefix, resource
+addresses, and physical names remain unchanged. The legacy project name does
 not mean production has a separate GCP project. Hetzner production host
 infrastructure lives in `terraform/hetzner-prod/`.
 
@@ -16,7 +17,7 @@ infrastructure lives in `terraform/hetzner-prod/`.
 
 ```text
 terraform/
-├── environments/dev/       # Retained shared GCP project
+├── shared-gcp/              # Retained shared GCP project
 ├── hetzner-prod/            # Hetzner VM/bootstrap/deploy integration
 ├── modules/
 │   ├── artifact-registry/
@@ -49,7 +50,7 @@ plan:
 ```bash
 gcloud auth list --filter=status:ACTIVE --format='value(account)'
 gcloud config get-value project
-cd terraform/environments/dev
+cd terraform/shared-gcp
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform init
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform plan
 ```

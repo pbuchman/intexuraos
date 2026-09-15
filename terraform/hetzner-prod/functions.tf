@@ -1,6 +1,6 @@
 # Cloud Functions remain in GCP for the Hetzner cutover. This root records the
 # continuity contract without re-owning function resources already managed by
-# terraform/environments/dev/main.tf.
+# terraform/shared-gcp/main.tf.
 
 locals {
   retained_gcp_function_pubsub_topics = {

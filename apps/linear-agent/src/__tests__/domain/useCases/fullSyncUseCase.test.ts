@@ -65,6 +65,23 @@ describe('fullSync', () => {
   });
 
   describe('successful sync', () => {
+    it.each([502, undefined])('reports evidence once and keeps it out of the public error (status %s)', async (statusCode) => {
+      const diagnostics = {
+        message: 'Linear listIssues failed: NetworkError',
+        operation: 'listIssues.fetchPage',
+        ...(statusCode === undefined ? {} : { statusCode }),
+      };
+      linearClient.setFailure(true, { code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable', diagnostics });
+      const logError = vi.spyOn(deps.logger, 'error');
+      const result = await fullSyncAllUsers({ ...deps, getAllConnectedUserIds: async () => ({ ok: true, value: [userId] }) });
+      expect(result).toEqual({ ok: false, error: { code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' } });
+      const reports = logError.mock.calls.filter(([context]) => !(context as { _skipSentry?: boolean })._skipSentry);
+      expect(reports).toHaveLength(1);
+      expect(reports[0]?.[0]).toEqual({
+        err: new Error(diagnostics.message), code: 'UPSTREAM_UNAVAILABLE', operation: diagnostics.operation, userId,
+        ...(statusCode === undefined ? {} : { statusCode }),
+      });
+    });
     it('syncs all issues from Linear API', async () => {
       linearClient.seedIssue(createTestApiIssue({ id: 'issue-1', identifier: 'INT-1' }));
       linearClient.seedIssue(createTestApiIssue({ id: 'issue-2', identifier: 'INT-2' }));
@@ -177,6 +194,34 @@ describe('fullSync', () => {
   });
 
   describe('error handling', () => {
+    it('keeps synced issues and reports a failed summary notification', async () => {
+      const notificationError = new Error('Summary service unavailable');
+      const notify = vi
+        .spyOn(codeAgentClient, 'notifyGroupSummaryRecompute')
+        .mockRejectedValueOnce(notificationError);
+      const warn = vi.spyOn(deps.logger, 'warn');
+      linearClient.seedIssue(
+        createTestApiIssue({
+          labels: [{ id: 'label-1', name: 'bug', color: '#ff0000' }],
+        })
+      );
+
+      const result = await fullSync(userId, deps);
+
+      expect(result.ok).toBe(true);
+      expect(issueRepo.count).toBe(1);
+      expect(notify).toHaveBeenCalledWith({
+        userId,
+        linearIssueId: 'INT-123',
+        labels: [{ id: 'label-1', name: 'bug' }],
+        sourceTimestamp: '2025-01-02T00:00:00.000Z',
+      });
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        { error: notificationError, linearIssueId: 'INT-123' },
+        'Failed to notify code-agent of label change'
+      );
+    });
+
     it('returns NOT_CONNECTED when user has no connection', async () => {
       connectionRepo.reset(); // Remove all connections
 
@@ -188,16 +233,25 @@ describe('fullSync', () => {
       }
     });
 
-    it('returns error when API call fails', async () => {
-      linearClient.setFailure(true, { code: 'API_ERROR', message: 'API unavailable' });
+    it.each(['API_ERROR', 'UPSTREAM_UNAVAILABLE'] as const)(
+      'reports failed syncs when the API returns %s',
+      async (code) => {
+        const error = { code, message: 'API unavailable' };
+        linearClient.setFailure(true, error);
+        const logError = vi.spyOn(deps.logger, 'error');
 
-      const result = await fullSync(userId, deps);
+        const result = await fullSync(userId, deps);
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe(code);
+        }
+        expect(logError).toHaveBeenCalledExactlyOnceWith(
+          { err: new Error(`Linear fullSync failed: ${code}`), code, operation: 'fullSync', userId },
+          'Failed to sync Linear issues'
+        );
       }
-    });
+    );
 
     it('returns error when connection repo fails', async () => {
       connectionRepo.setGetFullConnectionFailure(true);

@@ -129,7 +129,7 @@ appears in `protected-digests.json`.
 Dry-run first:
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform init

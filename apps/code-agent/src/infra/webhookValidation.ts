@@ -168,8 +168,13 @@ export async function validateWebhookSignature(
     return err({ code: 'unknown_task', message: `Task not found or has no webhook secret: ${taskId}` });
   }
 
-  // Compute expected signature
-  const rawBody = JSON.stringify(request.body);
+  // Verify the bytes captured by the JSON parser, before schema coercion.
+  // Re-serializing the parsed body can change the payload the orchestrator signed.
+  const attachedRaw = (request as unknown as { rawBody?: unknown }).rawBody;
+  const rawBody =
+    typeof attachedRaw === 'string'
+      ? attachedRaw
+      : JSON.stringify(request.body);
   /* v8 ignore start -- upstream: Fastify always produces non-empty header arrays — cannot simulate empty Array.isArray-true header @preserve */
   const timestampStr = Array.isArray(timestamp) ? timestamp[0] ?? '' : timestamp;
   /* v8 ignore stop @preserve */
@@ -193,4 +198,3 @@ export async function validateWebhookSignature(
 
   return ok(undefined);
 }
-

@@ -140,7 +140,10 @@ deploy_release() {
 
   run_remote_at "${REMOTE_RELEASE_DIR}" 'corepack enable && CI=true pnpm install --frozen-lockfile'
 
-  # This is intentionally destructive. Any failure after this boundary is fixed forward.
+  run_remote_at "${REMOTE_RELEASE_DIR}" \
+    "sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --validate-only --version ${package_version_quoted}"
+
+  # Candidate admission is complete. Any failure after this destructive boundary is fixed forward.
   run_remote_at "${REMOTE_RELEASE_DIR}" \
     "pm2 delete all >/dev/null 2>&1 || true; sudo -n systemctl stop alloy.service >/dev/null 2>&1 || true; ln -sfn ${release_dir_quoted} ${current_link_quoted}"
 
@@ -161,7 +164,6 @@ deploy_release() {
 
   publish_deployment_metadata
   verify_remote_runtime
-  delete_obsolete_releases
 }
 
 publish_deployment_metadata() {
@@ -188,24 +190,6 @@ NODE
 sudo -n systemctl is-active --quiet nginx
 sudo -n systemctl is-active --quiet alloy.service
 curl --fail --silent --show-error --max-time 10 http://127.0.0.1:12345/-/ready >/dev/null"
-}
-
-delete_obsolete_releases() {
-  run_remote_at "${REMOTE_RELEASE_DIR}" "node --input-type=module - '${REMOTE_REPO_DIR%/}/releases' '${COMMIT_SHA_VALUE}' '/var/www/intexuraos/web/releases' <<'NODE'
-import { lstatSync, readdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-const [codeRoot, keep, webRoot] = process.argv.slice(2);
-for (const root of [codeRoot, webRoot]) {
-  for (const name of readdirSync(root)) {
-    if (name === keep) continue;
-    if (!/^[0-9a-f]{40}$/u.test(name)) process.exit(1);
-    const path = join(root, name);
-    const status = lstatSync(path);
-    if (!status.isDirectory() || status.isSymbolicLink()) process.exit(1);
-    rmSync(path, { recursive: true });
-  }
-}
-NODE"
 }
 
 verify_public_runtime() {
@@ -238,4 +222,6 @@ main() {
     "${COMMIT_SHA_VALUE}" "${SECRET_PACKAGE_VERSION}"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

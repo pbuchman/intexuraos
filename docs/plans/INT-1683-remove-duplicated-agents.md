@@ -427,7 +427,7 @@ Initial cleanup surfaces found on the updated branch:
 - Modify: `apps/web/service-manifest.json`
 - Regenerate: `apps/web/src/config.generated.ts`
 - Regenerate: `ecosystem.generated.cjs`
-- Regenerate: `terraform/environments/dev/service-urls.auto.tfvars.json`
+- Regenerate: `terraform/shared-gcp/service-urls.auto.tfvars.json`
 - Modify: web tests for removed pages, services, config, and devbar tabs.
 
 **Interfaces:**
@@ -492,7 +492,7 @@ Initial cleanup surfaces found on the updated branch:
   Run:
 
   ```bash
-  rg -n "commands-agent|actions-agent|COMMANDS_AGENT|ACTIONS_AGENT|commandsAgent|actionsAgent|Commands Agent|Actions Agent|commandsAgentServiceUrl|actionsAgentUrl|commandsApi|ActionDetailModal|CommandDetailModal|ActionItem|CommandItem|ConfigurableActionButton|useActionConfig|conditionEvaluator|actionExecutor|useActionChanges|useCommandChanges|collection\\(db, 'commands'|collection\\(db, 'actions'|action-config|Voice-First|voice note|voice command|voice commands|approval-gated" apps/web ecosystem.generated.cjs terraform/environments/dev/service-urls.auto.tfvars.json
+  rg -n "commands-agent|actions-agent|COMMANDS_AGENT|ACTIONS_AGENT|commandsAgent|actionsAgent|Commands Agent|Actions Agent|commandsAgentServiceUrl|actionsAgentUrl|commandsApi|ActionDetailModal|CommandDetailModal|ActionItem|CommandItem|ConfigurableActionButton|useActionConfig|conditionEvaluator|actionExecutor|useActionChanges|useCommandChanges|collection\\(db, 'commands'|collection\\(db, 'actions'|action-config|Voice-First|voice note|voice command|voice commands|approval-gated" apps/web ecosystem.generated.cjs terraform/shared-gcp/service-urls.auto.tfvars.json
   ```
 
   Expected after cleanup: no matches.
@@ -594,8 +594,8 @@ Initial cleanup surfaces found on the updated branch:
 - Modify: `ecosystem.config.cjs`
 - Modify: `ecosystem.config.prod.cjs`
 - Modify: `ecosystem.generated.cjs`
-- Modify: `terraform/environments/dev/main.tf`
-- Modify: `terraform/environments/dev/service-urls.auto.tfvars.json`
+- Modify: `terraform/shared-gcp/main.tf`
+- Modify: `terraform/shared-gcp/service-urls.auto.tfvars.json`
 - Modify: `terraform/hetzner-prod/main.tf`
 - Modify: `terraform/hetzner-prod/pubsub.tf` if present.
 - Modify: `terraform/hetzner-prod/retained-gcp.tf`

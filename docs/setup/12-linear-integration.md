@@ -41,21 +41,11 @@ Webhooks enable real-time synchronization when issues are created, updated, or d
 | Environment          | Webhook URL                                             |
 | -------------------- | ------------------------------------------------------- |
 | Production           | `https://intexuraos.cloud/api/linear/webhooks`          |
-| Retained DEV recovery | `https://dev.intexuraos.cloud/api/linear/webhooks`     |
 
-The workspace webhook must normally target production. The retained DEV recovery URL exists only
-for a separately authorized recovery drill and returns `503` while DEV is hibernated. Do not
-create, enable, or repoint a Linear producer to DEV outside that reviewed resume window; restore
-the production target before re-hibernation.
+The workspace webhook targets production. Local tests use fixtures and do not
+repoint the live workspace webhook.
 
-> **Note:** Linear requires an HTTPS public URL. For one-off tunnel testing, use a tunnel service like ngrok:
->
-> ```bash
-> ngrok http 8126
-> # Use the generated https URL + /webhooks
-> ```
-
-### Step 2.2: Configure Webhook in Linear
+## Step 2.2: Configure Webhook in Linear
 
 1. Go to [Linear Settings](https://linear.app/settings) → **API** → **Webhooks**
 2. Click **New webhook**

@@ -1,5 +1,5 @@
-# IntexuraOS Dev Environment
-# This is the main entry point for the dev environment.
+# IntexuraOS Shared GCP Infrastructure
+# Shared retained GCP resources for production and local development.
 
 terraform {
   required_version = ">= 1.5.0"
@@ -163,12 +163,6 @@ variable "slack_channel_name" {
   default     = "#alerts"
 }
 
-variable "service_urls" {
-  description = "Generated service URL map emitted from apps/web/service-manifest.json for drift visibility."
-  type        = map(string)
-  default     = {}
-}
-
 # -----------------------------------------------------------------------------
 # Data Sources
 # -----------------------------------------------------------------------------
@@ -185,8 +179,7 @@ locals {
   project_number = data.google_project.current.number
 
   versioned_runtime_config = {
-    common = jsondecode(file("${path.module}/../../../config/environments/common.json"))
-    dev    = jsondecode(file("${path.module}/../../../config/environments/dev.json"))
+    common = jsondecode(file("${path.module}/../../config/environments/common.json"))
   }
 
   services = {
@@ -397,7 +390,6 @@ resource "google_apikeys_key" "firebase_browser_replacement" {
     browser_key_restrictions {
       allowed_referrers = [
         "https://intexuraos.cloud/*",
-        "https://dev.intexuraos.cloud/*",
         "http://localhost:3000/*",
       ]
     }
@@ -431,7 +423,7 @@ resource "google_apikeys_key" "firebase_browser_replacement" {
 # -----------------------------------------------------------------------------
 
 module "artifact_registry" {
-  source = "../../modules/artifact-registry"
+  source = "../modules/artifact-registry"
 
   project_id                            = var.project_id
   region                                = var.region
@@ -450,7 +442,7 @@ module "artifact_registry" {
 # -----------------------------------------------------------------------------
 
 module "static_assets" {
-  source = "../../modules/static-assets"
+  source = "../modules/static-assets"
 
   project_id  = var.project_id
   region      = var.region
@@ -465,7 +457,7 @@ module "static_assets" {
 # -----------------------------------------------------------------------------
 
 module "shared_content" {
-  source = "../../modules/shared-content"
+  source = "../modules/shared-content"
 
   project_id  = var.project_id
   region      = var.region
@@ -483,7 +475,7 @@ module "shared_content" {
 # -----------------------------------------------------------------------------
 
 module "whatsapp_media_bucket" {
-  source = "../../modules/whatsapp-media-bucket"
+  source = "../modules/whatsapp-media-bucket"
 
   project_id               = var.project_id
   region                   = var.region
@@ -502,7 +494,7 @@ module "whatsapp_media_bucket" {
 # -----------------------------------------------------------------------------
 
 module "generated_images_bucket" {
-  source = "../../modules/generated-images-bucket"
+  source = "../modules/generated-images-bucket"
 
   project_id                    = var.project_id
   region                        = var.region
@@ -522,7 +514,7 @@ module "generated_images_bucket" {
 # -----------------------------------------------------------------------------
 
 module "firestore" {
-  source = "../../modules/firestore"
+  source = "../modules/firestore"
 
   project_id  = var.project_id
   region      = var.region
@@ -538,7 +530,7 @@ module "firestore" {
 # Terraform owns containers and IAM only. Package/native values and versions are
 # published outside Terraform so secret material never enters Terraform state.
 module "secret_manager" {
-  source = "../../modules/secret-manager"
+  source = "../modules/secret-manager"
 
   project_id  = var.project_id
   environment = var.environment
@@ -787,7 +779,7 @@ resource "google_storage_bucket_iam_member" "hetzner_runtime_bucket_object_admin
 # -----------------------------------------------------------------------------
 
 module "iam" {
-  source = "../../modules/iam"
+  source = "../modules/iam"
 
   project_id  = var.project_id
   environment = var.environment
@@ -804,7 +796,7 @@ module "iam" {
 # -----------------------------------------------------------------------------
 
 module "claude_code_dev" {
-  source = "../../modules/claude-code-dev"
+  source = "../modules/claude-code-dev"
 
   project_id = var.project_id
 
@@ -894,7 +886,7 @@ resource "google_pubsub_topic_iam_member" "message_digest_publishes_runs" {
 # Deliberately has no subscription: one redacted message proves that a staged
 # runtime credential can publish without invoking a production consumer.
 module "pubsub_runtime_credential_canary" {
-  source = "../../modules/pubsub-topic"
+  source = "../modules/pubsub-topic"
 
   project_id = var.project_id
   topic_name = "intexuraos-runtime-credential-canary-${var.environment}"
@@ -905,7 +897,7 @@ module "pubsub_runtime_credential_canary" {
 
 # Topic for media cleanup events (whatsapp message deletion)
 module "pubsub_media_cleanup" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -930,7 +922,7 @@ module "pubsub_media_cleanup" {
 
 # Topic for WhatsApp webhook async processing (fast operations)
 module "pubsub_whatsapp_webhook_process" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1028,7 +1020,7 @@ resource "google_pubsub_subscription" "transcription_dlq_inspect" {
 
 # Topic for intex-agent WhatsApp Assistant message ingest (whatsapp -> intex-agent)
 module "pubsub_intex_message_ingest" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1053,7 +1045,7 @@ module "pubsub_intex_message_ingest" {
 
 # Topic for research processing (research-agent async research)
 module "pubsub_research_process" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1078,7 +1070,7 @@ module "pubsub_research_process" {
 
 # Topic for LLM analytics reporting (research-agent -> user-service)
 module "pubsub_llm_analytics" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1103,7 +1095,7 @@ module "pubsub_llm_analytics" {
 
 # Topic for individual LLM research calls (research-agent -> research-agent)
 module "pubsub_llm_call" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1128,7 +1120,7 @@ module "pubsub_llm_call" {
 
 # Topic for sending WhatsApp messages (research-agent, code-agent, intex-agent -> whatsapp-service)
 module "pubsub_whatsapp_send" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1169,7 +1161,7 @@ resource "google_pubsub_topic_iam_member" "message_digest_publishes_whatsapp" {
 
 # Pub/Sub for bookmark enrichment (link preview fetching)
 module "pubsub_bookmark_enrich" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1194,7 +1186,7 @@ module "pubsub_bookmark_enrich" {
 
 # Pub/Sub for bookmark summarization (AI summary generation)
 module "pubsub_bookmark_summarize" {
-  source = "../../modules/pubsub-push"
+  source = "../modules/pubsub-push"
 
   project_id               = var.project_id
   project_number           = local.project_number
@@ -1227,7 +1219,7 @@ module "pubsub_bookmark_summarize" {
 # -----------------------------------------------------------------------------
 
 module "cloud_build" {
-  source = "../../modules/cloud-build"
+  source = "../modules/cloud-build"
 
   project_id                 = var.project_id
   region                     = var.region
@@ -1264,7 +1256,7 @@ resource "google_secret_manager_secret_iam_member" "cloud_build_connection_oauth
 # -----------------------------------------------------------------------------
 
 module "github_wif" {
-  source = "../../modules/github-wif"
+  source = "../modules/github-wif"
 
   project_id                       = var.project_id
   github_owner                     = var.github_owner
@@ -1285,7 +1277,7 @@ module "github_wif" {
 # -----------------------------------------------------------------------------
 
 module "monitoring" {
-  source = "../../modules/monitoring"
+  source = "../modules/monitoring"
 
   project_id         = var.project_id
   environment        = var.environment
@@ -1477,7 +1469,7 @@ resource "google_pubsub_topic_iam_member" "transcription_publishes_completed" {
 }
 
 module "function_transcription" {
-  source = "../../modules/cloud-function"
+  source = "../modules/cloud-function"
 
   project_id    = var.project_id
   region        = var.region
@@ -1510,7 +1502,7 @@ module "function_transcription" {
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = google_pubsub_topic.transcription_completed.name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC       = google_pubsub_topic.transcription_dlq.name
-    INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.dev["INTEXURAOS_SENTRY_DSN_DEV"]
+    INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.common["INTEXURAOS_SENTRY_DSN_DEV"]
     INTEXURAOS_USER_SERVICE_URL                     = "${local.public_origin}/api/user"
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
   }

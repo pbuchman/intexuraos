@@ -151,7 +151,7 @@
 ### Task 8: Declare and load production corpus secrets
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `scripts/hetzner/load-secrets.sh`
 - Test: `scripts/__tests__/hetzner-runtime.test.ts`
 

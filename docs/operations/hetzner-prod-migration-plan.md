@@ -31,7 +31,7 @@ replacement PR, then close it without merging.
 2. Create `feature/int-1637-hetzner-migration-integration`.
 3. Merge #2095, #2098, #2097, and #2099 in that order.
 4. Resolve conflicts by keeping `terraform/hetzner-prod` as the Hetzner
-   production root and leaving `terraform/environments/dev` as the retained GCP
+   production root and leaving `terraform/shared-gcp` as the retained GCP
    root.
 5. Remove duplicate dev-root `hetzner_edge_origin` retargeting. Staged async
    cutover belongs to `terraform/hetzner-prod` through
@@ -98,7 +98,7 @@ replacement PR, then close it without merging.
   resources remain available for rollback.
 - `api-docs-hub remains local-only on Hetzner` at PM2 port 8133 during this
   cutover; no public Hetzner route replaces it in this PR.
-- `terraform/environments/dev` remains the retained GCP source of truth.
+- `terraform/shared-gcp` remains the retained GCP source of truth.
 - No migration or DNS cutover is performed by this PR.
 
 ## Pre-Migration Verification
@@ -190,14 +190,14 @@ sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
    `intexuraos.cloud` as a new version of
    `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN`; do not reuse
    `INTEXURAOS_CLOUDFLARE_API_TOKEN`.
-7. After DNS is moved to Hetzner, apply `terraform/environments/dev` with
+7. After DNS is moved to Hetzner, apply `terraform/shared-gcp` with
    `enable_load_balancer=false` to remove only the legacy GCP web load-balancer
    edge: forwarding rules, target proxies, URL maps, backend buckets, global
    address, and load-balancer certificate. Retained GCS buckets and Firestore
    must remain untouched.
 8. Before activation, disable the old Cloud Run-targeted Pub/Sub push consumers
    and pause the old app-targeted Cloud Scheduler jobs in coordination with
-   `terraform/environments/dev`. This prevents duplicate processing when
+   `terraform/shared-gcp`. This prevents duplicate processing when
    `activate_hetzner_async_consumers=true` is applied. Do not disable the
    retained audio-stored -> transcription Cloud Function subscription.
 9. Activate async consumers only after `/internal/*` smoke tests pass. After
@@ -251,7 +251,7 @@ GCP paths:
    only for rollback to pause Hetzner Scheduler jobs and reinstate the Pub/Sub
    staging filter.
 2. Before moving traffic back, restore the old Cloud Run-targeted Pub/Sub push consumers
-   and unpause the old app-targeted Cloud Scheduler jobs in `terraform/environments/dev`
+   and unpause the old app-targeted Cloud Scheduler jobs in `terraform/shared-gcp`
    or the recorded operational rollback commands.
 3. Restore Cloudflare DNS records to the recorded GCP load balancer IP only if
    the legacy GCP load balancer is recreated first with

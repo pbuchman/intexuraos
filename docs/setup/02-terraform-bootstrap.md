@@ -11,7 +11,7 @@ This document describes how to initialize and apply Terraform configuration for 
 ## 1. Configure Terraform Variables
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 
 # Copy example tfvars
 cp terraform.tfvars.example terraform.tfvars
@@ -282,7 +282,7 @@ Error: Error waiting for Updating Service: Image '...:abc123...' not found.
 1. **Refresh state from GCP** (Recommended):
 
    ```bash
-   cd terraform/environments/dev
+   cd terraform/shared-gcp
    terraform refresh
    terraform apply
    ```

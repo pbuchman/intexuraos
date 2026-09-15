@@ -27,7 +27,7 @@
 - `apps/code-agent/src/routes/webhooks/prTriagePubsubRoute.ts` — Fastify plugin registering `POST /internal/code/pubsub/pr-triage`
 - `apps/code-agent/src/__tests__/routes/webhooks/prTriagePubsubRoute.test.ts` — route tests
 - `apps/code-agent/src/routes/webhooks/pubsubHelpers.ts` — shared `authenticatePubSub` + `decodePubSubMessage` helpers (copied/adapted from `apps/bookmarks-agent/src/routes/pubsubHelpers.ts` because routes can't cross-import between apps)
-- `terraform/environments/dev/pubsub_pr_triage.tf` — new Terraform file invoking the `pubsub-push` module
+- `terraform/shared-gcp/pubsub_pr_triage.tf` — new Terraform file invoking the `pubsub-push` module
 
 **Modify:**
 - `packages/infra-pubsub/src/types.ts` — add `PRTriageEvent` and `PRTriagePublisherConfig` types
@@ -38,7 +38,7 @@
 - `apps/code-agent/src/routes/webhooks/github.ts` (lines 636–647) — replace the `void unifiedEvaluator.evaluate(...)` block with a `prTriagePublisher.publishPRTriage({ eventId: savedEvent.id, ... })` call (still fire-and-forget for the webhook response, but the publish is fast and the work itself runs in a separate request)
 - `apps/code-agent/src/routes/webhooks/index.ts` (or wherever webhook plugins are registered) — register the new `prTriagePubsubRoute`
 - `ecosystem.config.cjs` — add `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC` for `code-agent`
-- `terraform/environments/dev/main.tf` — add `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC` to code-agent's `env_vars`
+- `terraform/shared-gcp/main.tf` — add `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC` to code-agent's `env_vars`
 
 **No changes:** `unifiedEvaluator.ts`, `createReviewTask.ts`, `automationCommentRenderer.ts`, `gitHubWebhookRules.ts`, `firestore-collections.json` (collection ownership unchanged).
 
@@ -1034,13 +1034,13 @@ git commit -m "feat(code-agent): add /internal/code/pubsub/pr-triage push handle
 ### Task 8: Add the Terraform topic + push subscription
 
 **Files:**
-- Create: `terraform/environments/dev/pubsub_pr_triage.tf`
-- Modify: `terraform/environments/dev/main.tf` — add `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC` to code-agent's `env_vars` block
+- Create: `terraform/shared-gcp/pubsub_pr_triage.tf`
+- Modify: `terraform/shared-gcp/main.tf` — add `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC` to code-agent's `env_vars` block
 
 - [ ] **Step 1: Locate code-agent's env_vars block and add the topic env var**
 
 ```bash
-rg -n "module \"code_agent\"|module.code_agent " terraform/environments/dev/main.tf | head -20
+rg -n "module \"code_agent\"|module.code_agent " terraform/shared-gcp/main.tf | head -20
 ```
 
 Find the `module "code_agent"` declaration and its `env_vars = merge(...)` block. Add:
@@ -1052,7 +1052,7 @@ INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC = "intexuraos-pr-triage-${var.environment}"
 - [ ] **Step 2: Create the Pub/Sub module invocation**
 
 ```terraform
-# terraform/environments/dev/pubsub_pr_triage.tf
+# terraform/shared-gcp/pubsub_pr_triage.tf
 # Topic + push subscription that decouples GitHub webhook ingestion from
 # unifiedEvaluator triage. Webhook publishes to this topic; the push
 # subscription invokes /internal/code/pubsub/pr-triage on code-agent so
@@ -1089,7 +1089,7 @@ module "pubsub_pr_triage" {
 - [ ] **Step 3: Format and validate Terraform**
 
 ```bash
-cd terraform/environments/dev && terraform fmt -check && terraform validate
+cd terraform/shared-gcp && terraform fmt -check && terraform validate
 ```
 
 Expected: no diff from `fmt`, `validate` succeeds. If `validate` complains about uninitialized providers, run `terraform init` first.
@@ -1097,7 +1097,7 @@ Expected: no diff from `fmt`, `validate` succeeds. If `validate` complains about
 - [ ] **Step 4: Plan against dev**
 
 ```bash
-cd terraform/environments/dev && terraform plan -out=/tmp/pr-triage.tfplan
+cd terraform/shared-gcp && terraform plan -out=/tmp/pr-triage.tfplan
 ```
 
 Expected output: `Plan: 4 to add, 1 to change, 0 to destroy.`
@@ -1109,7 +1109,7 @@ Inspect the diff to confirm no unexpected changes.
 - [ ] **Step 5: Commit (do not apply yet — apply happens in Task 10)**
 
 ```bash
-git add terraform/environments/dev/pubsub_pr_triage.tf terraform/environments/dev/main.tf
+git add terraform/shared-gcp/pubsub_pr_triage.tf terraform/shared-gcp/main.tf
 git commit -m "infra(terraform): provision PR triage topic + push subscription for code-agent"
 ```
 
@@ -1163,7 +1163,7 @@ Expected: PASS end-to-end. If it fails, fix the failure and re-run before applyi
 - [ ] **Step 2: Apply Terraform (after CI passes)**
 
 ```bash
-cd terraform/environments/dev && terraform apply /tmp/pr-triage.tfplan
+cd terraform/shared-gcp && terraform apply /tmp/pr-triage.tfplan
 ```
 
 Expected: `Apply complete! Resources: N added, 1 changed, 0 destroyed.` Confirm the `intexuraos-pr-triage-dev` topic exists:

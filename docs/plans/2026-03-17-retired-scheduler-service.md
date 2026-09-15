@@ -259,7 +259,7 @@ The `action.services` array on each schedule further restricts which service too
 
 > **Rationale:** Internal endpoints bypass user-level authorization — they trust the calling service. Exposing them all to user-defined schedules without operation filtering would let users drive privileged APIs outside their data scope. The operation-level allowlist mitigates this by restricting tool generation to explicitly approved, user-safe operations.
 
-**Env var three-location rule (CLAUDE.md):** Every new env var must appear in: (1) `apps/retired-scheduler-service/src/index.ts` `REQUIRED_ENV` / `PRODUCTION_ONLY_ENV`, (2) `terraform/environments/dev/main.tf` Cloud Run module env block, (3) `ecosystem.config.cjs` env section. The `INTEXURAOS_RETIRED_SCHEDULER_SERVICE_URL` env var must additionally be added to: (a) `ecosystem.config.cjs` `COMMON_SERVICE_URLS`, (b) `terraform/environments/dev/main.tf` in the web app module env block.
+**Env var three-location rule (CLAUDE.md):** Every new env var must appear in: (1) `apps/retired-scheduler-service/src/index.ts` `REQUIRED_ENV` / `PRODUCTION_ONLY_ENV`, (2) `terraform/shared-gcp/main.tf` Cloud Run module env block, (3) `ecosystem.config.cjs` env section. The `INTEXURAOS_RETIRED_SCHEDULER_SERVICE_URL` env var must additionally be added to: (a) `ecosystem.config.cjs` `COMMON_SERVICE_URLS`, (b) `terraform/shared-gcp/main.tf` in the web app module env block.
 
 - [ ] **Step 4: Create services.ts with DI container**
 
@@ -840,8 +840,8 @@ git commit -m "feat(retired-scheduler-service): add Firestore composite index mi
 ### Task 10: Terraform & Infrastructure
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf` — add retired-scheduler-service Cloud Run service and Cloud Scheduler job
-- Modify: `terraform/environments/dev/variables.tf` (if needed for new vars)
+- Modify: `terraform/shared-gcp/main.tf` — add retired-scheduler-service Cloud Run service and Cloud Scheduler job
+- Modify: `terraform/shared-gcp/variables.tf` (if needed for new vars)
 
 - [ ] **Step 1: Add retired-scheduler-service to services locals**
 
@@ -911,7 +911,7 @@ git commit -m "infra(retired-scheduler-service): add Cloud Run service, Cloud Sc
 **Important:** Must use repo-standard invocation with SA credentials and cleared emulator env vars (required by `.claude/hooks/validate-terraform.sh`):
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 
 # Init
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \

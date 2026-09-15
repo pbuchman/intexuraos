@@ -48,20 +48,10 @@ describe('web static artifact security', () => {
     expect(spawnSync(process.execPath, [verifier, fixture]).status).not.toBe(0);
   });
 
-  it('sets no-cache headers for HTML and service workers at both origins', () => {
-    const caddy = execFileSync(
-      process.execPath,
-      [resolve(repoRoot, 'scripts/generate-dev-caddy.mjs'), '--profile', 'active-post-cutover'],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      }
-    );
+  it('sets no-cache headers for HTML and service workers in production', () => {
     const nginx = readFileSync(resolve(repoRoot, 'scripts/hetzner/nginx/intexuraos.conf'), 'utf8');
     const noCache = 'no-cache, no-store, must-revalidate';
 
-    expect(caddy).toContain(`Cache-Control "${noCache}"`);
-    expect(caddy).toContain('path / /index.html /sw.js /manifest.webmanifest');
     expect(nginx).toMatch(
       new RegExp(`location / \\{[\\s\\S]*Cache-Control "${noCache}"[\\s\\S]*try_files`)
     );

@@ -7,6 +7,7 @@
  */
 
 import type { Result, Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type {
   LinearAgentClient,
@@ -22,6 +23,25 @@ import type {
   IssueContext,
 } from '../../../../domain/ports/linearAgentClient.js';
 import { fetchLinearAgent } from '../linear-fetch-util.js';
+
+function safeNetworkReason(error: unknown): string {
+  const reason = /\b(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT)\b/.exec(getErrorMessage(error))?.[0];
+  return reason ?? 'Network request failed';
+}
+
+function isReportedValidationFailure(status: number, errorText: string): boolean {
+  if (status !== 503) return false;
+  try {
+    const body: unknown = JSON.parse(errorText);
+    return typeof body === 'object' && body !== null &&
+      'success' in body && body.success === false &&
+      'error' in body && typeof body.error === 'object' && body.error !== null &&
+      'code' in body.error && body.error.code === 'SERVICE_UNAVAILABLE' &&
+      'message' in body.error && typeof body.error.message === 'string';
+  } catch {
+    return false;
+  }
+}
 
 export interface IssueEndpointsDeps {
   baseUrl: string;
@@ -190,7 +210,7 @@ export function createIssueEndpoints(deps: IssueEndpointsDeps): IssueEndpoints {
       if (result.kind === 'http-error') {
         if (result.status === 404) {
           logger.warn(
-            { identifier: request.identifier, error: result.errorText },
+            { identifier: request.identifier, statusCode: result.status },
             'Linear issue not found or wrong team'
           );
           return err({
@@ -198,25 +218,33 @@ export function createIssueEndpoints(deps: IssueEndpointsDeps): IssueEndpoints {
             message: `Issue ${request.identifier} not found or belongs to different team`,
           });
         }
+        const alreadyReported = isReportedValidationFailure(result.status, result.errorText);
         logger.error(
-          { status: result.status, error: result.errorText },
+          {
+            err: new Error(`linear-agent validateIssue failed (HTTP ${String(result.status)})`),
+            operation: 'validateIssue',
+            statusCode: result.status,
+            ...(alreadyReported
+              ? { [SKIP_SENTRY_KEY]: true }
+              : {}),
+          },
           'linear-agent validateIssue failed'
         );
-        return err({ code: 'UNAVAILABLE', message: result.errorText });
+        return err({ code: 'UNAVAILABLE', message: result.errorText, ...(alreadyReported ? { alreadyReported: true } : {}) });
       }
 
       if (result.kind === 'invalid-body') {
-        logger.error({ body: result.body }, 'Invalid response from linear-agent');
+        logger.error({ err: new Error('Invalid response from linear-agent'), code: 'INVALID_RESPONSE', operation: 'validateIssue' }, 'Invalid response from linear-agent');
         return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
       }
 
       if (result.kind === 'timeout') {
-        logger.error({ timeoutMs }, 'linear-agent request timed out');
+        logger.error({ err: new Error('linear-agent request timed out'), code: 'TIMEOUT', operation: 'validateIssue', timeoutMs }, 'linear-agent request timed out');
         return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
       }
 
       if (result.kind === 'network-error') {
-        logger.error({ error: result.error }, 'linear-agent validateIssue request failed');
+        logger.error({ err: new Error(safeNetworkReason(result.error)), code: 'NETWORK_ERROR', operation: 'validateIssue' }, 'linear-agent validateIssue request failed');
         return err({ code: 'UNKNOWN', message: getErrorMessage(result.error) });
       }
 
@@ -323,26 +351,37 @@ export function createIssueEndpoints(deps: IssueEndpointsDeps): IssueEndpoints {
       });
 
       if (result.kind === 'http-error') {
-        logger.warn(
-          { status: result.status, error: result.errorText },
-          'linear-agent fetchIssueForDisplay failed'
-        );
+        if (result.status === 404) {
+          logger.info(
+            { identifier: request.identifier, statusCode: 404 },
+            'Linear issue not synchronized locally; using notification title fallback'
+          );
+        } else {
+          logger.error(
+            {
+              err: new Error(`linear-agent fetchIssueForDisplay failed (HTTP ${String(result.status)})`),
+              operation: 'fetchIssueForDisplay',
+              statusCode: result.status,
+            },
+            'linear-agent fetchIssueForDisplay failed'
+          );
+        }
         return err({ code: 'UNAVAILABLE', message: result.errorText });
       }
 
       if (result.kind === 'invalid-body') {
-        logger.error({ body: result.body }, 'Invalid response from linear-agent');
+        logger.error({ err: new Error('Invalid response from linear-agent'), code: 'INVALID_RESPONSE', operation: 'fetchIssueForDisplay' }, 'Invalid response from linear-agent');
         return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
       }
 
       if (result.kind === 'timeout') {
-        logger.error({ timeoutMs }, 'linear-agent request timed out');
+        logger.error({ err: new Error('linear-agent request timed out'), code: 'TIMEOUT', operation: 'fetchIssueForDisplay', timeoutMs }, 'linear-agent request timed out');
         return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
       }
 
       if (result.kind === 'network-error') {
         logger.error(
-          { error: result.error },
+          { err: new Error(safeNetworkReason(result.error)), code: 'NETWORK_ERROR', operation: 'fetchIssueForDisplay' },
           'linear-agent fetchIssueForDisplay request failed'
         );
         return err({ code: 'UNKNOWN', message: getErrorMessage(result.error) });

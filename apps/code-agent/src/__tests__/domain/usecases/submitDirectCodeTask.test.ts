@@ -352,13 +352,14 @@ describe('submitDirectCodeTask', () => {
     );
   });
 
-  it('returns internal_error when a user-provided Linear issue cannot be validated', async () => {
-    const { deps, linearIssueService } = createDeps();
+  it.each([true, false, undefined])('returns internal_error without reporting an already-reported validation failure: %s', async (alreadyReported) => {
+    const { deps, logger, linearIssueService, codeTaskRepo, taskEnqueueService } = createDeps();
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
       linearIssueTitle: 'Fallback task',
       linearIssueLabels: [],
       hasChildren: false,
       linearFallback: true,
+      ...(alreadyReported !== undefined ? { linearFallbackAlreadyReported: alreadyReported } : {}),
     });
 
     const result = await submit(deps, { linearIssueId: 'INT-404' });
@@ -367,7 +368,17 @@ describe('submitDirectCodeTask', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('internal_error');
       expect(result.error.message).toContain('INT-404');
+      expect(result.error.alreadyReported === true).toBe(alreadyReported === true);
     }
+    expect(logger[alreadyReported === true ? 'info' : 'error']).toHaveBeenCalledWith(
+      { linearIssueId: 'INT-404' }, 'User-provided Linear issue could not be validated'
+    );
+    if (alreadyReported === true) {
+      expect(logger.error).not.toHaveBeenCalled();
+    }
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   it('maps repository duplicate and active-task errors from normal task creation', async () => {
@@ -606,8 +617,8 @@ describe('submitDirectCodeTask', () => {
     });
   });
 
-  it('returns queue_full when fan-out fallback enqueue is full', async () => {
-    const { deps, linearIssueService, linearAgentClient, taskEnqueueService } = createDeps();
+  it.each([true, false])('retains queue_full after fan-out validation fallback (already reported=%s)', async (alreadyReported) => {
+    const { deps, linearIssueService, linearAgentClient, taskEnqueueService, logger } = createDeps();
     vi.mocked(linearIssueService.ensureIssueExists).mockResolvedValueOnce({
       linearIssueId: 'INT-1',
       linearIssueTitle: 'Complex issue',
@@ -616,7 +627,7 @@ describe('submitDirectCodeTask', () => {
       linearFallback: false,
     });
     vi.mocked(linearAgentClient.validateIssue).mockResolvedValueOnce(
-      err({ code: 'UNAVAILABLE', message: 'Linear unavailable' })
+      err({ code: 'UNAVAILABLE', message: 'Linear unavailable', alreadyReported })
     );
     vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
       err({ code: 'queue_full', message: 'Queue full' })
@@ -624,6 +635,12 @@ describe('submitDirectCodeTask', () => {
 
     const result = await submit(deps, { taskMode: 'execution', linearIssueId: 'INT-1' });
 
+    if (alreadyReported) {
+      expect(logger.info).toHaveBeenCalledWith({ linearIssueId: 'INT-1', code: 'UNAVAILABLE' }, 'Fan-out validation failed, falling back to normal dispatch');
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.anything(), 'Fan-out failed, falling back to normal dispatch');
+    } else {
+      expect(logger.warn).toHaveBeenCalledWith(expect.anything(), 'Fan-out failed, falling back to normal dispatch');
+    }
     expect(result).toEqual({
       ok: false,
       error: {

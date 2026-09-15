@@ -209,7 +209,7 @@ interface TranscriptionPreferences {
 - Modify: `terraform/modules/pubsub/variables.tf`
 - Modify: `terraform/modules/pubsub/outputs.tf`
 - Modify: `terraform/modules/cloud-functions/main.tf`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `terraform/environments/prod/main.tf`
 
 ### Steps

@@ -15,16 +15,20 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Detect service directory (apps, workers, or packages)
+# Detect workspace directory (apps, workers, packages, or tools)
 if [ -d "$PROJECT_ROOT/apps/$WORKSPACE/src" ]; then
   SERVICE_DIR="apps/$WORKSPACE"
 elif [ -d "$PROJECT_ROOT/workers/$WORKSPACE/src" ]; then
   SERVICE_DIR="workers/$WORKSPACE"
 elif [ -d "$PROJECT_ROOT/packages/$WORKSPACE/src" ]; then
   SERVICE_DIR="packages/$WORKSPACE"
+elif [ "$WORKSPACE" = "intex-agent-evals" ] && [ -d "$PROJECT_ROOT/tools/$WORKSPACE/src" ]; then
+  SERVICE_DIR="tools/$WORKSPACE"
+elif [ "$WORKSPACE" = "whatsapp-private-matrix-sync" ] && [ -d "$PROJECT_ROOT/tools/$WORKSPACE/src" ]; then
+  SERVICE_DIR="tools/$WORKSPACE"
 else
   echo "ERROR: Cannot find workspace directory for $WORKSPACE"
-  echo "Looked in: apps/$WORKSPACE/src, workers/$WORKSPACE/src, packages/$WORKSPACE/src"
+  echo "Looked in: apps/$WORKSPACE/src, workers/$WORKSPACE/src, packages/$WORKSPACE/src, tools/$WORKSPACE/src"
   exit 1
 fi
 
@@ -48,6 +52,28 @@ if [ "$WORKSPACE" = "web" ]; then
   pnpm --filter @intexuraos/$WORKSPACE test
 
   echo ""
+  echo "=== All checks passed for $WORKSPACE ==="
+  exit 0
+fi
+
+# The evaluator retains its package's existing validation contract, including
+# scenario checks. Repository coverage targets apps, workers and packages.
+if [ "$SERVICE_DIR" = "tools/intex-agent-evals" ]; then
+  echo "=== Targeted Verification: $WORKSPACE ==="
+  pnpm --filter "@intexuraos/$WORKSPACE" --fail-if-no-match run validate
+  echo "=== All checks passed for $WORKSPACE ==="
+  exit 0
+fi
+
+# The Matrix adapter is a Node-only tool with native ESM source and node:test tests.
+if [ "$SERVICE_DIR" = "tools/whatsapp-private-matrix-sync" ]; then
+  echo "=== Targeted Verification: $WORKSPACE ==="
+
+  while IFS= read -r -d '' source_file; do
+    node --check "$source_file"
+  done < <(find "$SERVICE_DIR/src" -type f -name '*.mjs' -print0 | sort -z)
+
+  pnpm --filter "$WORKSPACE" --fail-if-no-match test
   echo "=== All checks passed for $WORKSPACE ==="
   exit 0
 fi

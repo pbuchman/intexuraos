@@ -1,8 +1,10 @@
 # Hetzner Production Runbook
 
 Production deployment is manual-only, exact-SHA, and fix-forward. Downtime is
-accepted. There is no release rollback, secret projection rollback, package
-history, automatic deploy, or compatibility path.
+accepted. There is no secret projection rollback, package history, automatic
+deploy, or compatibility path. Existing code and web release artifacts are
+retained for manual recovery while the active secret package stays current.
+Storage cleanup is separate from deployment and must be explicitly reviewed.
 
 ## Fixed Runtime
 
@@ -42,22 +44,31 @@ The deployment script:
 
 1. verifies the clean exact-SHA checkout;
 2. creates an immutable code release and installs dependencies;
-3. stops and deletes PM2 applications and stops Alloy;
-4. runs the one-shot exact-version package loader;
-5. builds and installs the static web;
-6. starts PM2, Alloy, and nginx;
-7. writes `/deployment.json` with commit SHA, workflow run, deployment time,
+3. validates the exact secret candidate in isolation;
+4. stops and deletes PM2 applications and stops Alloy;
+5. runs the one-shot exact-version package loader;
+6. builds and installs the static web;
+7. starts PM2, Alloy, and nginx;
+8. writes `/deployment.json` with commit SHA, workflow run, deployment time,
    and package version;
-8. verifies local and public health;
-9. destroys older code and web releases.
+9. verifies local and public health.
 
-Any failure leaves the affected service stopped. Fix the cause in a new
-reviewed commit or complete the failed operation on the same exact release;
-never select an old release or package version.
+Candidate validation failure happens before shutdown and leaves the active
+runtime, release links, and secret package unchanged. A later failure leaves the
+affected service stopped. Fix the cause in a new reviewed commit or complete the
+failed operation on the same exact release. Do not select an old secret package.
 
 ## One-Shot Secret Projection
 
-The loader may run only while PM2 and Alloy are stopped:
+The deployment first validates the package while PM2 and Alloy are still online:
+
+```bash
+sudo -n INTEXURAOS_ENVIRONMENT=prod \
+  bash scripts/hetzner/load-secrets.sh --validate-only --version <numeric-version>
+```
+
+This mode uses an isolated private render root and publishes nothing. The
+ordinary publication command may run only while PM2 and Alloy are stopped:
 
 ```bash
 sudo -n INTEXURAOS_ENVIRONMENT=prod \
@@ -66,9 +77,10 @@ sudo -n INTEXURAOS_ENVIRONMENT=prod \
 
 It validates the complete PROD package, provider credentials, file modes,
 owners, Firebase key presence, runtime service-account identity, TLS key, and
-Cloudflare DNS token before publishing stable files. It then removes its
-private render root and all old local projections. It has no `--activate`,
-`--rollback`, partial-secret, current-release, or previous-release mode.
+Cloudflare DNS token before publishing stable files. It then removes transient
+staging, obsolete secret renders, and old local projections. It has no
+`--activate`, `--rollback`, partial-secret, current-release, or previous-release
+mode.
 
 ## Required Verification
 
@@ -146,14 +158,18 @@ account JSON, TLS material, or private logs containing request credentials.
 
 ## Failure Handling
 
-- Before service stop: fix forward without changing the live runtime.
+- Before service stop: candidate rejection changes neither the live runtime nor
+  the active package or release links.
 - After service stop: keep the affected service stopped until the candidate is
   valid, then resume the same exact-SHA deployment.
 - After partial file publication: rerun the complete one-shot loader with the
   same reviewed numeric version; never repair one field manually.
 - After code admission: create a new reviewed fix commit and deploy it forward.
-- Never restore an old package, key, release, projection, Terraform state, or
-  public Vite server.
+- Never restore an old package, key, projection, or Terraform state. Existing
+  code and web artifacts remain available for a separately reviewed recovery
+  that keeps the active secret package unchanged. Delete release artifacts only
+  through a separate, deliberate storage-maintenance change; deployment never
+  prunes them.
 
 ## Endpoint Changes
 

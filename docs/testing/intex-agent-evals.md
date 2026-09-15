@@ -184,12 +184,8 @@ pnpm eval:intex-agent:matrix-corpus
 
 The production wrapper accepts only `matrix-corpus`. The Home Dev wrapper retains
 `setup`, `preflight`, `endpoint`, `full`, `scenario intex-eval-NNN`, and `matrix-smoke`.
-While the retained DEV profile has `MODE=hibernated`, every one of those legacy selectors exits
-before the checkout, `direnv`, or evaluator with the stable result `DEV_RUNTIME_HIBERNATED`.
-Running one requires the separately reviewed DEV resume workflow; never resume DEV merely to
-replace the supported production acceptance path. The private Home Dev transport used by the
-production `matrix-corpus` wrapper is exempt because it targets the production runtime and does
-not start DEV services.
+Local selectors require a deliberately started localhost stack. They do not
+start services. The production wrapper remains the production acceptance path.
 `scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any
 message send with `PRODUCTION_MATRIX_CORPUS_REQUIRED`.
 `scenario`, `endpoint`, `matrix-smoke`, and `full` are targeted legacy
