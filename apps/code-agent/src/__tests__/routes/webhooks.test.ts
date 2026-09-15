@@ -4745,6 +4745,12 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
 
     it.each([true, false])('keeps review completion successful when validation fails (already reported=%s)', async (alreadyReported) => {
+      const requestLog = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      app.addHook('onRequest', async (request) => {
+        vi.spyOn(request.log, 'info').mockImplementation(requestLog.info);
+        vi.spyOn(request.log, 'warn').mockImplementation(requestLog.warn);
+        vi.spyOn(request.log, 'error').mockImplementation(requestLog.error);
+      });
       await createOriginTask({ traceId: 'trace_label_validate_fail', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_validate_fail_review' });
       const payload = makeLabelPayload(reviewTask.id);
@@ -4764,6 +4770,20 @@ describe('POST /internal/webhooks/task-complete', () => {
           (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
       );
       expect(labelCalls).toHaveLength(0);
+      const logContext = {
+        taskId: reviewTask.id,
+        prNumber: 42,
+        linearIssueId: 'INT-500',
+        code: 'UNAVAILABLE',
+      };
+      const logMessage = 'Failed to validate issue for review-outcome label (best-effort)';
+      if (alreadyReported) {
+        expect(requestLog.info).toHaveBeenCalledWith(logContext, logMessage);
+        expect(requestLog.warn).not.toHaveBeenCalledWith(logContext, logMessage);
+        expect(requestLog.error).not.toHaveBeenCalledWith(logContext, logMessage);
+      } else {
+        expect(requestLog.warn).toHaveBeenCalledWith(logContext, logMessage);
+      }
     });
 
     it('logs error and succeeds when updateIssueMetadata fails', async () => {
