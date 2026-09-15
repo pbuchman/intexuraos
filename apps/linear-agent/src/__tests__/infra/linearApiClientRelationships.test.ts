@@ -4,6 +4,7 @@ import { clearClientCache, createLinearApiClient } from '../../infra/linear/line
 
 const mocks = vi.hoisted(() => ({
   issues: vi.fn(),
+  issue: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   sleep: vi.fn().mockResolvedValue(undefined),
@@ -13,7 +14,7 @@ vi.mock('node:timers/promises', () => ({ setTimeout: mocks.sleep }));
 vi.mock('@linear/sdk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@linear/sdk')>()),
   LinearClient: vi.fn(function LinearClient() {
-    return { issues: mocks.issues };
+    return { issues: mocks.issues, issue: mocks.issue };
   }),
 }));
 vi.mock('@intexuraos/infra-sentry', () => ({
@@ -187,5 +188,56 @@ describe('listIssues relationship retries', () => {
       value: [{ parentId: null, assignee: null, childCount: 0, labels: [] }],
     });
     expect(mocks.sleep).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('getIssueByIdentifier retries', () => {
+  beforeEach(() => {
+    clearClientCache();
+    vi.clearAllMocks();
+    mocks.issue.mockReset();
+  });
+  afterEach(() => { clearClientCache(); });
+
+  it('retries the initial read and relationship mapping with fresh SDK getters', async () => {
+    const { issue, reads } = createSdkIssue('issue-1');
+    Object.defineProperty(issue, 'team', { get: () => Promise.resolve({ id: 'team-1', name: 'Engineering' }) });
+    mocks.issue.mockRejectedValueOnce(unavailableError()).mockResolvedValue(issue);
+    reads.state.mockRejectedValueOnce(unavailableError());
+
+    const result = await createLinearApiClient().getIssueByIdentifier('api-key', 'ENG-123');
+
+    expect(result).toMatchObject({ ok: true, value: { id: 'issue-1', teamId: 'team-1' } });
+    expect(mocks.issue).toHaveBeenCalledTimes(3);
+    expect(reads.state).toHaveBeenCalledTimes(2);
+    expect(mocks.error).not.toHaveBeenCalled();
+    expect(mocks.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns safe diagnostics after exactly three failed reads without reporting twice', async () => {
+    mocks.issue.mockRejectedValue(unavailableError());
+    const result = await createLinearApiClient().getIssueByIdentifier('api-key', 'ENG-123');
+    expect(mocks.issue).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'UPSTREAM_UNAVAILABLE',
+        diagnostics: { message: 'Linear getIssueByIdentifier failed: NetworkError (HTTP 503)', operation: 'getIssueByIdentifier', statusCode: 503 },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('private response body');
+    expect(mocks.error).not.toHaveBeenCalled();
+    expect(mocks.warn).not.toHaveBeenCalled();
+  });
+
+  it('preserves not-found and does not retry permanent errors', async () => {
+    mocks.issue.mockRejectedValue(new Error('Entity not found'));
+    expect(await createLinearApiClient().getIssueByIdentifier('api-key', 'ENG-123')).toEqual({ ok: true, value: null });
+    expect(mocks.issue).toHaveBeenCalledTimes(1);
+    clearClientCache();
+    mocks.issue.mockReset().mockRejectedValue(new Error('Authentication failed'));
+    expect(await createLinearApiClient().getIssueByIdentifier('api-key', 'ENG-123')).toMatchObject({ ok: false });
+    expect(mocks.issue).toHaveBeenCalledTimes(1);
   });
 });

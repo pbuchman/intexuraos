@@ -197,7 +197,7 @@ ${feedback.trim()}
     if (validateIssueResult.ok) {
       linearIssueLabelsForDispatch = validateIssueResult.value.labels;
     } else {
-      logger.warn(
+      logger[validateIssueResult.error.alreadyReported === true ? 'info' : 'warn'](
         { linearIssueId: originalTask.linearIssueId },
         'Failed to fetch Linear issue labels for feedback dispatch'
       );

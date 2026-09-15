@@ -4744,14 +4744,18 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
-    it('logs error and succeeds when validateIssue fails', async () => {
+    it.each([true, false])('keeps review completion successful when validation fails (already reported=%s)', async (alreadyReported) => {
+      const infoSpy = vi.spyOn(logger, 'info');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const errorSpy = vi.spyOn(logger, 'error');
+      vi.spyOn(app.log, 'child').mockReturnValue(logger);
       await createOriginTask({ traceId: 'trace_label_validate_fail', agentType: 'execution' });
       const reviewTask = await createReviewTaskForLabel({ traceId: 'trace_label_validate_fail_review' });
       const payload = makeLabelPayload(reviewTask.id);
 
       const { linearAgentClient: lac } = getServices();
       vi.mocked(lac.validateIssue).mockResolvedValueOnce(
-        err({ code: 'NOT_FOUND' as const, message: 'Issue not found' })
+        err({ code: 'UNAVAILABLE' as const, message: 'Linear unavailable', alreadyReported })
       );
 
       const response = await sendLabelPayload(payload);
@@ -4764,6 +4768,23 @@ describe('POST /internal/webhooks/task-complete', () => {
           (call[0].addLabels.includes('ready-to-merge') || call[0].addLabels.includes('ready-to-implement'))
       );
       expect(labelCalls).toHaveLength(0);
+      const validationLog = [
+        expect.objectContaining({ taskId: reviewTask.id, code: 'UNAVAILABLE' }),
+        'Failed to validate issue for review-outcome label (best-effort)',
+      ];
+      if (alreadyReported) {
+        expect(infoSpy).toHaveBeenCalledWith(...validationLog);
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.anything(),
+          'Failed to validate issue for review-outcome label (best-effort)',
+        );
+        expect(errorSpy).not.toHaveBeenCalledWith(
+          expect.anything(),
+          'Failed to validate issue for review-outcome label (best-effort)',
+        );
+      } else {
+        expect(warnSpy).toHaveBeenCalledWith(...validationLog);
+      }
     });
 
     it('logs error and succeeds when updateIssueMetadata fails', async () => {

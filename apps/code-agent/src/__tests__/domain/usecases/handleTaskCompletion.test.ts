@@ -181,6 +181,54 @@ describe('handleTaskCompletion', () => {
     });
   });
 
+  it.each([true, false])('keeps failed enforcement visible without duplicating validation reports (validation=%s)', async (validationFails) => {
+    const requestLog = createMockLogger();
+    const update = vi.fn().mockResolvedValue(ok(undefined));
+    setServices({
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok({
+          userId: 'u1', repository: 'a/b', workerType: 'codex',
+          status: 'running', agentType: 'execution', linearIssueId: 'INT-1',
+        })),
+        update,
+      } as never,
+      linearAgentClient: {
+        validateIssue: vi.fn().mockResolvedValue(validationFails
+          ? err({ code: 'UNAVAILABLE', message: 'Linear API temporarily unavailable', alreadyReported: true })
+          : ok({ id: 'linear-uuid', labels: [] })),
+        addComment: vi.fn().mockResolvedValue(err({ code: 'UNAVAILABLE', message: 'Comment failed' })),
+      } as never,
+      logger: createMockLogger() as never,
+    } as unknown as ServiceContainer);
+
+    const input = buildInput({
+      taskId: 't-validation', status: 'completed',
+      result: { execution_outcome_label: 'already_completed', prUrl: 'https://github.com/a/b/pull/9' },
+    });
+    input.requestLog = requestLog;
+    const outcome = await handleTaskCompletion(requestLog, input);
+
+    expect(outcome).toEqual({ kind: 'received' });
+    expect(update).toHaveBeenCalledWith('t-validation', expect.objectContaining({
+      status: 'failed',
+      error: expect.objectContaining({ code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED' }),
+      callbackReceived: true,
+    }));
+    if (validationFails) {
+      expect(requestLog.info).toHaveBeenCalledWith(
+        { taskId: 't-validation', code: 'LINEAR_VALIDATION_FAILED' },
+        'Execution deterministic enforcement failed'
+      );
+      expect(requestLog.error).not.toHaveBeenCalled();
+      expect(requestLog.warn).not.toHaveBeenCalled();
+    } else {
+      expect(requestLog.error).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('Comment failed') }),
+        'Execution deterministic enforcement failed'
+      );
+    }
+  });
+
   describe('completed path — execution agent (memory queued + automation logged)', () => {
     const ORIGINAL_EXECUTION_MEMORY_ENABLED =
       process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];

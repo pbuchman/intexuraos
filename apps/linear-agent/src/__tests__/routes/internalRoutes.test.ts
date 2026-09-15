@@ -260,6 +260,27 @@ describe('internalRoutes', () => {
       expect(body.success).toBe(false);
     });
 
+    it('returns 503 for exhausted upstream failures without exposing diagnostics', async () => {
+      seedConnection('user-456');
+      fakeLinearClient.setFailure(true, {
+        code: 'UPSTREAM_UNAVAILABLE',
+        message: 'Linear API temporarily unavailable',
+        diagnostics: { message: 'NetworkError (HTTP 503)', operation: 'getIssueByIdentifier.mapIssue', statusCode: 503 },
+      });
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123/validate?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({
+        success: false,
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'Linear API temporarily unavailable' },
+      });
+      expect(response.json().error).not.toHaveProperty('diagnostics');
+      expect(response.body).not.toContain('NetworkError');
+    });
+
     it('handles Linear API errors', async () => {
       seedConnection('user-456');
       fakeLinearClient.setFailure(true, {
