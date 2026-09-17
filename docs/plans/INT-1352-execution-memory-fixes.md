@@ -433,7 +433,7 @@ POST /internal/execution-memory/sweep-errored
 
 **C. Wire up Cloud Scheduler** in Terraform:
 
-**File:** `terraform/environments/dev/main.tf`
+**File:** `terraform/shared-gcp/main.tf`
 
 Add a Cloud Scheduler job that hits the sweep endpoint every 6 hours.
 
@@ -600,7 +600,7 @@ Step 7 (corpus pruning) ───────────→ Deploy after Step 6
 | `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts`                | 4, 5, 7 | Indexed evaluator; sweep function; prune function                                                                                               |
 | `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts`                | 6       | Agent-type-specific threshold                                                                                                                   |
 | `apps/code-agent/src/routes/internalRoutes.ts`                                        | 5, 7    | New sweep + prune endpoints (add to existing file)                                                                                              |
-| `terraform/environments/dev/main.tf`                                                  | 5, 7    | Cloud Scheduler jobs                                                                                                                            |
+| `terraform/shared-gcp/main.tf`                                                  | 5, 7    | Cloud Scheduler jobs                                                                                                                            |
 | `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`             | 2       | Schema enforcement tests (existing file)                                                                                                        |
 | `workers/orchestrator/src/services/__tests__/task-dispatcher.test.ts`                 | 3       | Resume prompt tests (**create new** — follow `completion-verifier.test.ts` pattern for Vitest setup, imports, and DI scaffolding)               |
 | `apps/code-agent/src/domain/usecases/__tests__/processExecutionMemoryBacklog.test.ts` | 4, 5, 7 | Evaluator + sweep + prune tests (**create new** — follow `getLinearIssueContext.test.ts` pattern for Vitest setup, imports, and DI scaffolding) |

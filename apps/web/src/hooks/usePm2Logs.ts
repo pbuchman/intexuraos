@@ -27,10 +27,8 @@ interface SSEMessage {
 const MAX_LOGS = 500;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
 
-// Return full SSE endpoint URL in dev environments
+// Logs are available only in the manually started Vite stack.
 function getLogStreamUrl(): string | null {
-  // Dev machine (dev.intexuraos.cloud): through Caddy (/logs/stream → localhost:8106/stream)
-  if (import.meta.env['INTEXURAOS_ENVIRONMENT'] === 'development') return '/logs/stream';
   // Local Vite dev server: direct localhost access
   if (import.meta.env.DEV) return 'http://localhost:8106/stream';
   return null;

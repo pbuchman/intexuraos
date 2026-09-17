@@ -70,12 +70,29 @@ export default defineConfig(({ mode }) => {
   const buildInfo = getBuildInfo();
   const buildVersion = `${buildInfo.version}-${buildInfo.shortSha}`;
 
+  const userService = WEB_SERVICE_URLS.find(
+    ({ envVar }) => envVar === 'INTEXURAOS_USER_SERVICE_URL'
+  );
+  if (userService === undefined) {
+    throw new Error('User service is required for the localhost OAuth callback proxy');
+  }
+
   const apiProxy = Object.fromEntries(
     WEB_SERVICE_URLS.map(({ apiPath, proxyTarget }) => [
       apiPath,
-      { target: proxyTarget, rewrite: (path: string) => path.replace(new RegExp(`^${apiPath}`), '') },
+      {
+        target: proxyTarget,
+        rewrite: (path: string) => path.replace(new RegExp(`^${apiPath}`), ''),
+      },
     ])
   );
+  const proxy = {
+    ...apiProxy,
+    '/oauth/connections': {
+      target: userService.proxyTarget,
+      changeOrigin: false,
+    },
+  };
 
   return {
     plugins: [
@@ -183,6 +200,7 @@ export default defineConfig(({ mode }) => {
             /^\/openapi\.json/,
             /^\/share\//,
             /^\/images\//,
+            /^\/oauth\/connections(?:\/|$)/,
           ],
         },
         devOptions: {
@@ -240,14 +258,14 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       strictPort: true,
       hmr: false,
-      proxy: apiProxy,
+      proxy,
     },
     preview: {
       allowedHosts: ['localhost', '127.0.0.1'],
       port: 3000,
       strictPort: true,
       host: '127.0.0.1',
-      proxy: apiProxy,
+      proxy,
     },
   };
 });

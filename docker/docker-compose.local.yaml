@@ -1,4 +1,21 @@
 services:
+  firestore-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:45a15cc163d2df13137478856b4b9bb90426100fa8aec542269460c10110b727
+    ports:
+      - '127.0.0.1:8101:8101'
+    volumes:
+      - firestore-data:/data
+      - ./firestore/start.sh:/start-firestore.sh:ro
+    command: sh /start-firestore.sh
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8101/']
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 12
+
   pubsub-emulator:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     ports:
@@ -27,3 +44,6 @@ services:
     depends_on:
       pubsub-emulator:
         condition: service_healthy
+
+volumes:
+  firestore-data:

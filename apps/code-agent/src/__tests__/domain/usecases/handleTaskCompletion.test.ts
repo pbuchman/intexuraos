@@ -15,6 +15,9 @@ import {
   type TaskCompleteWebhookBody,
 } from '../../../domain/usecases/handleTaskCompletion.js';
 import { resetServices, setServices, type ServiceContainer } from '../../../services.js';
+import { triageFailedTask } from '../../../domain/usecases/triageFailedTask.js';
+import { drainTaskQueue } from '../../../domain/usecases/drainTaskQueue.js';
+import { createTaskFormatterEntry } from '../../../domain/services/webhookHelpers.js';
 import type { TaskFormatterEntry } from '../../../domain/services/webhookHelpers.js';
 import { ok, err } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
@@ -176,6 +179,54 @@ describe('handleTaskCompletion', () => {
 
       expect(result).toEqual({ kind: 'fail', code: 'INTERNAL_ERROR', message: 'write failed' });
     });
+  });
+
+  it.each([true, false])('keeps failed enforcement visible without duplicating validation reports (validation=%s)', async (validationFails) => {
+    const requestLog = createMockLogger();
+    const update = vi.fn().mockResolvedValue(ok(undefined));
+    setServices({
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(ok({
+          userId: 'u1', repository: 'a/b', workerType: 'codex',
+          status: 'running', agentType: 'execution', linearIssueId: 'INT-1',
+        })),
+        update,
+      } as never,
+      linearAgentClient: {
+        validateIssue: vi.fn().mockResolvedValue(validationFails
+          ? err({ code: 'UNAVAILABLE', message: 'Linear API temporarily unavailable', alreadyReported: true })
+          : ok({ id: 'linear-uuid', labels: [] })),
+        addComment: vi.fn().mockResolvedValue(err({ code: 'UNAVAILABLE', message: 'Comment failed' })),
+      } as never,
+      logger: createMockLogger() as never,
+    } as unknown as ServiceContainer);
+
+    const input = buildInput({
+      taskId: 't-validation', status: 'completed',
+      result: { execution_outcome_label: 'already_completed', prUrl: 'https://github.com/a/b/pull/9' },
+    });
+    input.requestLog = requestLog;
+    const outcome = await handleTaskCompletion(requestLog, input);
+
+    expect(outcome).toEqual({ kind: 'received' });
+    expect(update).toHaveBeenCalledWith('t-validation', expect.objectContaining({
+      status: 'failed',
+      error: expect.objectContaining({ code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED' }),
+      callbackReceived: true,
+    }));
+    if (validationFails) {
+      expect(requestLog.info).toHaveBeenCalledWith(
+        { taskId: 't-validation', code: 'LINEAR_VALIDATION_FAILED' },
+        'Execution deterministic enforcement failed'
+      );
+      expect(requestLog.error).not.toHaveBeenCalled();
+      expect(requestLog.warn).not.toHaveBeenCalled();
+    } else {
+      expect(requestLog.error).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('Comment failed') }),
+        'Execution deterministic enforcement failed'
+      );
+    }
   });
 
   describe('completed path — execution agent (memory queued + automation logged)', () => {
@@ -1498,6 +1549,65 @@ describe('handleTaskCompletion', () => {
       );
       expect(notifyTaskFailed).toHaveBeenCalled();
     });
+
+    it.each([true, false])(
+      'sends one terminal notice after retry exhaustion (exhaustion notification succeeds: %s)',
+      async (exhaustionNotificationSucceeds) => {
+        const realTriage = await vi.importActual<typeof import('../../../domain/usecases/triageFailedTask.js')>(
+          '../../../domain/usecases/triageFailedTask.js'
+        );
+        vi.mocked(triageFailedTask).mockImplementationOnce(realTriage.triageFailedTask);
+        const task = {
+          id: 't-exhausted', userId: 'u1', repository: 'a/b', workerType: 'claude-opus',
+          status: 'running', agentType: 'execution', prNumber: 42, retriedFrom: 'retry-3',
+        };
+        const update = vi.fn().mockResolvedValue(ok(undefined));
+        const notifyTaskFailed = vi.fn().mockResolvedValue(ok(undefined));
+        const notifyTaskAutoRetryExhausted = vi.fn().mockResolvedValue(
+          exhaustionNotificationSucceeds ? ok(undefined) : err({ code: 'PUBLISH_FAILED', message: 'unavailable' })
+        );
+        const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+        const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+        const deleteLock = vi.fn().mockResolvedValue(undefined);
+        setServices({
+          codeTaskRepo: {
+            findById: vi.fn()
+              .mockResolvedValueOnce(ok(task))
+              .mockResolvedValueOnce(ok({ retriedFrom: 'retry-2' }))
+              .mockResolvedValueOnce(ok({ retriedFrom: 'retry-1' }))
+              .mockResolvedValueOnce(ok({})),
+            update,
+          } as never,
+          whatsappNotifier: { notifyTaskFailed, notifyTaskAutoRetryExhausted } as never,
+          metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+          firestore: { doc: vi.fn().mockReturnValue({ delete: deleteLock }) } as never,
+          automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+          taskEnqueueService: {} as never,
+          logLineRepo: {} as never,
+          userServiceClient: {} as never,
+          logger: createMockLogger() as never,
+        } as unknown as ServiceContainer);
+        const input = buildInput({
+          taskId: task.id, status: 'failed', duration: 30,
+          error: { code: 'SETUP_FAILED', message: 'Setup failed again' },
+        });
+        input.taskFormatterStates.set(task.id, createTaskFormatterEntry(task.workerType));
+
+        const result = await handleTaskCompletion(createMockLogger(), input);
+
+        expect(result).toEqual({ kind: 'received' });
+        expect(notifyTaskAutoRetryExhausted).toHaveBeenCalledExactlyOnceWith(
+          'u1', task, { attempts: 3, errorMessage: 'Setup failed again' }
+        );
+        expect(notifyTaskFailed).toHaveBeenCalledTimes(exhaustionNotificationSucceeds ? 0 : 1);
+        expect(update).toHaveBeenCalledWith(task.id, expect.objectContaining({ status: 'failed', callbackReceived: true }));
+        expect(deleteLock).toHaveBeenCalledOnce();
+        expect(incrementTasksCompleted).toHaveBeenCalledExactlyOnceWith('claude-opus', 'failed');
+        expect(recordTaskDuration).toHaveBeenCalledExactlyOnceWith('claude-opus', 30);
+        expect(input.taskFormatterStates.has(task.id)).toBe(false);
+        expect(drainTaskQueue).toHaveBeenCalledOnce();
+      }
+    );
 
     it('returns fail when failed status update fails', async () => {
       const update = vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'write failed' }));

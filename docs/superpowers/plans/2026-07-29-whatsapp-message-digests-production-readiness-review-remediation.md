@@ -257,7 +257,7 @@ pnpm exec prettier --check apps/web/src/pages/WhatsAppMessageDigestDetailPage.ts
    logging, Pub/Sub, Terraform secrets, hash routing, Firestore artifacts, and dead code. Do not run
    `pnpm run ci:tracked`.
 3. Run `terraform fmt -check -recursive terraform`, isolated `terraform init -backend=false` plus
-   `terraform validate` for `terraform/environments/dev` and `terraform/hetzner-prod`, and shell
+   `terraform validate` for `terraform/shared-gcp` and `terraform/hetzner-prod`, and shell
    syntax/ShellCheck again because the cutover is production-critical.
 4. Use review-only agents for one bounded architecture/migration/security review and one bounded UX/
    accessibility review. Validate every finding locally; if another behavior change is needed, write

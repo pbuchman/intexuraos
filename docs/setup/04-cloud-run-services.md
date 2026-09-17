@@ -1,9 +1,9 @@
 # 04 - Cloud Run Services
 
 > **Historical reference.** This page records the retired Cloud Run application
-> fleet. It is not a current deployment or DEV-resume runbook. The current
-> application runtime uses manual exact-SHA production deployment on Hetzner;
-> the retained Home Dev application profile is normally hibernated. Do not use
+> fleet. It is not a current deployment runbook. The current
+> application runtime uses manual exact-SHA production deployment on Hetzner
+> and a manually started localhost stack. Do not use
 > the commands below to deploy the current application or to start Home Dev.
 
 The remaining sections describe the former Cloud Run service configuration and
@@ -214,7 +214,7 @@ Validate versioned configuration first. Secret Manager IAM applies only to
 values classified as actual secrets.
 
 ```bash
-node scripts/render-runtime-config.mjs --environment dev --format dotenv >/dev/null
+node scripts/render-runtime-config.mjs --environment local --format dotenv >/dev/null
 ```
 
 ### Cold start issues

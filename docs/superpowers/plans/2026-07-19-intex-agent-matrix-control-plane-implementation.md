@@ -43,7 +43,7 @@
 - `firestore-collections.json`
 - `firestore.indexes.json`
 - `ecosystem.config.cjs`
-- `terraform/environments/dev/main.tf`
+- `terraform/shared-gcp/main.tf`
 
 `matrixCorpus.ts` owns strict schemas/types for `MatrixCorpusCapabilityV1`,
 `MatrixCorpusIngestContextV1`, `IntexAgentMatrixCorpusProfileV1`,

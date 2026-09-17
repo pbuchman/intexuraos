@@ -27,8 +27,8 @@ None. This is an infrastructure-only refactor — no HTTP routes, Pub/Sub topics
 | B. CI enforcement scripts              | `scripts/verify-terraform-env-consumers.mjs`, `scripts/verify-ecosystem-coverage.mjs`, `scripts/verify-terraform-secret-mounts.mjs` | `scripts/verify-env-vars.mjs`, `scripts/ci-tracked.mjs`                                                                                                                                                                           | —                                                                                       |
 | C. api-docs-hub env validation         | —                                                                                                                                   | `apps/api-docs-hub/src/index.ts`, `ecosystem.config.cjs`, `scripts/verify-required-endpoints.mjs` (if applicable)                                                                                                                 | —                                                                                       |
 | D. pnpm pin + Dockerfile consolidation | `docker/Dockerfile.service`, `cloudbuild/scripts/deploy-service.sh`                                                                 | `package.json` (packageManager), all `apps/<svc>/Dockerfile` (21), all `cloudbuild/scripts/deploy-<svc>.sh` (21), `apps/web/cloudbuild.yaml` (pnpm line), `docker/code-worker/Dockerfile`, `docker/code-worker/Dockerfile.test`   | — (optional: remove per-service dockerfiles once shared one is proven; keep as stage 2) |
-| E. Terraform dev split                 | `terraform/environments/dev/services.tf`, `secrets.tf`, `iam.tf`, `pubsub.tf`, `locals.tf`                                          | `terraform/environments/dev/main.tf` (shrunk to providers + module glue)                                                                                                                                                          | —                                                                                       |
-| F. Orphan cleanup                      | —                                                                                                                                   | `terraform/environments/dev/main.tf` (remove 8 orphan secrets, dead `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`), `ecosystem.config.cjs` (dead env var)                                                                               | —                                                                                       |
+| E. Terraform dev split                 | `terraform/shared-gcp/services.tf`, `secrets.tf`, `iam.tf`, `pubsub.tf`, `locals.tf`                                          | `terraform/shared-gcp/main.tf` (shrunk to providers + module glue)                                                                                                                                                          | —                                                                                       |
+| F. Orphan cleanup                      | —                                                                                                                                   | `terraform/shared-gcp/main.tf` (remove 8 orphan secrets, dead `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`), `ecosystem.config.cjs` (dead env var)                                                                               | —                                                                                       |
 | G. Prod environment decision           | Either: `terraform/environments/prod/**`, OR: —                                                                                     | `.claude/CLAUDE.md`, `.claude/reference/infrastructure.md`, `.claude/reference/environments.md`                                                                                                                                   | —                                                                                       |
 
 ## Contracts Between Subtasks (No Runtime Dependencies)
@@ -68,11 +68,11 @@ Subtasks communicate through on-disk file contracts, not code imports. Each cont
 
 **Consumers:** `apps/web/cloudbuild.yaml` (reads via `jq -r '.services[] | "\(.name):\(.envSuffix)"'`), `.github/workflows/deploy.yml` (both `monolith` and `individual` branches — same jq read), `apps/web/src/config.ts` (only if the file already enumerates suffixes — no new coupling).
 
-**Enforcement:** `scripts/verify-web-service-manifest.mjs` fails CI when (a) a manifest entry has no corresponding Terraform `module "<name>"` in `terraform/environments/dev/`, (b) `cloudbuild.yaml` still contains a literal `CLOUD_RUN_SERVICES=(` array (must be replaced with `jq`), (c) `deploy.yml` contains a literal `CLOUD_RUN_SERVICES=(` array.
+**Enforcement:** `scripts/verify-web-service-manifest.mjs` fails CI when (a) a manifest entry has no corresponding Terraform `module "<name>"` in `terraform/shared-gcp/`, (b) `cloudbuild.yaml` still contains a literal `CLOUD_RUN_SERVICES=(` array (must be replaced with `jq`), (c) `deploy.yml` contains a literal `CLOUD_RUN_SERVICES=(` array.
 
 ### Contract 2 — Terraform `local.services` shape (owner: Subtask E)
 
-After the split, `terraform/environments/dev/locals.tf` exposes:
+After the split, `terraform/shared-gcp/locals.tf` exposes:
 
 ```hcl
 locals {
@@ -173,7 +173,7 @@ Each subtask below is shippable independently. All 7 run in parallel. No depende
 - [ ] Write failing test `verify-terraform-env-consumers.test.mjs`: given a fixture `main.tf` with `INTEXURAOS_FOO_URL = "bar"` and no consumer under `apps/*/src/`, script must exit 1.
 - [ ] Run — expect FAIL ("script not found").
 - [ ] Implement `verify-terraform-env-consumers.mjs`:
-  - Walk every `.tf` file under `terraform/environments/dev/`.
+  - Walk every `.tf` file under `terraform/shared-gcp/`.
   - Extract right-hand side keys of every `env_vars = { ... }` block (regex on `(\s+INTEXURAOS_[A-Z0-9_]+)\s*=`). Also support the Terraform `for_each = local.services` shape by parsing `locals.tf`.
   - For each `INTEXURAOS_*` name: `rg -l "\\b${name}\\b" apps/*/src/ workers/*/src/`. If no match AND not in `KNOWN_UNCONSUMED` allowlist (empty by default), fail with filename + var.
 - [ ] Repeat for Script 2 (`verify-ecosystem-coverage.mjs`): every directory under `apps/` with a Terraform `module "<name>"` must appear in `ecosystem.config.cjs` `apps:` array. Also assert every app `src/index.ts` calls `validateRequiredEnv(`.
@@ -246,18 +246,18 @@ Each subtask below is shippable independently. All 7 run in parallel. No depende
 ---
 
 ### Subtask E — Terraform dev Monolith Split
-**Owner agent:** 1 agent, service boundary: `terraform/environments/dev/`
+**Owner agent:** 1 agent, service boundary: `terraform/shared-gcp/`
 **Issue title:** `[INT-1536] Terraform — split dev/main.tf into focused files`
 **Files:**
-- Create: `terraform/environments/dev/locals.tf` (Contract 2 — `local.services` map)
-- Create: `terraform/environments/dev/services.tf` (Cloud Run module instantiations via `for_each = local.services`)
-- Create: `terraform/environments/dev/secrets.tf` (all `google_secret_manager_secret` + `_version` + `_iam_member`)
-- Create: `terraform/environments/dev/iam.tf` (service accounts + role bindings)
-- Create: `terraform/environments/dev/pubsub.tf` (topics + subscriptions; merge existing `pubsub_pr_triage.tf`)
-- Modify: `terraform/environments/dev/main.tf` (shrink to provider + backend glue only)
+- Create: `terraform/shared-gcp/locals.tf` (Contract 2 — `local.services` map)
+- Create: `terraform/shared-gcp/services.tf` (Cloud Run module instantiations via `for_each = local.services`)
+- Create: `terraform/shared-gcp/secrets.tf` (all `google_secret_manager_secret` + `_version` + `_iam_member`)
+- Create: `terraform/shared-gcp/iam.tf` (service accounts + role bindings)
+- Create: `terraform/shared-gcp/pubsub.tf` (topics + subscriptions; merge existing `pubsub_pr_triage.tf`)
+- Modify: `terraform/shared-gcp/main.tf` (shrink to provider + backend glue only)
 
 **Steps:**
-- [ ] Run `terraform init && terraform plan -out=/tmp/tf-before.plan` in `terraform/environments/dev/`. Save full output to `/tmp/tf-before.txt`.
+- [ ] Run `terraform init && terraform plan -out=/tmp/tf-before.plan` in `terraform/shared-gcp/`. Save full output to `/tmp/tf-before.txt`.
 - [ ] Enumerate every top-level block in `main.tf` and decide its destination file. Record mapping in a scratch note.
 - [ ] Move blocks one file at a time: `secrets.tf` first (least-coupled), then `iam.tf`, then `pubsub.tf` (merge `pubsub_pr_triage.tf`), then `locals.tf` (build `local.services` map from the 21 existing `module "<svc>"` blocks), then `services.tf` (single `module "cloud_run_services" { for_each = local.services ... source = "../../modules/cloud-run-service" ... }`).
 - [ ] After each move, run `terraform plan` — expect **zero resource changes**. Commit each file-move as its own commit (`refactor(tf): move secrets to secrets.tf — no plan changes`).
@@ -266,15 +266,15 @@ Each subtask below is shippable independently. All 7 run in parallel. No depende
 - [ ] Run `pnpm run ci:tracked` — expect PASS (incl. Subtask B's `verify-terraform-env-consumers.mjs` which must now recognise the `for_each` shape — verify Subtask B's fixture test covers this, else file a follow-up ticket).
 - [ ] Commit `refactor(tf): drive Cloud Run services from local.services map`.
 
-**Acceptance:** `terraform plan` says "No changes". `wc -l terraform/environments/dev/main.tf` is under 100. Adding a new Cloud Run service is a 10-line entry in `locals.tf`.
+**Acceptance:** `terraform plan` says "No changes". `wc -l terraform/shared-gcp/main.tf` is under 100. Adding a new Cloud Run service is a 10-line entry in `locals.tf`.
 
 ---
 
 ### Subtask F — Orphan Resource Cleanup
-**Owner agent:** 1 agent, service boundary: `terraform/environments/dev/` + `ecosystem.config.cjs`
+**Owner agent:** 1 agent, service boundary: `terraform/shared-gcp/` + `ecosystem.config.cjs`
 **Issue title:** `[INT-1536] Remove orphan secrets + dead env vars`
 **Files:**
-- Modify: `terraform/environments/dev/main.tf` (or `secrets.tf` / `services.tf` after Subtask E lands — coordinate via rebase)
+- Modify: `terraform/shared-gcp/main.tf` (or `secrets.tf` / `services.tf` after Subtask E lands — coordinate via rebase)
 - Modify: `ecosystem.config.cjs` (remove dead `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` if present)
 
 **Targets (from `docs/reviews/2026-04-24-refactoring-analysis.md` §8):**
@@ -318,7 +318,7 @@ Each subtask below is shippable independently. All 7 run in parallel. No depende
 - [ ] Commit `docs: reconcile prod environment references with single-project reality`.
 
 **Steps (Option 1 — create prod):**
-- [ ] Copy `terraform/environments/dev/` to `terraform/environments/prod/` AFTER Subtask E lands (cleaner base).
+- [ ] Copy `terraform/shared-gcp/` to `terraform/environments/prod/` AFTER Subtask E lands (cleaner base).
 - [ ] Update `backend.tf` to point to a prod-specific GCS bucket / key prefix.
 - [ ] Parameterise project ID in `variables.tf`.
 - [ ] `terraform init && terraform plan` in prod dir against a real prod project — capture plan for user review. **Stop here — do not apply without user approval.**
@@ -344,14 +344,14 @@ All 7 subtasks target `development` branch independently. If merged out-of-order
 - [ ] `apps/api-docs-hub/src/index.ts` calls `validateRequiredEnv`.
 - [ ] `package.json` has `"packageManager": "pnpm@<version>"`; zero Dockerfiles pin `pnpm@<version>` explicitly.
 - [ ] `docker/Dockerfile.service` + `cloudbuild/scripts/deploy-service.sh` exist and are used by at least 2 services (stage 1 — proof of concept); remaining 19 services tracked in a follow-up stage-2 issue.
-- [ ] `terraform/environments/dev/main.tf` is under 100 lines; `services.tf`, `secrets.tf`, `iam.tf`, `pubsub.tf`, `locals.tf` contain the split.
+- [ ] `terraform/shared-gcp/main.tf` is under 100 lines; `services.tf`, `secrets.tf`, `iam.tf`, `pubsub.tf`, `locals.tf` contain the split.
 - [ ] 8 orphan Secret Manager secrets either wired or removed; `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC` removed.
 - [ ] `.claude/CLAUDE.md` and filesystem agree on prod environment existence.
 
 ## Test Plan
 
 - CI: `pnpm run ci:tracked` (all verify-* scripts + type + lint + tests).
-- Terraform: `terraform plan` in `terraform/environments/dev/` shows **zero changes** after Subtask E.
+- Terraform: `terraform plan` in `terraform/shared-gcp/` shows **zero changes** after Subtask E.
 - Docker: `docker build --build-arg SERVICE=user-service -f docker/Dockerfile.service .` succeeds.
 - Docker: image size within ±5% of per-service Dockerfile baseline.
 - Deploy smoke: run Cloud Build trigger for one service (e.g., user-service) against dev and confirm Cloud Run URL returns 200 on `/health`.

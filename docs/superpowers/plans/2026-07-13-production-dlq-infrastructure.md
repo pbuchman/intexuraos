@@ -114,7 +114,7 @@ Expected: PASS.
 - Modify: `scripts/__tests__/hetzner-runtime.test.ts`
 - Modify: `terraform/modules/pubsub-push/main.tf`
 - Modify: `terraform/modules/pubsub/main.tf`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 **Interfaces:**
 - Consumes: module variables `project_id`, `project_number`, and `enable_push_subscription`.
@@ -176,7 +176,7 @@ resource "google_pubsub_subscription_iam_member" "pubsub_subscribes_audio_stored
 
 - [ ] **Step 5: Format and rerun the contract test**
 
-Run: `terraform fmt terraform/modules/pubsub-push/main.tf terraform/modules/pubsub/main.tf terraform/environments/dev/main.tf && PATH="/opt/homebrew/opt/node@22/bin:$PATH" pnpm exec vitest run scripts/__tests__/hetzner-runtime.test.ts`
+Run: `terraform fmt terraform/modules/pubsub-push/main.tf terraform/modules/pubsub/main.tf terraform/shared-gcp/main.tf && PATH="/opt/homebrew/opt/node@22/bin:$PATH" pnpm exec vitest run scripts/__tests__/hetzner-runtime.test.ts`
 
 Expected: PASS.
 
@@ -240,7 +240,7 @@ Run:
 terraform fmt terraform/modules/monitoring/main.tf
 PATH="/opt/homebrew/opt/node@22/bin:$PATH" pnpm exec vitest run scripts/__tests__/hetzner-runtime.test.ts
 PATH="/opt/homebrew/opt/node@22/bin:$PATH" pnpm run ci:tracked
-git add scripts/__tests__/hetzner-runtime.test.ts terraform/hetzner-prod/pubsub.tf terraform/modules/pubsub-push/main.tf terraform/modules/pubsub/main.tf terraform/environments/dev/main.tf terraform/modules/monitoring/main.tf docs/operations/pubsub-dlq-runbook.md docs/operations/hetzner-prod-runbook.md
+git add scripts/__tests__/hetzner-runtime.test.ts terraform/hetzner-prod/pubsub.tf terraform/modules/pubsub-push/main.tf terraform/modules/pubsub/main.tf terraform/shared-gcp/main.tf terraform/modules/monitoring/main.tf docs/operations/pubsub-dlq-runbook.md docs/operations/hetzner-prod-runbook.md
 git commit -m "fix: harden production dead letter queues"
 ```
 
@@ -249,7 +249,7 @@ Expected: all commands pass; the commit contains only DLQ infrastructure, monito
 ### Task 4: Terraform Plans and Post-Merge Apply
 
 **Files:**
-- Verify: `terraform/environments/dev`
+- Verify: `terraform/shared-gcp`
 - Verify: `terraform/hetzner-prod`
 
 **Interfaces:**
@@ -261,8 +261,8 @@ Expected: all commands pass; the commit contains only DLQ infrastructure, monito
 Run with `GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/sa-key.json"`, `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` set to the same path, and all Firestore/Pub/Sub emulator variables unset:
 
 ```bash
-terraform -chdir=terraform/environments/dev init -upgrade
-terraform -chdir=terraform/environments/dev validate
+terraform -chdir=terraform/shared-gcp init -upgrade
+terraform -chdir=terraform/shared-gcp validate
 terraform -chdir=terraform/hetzner-prod init -upgrade
 terraform -chdir=terraform/hetzner-prod validate
 ```

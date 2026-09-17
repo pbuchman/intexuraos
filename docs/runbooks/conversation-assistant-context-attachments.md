@@ -30,10 +30,10 @@ This runbook covers rollout, verification, recovery, and rollback for immutable 
    TTL_PLAN_PATH="${TTL_PLAN_DIR}/conversation-assistant.tfplan"
    test "$(git rev-parse HEAD)" = "${FROZEN_SHA}"
    test -z "$(git status --porcelain=v1 --untracked-files=all)"
-   terraform -chdir=terraform/environments/dev init
-   terraform -chdir=terraform/environments/dev validate
-   terraform -chdir=terraform/environments/dev plan -out="${TTL_PLAN_PATH}"
-   terraform -chdir=terraform/environments/dev show "${TTL_PLAN_PATH}"
+   terraform -chdir=terraform/shared-gcp init
+   terraform -chdir=terraform/shared-gcp validate
+   terraform -chdir=terraform/shared-gcp plan -out="${TTL_PLAN_PATH}"
+   terraform -chdir=terraform/shared-gcp show "${TTL_PLAN_PATH}"
    shasum -a 256 "${TTL_PLAN_PATH}"
    ```
 
@@ -41,7 +41,7 @@ This runbook covers rollout, verification, recovery, and rollback for immutable 
    operator-controlled temporary directory. Stop if the plan contains anything
    beyond the reviewed TTL resources or if HEAD/worktree changes. Apply that
    exact saved plan with
-   `terraform -chdir=terraform/environments/dev apply "${TTL_PLAN_PATH}"`, then
+   `terraform -chdir=terraform/shared-gcp apply "${TTL_PLAN_PATH}"`, then
    re-check the frozen HEAD and record the plan hash.
 2. Dispatch migrations 124/125 from the same ref and wait until all indexes report ready.
 3. Trigger the supported Hetzner production deployment workflow for that exact SHA/ref.

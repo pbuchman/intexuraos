@@ -33,7 +33,7 @@ variable "source_environment" {
 
   validation {
     condition     = var.source_environment == "dev"
-    error_message = "This cutover currently targets retained resources owned by terraform/environments/dev."
+    error_message = "This cutover currently targets retained resources owned by terraform/shared-gcp."
   }
 }
 

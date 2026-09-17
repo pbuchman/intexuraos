@@ -17,12 +17,9 @@ Register the code-agent webhook URL with SentryBox:
 | Environment           | Webhook URL                                                   |
 | --------------------- | ------------------------------------------------------------- |
 | Production            | `https://intexuraos.cloud/api/code/webhooks/sentry`           |
-| Retained DEV recovery | `https://dev.intexuraos.cloud/api/code/webhooks/sentry`       |
 
-Only production forwarding is supported during normal operation. DEV forwarding remains disabled
-while the retained runtime is hibernated; the recovery URL returns `503`. Enable it only inside a
-separately authorized recovery drill, then disable it again before re-hibernation. Keep the DEV
-ingest configuration and signing secret for reversibility; do not delete either one.
+Forward actionable SentryBox events to production. Local tests use fixtures;
+remove obsolete DEV forwarding entries while preserving stored signing secrets.
 
 The compatibility route remains `/webhooks/sentry` and accepts SentryBox
 deliveries with:
@@ -134,22 +131,36 @@ After changing the integration or its deployment config, run:
 pnpm run ci:tracked
 ```
 
-For a live smoke test:
+For the production acceptance check, preserve existing issues, events,
+configuration, and keys. Do not clear stored records as part of acceptance.
+Wait for a **natural** event. Do not inject an error, run a manual sync, or create
+a manual repair task. Confirm one issue transition creates one task, then inspect
+its evidence, review any justified PR, deploy it, and check two subsequent
+scheduled synchronizations. No new event is not proof of a repaired automation.
 
-1. Send a controlled SentryBox event to a low-risk project and environment.
-2. Confirm the SentryBox delivery log shows a 2xx response.
-3. Confirm test/sample deliveries return ignored and do not create a
-   `sentry-issue-events` record.
-4. Trigger an actionable delivery and confirm code-agent stores one
-   `sentry-issue-events` record for the Sentry issue transition.
-5. Confirm one Linear issue is created or linked.
-6. Confirm one queued CodeTask exists with `agentType: "sentry"`.
-7. Confirm the task worker type matches the automation user's
-   `defaultSentryWorkerType`.
-8. Run the pinned Error Hub MCP verifier against the created issue and event,
-   and confirm the worker fetches both through `error_hub`.
-9. Confirm successful completion includes a PR URL and a final outcome of
-   `fixed` or `suppressed`.
+Any cleanup is a separate operator procedure requiring explicit authorization,
+a defined scope, a verified backup, and a restoration procedure; it is not a
+prerequisite for this check.
+
+Linear full-sync failures include the exact read in `operation` and
+`linear.operation`, the total attempts in `linear.attempt_count`, and up to three
+`linear.attempt_N` tags containing a safe outcome, duration in milliseconds, and
+retry delay (zero on the terminal attempt). These tags survive SentryBox's
+extra-data allowlist and appear in `get_issue_details`. The exception message
+remains stable so timing changes do not split issue groups. Queries, variables,
+credentials and response bodies are never included in this diagnostic context.
+
+If supported evidence cannot justify a code change, the task stops with
+`SENTRY_EVIDENCE_UNAVAILABLE` without automatic retry. Its reason must state the
+confirmed failure and attempt evidence first, then the specific missing fact.
+An accessible event showing upstream unavailability is different from failed
+MCP access. Do not claim recovery without evidence, manufacture a PR, or suppress
+an actual upstream error to pass the acceptance check.
+
+An explicitly authorized diagnostic follow-up can improve evidence collection
+without fixing or suppressing the original failure. Keep that follow-up separate
+from completion of the original issue: do not close the issue or rewrite the
+historical failed task as successful based on diagnostic improvements alone.
 
 To test signature rejection locally, send the same payload with a bogus
 `Sentry-Hook-Signature` and confirm code-agent returns `401`.
@@ -165,4 +176,4 @@ include:
 - the code-level suppression change
 - verification commands and results
 
-If the report cannot be proven safe to suppress, fix the bug instead.
+If suppression is not justified, fix a demonstrated bug or stop with the concrete missing evidence.

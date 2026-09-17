@@ -300,7 +300,7 @@ Serves the production build locally at `http://localhost:3000`
 | "CORS errors"                           | Ensure backend service allows requests from localhost                                      |
 | "Service worker not registering"        | Clear site data and reload in DevTools Application tab                                     |
 | "Vite HMR not working"                  | HMR is disabled by default (`hmr: false` in vite.config.ts); use full page reload          |
-| DevBar not showing                      | Visible in local dev (`pnpm dev`) or a temporarily resumed retained DEV profile, not in production; DEV is normally hibernated |
+| DevBar not showing                      | Visible in the manually started localhost stack (`pnpm dev`); hidden in production |
 | Chat not working as guest               | Guest sessions are rate-limited; clear `intex-guest-session-id` from localStorage to reset |
 | Dark mode not persisting                | Ensure localStorage is available (not in strict private mode)                              |
 | Linear board not updating               | Firestore listener may have expired; reload the page                                       |

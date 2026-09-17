@@ -205,8 +205,8 @@ Multi-repo requires:
 Runtime task routing and build/deploy configuration are separate concerns:
 
 - `.envrc.local.example:190` and `:193` still expose single runtime repository URL/path examples.
-- `terraform/environments/dev/main.tf:548` still documents runtime GitHub App/private-key/repository secrets.
-- `terraform/environments/dev/main.tf:554` describes `INTEXURAOS_GITHUB_INSTALLATION_ID` as the installation for `pbuchman/intexuraos`.
+- `terraform/shared-gcp/main.tf:548` still documents runtime GitHub App/private-key/repository secrets.
+- `terraform/shared-gcp/main.tf:554` describes `INTEXURAOS_GITHUB_INSTALLATION_ID` as the installation for `pbuchman/intexuraos`.
 - `terraform/variables.tf:18`, `:23`, and `:29` define GitHub owner/repo/branch for the IntexuraOS build pipeline.
 - `terraform/modules/cloud-build/main.tf:38` uses those build variables for Cloud Build, not task runtime selection.
 - GitHub user identity already has OAuth connection endpoints in `apps/user-service/src/routes/gitHubOAuthConnectionRoutes.ts`; this is related identity state, not a substitute for GitHub App installation records used by workers.
@@ -618,7 +618,7 @@ Classifications:
 | `migrations/083_code-tasks-ask-agent-active-query-index.mjs:20` repo-blind Ask Agent index | `R-CHANGE` | Add repo-aware active Ask Agent index. |
 | `migrations/085_deduplicate-execution-memories.mjs:13` historical IntexuraOS filter | `N-NOTE` | Do not rewrite immutable migration. |
 | `.envrc.local.example:190`, `:193` single repo env examples | `R-CHANGE` | Update docs once runtime config moves to repo registry. |
-| `terraform/environments/dev/main.tf:548`, `:554` single runtime repo/install secrets | `R-CHANGE` | Update runtime secret model. |
+| `terraform/shared-gcp/main.tf:548`, `:554` single runtime repo/install secrets | `R-CHANGE` | Update runtime secret model. |
 | `terraform/variables.tf:18`, `:23`, `:29` build owner/repo/branch | `M-META` | Keep as IntexuraOS build pipeline config. |
 | `terraform/modules/cloud-build/main.tf:38` Cloud Build repo URI | `M-META` | Keep; not task target routing. |
 | `.github/CODEOWNERS:5` IntexuraOS owner metadata | `M-META` | Keep; not copied into external repos. |

@@ -26,6 +26,7 @@ vi.mock('@sentry/node', () => {
       setContext: vi.fn(),
     };
     callback(mockScope);
+    return mockScope;
   });
 
   return {
@@ -284,6 +285,51 @@ describe('createSentryStream - sendLogToSentry internal function', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  it.each(
+    [undefined, null, [], 'invalid', { 'bad key': 'ignored', okay: 42, long: 'x'.repeat(201) }].map(
+      (value) => [value]
+    )
+  )('ignores invalid tag context %j', (_sentryTags) => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const stream = createSentryStream(pino.multistream([]));
+    pino({}, stream).error({ _sentryTags }, 'failure');
+    const scope = vi.mocked(Sentry.withScope).mock.results.at(-1)?.value as {
+      setTag: ReturnType<typeof vi.fn>;
+    };
+    expect(scope.setTag).not.toHaveBeenCalled();
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it('captures bounded explicit tags once and keeps timing out of the exception and extras', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const stream = createSentryStream(pino.multistream([]));
+    const tags = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [
+        `linear.attempt_${String(i)}`,
+        'HTTP_503;duration_ms=123;retry_delay_ms=568',
+      ])
+    );
+    pino({}, stream).error(
+      { err: { message: 'Linear mapping failed: HTTP 503' }, _sentryTags: tags },
+      'sync failed'
+    );
+    const scope = vi.mocked(Sentry.withScope).mock.results.at(-1)?.value as {
+      setTag: ReturnType<typeof vi.fn>;
+      setExtras: ReturnType<typeof vi.fn>;
+    };
+    expect(scope.setTag).toHaveBeenCalledTimes(16);
+    expect(scope.setTag).toHaveBeenCalledWith('linear.attempt_0', tags['linear.attempt_0']);
+    expect(scope.setExtras).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: expect.objectContaining({ message: 'Linear mapping failed: HTTP 503' }),
+      })
+    );
+    expect(scope.setExtras.mock.calls[0]?.[0]).not.toHaveProperty('_sentryTags');
+    expect(Sentry.captureException).toHaveBeenCalledExactlyOnceWith(
+      new Error('Linear mapping failed: HTTP 503')
+    );
   });
 
   it('ignores logs with level below warn (40)', () => {
