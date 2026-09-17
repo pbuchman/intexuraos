@@ -131,12 +131,16 @@ After changing the integration or its deployment config, run:
 pnpm run ci:tracked
 ```
 
-For the production acceptance check, preserve a verified database backup before
-clearing issues and events through the existing API; keep configuration and keys.
+For the production acceptance check, preserve existing issues, events,
+configuration, and keys. Do not clear stored records as part of acceptance.
 Wait for a **natural** event. Do not inject an error, run a manual sync, or create
 a manual repair task. Confirm one issue transition creates one task, then inspect
 its evidence, review any justified PR, deploy it, and check two subsequent
 scheduled synchronizations. No new event is not proof of a repaired automation.
+
+Any cleanup is a separate operator procedure requiring explicit authorization,
+a defined scope, a verified backup, and a restoration procedure; it is not a
+prerequisite for this check.
 
 Linear full-sync failures include the exact read in `operation` and
 `linear.operation`, the total attempts in `linear.attempt_count`, and up to three
@@ -152,6 +156,11 @@ confirmed failure and attempt evidence first, then the specific missing fact.
 An accessible event showing upstream unavailability is different from failed
 MCP access. Do not claim recovery without evidence, manufacture a PR, or suppress
 an actual upstream error to pass the acceptance check.
+
+An explicitly authorized diagnostic follow-up can improve evidence collection
+without fixing or suppressing the original failure. Keep that follow-up separate
+from completion of the original issue: do not close the issue or rewrite the
+historical failed task as successful based on diagnostic improvements alone.
 
 To test signature rejection locally, send the same payload with a bogus
 `Sentry-Hook-Signature` and confirm code-agent returns `401`.
