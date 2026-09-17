@@ -192,9 +192,9 @@ export function createLinearApiClient(): LinearApiClient {
                   hasNextPage: issuesConnection.pageInfo.hasNextPage,
                 };
               },
-              'listIssues',
+              'listIssues.fetchPage',
               Date.now(),
-              retryOptions
+              { ...retryOptions, evidenceGroupingOperation: 'listIssues.fetchPage' }
             );
           };
 

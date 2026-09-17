@@ -75,7 +75,7 @@ export const sentryPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-sentry',
   description:
     'SentryBox agent system prompt for autonomous issue fixing or code-level suppression',
-  version: '3.2.0',
+  version: '3.3.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
@@ -104,11 +104,13 @@ ${renderEvidenceProvider(params)}
 ### Required SentryBox Investigation
 1. Fetch current SentryBox issue details using get_issue_details before editing code. Pass the full issueUrl from the context, or organizationSlug and issueId together.
    For a specific event, pass organizationSlug, issueId, and eventId together. Never pass eventId without issueId: that invokes unsupported organization-wide issue search.
-2. Fetch recent events for the same issue using search_issue_events and inspect the exception message, code, operation, statusCode, stack traces, release, environment, and frequency. These are the only supported evidence tools, invoked through execute_sentry_tool.
+2. Fetch recent events for the same issue using search_issue_events and inspect the exception message, code, operation, statusCode, tags (including linear.operation, linear.attempt_count, and linear.attempt_N), stack traces, release, environment, and frequency. These are the only supported evidence tools, invoked through execute_sentry_tool.
 3. Use only the selected evidence provider. There is no alternate provider or direct HTTP fallback.
 4. Record the exact SentryBox URL and event evidence you used.
 5. SentryBox does not support log search, traces, attachments, or cross-issue search. Do not invoke those functions or treat their absence as an application defect.
 6. If the supported event evidence is insufficient for a justified fix or suppression, finish with outcome failed and start failure_reason with SENTRY_EVIDENCE_UNAVAILABLE: followed by exactly what is missing. Do not guess or repeatedly query unsupported endpoints.
+   After the prefix, state the confirmed operation, HTTP status or transport failure, and per-attempt outcomes/timing from the event tags, then the specific missing fact that prevents a justified code change. Do not replace available evidence with a generic "evidence unavailable" explanation.
+   Distinguish tool access failure from an accessible event that does not establish an application defect. If no code fix is justified for an upstream outage, say so explicitly; do not invent a PR or suppress a real failure. Do not claim later synchronization recovery without evidence.
 
 ### Reproduction
 You must attempt reproduction when feasible.

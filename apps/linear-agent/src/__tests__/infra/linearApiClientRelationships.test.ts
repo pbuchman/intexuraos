@@ -139,9 +139,14 @@ describe('listIssues relationship retries', () => {
         code: 'UPSTREAM_UNAVAILABLE',
         message: 'Linear API temporarily unavailable',
         diagnostics: {
-          operation: 'listIssues.mapIssuesWithBatchedStates',
+          operation: `listIssues.${relationship}`,
           message: 'Linear listIssues.mapIssuesWithBatchedStates failed: NetworkError (HTTP 503)',
           statusCode: 503,
+          attemptCount: 3,
+          attempts: [1, 2, 3].map((attempt) => ({
+            attempt, outcome: 'HTTP_503', durationMs: expect.any(Number),
+            delayMs: attempt === 3 ? 0 : expect.any(Number),
+          })),
         },
       },
     });
@@ -167,7 +172,7 @@ describe('listIssues relationship retries', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: { code, diagnostics: { operation: 'listIssues.mapIssuesWithBatchedStates' } },
+      error: { code, diagnostics: { operation: 'listIssues.state', attemptCount: 1 } },
     });
     expect(failing.reads.state).toHaveBeenCalledTimes(1);
     expect(mocks.sleep).not.toHaveBeenCalled();

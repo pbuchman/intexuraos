@@ -82,6 +82,32 @@ describe('fullSync', () => {
         ...(statusCode === undefined ? {} : { statusCode }),
       });
     });
+    it('puts attempt evidence in tags on the single final report without changing the exception', async () => {
+      const message = 'Linear listIssues.mapIssuesWithBatchedStates failed: NetworkError (HTTP 503)';
+      linearClient.setFailure(true, {
+        code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable',
+        diagnostics: { message, operation: 'listIssues.assignee', statusCode: 503, attemptCount: 3,
+          attempts: [
+            { attempt: 1, outcome: 'HTTP_503', durationMs: 123, delayMs: 568 },
+            { attempt: 2, outcome: 'HTTP_503', durationMs: 234, delayMs: 1136 },
+            { attempt: 3, outcome: 'HTTP_503', durationMs: 345, delayMs: 0 },
+          ],
+        },
+      });
+      const logError = vi.spyOn(deps.logger, 'error');
+      expect(await fullSync(userId, deps)).toEqual({ ok: false, error: {
+        code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable',
+      } });
+      expect(logError).toHaveBeenCalledExactlyOnceWith({
+        err: new Error(message), code: 'UPSTREAM_UNAVAILABLE', operation: 'listIssues.assignee', statusCode: 503, userId,
+        _sentryTags: {
+          'linear.operation': 'listIssues.assignee', 'linear.attempt_count': '3',
+          'linear.attempt_1': 'HTTP_503;duration_ms=123;retry_delay_ms=568',
+          'linear.attempt_2': 'HTTP_503;duration_ms=234;retry_delay_ms=1136',
+          'linear.attempt_3': 'HTTP_503;duration_ms=345;retry_delay_ms=0',
+        },
+      }, 'Failed to sync Linear issues');
+    });
     it('syncs all issues from Linear API', async () => {
       linearClient.seedIssue(createTestApiIssue({ id: 'issue-1', identifier: 'INT-1' }));
       linearClient.seedIssue(createTestApiIssue({ id: 'issue-2', identifier: 'INT-2' }));

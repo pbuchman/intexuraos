@@ -38,6 +38,10 @@ describe('sentryPrompt evidence provider routing', () => {
     expect(prompt).toContain('SENTRY_EVIDENCE_UNAVAILABLE:');
     expect(prompt).toContain('get_issue_details');
     expect(prompt).toContain('search_issue_events');
+    expect(prompt).toContain('linear.attempt_count');
+    expect(prompt).toContain('state the confirmed operation');
+    expect(prompt).toContain('Distinguish tool access failure from an accessible event');
+    expect(prompt).toContain('Do not claim later synchronization recovery without evidence');
     expect(prompt).toContain('Do not invoke those functions');
     expect(prompt).not.toContain('GET /api/0/');
     expect(prompt).not.toContain('https://$ERROR_HUB_HOST');
