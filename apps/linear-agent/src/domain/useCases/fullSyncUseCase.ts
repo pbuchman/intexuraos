@@ -48,6 +48,16 @@ export async function fullSync(
     code,
     operation: diagnostics?.operation ?? 'fullSync',
     ...(diagnostics?.statusCode === undefined ? {} : { statusCode: diagnostics.statusCode }),
+    ...(diagnostics?.attempts === undefined ? {} : {
+      _sentryTags: {
+        'linear.operation': diagnostics.operation,
+        'linear.attempt_count': String(diagnostics.attemptCount),
+        ...Object.fromEntries(diagnostics.attempts.map((attempt) => [
+          `linear.attempt_${String(attempt.attempt)}`,
+          `${attempt.outcome};duration_ms=${String(attempt.durationMs)};retry_delay_ms=${String(attempt.delayMs)}`,
+        ])),
+      },
+    }),
     userId,
   }, 'Failed to sync Linear issues');
   return err({ code, message });

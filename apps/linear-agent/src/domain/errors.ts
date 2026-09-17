@@ -16,7 +16,13 @@ export interface LinearError {
   code: LinearErrorCode;
   message: string;
   /** Internal, payload-free evidence; removed at the fullSync boundary. */
-  diagnostics?: { message: string; operation: string; statusCode?: number };
+  diagnostics?: {
+    message: string;
+    operation: string;
+    statusCode?: number;
+    attemptCount?: number;
+    attempts?: { attempt: number; outcome: string; durationMs: number; delayMs: number }[];
+  };
 }
 
 export function createLinearError(code: LinearErrorCode, message: string): LinearError {

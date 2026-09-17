@@ -236,7 +236,7 @@ describe('LinearApiClient', () => {
         expect(mocks.warn).toHaveBeenCalledExactlyOnceWith(
           {
             teamId: 'team-1',
-            operationName: 'listIssues',
+            operationName: 'listIssues.fetchPage',
             attempt: 1,
             delayMs: expect.any(Number),
             error: diagnosticMessage,
@@ -258,7 +258,10 @@ describe('LinearApiClient', () => {
 
       expect(result).toEqual({
         ok: false,
-        error: { code: 'INVALID_API_KEY', message: 'Invalid Linear API key', diagnostics: { operation: 'listIssues.fetchPage', message: 'Linear listIssues.fetchPage failed: INVALID_API_KEY (HTTP 401)', statusCode: 401 } },
+        error: { code: 'INVALID_API_KEY', message: 'Invalid Linear API key', diagnostics: { operation: 'listIssues.fetchPage', message: 'Linear listIssues.fetchPage failed: INVALID_API_KEY (HTTP 401)', statusCode: 401, attemptCount: 2, attempts: [
+          { attempt: 1, outcome: 'HTTP_502', durationMs: expect.any(Number), delayMs: expect.any(Number) },
+          { attempt: 2, outcome: 'HTTP_401', durationMs: expect.any(Number), delayMs: 0 },
+        ] } },
       });
       expect(mocks.issues).toHaveBeenCalledTimes(2);
       expect(mocks.warn).toHaveBeenCalledExactlyOnceWith(
@@ -286,7 +289,9 @@ describe('LinearApiClient', () => {
           expect(result.error).toEqual({
             code: 'UPSTREAM_UNAVAILABLE',
             message: 'Linear API temporarily unavailable',
-            diagnostics: { operation: 'listIssues.fetchPage', message: 'Linear listIssues.fetchPage failed: UPSTREAM_UNAVAILABLE (HTTP 502)', statusCode: 502 },
+            diagnostics: { operation: 'listIssues.fetchPage', message: 'Linear listIssues.fetchPage failed: UPSTREAM_UNAVAILABLE (HTTP 502)', statusCode: 502, attemptCount: 3, attempts: [1, 2, 3].map((attempt) => ({
+              attempt, outcome: 'HTTP_502', durationMs: expect.any(Number), delayMs: attempt === 3 ? 0 : expect.any(Number),
+            })) },
           });
         }
         expect(mocks.issues).toHaveBeenCalledTimes(3);

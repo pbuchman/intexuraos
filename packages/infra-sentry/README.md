@@ -21,3 +21,9 @@ For full API documentation, see [`docs/packages/infra-sentry/README.md`](../../d
 ```bash
 pnpm vitest run packages/infra-sentry
 ```
+
+Structured logs can explicitly supply `_sentryTags` for payload-free diagnostic
+strings. The transport accepts at most 16 tags, with keys matching
+`[a-z][a-z0-9_.-]{0,63}` and values up to 200 characters. It sends these as Sentry
+tags rather than extras, so SentryBox retains them. Callers must never include
+credentials, queries, user payloads, or raw API responses in tag values.

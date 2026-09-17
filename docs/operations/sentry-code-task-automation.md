@@ -131,22 +131,27 @@ After changing the integration or its deployment config, run:
 pnpm run ci:tracked
 ```
 
-For a live smoke test:
+For the production acceptance check, preserve a verified database backup before
+clearing issues and events through the existing API; keep configuration and keys.
+Wait for a **natural** event. Do not inject an error, run a manual sync, or create
+a manual repair task. Confirm one issue transition creates one task, then inspect
+its evidence, review any justified PR, deploy it, and check two subsequent
+scheduled synchronizations. No new event is not proof of a repaired automation.
 
-1. Send a controlled SentryBox event to a low-risk project and environment.
-2. Confirm the SentryBox delivery log shows a 2xx response.
-3. Confirm test/sample deliveries return ignored and do not create a
-   `sentry-issue-events` record.
-4. Trigger an actionable delivery and confirm code-agent stores one
-   `sentry-issue-events` record for the Sentry issue transition.
-5. Confirm one Linear issue is created or linked.
-6. Confirm one queued CodeTask exists with `agentType: "sentry"`.
-7. Confirm the task worker type matches the automation user's
-   `defaultSentryWorkerType`.
-8. Run the pinned Error Hub MCP verifier against the created issue and event,
-   and confirm the worker fetches both through `error_hub`.
-9. Confirm successful completion includes a PR URL and a final outcome of
-   `fixed` or `suppressed`.
+Linear full-sync failures include the exact read in `operation` and
+`linear.operation`, the total attempts in `linear.attempt_count`, and up to three
+`linear.attempt_N` tags containing a safe outcome, duration in milliseconds, and
+retry delay (zero on the terminal attempt). These tags survive SentryBox's
+extra-data allowlist and appear in `get_issue_details`. The exception message
+remains stable so timing changes do not split issue groups. Queries, variables,
+credentials and response bodies are never included in this diagnostic context.
+
+If supported evidence cannot justify a code change, the task stops with
+`SENTRY_EVIDENCE_UNAVAILABLE` without automatic retry. Its reason must state the
+confirmed failure and attempt evidence first, then the specific missing fact.
+An accessible event showing upstream unavailability is different from failed
+MCP access. Do not claim recovery without evidence, manufacture a PR, or suppress
+an actual upstream error to pass the acceptance check.
 
 To test signature rejection locally, send the same payload with a bogus
 `Sentry-Hook-Signature` and confirm code-agent returns `401`.
@@ -162,4 +167,4 @@ include:
 - the code-level suppression change
 - verification commands and results
 
-If the report cannot be proven safe to suppress, fix the bug instead.
+If suppression is not justified, fix a demonstrated bug or stop with the concrete missing evidence.
