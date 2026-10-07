@@ -32,7 +32,7 @@ github_branch = "development"
 github_connection_name = "github-pbuchman"
 
 # Keep retired Cloud Run-targeted Pub/Sub pushes disabled.
-# Hetzner-owned subscriptions and Scheduler jobs live in terraform/hetzner-prod.
+# Hetzner-owned subscriptions and Scheduler jobs live in terraform/prod-runtime.
 enable_legacy_cloud_run_async_consumers = false
 
 # Enable LLM API audit logging (logs all LLM calls to Firestore)

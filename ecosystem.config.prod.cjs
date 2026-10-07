@@ -1,5 +1,5 @@
 /**
- * PM2 Ecosystem Configuration for Hetzner production.
+ * PM2 Ecosystem Configuration for the production runtime.
  *
  * Usage:
  *   INTEXURAOS_ENVIRONMENT=prod pm2 start ecosystem.config.prod.cjs
@@ -38,54 +38,128 @@ const REPO_ROOT = __dirname;
 const TSX_CLI = path.resolve(REPO_ROOT, 'node_modules/tsx/dist/cli.mjs');
 const WAIT_SCRIPT = path.resolve(REPO_ROOT, 'scripts/pm2-wait-start.mjs');
 const PUBLIC_ORIGIN = envValue('INTEXURAOS_PUBLIC_ORIGIN') ?? 'https://intexuraos.cloud';
+const RUNTIME_HOME = envValue('HOME') || '/home/intexuraos-prod';
 const GOOGLE_APPLICATION_CREDENTIALS =
-  envValue('GOOGLE_APPLICATION_CREDENTIALS') ?? '/home/deploy/runtime-sa-key.json';
+  envValue('GOOGLE_APPLICATION_CREDENTIALS') || path.join(RUNTIME_HOME, 'runtime-sa-key.json');
 const PROJECT_ID = envValue('INTEXURAOS_GCP_PROJECT_ID') ?? 'intexuraos-dev-pbuchman';
 const RETAINED_GCP_ENVIRONMENT = 'dev';
 
-const SERVICE_PORTS = {
-  'user-service': 8110,
-  'notion-service': 8112,
-  'whatsapp-service': 8113,
-  'mobile-notifications-service': 8114,
-  'fishing-assistant-service': 8119,
-  'research-agent': 8116,
-  'image-service': 8120,
-  'notes-agent': 8121,
-  'app-settings-service': 8122,
-  'bookmarks-agent': 8124,
-  'calendar-agent': 8125,
-  'linear-agent': 8126,
-  'web-agent': 8127,
-  'code-agent': 8128,
-  'hellscript-agent': 8131,
-  'llm-usage-service': 8132,
-  'api-docs-hub': 8133,
-  'intex-agent': 8134,
-  'message-digest-service': 8135,
+const SERVICE_DEFINITIONS = {
+  'user-service': {
+    port: 8110,
+    urlEnv: 'INTEXURAOS_USER_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_USER_SERVICE_OPENAPI_URL',
+    waitFor: 'app-settings-service',
+  },
+  'notion-service': {
+    port: 8112,
+    urlEnv: 'INTEXURAOS_NOTION_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_NOTION_SERVICE_OPENAPI_URL',
+  },
+  'whatsapp-service': {
+    port: 8113,
+    urlEnv: 'INTEXURAOS_WHATSAPP_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL',
+  },
+  'mobile-notifications-service': {
+    port: 8114,
+    urlEnv: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL',
+  },
+  'research-agent': {
+    port: 8116,
+    urlEnv: 'INTEXURAOS_RESEARCH_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL',
+    waitFor: 'app-settings-service',
+  },
+  'fishing-assistant-service': {
+    port: 8119,
+    urlEnv: 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL',
+  },
+  'image-service': {
+    port: 8120,
+    urlEnv: 'INTEXURAOS_IMAGE_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL',
+    waitFor: 'app-settings-service',
+  },
+  'notes-agent': {
+    port: 8121,
+    urlEnv: 'INTEXURAOS_NOTES_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_NOTES_AGENT_OPENAPI_URL',
+  },
+  'app-settings-service': {
+    port: 8122,
+    urlEnv: 'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL',
+  },
+  'bookmarks-agent': {
+    port: 8124,
+    urlEnv: 'INTEXURAOS_BOOKMARKS_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL',
+  },
+  'calendar-agent': {
+    port: 8125,
+    urlEnv: 'INTEXURAOS_CALENDAR_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL',
+    waitFor: 'app-settings-service',
+  },
+  'linear-agent': {
+    port: 8126,
+    urlEnv: 'INTEXURAOS_LINEAR_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_LINEAR_AGENT_OPENAPI_URL',
+    waitFor: 'app-settings-service',
+  },
+  'web-agent': {
+    port: 8127,
+    urlEnv: 'INTEXURAOS_WEB_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_WEB_AGENT_OPENAPI_URL',
+    waitFor: 'app-settings-service',
+  },
+  'code-agent': {
+    port: 8128,
+    urlEnv: 'INTEXURAOS_CODE_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_CODE_AGENT_OPENAPI_URL',
+  },
+  'hellscript-agent': {
+    port: 8131,
+    urlEnv: 'INTEXURAOS_HELLSCRIPT_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL',
+  },
+  'llm-usage-service': {
+    port: 8132,
+    urlEnv: 'INTEXURAOS_LLM_USAGE_SERVICE_URL',
+  },
+  'api-docs-hub': {
+    port: 8133,
+    urlEnv: 'INTEXURAOS_API_DOCS_HUB_URL',
+  },
+  'intex-agent': {
+    port: 8134,
+    urlEnv: 'INTEXURAOS_INTEX_AGENT_URL',
+    openApiUrlEnv: 'INTEXURAOS_INTEX_AGENT_OPENAPI_URL',
+  },
+  'message-digest-service': {
+    port: 8135,
+    urlEnv: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL',
+    openApiUrlEnv: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL',
+  },
 };
 
-const SERVICE_URL_ENV = {
-  'user-service': 'INTEXURAOS_USER_SERVICE_URL',
-  'notion-service': 'INTEXURAOS_NOTION_SERVICE_URL',
-  'whatsapp-service': 'INTEXURAOS_WHATSAPP_SERVICE_URL',
-  'mobile-notifications-service': 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
-  'fishing-assistant-service': 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL',
-  'research-agent': 'INTEXURAOS_RESEARCH_AGENT_URL',
-  'image-service': 'INTEXURAOS_IMAGE_SERVICE_URL',
-  'notes-agent': 'INTEXURAOS_NOTES_AGENT_URL',
-  'app-settings-service': 'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
-  'bookmarks-agent': 'INTEXURAOS_BOOKMARKS_AGENT_URL',
-  'calendar-agent': 'INTEXURAOS_CALENDAR_AGENT_URL',
-  'linear-agent': 'INTEXURAOS_LINEAR_AGENT_URL',
-  'web-agent': 'INTEXURAOS_WEB_AGENT_URL',
-  'code-agent': 'INTEXURAOS_CODE_AGENT_URL',
-  'hellscript-agent': 'INTEXURAOS_HELLSCRIPT_AGENT_URL',
-  'llm-usage-service': 'INTEXURAOS_LLM_USAGE_SERVICE_URL',
-  'api-docs-hub': 'INTEXURAOS_API_DOCS_HUB_URL',
-  'intex-agent': 'INTEXURAOS_INTEX_AGENT_URL',
-  'message-digest-service': 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL',
-};
+const MAX_BASE_PORT = Math.max(...Object.values(SERVICE_DEFINITIONS).map(({ port }) => port));
+const MAX_PORT_OFFSET = 65535 - MAX_BASE_PORT;
+const rawPortOffset = envValue('INTEXURAOS_PROD_PORT_OFFSET') ?? '0';
+if (!/^(?:0|[1-9]\d*)$/.test(rawPortOffset) || Number(rawPortOffset) > MAX_PORT_OFFSET) {
+  throw new Error(
+    `INTEXURAOS_PROD_PORT_OFFSET must be an integer between 0 and ${String(MAX_PORT_OFFSET)}`
+  );
+}
+const PORT_OFFSET = Number(rawPortOffset);
+
+const PROD_PROFILE = envValue('INTEXURAOS_PROD_PROFILE') ?? 'full';
+if (PROD_PROFILE !== 'full' && PROD_PROFILE !== 'basic') {
+  throw new Error('INTEXURAOS_PROD_PROFILE must be one of: full, basic');
+}
 
 const PUBLIC_API_PATHS = {
   'user-service': '/api/user',
@@ -106,26 +180,6 @@ const PUBLIC_API_PATHS = {
   'llm-usage-service': '/api/llm-usage',
   'intex-agent': '/api/intex-agent',
   'message-digest-service': '/api/message-digests',
-};
-
-const API_DOCS_HUB_OPENAPI_URLS = {
-  INTEXURAOS_USER_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8110/openapi.json',
-  INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8112/openapi.json',
-  INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8113/openapi.json',
-  INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8114/openapi.json',
-  INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8119/openapi.json',
-  INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://127.0.0.1:8116/openapi.json',
-  INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8120/openapi.json',
-  INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8122/openapi.json',
-  INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://127.0.0.1:8121/openapi.json',
-  INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://127.0.0.1:8124/openapi.json',
-  INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://127.0.0.1:8125/openapi.json',
-  INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'http://127.0.0.1:8128/openapi.json',
-  INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://127.0.0.1:8126/openapi.json',
-  INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://127.0.0.1:8127/openapi.json',
-  INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://127.0.0.1:8131/openapi.json',
-  INTEXURAOS_INTEX_AGENT_OPENAPI_URL: 'http://127.0.0.1:8134/openapi.json',
-  INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8135/openapi.json',
 };
 
 const PROD_SERVICE_ORDER = [
@@ -149,15 +203,32 @@ const PROD_SERVICE_ORDER = [
   'web-agent',
   'api-docs-hub',
 ];
+const BASIC_EXCLUDED_SERVICES = new Set(['research-agent', 'message-digest-service']);
+const ACTIVE_SERVICE_ORDER = PROD_SERVICE_ORDER.filter(
+  (name) => PROD_PROFILE === 'full' || !BASIC_EXCLUDED_SERVICES.has(name)
+);
+const ACTIVE_SERVICE_NAMES = new Set(ACTIVE_SERVICE_ORDER);
 
-const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
-  'user-service',
-  'research-agent',
-  'image-service',
-  'calendar-agent',
-  'linear-agent',
-  'web-agent',
-]);
+function servicePort(name) {
+  return SERVICE_DEFINITIONS[name].port + PORT_OFFSET;
+}
+
+const activePorts = ACTIVE_SERVICE_ORDER.map(servicePort);
+if (new Set(activePorts).size !== activePorts.length) {
+  throw new Error('Production service configuration contains duplicate ports');
+}
+
+const API_DOCS_HUB_OPENAPI_URLS = Object.fromEntries(
+  ACTIVE_SERVICE_ORDER.flatMap((name) => {
+    const definition = SERVICE_DEFINITIONS[name];
+    return definition.openApiUrlEnv === undefined
+      ? []
+      : [[definition.openApiUrlEnv, `http://127.0.0.1:${String(servicePort(name))}/openapi.json`]];
+  })
+);
+const ACTIVE_OPENAPI_SERVICES = ACTIVE_SERVICE_ORDER.filter(
+  (name) => SERVICE_DEFINITIONS[name].openApiUrlEnv !== undefined
+);
 
 function topic(name) {
   return `intexuraos-${name}-${RETAINED_GCP_ENVIRONMENT}`;
@@ -165,9 +236,9 @@ function topic(name) {
 
 function localServiceUrls() {
   return Object.fromEntries(
-    Object.entries(SERVICE_URL_ENV).map(([service, envVar]) => [
-      envVar,
-      `http://127.0.0.1:${SERVICE_PORTS[service]}`,
+    Object.entries(SERVICE_DEFINITIONS).map(([service, { urlEnv }]) => [
+      urlEnv,
+      `http://127.0.0.1:${String(servicePort(service))}`,
     ])
   );
 }
@@ -275,7 +346,7 @@ const SERVICE_RUNTIME_ENV_KEYS = {
 };
 
 const COMMON_SERVICE_ENV = {
-  HOME: envValue('HOME') ?? '/home/deploy',
+  HOME: RUNTIME_HOME,
   PATH: envValue('PATH'),
   ...pickEnv(COMMON_ENV_KEYS),
   GOOGLE_APPLICATION_CREDENTIALS,
@@ -283,6 +354,7 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_GCP_PROJECT_ID: PROJECT_ID,
   INTEXURAOS_ENVIRONMENT: 'prod',
   INTEXURAOS_RUNTIME: 'prod',
+  HOST: '127.0.0.1',
   ...(envValue('INTEXURAOS_COMMIT_SHA') === undefined
     ? {}
     : { INTEXURAOS_COMMIT_SHA: envValue('INTEXURAOS_COMMIT_SHA') }),
@@ -357,6 +429,8 @@ const SERVICE_ENV_MAPPINGS = {
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
   },
   'code-agent': {
+    INTEXURAOS_PR_TRIAGE_ENABLED:
+      PROD_PROFILE === 'basic' ? 'false' : (envValue('INTEXURAOS_PR_TRIAGE_ENABLED') ?? 'true'),
     INTEXURAOS_SERVICE_URL: envValue('INTEXURAOS_SERVICE_URL') ?? publicServiceUrl('code-agent'),
     INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL:
       envValue('INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL') ?? `${PUBLIC_ORIGIN}/api/code`,
@@ -404,13 +478,21 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'api-docs-hub': {
     ...API_DOCS_HUB_OPENAPI_URLS,
+    ...(PROD_PROFILE === 'basic'
+      ? { INTEXURAOS_API_DOCS_EXPECTED_SERVICES: ACTIVE_OPENAPI_SERVICES.join(',') }
+      : {}),
   },
 };
 
 function createServiceConfig(name) {
-  const waitForService = APP_SETTINGS_DEPENDENT_SERVICES.has(name)
-    ? 'http://127.0.0.1:8122/health'
-    : undefined;
+  const waitForName = SERVICE_DEFINITIONS[name].waitFor;
+  if (waitForName !== undefined && !ACTIVE_SERVICE_NAMES.has(waitForName)) {
+    throw new Error(`Production service ${name} depends on inactive service ${waitForName}`);
+  }
+  const waitForService =
+    waitForName === undefined
+      ? undefined
+      : `http://127.0.0.1:${String(servicePort(waitForName))}/health`;
 
   return {
     name,
@@ -423,7 +505,7 @@ function createServiceConfig(name) {
       ...pickEnv(SERVICE_RUNTIME_ENV_KEYS[name] ?? []),
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       ...(waitForService === undefined ? {} : { WAIT_FOR_SERVICE: waitForService }),
-      PORT: String(SERVICE_PORTS[name]),
+      PORT: String(servicePort(name)),
       NODE_ENV: 'production',
     },
     autorestart: true,
@@ -448,5 +530,5 @@ function createServiceConfig(name) {
 }
 
 module.exports = {
-  apps: PROD_SERVICE_ORDER.map(createServiceConfig),
+  apps: ACTIVE_SERVICE_ORDER.map(createServiceConfig),
 };

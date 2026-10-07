@@ -13,8 +13,8 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
-const validatorPath = resolve(repoRoot, 'scripts/hetzner/validate-prod-secret-candidate.sh');
-const loaderPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
+const validatorPath = resolve(repoRoot, 'scripts/home-prod/validate-prod-secret-candidate.sh');
+const loaderPath = resolve(repoRoot, 'scripts/home-prod/load-secrets.sh');
 const terraformPath = resolve(repoRoot, 'terraform/shared-gcp/main.tf');
 const operationsPath = resolve(repoRoot, 'docs/operations/secret-packages.md');
 const pubsubUiPath = resolve(repoRoot, 'tools/pubsub-ui/index.html');

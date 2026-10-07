@@ -116,7 +116,7 @@ isolated admission check that publishes nothing:
 
 ```bash
 sudo -n INTEXURAOS_ENVIRONMENT=prod \
-  bash scripts/hetzner/load-secrets.sh --validate-only --version <prod-version>
+  bash scripts/home-prod/load-secrets.sh --validate-only --version <prod-version>
 ```
 
 After admission, the one-shot loader requires PM2 and Alloy to be stopped and
@@ -124,7 +124,7 @@ publishes a complete stable projection:
 
 ```bash
 sudo -n INTEXURAOS_ENVIRONMENT=prod \
-  bash scripts/hetzner/load-secrets.sh --version <prod-version>
+  bash scripts/home-prod/load-secrets.sh --version <prod-version>
 ```
 
 Required result:

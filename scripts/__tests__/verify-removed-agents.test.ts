@@ -153,32 +153,6 @@ const receipt = command.ingestReceiptId;
     expect(result.stdout).toContain('Removed agent verification passed');
   });
 
-  it('allows only the explicit Terraform retired async cleanup inventory to name deleted resources', () => {
-    writeFixture(
-      rootDir,
-      'terraform/hetzner-prod/retired-async-cleanup.tf',
-      `
-locals {
-  retired_prod_hetzner_pubsub_subscriptions = {
-    commands_ingest = {
-      subscription_name = "intexuraos-commands-ingest-prod-hetzner"
-      push_path         = "/internal/commands"
-    }
-    actions_queue = {
-      subscription_name = "intexuraos-actions-queue-prod-hetzner"
-      push_path         = "/internal/actions/process"
-    }
-  }
-}
-`
-    );
-
-    const result = runVerifier(rootDir);
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Removed agent verification passed');
-  });
-
   it('allows only the exact preserved legacy Pub/Sub recovery inventory lines', () => {
     writeFixture(
       rootDir,

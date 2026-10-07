@@ -23,7 +23,7 @@ monolithic Cloud Build triggers and no `cloudbuild/cloudbuild.yaml` application
 pipeline.
 
 Production application deployment is manual exact-SHA deployment to Hetzner.
-Use [the production runbook](../operations/hetzner-prod-runbook.md) or the
+Use [the production runbook](../operations/home-prod-runbook.md) or the
 `hetzner-prod` target in `.github/workflows/deploy.yml`.
 
 ## Architecture
@@ -135,4 +135,4 @@ push must not deploy or start Home Dev.
 
 - [Cloud Build 2nd Gen GitHub connection](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github)
 - [Cloud Build trigger schema](https://cloud.google.com/build/docs/api/reference/rest/v1/projects.locations.triggers)
-- [Hetzner production runbook](../operations/hetzner-prod-runbook.md)
+- [Home PROD runbook](../operations/home-prod-runbook.md)

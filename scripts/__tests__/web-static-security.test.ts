@@ -49,7 +49,10 @@ describe('web static artifact security', () => {
   });
 
   it('sets no-cache headers for HTML and service workers in production', () => {
-    const nginx = readFileSync(resolve(repoRoot, 'scripts/hetzner/nginx/intexuraos.conf'), 'utf8');
+    const nginx = readFileSync(
+      resolve(repoRoot, 'scripts/home-prod/nginx/intexuraos.conf'),
+      'utf8'
+    );
     const noCache = 'no-cache, no-store, must-revalidate';
 
     expect(nginx).toMatch(

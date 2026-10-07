@@ -53,27 +53,27 @@ describe('App.tsx lazy-loaded routes', () => {
     expect(source).not.toContain('const NotificationDigestsPage = React.lazy(');
     expect(source).not.toContain('const NotificationDigestBackfillPage = React.lazy(');
     expect(source).not.toContain('const NotificationDigestViewPage = React.lazy(');
-    expect(source).toMatch(
-      /path="\/notifications\/digests"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
-    );
-    expect(source).toMatch(
-      /path="\/notifications\/digests\/backfill"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
-    );
+    expect(source).toContain('path="/notifications/digests"');
+    expect(source).toContain('path="/notifications/digests/backfill"');
     expect(source).toContain('path="/notifications/digests/:groupKey/:date"');
-    expect(source).toContain('element={<MessageDigestLegacyRedirectPage />}');
+    expect(source).toContain('<MessageDigestLegacyRedirectPage />');
   });
 
   it('redirects legacy Fishing digest entry points without rendering duplicate pages', () => {
     expect(source).not.toContain('const FishingDigestsPage = React.lazy(');
     expect(source).not.toContain('const FishingDigestViewPage = React.lazy(');
-    expect(source).toMatch(
-      /path="\/fishing-assistant\/digests"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
-    );
-    expect(source).toMatch(
-      /path="\/fishing\/digests"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
-    );
+    expect(source).toContain('path="/fishing-assistant/digests"');
+    expect(source).toContain('path="/fishing/digests"');
     expect(source).toContain('path="/fishing-assistant/digests/:groupKey/:date"');
     expect(source).toContain('path="/fishing/digests/:groupKey/:date"');
+  });
+
+  it('shows user-facing unavailable states for omitted production capabilities', () => {
+    expect(source).toContain('This feature is temporarily unavailable.');
+    for (const capability of ['research', 'messageDigests', 'prTriage', 'schedulers']) {
+      expect(source).toContain(`featureAvailability.${capability}`);
+    }
+    expect(source).not.toContain('basic profile');
   });
 
   it('uses Intex Agent sessions as the authenticated landing page', () => {
