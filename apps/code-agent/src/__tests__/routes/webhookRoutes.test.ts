@@ -187,6 +187,68 @@ describe('webhookRoutes — POST /internal/webhooks/task-complete', () => {
     expect(call?.[1].body.result?.rebaseResult).toStrictEqual(rebaseResult);
   });
 
+  it.each([
+    {
+      name: 'JSON whitespace',
+      rawBody: '{ "taskId": "t-raw", "status": "completed" }',
+      expectedBody: { taskId: 't-raw', status: 'completed' },
+    },
+    {
+      name: 'schema-coerced result fields',
+      rawBody: '{"taskId":"t-raw","status":"completed","result":{"commits":"2"}}',
+      expectedBody: { taskId: 't-raw', status: 'completed', result: { commits: 2 } },
+    },
+  ])('verifies the original signed bytes with $name', async ({ rawBody, expectedBody }) => {
+    vi.mocked(handleTaskCompletionModule.handleTaskCompletion).mockResolvedValue({ kind: 'received' });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = crypto.createHmac('sha256', WEBHOOK_SECRET)
+      .update(`${timestamp}.${rawBody}`).digest('hex');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload: rawBody,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ received: true });
+    expect(handleTaskCompletionModule.handleTaskCompletion).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      expect.objectContaining({ body: expectedBody })
+    );
+  });
+
+  it('rejects altered bytes even when JSON parsing produces the signed object', async () => {
+    vi.mocked(handleTaskCompletionModule.handleTaskCompletion).mockResolvedValue({ kind: 'received' });
+    const payload = { taskId: 't-raw', status: 'completed' };
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = signPayload(payload, WEBHOOK_SECRET, timestamp);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-timestamp': String(timestamp),
+        'x-request-signature': signature,
+      },
+      payload: JSON.stringify(payload, null, 2),
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      success: false,
+      error: { code: 'INVALID_SIGNATURE', message: 'HMAC signature verification failed' },
+    });
+    expect(handleTaskCompletionModule.handleTaskCompletion).not.toHaveBeenCalled();
+    expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+  });
+
   it('returns 401 WITHOUT calling the use case when the signature is invalid', async () => {
     const payload = { taskId: 't-1', status: 'completed' as const };
     const timestamp = Math.floor(Date.now() / 1000);

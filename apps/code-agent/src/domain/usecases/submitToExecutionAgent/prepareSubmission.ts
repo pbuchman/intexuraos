@@ -206,8 +206,8 @@ export async function prepareSubmission(
   // Step 7: Fetch fresh labels from Linear and validate
   const validateResult = await linearAgentClient.validateIssue({ userId, identifier: linearIssueId });
   if (!validateResult.ok) {
-    logger.warn({ linearIssueId, error: validateResult.error }, 'Failed to fetch Linear issue labels for Execution Agent submission');
-    return err({ code: 'label_not_ready', message: 'Failed to fetch Linear issue labels. Please try again.' });
+    logger[validateResult.error.alreadyReported === true ? 'info' : 'warn']({ linearIssueId, error: validateResult.error }, 'Failed to fetch Linear issue labels for Execution Agent submission');
+    return err({ code: 'label_not_ready', message: 'Failed to fetch Linear issue labels. Please try again.', ...(validateResult.error.alreadyReported === true ? { alreadyReported: true } : {}) });
   }
 
   const freshLabels = validateResult.value.labels;

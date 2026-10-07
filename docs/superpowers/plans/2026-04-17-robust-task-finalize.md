@@ -35,7 +35,7 @@
 - `workers/orchestrator/src/services/task-dispatcher.ts` — `finalizeTask` calls `statusUpdateClient` with retry before existing webhook; accepts `statusUpdateClient` via constructor
 - `workers/orchestrator/src/__tests__/task-dispatcher.test.ts` — test finalize blocks on status update success
 - `workers/orchestrator/src/start.ts` — wire `StatusUpdateClient` into `TaskDispatcher`
-- `terraform/environments/dev/main.tf` — add `google_cloud_scheduler_job` for zombie detection (dev only — per user instruction)
+- `terraform/shared-gcp/main.tf` — add `google_cloud_scheduler_job` for zombie detection (dev only — per user instruction)
 
 ---
 
@@ -1273,23 +1273,23 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 ## Task 6: Cloud Scheduler cron for `detect-zombies` (dev only)
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 Per user instruction: this change goes in dev only. Prod and dev share Firestore, so a dev-triggered sweep recovers both environments' tasks when the orchestrator writes the shared collection. If prod operates independently, replicate this block in `terraform/environments/prod/main.tf` later — out of scope for this PR.
 
 - [ ] **Step 1: Read the existing schedulers in the file to match the pattern**
 
-Open `terraform/environments/dev/main.tf` and find the block around line 1789 (`google_cloud_scheduler_job "cron_agent_tick"`). Use this as the pattern. Also find the `google_cloud_run_service_iam_member` pattern that grants `scheduler@` invoker on each Cloud Run service — confirm a similar grant exists or must be added for `intexuraos-code-agent`.
+Open `terraform/shared-gcp/main.tf` and find the block around line 1789 (`google_cloud_scheduler_job "cron_agent_tick"`). Use this as the pattern. Also find the `google_cloud_run_service_iam_member` pattern that grants `scheduler@` invoker on each Cloud Run service — confirm a similar grant exists or must be added for `intexuraos-code-agent`.
 
 Search for existing code-agent scheduler invoker grant:
 
 ```bash
-grep -n "scheduler.*code_agent\|code_agent.*scheduler" terraform/environments/dev/main.tf || echo "not found"
+grep -n "scheduler.*code_agent\|code_agent.*scheduler" terraform/shared-gcp/main.tf || echo "not found"
 ```
 
 - [ ] **Step 2: Add the scheduler job (and invoker IAM if missing)**
 
-Append to `terraform/environments/dev/main.tf` (below the `cron_agent_tick` block is a good spot):
+Append to `terraform/shared-gcp/main.tf` (below the `cron_agent_tick` block is a good spot):
 
 ```hcl
 # Grant the shared Cloud Scheduler SA invoker on code-agent (no-op if already granted).
@@ -1346,7 +1346,7 @@ Also confirm how `X-Internal-Auth` is handled for other scheduler-invoked endpoi
 - [ ] **Step 3: Validate Terraform**
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform fmt
 terraform validate
 cd - > /dev/null
@@ -1357,7 +1357,7 @@ Expected: formatted without changes, validate passes.
 - [ ] **Step 4: Plan against dev project**
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform plan -var-file=... # match existing pattern in repo
 cd - > /dev/null
 ```
@@ -1367,7 +1367,7 @@ Confirm the plan shows exactly two additions: the IAM member (if needed) and the
 - [ ] **Step 5: Commit**
 
 ```bash
-git add terraform/environments/dev/main.tf
+git add terraform/shared-gcp/main.tf
 git commit -m "chore(terraform/dev): schedule code-tasks zombie sweep every 5 minutes
 
 Cloud Scheduler hits /internal/code/detect-zombies every 5 minutes.

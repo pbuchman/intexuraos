@@ -31,6 +31,9 @@ const INFRA_RETRY_CODES = new Set([
 export function classifyFailure(error: TaskError): FailureVerdict {
   const { code: errorCode, message: errorMessage, remediation } = error;
 
+  // Re-running the same investigation cannot supply missing evidence.
+  if (errorCode === 'SENTRY_EVIDENCE_UNAVAILABLE') return 'fail';
+
   // INT-1454: Worktree metadata was lost on adoption and could not be
   // repaired. The task's in-container state is unrecoverable; silently
   // looping on retries would just repeat exit-128 for every git command.

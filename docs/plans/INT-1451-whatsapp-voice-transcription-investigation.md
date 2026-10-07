@@ -278,7 +278,7 @@ INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION:
   process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'intexuraos-whatsapp-send-dev-push',
 ```
 
-Confirm each name against `terraform/environments/dev/main.tf`. If the Terraform name disagrees, Terraform wins.
+Confirm each name against `terraform/shared-gcp/main.tf`. If the Terraform name disagrees, Terraform wins.
 
 - [ ] **Step 2: Restart whatsapp-service on home-dev** (via the existing deploy path — do not reach into PM2 manually).
 
@@ -356,7 +356,7 @@ git commit -m "[INT-1451] Make critical Pub/Sub topics non-nullable at the type 
 ### Task 5 — Consolidate transcription-completed topic
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf` — remove legacy `intexuraos-transcription-completed-dev` topic + subscriptions once traffic has migrated.
+- Modify: `terraform/shared-gcp/main.tf` — remove legacy `intexuraos-transcription-completed-dev` topic + subscriptions once traffic has migrated.
 - Modify: Cloud Function env var `INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC` → `intexuraos-srt-transcription-completed-dev`.
 - Modify: `workers/transcription/src/types.ts` — no code change beyond doc reference.
 
@@ -383,7 +383,7 @@ git commit -m "[INT-1451] Consolidate transcription-completed onto srt- topic"
 
 **Files:**
 - Modify: `packages/infra-pubsub/src/basePublisher.ts` — when publish fails, emit a Sentry breadcrumb + `logger.error` with structured fields `{topic, code, context}` so an alert policy can fire on `severity:ERROR AND jsonPayload.event="audio_publish_failed"`.
-- Add: a GCP alert policy in `terraform/environments/dev/main.tf` (and prod counterpart) that triggers when `count(jsonPayload.event="audio_publish_failed") > 0 over 5 minutes`.
+- Add: a GCP alert policy in `terraform/shared-gcp/main.tf` (and prod counterpart) that triggers when `count(jsonPayload.event="audio_publish_failed") > 0 over 5 minutes`.
 
 - [ ] **Step 1: Confirm `@intexuraos/infra-sentry` exposes `addBreadcrumb`.** Read `packages/infra-sentry/src/index.ts`; if it does not, add a minimal passthrough (out of scope otherwise).
 

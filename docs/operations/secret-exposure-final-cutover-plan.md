@@ -4,8 +4,8 @@ Status: historical archive; do not execute.
 
 This file preserves the already-executed security migration plan for audit provenance. Its commands,
 goal template, deployment model, and statements of authority are superseded and must not be used for
-a current change. The [current DEV hibernation runbook](./dev-hibernation.md) is the operational
-authority for the Home Dev runtime lifecycle; current secret-package work follows
+a current change. Current runtime ownership is described in [Runtime Environments](./runtime-environments.md);
+current secret-package work follows
 [Secret Packages Operations](./secret-packages.md).
 
 ## Historical Autonomous Agent Goal Template — Do Not Create
@@ -174,7 +174,7 @@ the migrator. No dual-read runtime is allowed.
 8. Require `refs/heads/development` to equal that SHA immediately before manual
    dispatch and require the created workflow run `headSha` to match it.
 9. Deploy that same SHA to Home Dev, static DEV web, orchestrator, Alloy,
-   transcription, and Hetzner production. Start services only after package
+   transcription, and Home PROD. Start services only after package
    projection validation.
 10. Run direct-origin, public, Auth0, Firebase, OAuth, WhatsApp, Matrix,
    transcription, OpenRouter, orchestrator, observability, and browser smokes.

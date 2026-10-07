@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { createDockerComposeEnv } from './lib/docker-compose-env.mjs';
 import { buildLocalEmulatorStartPlan } from './lib/local-emulator-lifecycle.mjs';
-import { runHomeDevRuntimeCommand } from './run-home-dev-runtime-command.mjs';
+import { spawnSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '..');
@@ -204,15 +204,11 @@ async function startEmulators() {
   const dockerEnv = createDockerComposeEnv();
   try {
     for (const command of buildLocalEmulatorStartPlan()) {
-      const result = runHomeDevRuntimeCommand(
-        'docker',
-        ['compose', '-f', composeFile, ...command],
-        {
-          cwd: ROOT_DIR,
-          env: dockerEnv.env,
-          stdio: 'inherit',
-        }
-      );
+      const result = spawnSync('docker', ['compose', '-f', composeFile, ...command], {
+        cwd: ROOT_DIR,
+        env: dockerEnv.env,
+        stdio: 'inherit',
+      });
       if (result.status !== 0) throw new Error(`docker compose exited ${String(result.status)}`);
     }
   } catch (error) {
@@ -230,7 +226,7 @@ async function startEmulators() {
 }
 
 async function verifyDockerServices(composeFile) {
-  const requiredServices = ['pubsub-ui'];
+  const requiredServices = ['firestore-emulator', 'pubsub-emulator', 'pubsub-ui'];
 
   const dockerEnv = createDockerComposeEnv();
   try {
@@ -277,7 +273,10 @@ async function waitForEmulators() {
   const maxAttempts = 60;
   const delayMs = 1000;
 
-  const endpoints = [{ name: 'Pub/Sub UI', url: 'http://localhost:8105/health' }];
+  const endpoints = [
+    { name: 'Message Digest Firestore', url: 'http://localhost:8101/' },
+    { name: 'Pub/Sub UI', url: 'http://localhost:8105/health' },
+  ];
 
   for (const endpoint of endpoints) {
     let attempts = 0;

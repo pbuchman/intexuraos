@@ -9,7 +9,7 @@ the repository in mode-`0600` files.
 Render reviewable non-secret configuration:
 
 ```bash
-node scripts/render-runtime-config.mjs --environment dev --format shell-export
+node scripts/render-runtime-config.mjs --environment local --format shell-export
 node scripts/render-runtime-config.mjs --environment prod --format dotenv
 ```
 
@@ -18,7 +18,7 @@ unknown, and secret-classified names.
 
 ## Secret Packages
 
-`config/environments/secret-packages.json` defines the exact DEV and PROD
+`config/environments/secret-packages.json` defines the exact local/worker (historically `dev`) and PROD
 package membership. `config/environments/secret-package-sources.json` permits
 only the current base package as an incremental build source.
 
@@ -98,49 +98,10 @@ to exact production endpoints. It ignores inherited localhost or DEV URLs;
 `INTEXURAOS_ENVIRONMENT=dev` and `INTEXURAOS_RUNTIME=dev` remain audited legacy
 host/observability tags, not routing inputs.
 
-Run the production-to-DEV dependency regression gate after editing any tracked
-or non-ignored repository file:
-
-```bash
-pnpm run verify:production-dev-dependencies
-```
-
-This direct command is the CI authority. The unit suite skips a second full
-repository traversal by default; to exercise that redundant wrapper explicitly,
-run `INTEXURAOS_RUN_TRACKED_PRODUCTION_DEV_GATE_TEST=1 pnpm exec vitest run
-scripts/__tests__/production-dev-dependency-gate.test.ts`.
-
-The file universe is derived by the verifier and cannot be narrowed by policy.
-Intentional historical/test/hibernation occurrences require an exact line,
-occurrence count, classification, owner, and reason in the tracked policy. The
-literal scanner canonicalizes supported JS/JSON, YAML/HCL, shell ANSI-C, CSS,
-and HTML/XML escape forms through Node's WHATWG/UTS-46 host implementation.
-It also folds bounded recursive percent encoding and common statically computable
-JavaScript/TypeScript expressions: adjacent literal concatenation, template
-interpolation from literals or one unambiguous `const`, `String(...)`, literal
-array `.join(...)`, and literal UTF-8 base64 decoding. For GitHub Actions
-workflows it also composes statically enumerable `env` references with literal
-`format(...)` expressions and shell-adjacent quote/ANSI-C projections. A
-relevant unresolved workflow value that could complete the forbidden hostname
-fails closed after all supported projections; harmless standalone unresolved
-values remain outside the hostname contract. Case/Unicode variants, duplicate
-or stale entries, duplicate JSON keys, malformed text, NUL bytes, symlinks,
-inventory changes, files whose SHA-256 changes across the whole scan, and
-bounded expansion overflow all fail closed. The one intentional non-text test
-fixture is pinned separately by SHA-256. Other dynamic environment
-substitution, mutable identifiers, runtime branches, and custom decoders still
-require an executable or data-flow-specific regression test.
-
-For a statically computed occurrence, `lineEquals` names the exact discovered
-sink line even when that isolated line does not spell the hostname. Such an
-entry is accepted only when whole-file constant analysis produces an occurrence
-at the same path and exact line; an arbitrary or stale sink line fails closed.
-
-Production Web deployment consumes the manifest only through
-`scripts/render-production-web-service-env.mjs`, which emits validated relative
-`apiPath` entries. Its regression test executes the real deployment shell with
-a DEV `serviceUrl` sentinel and verifies both the final build environment and
-sanitized dotenv output.
+Production routing is covered by focused tests for generated worker callbacks,
+Matrix configuration, strict worker secret projection, and the real production
+web deployment environment. Matrix edge validation belongs to `pbuchman-dev`,
+which owns the static Caddy fragment.
 
 Build the Alloy projection without direct GCP access:
 
@@ -154,50 +115,54 @@ sudo -n env \
 
 ## Production Deployment
 
-`scripts/hetzner/github-actions-deploy.sh` deploys the exact GitHub Actions SHA
-and exact protected package version. It stops PM2 and Alloy, runs the one-shot
-loader, installs static web and code, starts services, writes the deployment
-attestation, verifies health, and deletes prior releases.
+Home PROD deploys an exact reviewed Git SHA and protected package version through
+the host-installed launcher. The launcher and its unprivileged release driver
+admit the package and build before switching the dedicated code, web, and PM2
+runtime pointers. See the [Home PROD runbook](../docs/operations/home-prod-runbook.md).
 
 The production loader may run manually only while PM2 and Alloy are stopped:
 
 ```bash
 sudo -n INTEXURAOS_ENVIRONMENT=prod \
-  bash scripts/hetzner/load-secrets.sh --version <numeric-version>
+  bash scripts/home-prod/load-secrets.sh --version <numeric-version>
 ```
 
-It publishes a complete stable projection and has no partial, activation,
-previous-release, or rollback mode. Any failure leaves services stopped for a
-fix-forward repair.
+It publishes a complete stable projection and has no partial activation or
+secret rollback mode. `--validate-only` renders and checks an isolated candidate
+without changing active files. A publication failure leaves services stopped
+for a fix-forward repair.
 
-## Edge And Cutover Verification
+### Home PROD native deployment
 
-- `generate-dev-caddy.mjs`: generates one explicitly selected immutable DEV
-  edge profile (`active-pre-cutover`, `active-post-cutover`, `draining`, or
-  `hibernated`) or the separate production Matrix fragment from the tracked
-  manifests. The byte-exact outputs in `config/edge/generated/` are deployment
-  inputs and must match the generator; live hosts select these files instead of
-  regenerating or editing route semantics.
-- `validate-dev-caddy-profiles.mjs`: compares every tracked edge fixture with
-  fresh generator output, then validates all five files with a pinned Caddy
-  container in isolated, networkless runs. Missing Docker/Caddy validation is a
-  hard failure.
-
-Generate one reviewable output on stdout or validate the complete tracked set:
+Home PROD uses a dedicated `intexuraos-prod` account, clone, release roots, and
+`PM2_HOME`. The installed root launcher accepts only an exact 40-character SHA and
+positive numeric package version. Root fetches the package with its fixed provisioner
+credential, then the repository deployment runs as the unprivileged account:
 
 ```bash
-node scripts/generate-dev-caddy.mjs --profile active-post-cutover
-node scripts/generate-dev-caddy.mjs --matrix-fragment
-pnpm run verify:dev-edge-profiles
+sudo /usr/local/sbin/intexuraos-home-prod-deploy <40hex-sha> <numeric-version>
 ```
 
-- `install-dev-static-web.sh`: verifies and publishes an exact-SHA Home Dev
-  static build under `/var/www/intexuraos-dev/current` with Caddy-readable
-  permissions.
-- `verify-final-cutover-plan.mjs`: checks saved Terraform plan JSON against the
-  frozen exact address/action allowlist.
-- `security/final-cutover-data.mjs`: one-time offline encrypted-data and
-  retired-worker migration while every writer is stopped.
+The unprivileged driver is `scripts/home-prod/deploy-release.sh`. It admits an isolated
+secret projection, performs a frozen install, builds non-web workspaces, builds the SPA
+against that isolated candidate, and validates the basic PM2 profile on loopback `181xx`
+ports before stopping the dedicated PM2 home or switching code and web pointers.
+
+`load-secrets.sh --user-projection` is reserved for this driver. It confines all active
+outputs to `/home/intexuraos-prod`, keeps them mode `0600`, requires a private offline
+payload copy with mode `0600` or stricter, and never places the root provisioner credential
+in the runtime environment.
+`--candidate-output` is valid only with user-owned validation-only mode and creates the
+private build input consumed before activation.
+
+## Runtime Ownership
+
+Production application services run in the isolated Home PROD runtime. Use
+`pnpm dev` for a manually started localhost stack. Home Dev retains the
+production-serving orchestrator and workers; it has no
+hosted application DEV, public DEV edge, or application autostart.
+The host repository `pbuchman-dev` owns Caddy and the static production Matrix
+fragment at `machine-setup/config/matrix-outbound.caddy`.
 
 ## Connection Verification
 

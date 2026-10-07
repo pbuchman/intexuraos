@@ -45,7 +45,6 @@ const phases = [
       { name: 'terraform-secrets', script: 'verify-terraform-secrets.mjs' },
       { name: 'secret-packages', script: 'verify-secret-packages.mjs' },
       { name: 'credential-files', script: 'verify-credential-files.mjs' },
-      { name: 'dev-edge-profiles', script: 'validate-dev-caddy-profiles.mjs' },
       { name: 'pubsub', script: 'verify-pubsub.mjs' },
       { name: 'logging', script: 'verify-logging.mjs' },
       { name: 'incoming-request-logging', script: 'verify-incoming-request-logging.mjs' },
@@ -66,16 +65,6 @@ const phases = [
       { name: 'agent-instructions', script: 'verify-agent-instructions.mjs' },
       { name: 'llm-architecture', run: 'npx tsx scripts/verify-llm-architecture.ts' },
       { name: 'web-env-lockstep', run: 'node scripts/ci/check-web-env-lockstep.cjs' },
-    ],
-  },
-  {
-    name: 'Production Dependency Gate',
-    parallel: false,
-    commands: [
-      {
-        name: 'production-dev-dependencies',
-        script: 'verify-production-dev-dependencies.mjs',
-      },
     ],
   },
   {

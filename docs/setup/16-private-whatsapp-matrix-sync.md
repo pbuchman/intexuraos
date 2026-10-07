@@ -162,8 +162,8 @@ All three require the exact
 `Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>` header. The health route
 returns `401` before evaluating readiness when the bearer is absent or invalid.
 
-Hetzner production renders `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` from the
-production overlay in versioned configuration when `scripts/hetzner/load-secrets.sh` writes
+Home PROD renders `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` from the
+production overlay in versioned configuration when `scripts/home-prod/load-secrets.sh` writes
 `/etc/intexuraos/.env.prod`; only the adjacent adapter auth token comes from
 Secret Manager. The tracked production value is the production-owned
 `https://matrix-outbound.intexuraos.cloud/api/matrix-outbound` route. Do not point

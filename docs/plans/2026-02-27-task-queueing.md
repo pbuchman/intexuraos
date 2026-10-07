@@ -976,7 +976,7 @@ Also update `firestore.indexes.json`:
 ### Task F2: Add Cloud Scheduler Terraform configuration
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 ```hcl
 # Cloud Scheduler job for task queue drain

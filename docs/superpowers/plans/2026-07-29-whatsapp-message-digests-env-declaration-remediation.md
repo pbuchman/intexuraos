@@ -20,7 +20,7 @@ wiring.
 - Do not make `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` required and do not change token validation,
   rotation, or authorization behavior.
 - Do not edit generated service URLs: `ecosystem.generated.cjs` and
-  `terraform/environments/dev/service-urls.auto.tfvars.json` already contain the URL.
+  `terraform/shared-gcp/service-urls.auto.tfvars.json` already contain the URL.
 - Do not run another full `pnpm run ci:tracked` until focused env validation, service/config tests,
   static checks, and review are green.
 - Preserve the five user-owned untracked files under `docs/superpowers/specs/`.
@@ -41,7 +41,7 @@ wiring.
 - Modify: `scripts/verify-env-vars.mjs`
 - Verify: `apps/whatsapp-service/src/config.ts`
 - Verify: `ecosystem.generated.cjs`
-- Verify: `terraform/environments/dev/service-urls.auto.tfvars.json`
+- Verify: `terraform/shared-gcp/service-urls.auto.tfvars.json`
 
 **Interfaces:**
 - Consumes: `validateRequiredEnv(REQUIRED_ENV)`, `COMMON_OPTIONAL_ENV`, and the existing generated

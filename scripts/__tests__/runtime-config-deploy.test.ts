@@ -22,8 +22,8 @@ const repoRoot = resolve(__dirname, '..', '..');
 const syncSecretsPath = resolve(repoRoot, 'scripts/sync-secrets.sh');
 const secretPackageCliPath = resolve(repoRoot, 'scripts/secret-package.mjs');
 const devSecretProjectionPath = resolve(repoRoot, 'scripts/lib/dev-secret-projection.mjs');
-const loadSecretsPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
-const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
+const loadSecretsPath = resolve(repoRoot, 'scripts/home-prod/load-secrets.sh');
+const deployWebPath = resolve(repoRoot, 'scripts/home-prod/deploy-web.sh');
 const loadGrafanaEnvPath = resolve(repoRoot, 'scripts/observability/load-grafana-cloud-env.sh');
 const generateOrchestratorEnvPath = resolve(repoRoot, 'scripts/generate-orchestrator-env.mjs');
 const localEnvExamplePath = resolve(repoRoot, '.envrc.local.example');
@@ -454,7 +454,7 @@ describe('runtime configuration cutover', () => {
         readFileSync(resolve(repoRoot, 'config/environments/common.json'), 'utf8')
       ) as Record<string, string>),
       ...(JSON.parse(
-        readFileSync(resolve(repoRoot, 'config/environments/dev.json'), 'utf8')
+        readFileSync(resolve(repoRoot, 'config/environments/local.json'), 'utf8')
       ) as Record<string, string>),
     };
     expect(merged).toMatchObject({ ...trackedConfig, ...packageEnv });
@@ -1642,7 +1642,7 @@ describe('runtime configuration cutover', () => {
     expect(
       readFileSync(resolve(repoRoot, 'config/environments/common.json'), 'utf8')
     ).not.toContain('INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI');
-    expect(readFileSync(resolve(repoRoot, 'config/environments/dev.json'), 'utf8')).not.toContain(
+    expect(readFileSync(resolve(repoRoot, 'config/environments/local.json'), 'utf8')).not.toContain(
       'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'
     );
     expect(readFileSync(resolve(repoRoot, 'config/environments/prod.json'), 'utf8')).not.toContain(

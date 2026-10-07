@@ -285,10 +285,11 @@ export async function createTaskForPR(
   }
 
   if (linearResult.linearFallback) {
-    logger.warn(
-      { userId },
-      'Linear issue creation failed, using fallback mode'
-    );
+    if (linearResult.linearFallbackAlreadyReported === true) {
+      logger.info({ userId }, 'Linear issue validation failed, using fallback mode');
+    } else {
+      logger.warn({ userId }, 'Linear issue creation failed, using fallback mode');
+    }
     deps.automationLog.record(
       { repository, prNumber },
       { type: 'linear_issue_failed', error: linearResult.linearFallbackError ?? DEFAULT_LINEAR_FALLBACK_ERROR },

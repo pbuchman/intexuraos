@@ -127,7 +127,7 @@ describe('OAuth Connection Routes', () => {
         headers: {
           authorization: `Bearer ${token}`,
           'x-forwarded-proto': 'https',
-          'x-forwarded-host': 'api.example.com',
+          'x-forwarded-host': 'intexuraos.cloud',
         },
       });
 
@@ -135,6 +135,9 @@ describe('OAuth Connection Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
       expect(body.success).toBe(true);
       expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+      expect(fakeGoogleOAuthClient.getLastGeneratedRedirectUri()).toBe(
+        'https://intexuraos.cloud/oauth/connections/google/callback'
+      );
     });
 
     it('returns 503 when Google OAuth is not configured', async () => {
@@ -178,7 +181,7 @@ describe('OAuth Connection Routes', () => {
         headers: {
           authorization: `Bearer ${token}`,
           // No x-forwarded-proto, no x-forwarded-host
-          host: 'api.example.com',
+          host: 'localhost:3000',
         },
       });
 
@@ -186,6 +189,9 @@ describe('OAuth Connection Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
       expect(body.success).toBe(true);
       expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+      expect(fakeGoogleOAuthClient.getLastGeneratedRedirectUri()).toBe(
+        'http://localhost:3000/oauth/connections/google/callback'
+      );
     });
 
     it('uses fallback localhost when both forwarded headers and host header are missing', async () => {

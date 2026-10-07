@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDockerComposeEnv } from './lib/docker-compose-env.mjs';
 import { buildLocalEmulatorStartPlan } from './lib/local-emulator-lifecycle.mjs';
-import { runHomeDevRuntimeCommand } from './run-home-dev-runtime-command.mjs';
+import { spawnSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -13,7 +13,7 @@ const dockerEnv = createDockerComposeEnv();
 function runCompose(args) {
   const options = { cwd: rootDir, env: dockerEnv.env, stdio: 'inherit' };
   const command = ['compose', '-f', composeFile, ...args];
-  const result = runHomeDevRuntimeCommand('docker', command, options);
+  const result = spawnSync('docker', command, options);
 
   if (result.error) throw result.error;
   return result.status ?? 1;

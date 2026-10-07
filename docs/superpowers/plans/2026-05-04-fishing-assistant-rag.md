@@ -75,7 +75,7 @@
 - Create: `migrations/101_create_fishing_assistant_collections.mjs`
 - Create: `migrations/__tests__/101-create-fishing-assistant-collections.test.ts`
 - Modify: `firestore-collections.json`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `terraform/modules/cloud-build/main.tf`
 - Modify: `cloudbuild/cloudbuild.yaml`
 - Create: `cloudbuild/scripts/deploy-fishing-assistant-service.sh`
@@ -519,7 +519,7 @@ Expected: PASS after all scaffold/deploy files are complete.
 ### Task 5: Add deployment and local environment wiring
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `terraform/modules/cloud-build/main.tf`
 - Modify: `cloudbuild/cloudbuild.yaml`
 - Create: `cloudbuild/scripts/deploy-fishing-assistant-service.sh`
@@ -573,7 +573,7 @@ Add service entries in:
 Search for existing OpenAPI URL envs:
 
 ```bash
-rg -n "OPENAPI_URL|service-manifest|api-docs" apps/api-docs-hub ecosystem.config.cjs terraform/environments/dev/main.tf
+rg -n "OPENAPI_URL|service-manifest|api-docs" apps/api-docs-hub ecosystem.config.cjs terraform/shared-gcp/main.tf
 ```
 
 If `api-docs-hub` has an explicit list, add:

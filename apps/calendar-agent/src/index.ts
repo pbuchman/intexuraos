@@ -48,7 +48,7 @@ async function main(): Promise<void> {
 
   const app = await buildServer();
   const port = Number(process.env['PORT'] ?? 8125);
-  const host = '0.0.0.0';
+  const host = process.env['HOST'] ?? '0.0.0.0';
 
   // Drain registered usage sinks on SIGTERM/SIGINT before exit so the 500ms
   // batching window doesn't lose events when Cloud Run scales down.

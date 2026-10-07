@@ -355,6 +355,29 @@ describe('createTaskForPR', () => {
     request = createDefaultRequest();
   });
 
+  it.each([true, false])('keeps fallback logging owned by validation only for an existing issue (%s)', async (existingIssue) => {
+    request.prTitle = existingIssue ? '[INT-123] Fix the bug' : 'Fix the bug';
+    const info = vi.fn();
+    const warn = vi.fn();
+    deps.logger = { ...logger, info, warn } as Logger;
+    deps.linearIssueService.ensureIssueExists = vi.fn().mockResolvedValue({
+      linearIssueTitle: 'Fallback',
+      linearFallback: true,
+      linearFallbackError: 'Unavailable',
+      linearFallbackAlreadyReported: existingIssue,
+      linearIssueLabels: [],
+      hasChildren: false,
+    });
+    const result = await createTaskForPR(deps, request);
+    expect(result.ok).toBe(true);
+    if (existingIssue) {
+      expect(info).toHaveBeenCalledWith({ userId: 'user-123' }, 'Linear issue validation failed, using fallback mode');
+      expect(warn).not.toHaveBeenCalledWith(expect.anything(), 'Linear issue creation failed, using fallback mode');
+    } else {
+      expect(warn).toHaveBeenCalledWith({ userId: 'user-123' }, 'Linear issue creation failed, using fallback mode');
+    }
+  });
+
   it('creates a task and enqueues it successfully', async () => {
     const createSpy = vi.spyOn(deps.codeTaskRepo, 'create');
     const result = await createTaskForPR(deps, request);

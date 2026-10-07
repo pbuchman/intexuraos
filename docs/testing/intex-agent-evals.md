@@ -8,7 +8,7 @@ phone-visible message flow and browser acceptance checklist, is documented in
 
 The evaluator process and its protected Matrix credentials run only on the Linux host
 `home-dev`, from `$HOME/deploy/intexuraos`, through the SSH alias `home-dev`. The
-system under test is exclusively the Hetzner production deployment at
+system under test is exclusively the Home PROD deployment at
 `https://intexuraos.cloud`, with runtime audience `hetzner-prod`. Its WhatsApp Service,
 Intex Agent, webhook ingress, sessions, LLM calls, strict mocks, and Test Runs are all
 production processes. The runner reaches the two corpus-only control planes through
@@ -184,12 +184,8 @@ pnpm eval:intex-agent:matrix-corpus
 
 The production wrapper accepts only `matrix-corpus`. The Home Dev wrapper retains
 `setup`, `preflight`, `endpoint`, `full`, `scenario intex-eval-NNN`, and `matrix-smoke`.
-While the retained DEV profile has `MODE=hibernated`, every one of those legacy selectors exits
-before the checkout, `direnv`, or evaluator with the stable result `DEV_RUNTIME_HIBERNATED`.
-Running one requires the separately reviewed DEV resume workflow; never resume DEV merely to
-replace the supported production acceptance path. The private Home Dev transport used by the
-production `matrix-corpus` wrapper is exempt because it targets the production runtime and does
-not start DEV services.
+Local selectors require a deliberately started localhost stack. They do not
+start services. The production wrapper remains the production acceptance path.
 `scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any
 message send with `PRODUCTION_MATRIX_CORPUS_REQUIRED`.
 `scenario`, `endpoint`, `matrix-smoke`, and `full` are targeted legacy
@@ -242,7 +238,7 @@ configuration, raw provider or endpoint bodies, assistant text, Matrix history,
 tokens, or protected paths.
 
 `revision_mismatch` means that the reviewed revision is not simultaneously present in the
-Home Dev runner checkout and the production Hetzner deployment attestation. Complete the
+Home Dev runner checkout and the Home PROD deployment attestation. Complete the
 normal merge/deployment and update the runner checkout through the established deployment
 workflow; never bypass revision proof. A missing protected runner configuration is
 repaired from the already-established machine-local state rather than by asking again for

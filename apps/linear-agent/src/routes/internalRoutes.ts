@@ -269,6 +269,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
+          503: {
+            description: 'Linear upstream temporarily unavailable after retries',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
         },
       },
     },
@@ -309,6 +318,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (code === 'NOT_CONNECTED') {
           reply.status(403);
           return await reply.fail('FORBIDDEN', message);
+        }
+        if (code === 'UPSTREAM_UNAVAILABLE') {
+          return await reply.fail('SERVICE_UNAVAILABLE', message);
         }
         reply.status(400);
         return await reply.fail('INVALID_REQUEST', message);

@@ -117,7 +117,7 @@
 - Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`
 - Modify: `docker/code-worker/entrypoint.sh`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `scripts/verify-env-vars.mjs`
 - Modify: `docs/overview.md`
@@ -767,7 +767,7 @@ git commit -m "refactor: finalize glm-5 worker migration"
 ### Task 11: Remove remaining env, Terraform, and docs references
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `scripts/verify-env-vars.mjs`
 - Modify: `workers/orchestrator/README.md`
@@ -865,7 +865,7 @@ rg "error|FAIL" -C3 /tmp/ci-output-zai-removal.txt
 - [ ] **Step 4: Final commit**
 
 ```bash
-git add terraform/environments/dev/main.tf ecosystem.config.cjs scripts/verify-env-vars.mjs docs
+git add terraform/shared-gcp/main.tf ecosystem.config.cjs scripts/verify-env-vars.mjs docs
 git commit -m "docs: remove zai references and finalize glm-5 cleanup"
 ```
 

@@ -200,7 +200,7 @@ export async function retryTask(
     if (validateIssueResult.ok) {
       linearIssueLabelsForDispatch = validateIssueResult.value.labels;
     } else {
-      logger.warn(
+      logger[validateIssueResult.error.alreadyReported === true ? 'info' : 'warn'](
         {
           linearIssueId: originalTask.linearIssueId,
           errorCode: validateIssueResult.error.code,

@@ -44,7 +44,7 @@ Blast radius is huge: there are **41 files** touching `UsageLogger` across packa
    ```bash
    rg "INTEXURAOS_LLM_USAGE_SERVICE_URL" terraform/ ecosystem.config.cjs apps/
    ```
-   Should return matches in `terraform/environments/dev/main.tf` (line ~310), `ecosystem.config.cjs` (line ~57), and — after Phase 3 — every consuming app's `REQUIRED_ENV`.
+   Should return matches in `terraform/shared-gcp/main.tf` (line ~310), `ecosystem.config.cjs` (line ~57), and — after Phase 3 — every consuming app's `REQUIRED_ENV`.
 5. **Sanity check `firestore-collections.json` hasn't drifted.** The current `llm_usage_stats` entry at line 69 says `"owner": "llm-pricing"`. If someone already changed this, stop and reconcile.
 
 ## Complete writer inventory
@@ -173,7 +173,7 @@ The implementer should read all of these before touching code. Paths are absolut
 18. `/Users/p.buchman/personal/intexuraos-1/apps/llm-usage-service/src/domain/usecases/ingestUsageEvents.ts` — where the fanout webhook must be added.
 19. `/Users/p.buchman/personal/intexuraos-1/apps/app-settings-service/src/infra/firestore/usageStatsRepository.ts` — `FirestoreUsageStatsRepository` (the READER being replaced).
 20. `/Users/p.buchman/personal/intexuraos-1/apps/app-settings-service/src/routes/publicRoutes.ts:219` — the endpoint currently driven by the above reader.
-21. `/Users/p.buchman/personal/intexuraos-1/terraform/environments/dev/main.tf:310` — confirm `INTEXURAOS_LLM_USAGE_SERVICE_URL` is already set in `common_service_env_vars`.
+21. `/Users/p.buchman/personal/intexuraos-1/terraform/shared-gcp/main.tf:310` — confirm `INTEXURAOS_LLM_USAGE_SERVICE_URL` is already set in `common_service_env_vars`.
 22. `/Users/p.buchman/personal/intexuraos-1/ecosystem.config.cjs:57` — same confirmation for PM2.
 23. `/Users/p.buchman/personal/intexuraos-1/firestore-collections.json:69` — current `llm_usage_stats` ownership entry.
 
@@ -557,7 +557,7 @@ Only do this AFTER Phase 6 is green in prod for 48h.
 
 8a.9. Update `ecosystem.config.cjs` — no change needed (env var already exists).
 
-8a.10. Update `terraform/environments/dev/main.tf` — `llm-usage-service` needs outbound access to `code-agent`'s internal URL. This should already be covered by `common_service_env_vars`, verify `INTEXURAOS_CODE_AGENT_URL` is in the llm-usage-service Cloud Run env.
+8a.10. Update `terraform/shared-gcp/main.tf` — `llm-usage-service` needs outbound access to `code-agent`'s internal URL. This should already be covered by `common_service_env_vars`, verify `INTEXURAOS_CODE_AGENT_URL` is in the llm-usage-service Cloud Run env.
 
 8a.11. Deploy, end-to-end test: submit a code task, wait for completion, verify `user_usage/{userId}.costToday` incremented by the right amount and `user_usage/{userId}/processed_events/{eventId}` sentinel exists.
 

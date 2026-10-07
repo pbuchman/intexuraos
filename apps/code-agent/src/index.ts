@@ -39,6 +39,7 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC',
+  'INTEXURAOS_PR_TRIAGE_ENABLED', // Explicit runtime capability; basic Home PROD sets false
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
@@ -55,6 +56,8 @@ const PRODUCTION_ONLY_ENV = [
 
 // In E2E mode, only validate core env vars; others have sensible defaults
 const isE2eMode = process.env['E2E_MODE'] === 'true';
+// Direct local starts keep the same default as PM2; basic Home PROD supplies false.
+process.env['INTEXURAOS_PR_TRIAGE_ENABLED'] ??= 'true';
 validateRequiredEnv(isE2eMode ? REQUIRED_ENV : [...REQUIRED_ENV, ...PRODUCTION_ONLY_ENV]);
 
 // Initialize Sentry (required - DSN is validated above)
@@ -98,7 +101,7 @@ async function main(): Promise<void> {
   // batching window doesn't lose events when Cloud Run scales down.
   installUsageSinkShutdownHandler({ app, logger });
 
-  await app.listen({ port: config.port, host: '0.0.0.0' });
+  await app.listen({ port: config.port, host: process.env['HOST'] ?? '0.0.0.0' });
 }
 
 main().catch((error: unknown) => {

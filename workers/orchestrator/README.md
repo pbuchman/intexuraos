@@ -218,10 +218,9 @@ curl -s http://localhost:8199/health | jq .
 #### Rebuilding and Deploying Changes
 
 The production-owned Home Dev worker runs from a built artifact and does not auto-rebuild on code
-changes. A push to `development` neither deploys nor restarts it. Activate only an exact reviewed
-artifact during the authorized M7.3 procedure in the
-[DEV hibernation runbook](../../docs/operations/dev-hibernation.md), after its zero-work and identity
-gates pass:
+changes. A push to `development` neither deploys nor restarts it. Activate an exact reviewed artifact with the host repository’s
+`intexuraos-orchestrator-zero-work-restart` helper. It freezes admission and
+requires no active tasks or pending callbacks before restarting:
 
 ```bash
 # 1. In the staged checkout, prove and build the exact reviewed artifact
@@ -230,8 +229,8 @@ test "$(git rev-parse HEAD)" = "<reviewed-40-character-sha>"
 pnpm build   # builds shared packages
 pnpm --filter orchestrator build
 
-# 2. Only after the runbook's zero-work gate, restart the retained worker
-sudo systemctl restart intexuraos-orchestrator@pbuchman
+# 2. Use the host-owned helper with the reviewed artifact and its health checks.
+# See pbuchman-dev machine-setup instructions for the exact invocation.
 
 # 3. Verify
 curl -s http://localhost:8199/health | jq .
@@ -739,3 +738,11 @@ cd ../../workers/orchestrator && pnpm test:e2e
 - Orchestrator pulls the worker image before each new task container.
 - Pull failure is fail-fast (no cached-image fallback) to prevent stale runtime behavior.
 - Startup logs include requested image ref and resolved digest.
+
+## SentryBox investigations
+
+The Sentry worker uses only `get_issue_details` and `search_issue_events` through
+`error_hub`. SentryBox does not provide log search, traces or attachments.
+Insufficient event evidence ends the task with `SENTRY_EVIDENCE_UNAVAILABLE`
+without automatic retries. Runtime/provider failures retain the existing retry
+policy; usage-limit messages retain the provider's reset time.

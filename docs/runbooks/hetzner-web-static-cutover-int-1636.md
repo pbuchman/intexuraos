@@ -61,7 +61,7 @@ suffix is current production infrastructure naming.
 - [ ] Record GCP rollback values:
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform output web_app_load_balancer_ip
 terraform output web_app_bucket_name
 terraform output static_assets_bucket_name
@@ -113,15 +113,16 @@ URLs; this is a hard cutover with no alias or rewrite fallback.
 
 | System              | Setting                              | Required cutover value                                                                 | Notes |
 | ------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- | ----- |
-| Auth0 SPA app       | Allowed Callback URLs                | `https://intexuraos.cloud`                                                             | Keep `https://dev.intexuraos.cloud` only as the retained recovery callback; DEV is normally hibernated. No `*.run.app`. |
+| Auth0 SPA app       | Allowed Callback URLs                | `https://intexuraos.cloud`                                                             | Keep `http://localhost:3000` for local use. Remove the obsolete hosted DEV callback. No `*.run.app`. |
 | Auth0 SPA app       | Allowed Logout URLs                  | `https://intexuraos.cloud`                                                             | Same retained recovery-domain note as above. |
 | Auth0 SPA app       | Allowed Web Origins                  | `https://intexuraos.cloud`                                                             | Same retained recovery-domain note as above. |
 | Auth0 ChatGPT app   | Authorization URL                    | `https://intexuraos.cloud/api/user/auth/oauth/authorize`                               | Only if the ChatGPT Action app is active. |
 | Auth0 ChatGPT app   | Token URL                            | `https://intexuraos.cloud/api/user/auth/oauth/token`                                   | Must share the same root domain as Authorization URL. |
 | Auth0 ChatGPT app   | Allowed Callback URLs                | ChatGPT-provided `https://chat.openai.com/aip/.../oauth/callback` or `https://chatgpt.com/aip/.../oauth/callback` | Not an IntexuraOS domain. |
 | Firebase Auth       | Authorized domains                   | `intexuraos.cloud`                                                                     | Keep the Firebase `authDomain` secret value from Terraform; do not replace it with the web domain. |
+| Google OAuth client | Authorized redirect URI              | `https://intexuraos.cloud/oauth/connections/google/callback`                           | Keep `http://localhost:3000/oauth/connections/google/callback` for local use. Remove only obsolete hosted DEV entries. |
 | GitHub OAuth App    | Homepage URL                         | `https://intexuraos.cloud`                                                             | Applies to the user-service GitHub connection flow. |
-| GitHub OAuth App    | Authorization callback URL           | `https://intexuraos.cloud/oauth/connections/github/callback`                           | Hetzner must proxy `/oauth/connections/github/*` to `user-service`; current code generates this path from forwarded host/proto. |
+| GitHub OAuth App    | Authorization callback URL           | `https://intexuraos.cloud/oauth/connections/github/callback`                           | Keep `http://localhost:3000/oauth/connections/github/callback` for local use. Hetzner proxies this path to `user-service`. |
 | Linear webhook      | Webhook URL                          | `https://intexuraos.cloud/api/linear/webhooks`                                         | Keep the signing secret unchanged. |
 | WhatsApp webhook    | Callback URL                         | `https://intexuraos.cloud/api/whatsapp/webhooks`                                      | Keep the verify token unchanged. |
 | WhatsApp webhook    | Webhook fields                       | `messages`, `message_status`                                                           | Verify WABA app subscription remains active. |

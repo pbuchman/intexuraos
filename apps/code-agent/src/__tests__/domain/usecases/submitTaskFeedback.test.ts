@@ -165,6 +165,18 @@ describe('submitTaskFeedback', () => {
     };
   });
 
+  it.each([true, false])('keeps validation failures reportable only when not already reported: %s', async (alreadyReported) => {
+    const failure = { code: 'UNAVAILABLE', message: 'Validation unavailable', alreadyReported };
+    mockLinearAgentClient.validateIssue = vi.fn().mockResolvedValue(err(failure));
+    const result = await submitTaskFeedback(deps, mockRequest);
+    expect(result.ok).toBe(true);
+    expect(mockLogger[alreadyReported ? 'info' : 'warn']).toHaveBeenCalledWith(expect.any(Object), 'Failed to fetch Linear issue labels for feedback dispatch');
+    if (alreadyReported) {
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    }
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
   describe('happy path', () => {
     it('successfully creates follow-up task and dispatches', async () => {
       const result = await submitTaskFeedback(deps, mockRequest);

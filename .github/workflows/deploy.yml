@@ -6,51 +6,69 @@ on:
       target:
         description: 'Deployment target'
         required: true
-        default: hetzner-prod
+        default: home-prod
         type: choice
         options:
-          - hetzner-prod
+          - home-prod
           - firestore
           - transcription
           - code-worker
-      deploy_nginx:
-        description: 'Refresh and reload nginx during Hetzner deployment'
-        required: true
-        default: true
-        type: boolean
 
 permissions:
   contents: read
   id-token: write
   pull-requests: read
+  actions: read
 
 concurrency:
   group: deploy-${{ inputs.target }}
   cancel-in-progress: false
 
 jobs:
-  deploy-hetzner-prod:
-    name: Deploy Hetzner Production
-    if: ${{ inputs.target == 'hetzner-prod' }}
-    runs-on: ubuntu-latest
+  deploy-home-prod:
+    name: Deploy Home Production
+    if: ${{ inputs.target == 'home-prod' }}
+    runs-on: [self-hosted, Linux, X64, builder]
     timeout-minutes: 210
     env:
       GH_TOKEN: ${{ github.token }}
-      HETZNER_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_PRIVATE_KEY }}
-      HETZNER_PROD_HOST: ${{ vars.HETZNER_PROD_HOST || '162.55.210.48' }}
-      DEPLOY_NGINX: ${{ inputs.deploy_nginx }}
-      SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
+      PROD_SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
 
-      - name: Deploy via Hetzner runtime scripts
-        run: bash scripts/hetzner/github-actions-deploy.sh
+      - name: Admit exact development release
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_NAME" == 'home-dev' ]] || { echo 'Home PROD requires the home-dev runner' >&2; exit 1; }
+          [[ "$GITHUB_REF" == 'refs/heads/development' ]] || { echo 'Home PROD deploys only development' >&2; exit 1; }
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid release SHA' >&2; exit 1; }
+          [[ "$PROD_SECRET_PACKAGE_VERSION" =~ ^[1-9][0-9]*$ ]] || { echo 'PROD_SECRET_PACKAGE_VERSION must be a positive integer' >&2; exit 1; }
+          git fetch --quiet --no-tags origin development
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          [[ "$(git rev-parse origin/development)" == "$GITHUB_SHA" ]]
+          node scripts/home-prod/verify-secret-package-version-pins.mjs "$PROD_SECRET_PACKAGE_VERSION" config/environments/secret-packages.json
+
+          ci_runs="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=development&event=push&status=success&head_sha=${GITHUB_SHA}&per_page=100")"
+          printf '%s' "$ci_runs" | node -e '
+            const fs = require("node:fs");
+            const expected = process.argv[1];
+            const payload = JSON.parse(fs.readFileSync(0, "utf8"));
+            if (!payload.workflow_runs?.some((run) =>
+              run.head_sha === expected && run.head_branch === "development"
+              && run.event === "push" && run.conclusion === "success")) process.exit(1);
+          ' "$GITHUB_SHA"
+
+      - name: Activate admitted release
+        run: sudo /usr/local/sbin/intexuraos-home-prod-deploy "$GITHUB_SHA" "$PROD_SECRET_PACKAGE_VERSION"
 
   deploy-retained-gcp:
     name: Deploy Retained GCP ${{ inputs.target }}
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target != 'hetzner-prod' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target != 'home-prod' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 

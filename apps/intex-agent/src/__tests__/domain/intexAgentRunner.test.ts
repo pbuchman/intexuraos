@@ -5,7 +5,7 @@ import {
 } from '@intexuraos/http-contracts';
 import type { LLMError, ToolCallingClient, ToolCallingResult } from '@intexuraos/llm-contract';
 import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   IntexAgentToolExecutor,
   QueryCalendarEventsToolArgs,
@@ -12117,6 +12117,45 @@ describe('createIntexAgentRunner', () => {
       });
 
       expect(result.outcome).toBe(expectedOutcome);
+    });
+
+    it.each(['GMT', 'GMT+00:00'])('accepts the ICU UTC offset spelling %s', async (offsetName) => {
+      const nativeFormatToParts = Intl.DateTimeFormat.prototype.formatToParts;
+      const formatToParts = vi
+        .spyOn(Intl.DateTimeFormat.prototype, 'formatToParts')
+        .mockImplementation(function (this: Intl.DateTimeFormat, date) {
+          const parts = nativeFormatToParts.call(this, date);
+          const options = this.resolvedOptions();
+          if (options.timeZone !== 'UTC' || options.timeZoneName !== 'longOffset') return parts;
+          return parts.map((part) =>
+            part.type === 'timeZoneName' ? { ...part, value: offsetName } : part
+          );
+        });
+
+      try {
+        const { runner } = structuredCalendarUpdateHarness({
+          queryCall: timedCalendarUpdateQueryCall(),
+          queryResult: timedCalendarUpdateQueryResult(),
+          operations: [
+            timedCalendarUpdatePlanningOperation({
+              start: { dateTime: '2026-08-22T18:00:00Z', timeZone: 'UTC' },
+              end: { dateTime: '2026-08-22T19:00:00Z', timeZone: 'UTC' },
+            }),
+          ],
+        });
+
+        await expect(
+          runner.run({
+            session: session(),
+            events: [],
+            message: 'Move Calendar call to August 22 at 18:00 UTC.',
+            currentDateTime: CURRENT_DATE_TIME,
+            timeZone: 'Europe/Warsaw',
+          })
+        ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+      } finally {
+        formatToParts.mockRestore();
+      }
     });
 
     it('rejects a duration comparison against a mixed-kind lookup range', async () => {

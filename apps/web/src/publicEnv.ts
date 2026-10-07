@@ -7,6 +7,7 @@ export const PUBLIC_WEB_ENV_KEYS = [
   'INTEXURAOS_FIREBASE_AUTH_DOMAIN',
   'INTEXURAOS_SENTRY_DSN_WEB',
   'INTEXURAOS_USE_FIREBASE_EMULATORS',
+  'INTEXURAOS_PUBLIC_DEPLOYMENT_PROFILE',
 ] as const;
 
 export type PublicWebEnvKey = (typeof PUBLIC_WEB_ENV_KEYS)[number];
@@ -22,5 +23,7 @@ export function readPublicWebEnv(): Record<PublicWebEnvKey, string | undefined> 
     INTEXURAOS_SENTRY_DSN_WEB: import.meta.env.INTEXURAOS_SENTRY_DSN_WEB,
     INTEXURAOS_USE_FIREBASE_EMULATORS:
       import.meta.env.INTEXURAOS_USE_FIREBASE_EMULATORS,
+    INTEXURAOS_PUBLIC_DEPLOYMENT_PROFILE:
+      import.meta.env['INTEXURAOS_PUBLIC_DEPLOYMENT_PROFILE'],
   };
 }

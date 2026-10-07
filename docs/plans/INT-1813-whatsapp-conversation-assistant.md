@@ -311,7 +311,7 @@ Implementation may refine wording, but it must preserve these semantics:
 - Create `migrations/__tests__/117-private-whatsapp-conversation-context-index.test.ts`.
 - Create `migrations/118_whatsapp-conversation-assistant-indexes.mjs`.
 - Create `migrations/__tests__/118-whatsapp-conversation-assistant-indexes.test.ts`.
-- Modify `ecosystem.config.cjs` and `terraform/environments/dev/main.tf` for `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`.
+- Modify `ecosystem.config.cjs` and `terraform/shared-gcp/main.tf` for `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`.
 - Modify `firestore-collections.json`.
 
 ### Web App
@@ -516,7 +516,7 @@ Expected: PASS.
 - Modify: `apps/whatsapp-service/src/config.ts`
 - Modify: `apps/whatsapp-service/src/index.ts`
 - Modify: `ecosystem.config.cjs`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `firestore-collections.json`
 - Create: `migrations/118_whatsapp-conversation-assistant-indexes.mjs`
 - Create: `migrations/__tests__/118-whatsapp-conversation-assistant-indexes.test.ts`
@@ -585,7 +585,7 @@ Add required env vars:
 
 - `INTEXURAOS_CONVERSATION_ASSISTANT_MODEL`
 
-Default the model to `or:google/gemini-3.5-flash`, verified in the OpenRouter catalog on 2026-06-30. Wire env vars in `apps/whatsapp-service/src/index.ts`, `ecosystem.config.cjs`, and `terraform/environments/dev/main.tf`.
+Default the model to `or:google/gemini-3.5-flash`, verified in the OpenRouter catalog on 2026-06-30. Wire env vars in `apps/whatsapp-service/src/index.ts`, `ecosystem.config.cjs`, and `terraform/shared-gcp/main.tf`.
 
 - [ ] **Step 6: Add Firestore registry and indexes**
 

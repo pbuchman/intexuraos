@@ -16,6 +16,7 @@ import type { WorkerSettingsResponse } from '@/services/workerSettingsApi.types'
 import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks, submitCodeTask } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
+import { config } from '@/config';
 import { WORKER_TYPE_METADATA } from '@/components/workers/shared.js';
 import {
   formatSchedulePreview,
@@ -443,7 +444,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
             disabled={submitting}
           />
 
-          {taskMode === 'execution' ? (
+          {taskMode === 'execution' && (config.featureAvailability.schedulers) ? (
             <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
               <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <input
@@ -493,6 +494,10 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   </p>
                 </div>
               ) : null}
+            </div>
+          ) : taskMode === 'execution' ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+              Scheduling is temporarily unavailable.
             </div>
           ) : null}
 

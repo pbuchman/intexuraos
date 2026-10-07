@@ -17,9 +17,9 @@ describe('code task callback URLs', () => {
     );
   });
 
-  it('builds routable dev callback URLs through the public code-agent API prefix', () => {
+  it('does not apply production routing to the retired hostname', () => {
     expect(buildTaskCompleteWebhookUrl('https://dev.intexuraos.cloud')).toBe(
-      'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete'
+      'https://dev.intexuraos.cloud/internal/webhooks/task-complete'
     );
   });
 
@@ -48,7 +48,7 @@ describe('code task callback URLs', () => {
   });
 
   it('classifies callback ownership from normalized callback bases', () => {
-    expect(classifyCallbackOwner(normalizeCallbackBaseUrl('https://dev.intexuraos.cloud'))).toBe('dev');
+    expect(classifyCallbackOwner(normalizeCallbackBaseUrl('https://dev.intexuraos.cloud'))).toBe('custom');
     expect(classifyCallbackOwner(normalizeCallbackBaseUrl('https://intexuraos.cloud'))).toBe('prod');
     expect(classifyCallbackOwner('https://callback.test')).toBe('custom');
   });

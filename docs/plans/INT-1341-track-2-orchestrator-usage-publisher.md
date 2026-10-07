@@ -77,7 +77,7 @@ Run these before opening a PR branch. Each is a hard blocker.
 - `apps/code-agent/src/index.ts` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to `REQUIRED_ENV`.
 - `apps/code-agent/src/config.ts` (or wherever `loadConfig()` lives) — add `llmUsageServiceUrl: string` from `process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL']`.
 - `apps/code-agent/src/server.ts` (or equivalent route-registration entry point) — register `internalUsageWebhookRoute` plugin.
-- `terraform/environments/dev/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to code-agent's service env block (already defined as a terraform local at line 310; just add it to code-agent's var map).
+- `terraform/shared-gcp/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to code-agent's service env block (already defined as a terraform local at line 310; just add it to code-agent's var map).
 - `ecosystem.config.cjs` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132'` to code-agent's PM2 env block.
 - `firestore-collections.json` — no change (no new collections).
 
@@ -253,7 +253,7 @@ Run `pnpm run verify:workspace:tracked -- llm-pricing` — must stay green.
 Per CLAUDE.md env-vars rule, a new env var requires changes in three files:
 
 1. `apps/code-agent/src/index.ts` — add `'INTEXURAOS_LLM_USAGE_SERVICE_URL'` to `REQUIRED_ENV` array.
-2. `terraform/environments/dev/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL = "https://${local.services.llm_usage_service.name}-${local.cloud_run_url_suffix}"` to code-agent's service env block (the local value is already defined at line 310 and used by other services; just add it to code-agent's map).
+2. `terraform/shared-gcp/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL = "https://${local.services.llm_usage_service.name}-${local.cloud_run_url_suffix}"` to code-agent's service env block (the local value is already defined at line 310 and used by other services; just add it to code-agent's map).
 3. `ecosystem.config.cjs` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132'` to code-agent's PM2 `env` block.
 
 #### Step 3.2 — Update `ServiceContainer` and `ServiceConfig`

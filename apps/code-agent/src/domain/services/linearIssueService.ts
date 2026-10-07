@@ -23,6 +23,8 @@ export interface EnsureIssueResult {
   linearFallback: boolean;
   /** Error message when linearFallback is true */
   linearFallbackError?: string;
+  /** True when the validation owner already reported the fallback failure. */
+  linearFallbackAlreadyReported?: boolean;
   /** Labels from validated issue */
   linearIssueLabels: string[];
   /** Whether the issue has child issues */
@@ -118,7 +120,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
         });
 
         if (!validationResult.ok) {
-          logger.warn(
+          logger[validationResult.error.alreadyReported === true ? 'info' : 'warn'](
             { linearIssueId, error: validationResult.error },
             'Issue validation failed, using fallback mode'
           );
@@ -126,6 +128,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
             linearIssueTitle: `Linked issue ${linearIssueId}`,
             linearFallback: true,
             linearFallbackError: validationResult.error.message,
+            ...(validationResult.error.alreadyReported === true ? { linearFallbackAlreadyReported: true } : {}),
             linearIssueLabels: [],
             hasChildren: false,
           };

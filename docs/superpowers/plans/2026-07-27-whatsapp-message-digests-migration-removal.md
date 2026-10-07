@@ -214,8 +214,8 @@ irreversibly deidentifies its activation record in addition to canonical and leg
 - `tools/pubsub-ui/index.html`
 - `tools/pubsub-ui/README.md`
 - `scripts/pubsub-publish-test.mjs`
-- `terraform/environments/dev/main.tf`
-- `terraform/environments/dev/service-urls.auto.tfvars.json`
+- `terraform/shared-gcp/main.tf`
+- `terraform/shared-gcp/service-urls.auto.tfvars.json`
 - `terraform/modules/iam/main.tf`
 - `terraform/hetzner-prod/main.tf`
 - `terraform/hetzner-prod/pubsub.tf`
@@ -445,7 +445,7 @@ pnpm run verify:firestore
    routes, and the cutover-scoped internal-only preparation include. Public candidate ingress must
    not be enabled by preparation.
 4. Extend Terraform tests/plan fixtures for the real two-root dependency order. First,
-   `terraform/environments/dev` creates the dedicated Message Digest identity, run-request topic, and
+   `terraform/shared-gcp` creates the dedicated Message Digest identity, run-request topic, and
    IAM. Then `terraform/hetzner-prod` creates the push subscription/DLQ and five-minute scheduler and
    removes only the legacy digest scheduler. Observe RED for wrong root ownership or ordering.
 5. Implement that resource graph without applying it. The runbook generates/reviews each forward
@@ -499,9 +499,9 @@ pnpm run generate:service-wiring
 pnpm exec vitest run scripts/__tests__/verify-web-service-manifest.test.ts scripts/__tests__/ecosystem.config.test.ts scripts/__tests__/ecosystem.prod.config.test.ts scripts/__tests__/hetzner-runtime.test.ts scripts/__tests__/message-digest-cutover.test.ts
 pnpm run verify:service-wiring
 pnpm run verify:route-resource-names
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/environments/dev fmt -check
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/environments/dev init -backend=false
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/environments/dev validate
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/shared-gcp fmt -check
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/shared-gcp init -backend=false
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/shared-gcp validate
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/hetzner-prod fmt -check
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/hetzner-prod init -backend=false
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/hetzner-prod validate

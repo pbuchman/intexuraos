@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CONFIG_ROOT = resolve(MODULE_DIRECTORY, '..', '..', 'config', 'environments');
-const ENVIRONMENTS = new Set(['dev', 'prod']);
+const ENVIRONMENTS = new Set(['local', 'prod']);
 const FORMATS = new Set(['dotenv', 'shell-export']);
 const ENV_NAME_PATTERN = /^INTEXURAOS_[A-Z0-9_]+$/u;
 const SENSITIVE_CONFIG_NAME_PATTERN =
@@ -17,7 +17,7 @@ const POLICY_KEYS = [
   'secretManagerNames',
   'sensitiveConfigNameAllowlist',
 ];
-const SCOPE_KEYS = ['common', 'dev', 'prod'];
+const SCOPE_KEYS = ['common', 'local', 'prod'];
 
 /**
  * Load and validate the classification policy without exposing configuration values.
@@ -39,7 +39,7 @@ export function loadRuntimePolicy(options = {}) {
 
   const scopes = {
     common: readNameList(policy.scopes.common, 'policy common scope'),
-    dev: readNameList(policy.scopes.dev, 'policy dev scope'),
+    local: readNameList(policy.scopes.local, 'policy local scope'),
     prod: readNameList(policy.scopes.prod, 'policy prod scope'),
   };
   const secretManagerNames = readNameList(
@@ -57,12 +57,12 @@ export function loadRuntimePolicy(options = {}) {
   );
 
   const commonSet = new Set(scopes.common);
-  for (const name of [...scopes.dev, ...scopes.prod]) {
+  for (const name of [...scopes.local, ...scopes.prod]) {
     if (commonSet.has(name)) {
       throw configError(`environment-specific config is also common: ${name}`);
     }
   }
-  const configNames = [...new Set([...scopes.common, ...scopes.dev, ...scopes.prod])];
+  const configNames = [...new Set([...scopes.common, ...scopes.local, ...scopes.prod])];
 
   const configSet = new Set(configNames);
   const secretManagerSet = new Set(secretManagerNames);
@@ -128,7 +128,7 @@ export function loadRuntimePolicy(options = {}) {
 /**
  * Load the tracked non-secret configuration for an environment.
  *
- * @param {{ environment: 'dev' | 'prod', configRoot?: string }} options
+ * @param {{ environment: 'local' | 'prod', configRoot?: string }} options
  * @returns {Record<string, string>}
  */
 export function loadRuntimeConfig(options) {
@@ -149,7 +149,7 @@ export function loadRuntimeConfig(options) {
 /**
  * Validate configuration and return metadata only.
  *
- * @param {{ environment: 'dev' | 'prod', configRoot?: string }} options
+ * @param {{ environment: 'local' | 'prod', configRoot?: string }} options
  */
 export function validateRuntimeConfig(options) {
   const environment = readEnvironment(options?.environment);
@@ -165,7 +165,7 @@ export function validateRuntimeConfig(options) {
  * Render configuration for the existing shell- and dotenv-based runtime loaders.
  *
  * @param {{
- *   environment: 'dev' | 'prod',
+ *   environment: 'local' | 'prod',
  *   configRoot?: string,
  *   format: 'dotenv' | 'shell-export',
  *   keys?: string[],

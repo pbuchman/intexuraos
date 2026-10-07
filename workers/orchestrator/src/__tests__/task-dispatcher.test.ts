@@ -3010,7 +3010,10 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('sentry outcome=failed finalizes the task as failed instead of completed', async () => {
+    it.each([
+      ['sentry_auth_failed', 'TASK_RUNTIME_HARD_ERROR'],
+      ['SENTRY_EVIDENCE_UNAVAILABLE: source cause missing', 'SENTRY_EVIDENCE_UNAVAILABLE'],
+    ])('sentry outcome=failed preserves its failure category: %s', async (reason, code) => {
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
         '{"type":"thread.started","thread_id":"test-session"}\n' +
           '{"type":"turn.started"}\n' +
@@ -3037,7 +3040,7 @@ describe('TaskDispatcher', () => {
           linear_issue: 'https://linear.app/pbuchman/issue/INT-123/sentry-typeerror',
           verification: 'not run',
           reproduction: 'not feasible before authentication failed',
-          failure_reason: 'sentry_auth_failed',
+          failure_reason: reason,
           summary: 'Could not fetch Sentry issue details.',
         },
       });
@@ -3075,8 +3078,8 @@ describe('TaskDispatcher', () => {
           payload: expect.objectContaining({
             status: 'failed',
             error: expect.objectContaining({
-              code: 'TASK_RUNTIME_HARD_ERROR',
-              message: expect.stringContaining('reason: sentry_auth_failed'),
+              code,
+              message: expect.stringContaining(reason),
             }),
           }),
         })

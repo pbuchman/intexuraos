@@ -35,7 +35,7 @@ describe('Codex infrastructure pre-tool policy', () => {
 
   it.each([
     { command: 'terraform apply', allowed: false },
-    { command: 'terraform -chdir=terraform/environments/dev apply', allowed: false },
+    { command: 'terraform -chdir=terraform/shared-gcp apply', allowed: false },
     { command: 'gcloud run deploy api', allowed: false },
     { command: 'gcloud --project=intexuraos-dev-pbuchman run deploy api', allowed: false },
     { command: 'gcloud --project intexuraos-dev-pbuchman run deploy api', allowed: false },

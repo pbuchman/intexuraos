@@ -5,9 +5,8 @@ Cloud Build retains the GCP repository connection and three build targets. It is
 not the deployment mechanism for the application runtime.
 
 > Pushing or merging `development` does not deploy Home Dev and does not start
-> Home Dev. It also does not deploy the production application. The retained DEV application
-> profile is normally hibernated and can be resumed only through the explicit
-> Home Dev mode controller and its runbook.
+> Home Dev. It also does not deploy the production application. Local application
+> services are started manually; Home Dev retains the production-serving worker.
 
 ## Current Ownership
 
@@ -24,7 +23,7 @@ monolithic Cloud Build triggers and no `cloudbuild/cloudbuild.yaml` application
 pipeline.
 
 Production application deployment is manual exact-SHA deployment to Hetzner.
-Use [the production runbook](../operations/hetzner-prod-runbook.md) or the
+Use [the production runbook](../operations/home-prod-runbook.md) or the
 `hetzner-prod` target in `.github/workflows/deploy.yml`.
 
 ## Architecture
@@ -62,7 +61,7 @@ It is not part of ordinary deployment or DEV resume.
    existing connection before any Terraform apply:
 
    ```bash
-   cd terraform/environments/dev
+   cd terraform/shared-gcp
    terraform init
    terraform import \
      module.cloud_build.google_cloudbuildv2_connection.github \
@@ -136,4 +135,4 @@ push must not deploy or start Home Dev.
 
 - [Cloud Build 2nd Gen GitHub connection](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github)
 - [Cloud Build trigger schema](https://cloud.google.com/build/docs/api/reference/rest/v1/projects.locations.triggers)
-- [Hetzner production runbook](../operations/hetzner-prod-runbook.md)
+- [Home PROD runbook](../operations/home-prod-runbook.md)

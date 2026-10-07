@@ -101,9 +101,8 @@ describe('Intex Agent evaluation documentation', () => {
     expect(runbook).toContain(
       '`scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any'
     );
-    expect(runbook).toContain('`MODE=hibernated`');
-    expect(runbook).toContain('`DEV_RUNTIME_HIBERNATED`');
-    expect(runbook).toMatch(/production `matrix-corpus` wrapper is exempt/u);
+    expect(runbook).toContain('Local selectors require a deliberately started localhost stack.');
+    expect(runbook).toContain('The production wrapper remains the production acceptance path.');
     expect(runbook).toContain('20 scenarios and 60 turns');
     expect(runbook).toContain('or:deepseek/deepseek-v4-flash');
 

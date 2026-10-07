@@ -133,7 +133,7 @@ If the execution-time OpenRouter catalog has a separate current Gemini 3.5 Think
 **Files:**
 - Modify: `ecosystem.config.cjs`
 - Modify: `ecosystem.config.prod.cjs`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `apps/whatsapp-service/src/config.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/config.test.ts`
 - Modify: `apps/whatsapp-service/src/__tests__/openapi-contract.test.ts`
@@ -217,7 +217,7 @@ Update all active Conversation Assistant defaults from `or:minimax/minimax-m2.7`
 - `apps/whatsapp-service/src/config.ts`
 - `ecosystem.config.cjs`
 - `ecosystem.config.prod.cjs`
-- `terraform/environments/dev/main.tf`
+- `terraform/shared-gcp/main.tf`
 - WhatsApp service test utilities and tests that assert the default model.
 
 - [ ] **Step 5: Migrate shared OpenRouter allowlists and display names**

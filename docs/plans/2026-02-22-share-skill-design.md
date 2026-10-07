@@ -52,7 +52,7 @@ This scopes the 365-day auto-delete to only `research/*` objects. Objects under 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-terraform -chdir=terraform/environments/dev fmt -recursive
+terraform -chdir=terraform/shared-gcp fmt -recursive
 ```
 
 Expected: files formatted (or "0 files formatted" if already correct).
@@ -62,7 +62,7 @@ Expected: files formatted (or "0 files formatted" if already correct).
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-terraform -chdir=terraform/environments/dev plan
+terraform -chdir=terraform/shared-gcp plan
 ```
 
 Expected: 1 change — `google_storage_bucket.shared_content` updated in-place (lifecycle rule condition changed).
@@ -72,7 +72,7 @@ Expected: 1 change — `google_storage_bucket.shared_content` updated in-place (
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-terraform -chdir=terraform/environments/dev apply -auto-approve
+terraform -chdir=terraform/shared-gcp apply -auto-approve
 ```
 
 Expected: `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`

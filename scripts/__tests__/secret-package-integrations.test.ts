@@ -10,7 +10,7 @@ function read(path: string): string {
 
 describe('final secret-package integrations', () => {
   it('loads DEV and PROD only from exact package versions', () => {
-    for (const path of ['scripts/sync-secrets.sh', 'scripts/hetzner/load-secrets.sh'] as const) {
+    for (const path of ['scripts/sync-secrets.sh', 'scripts/home-prod/load-secrets.sh'] as const) {
       const script = read(path);
 
       expect(script, path).toContain('scripts/secret-package.mjs');
@@ -32,7 +32,7 @@ describe('final secret-package integrations', () => {
 
   it('keeps direct Secret Manager reads out of runtime consumers', () => {
     for (const path of [
-      'scripts/hetzner/install-nginx-and-cert.sh',
+      'scripts/home-prod/render-edge.mjs',
       'scripts/observability/load-grafana-cloud-env.sh',
       'workers/orchestrator/src/bootstrap/secret-manager.ts',
       'docker/code-worker/entrypoint.sh',
@@ -113,23 +113,23 @@ describe('final secret-package integrations', () => {
 
   it('makes production deployment manual-only and pins its package version', () => {
     const workflow = read('.github/workflows/deploy.yml');
-    const deploy = read('scripts/hetzner/github-actions-deploy.sh');
-    const verifier = read('scripts/hetzner/verify-deployment-document.mjs');
+    const deploy = read('scripts/home-prod/deploy-release.sh');
+    const verifier = read('scripts/home-prod/verify-secret-package-version-pins.mjs');
 
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).not.toMatch(/push:\s*\n\s*branches:\s*\[development\]/u);
     expect(workflow).toContain('PROD_SECRET_PACKAGE_VERSION');
     expect(deploy).toContain('SECRET_PACKAGE_VERSION');
-    expect(deploy).not.toContain('--rollback');
-    expect(deploy).not.toContain('previous immutable release');
-    expect(verifier).toContain('secretPackageVersion');
+    expect(deploy).not.toMatch(/\bssh\b/u);
+    expect(verifier).toContain('stableVersion');
   });
 
-  it('uses a one-shot PROD projection with no history or rollback surface', () => {
-    const loader = read('scripts/hetzner/load-secrets.sh');
+  it('uses isolated candidate admission plus one-shot PROD publication with no rollback surface', () => {
+    const loader = read('scripts/home-prod/load-secrets.sh');
 
-    expect(loader).toContain('Services must be');
-    expect(loader).toContain('stopped before it runs');
+    expect(loader).toContain('--validate-only');
+    expect(loader).toContain('Validation-only mode is safe while services are running');
+    expect(loader).toContain('requires services to be stopped');
     expect(loader).toContain('rm -rf -- "${SECRET_PROJECTION_ROOT}"');
     expect(loader).not.toContain('--rollback');
     expect(loader).not.toContain('--activate');
@@ -151,7 +151,7 @@ describe('final secret-package integrations', () => {
     expect(plan).toContain('# Secret Exposure Final Cutover Plan (Historical Archive)');
     expect(plan).toContain('Status: historical archive; do not execute.');
     expect(plan).toContain('## Historical Autonomous Agent Goal Template — Do Not Create');
-    expect(plan).toContain('[current DEV hibernation runbook](./dev-hibernation.md)');
+    expect(plan).toContain('[Runtime Environments](./runtime-environments.md)');
     expect(plan).toContain('[Secret Packages Operations](./secret-packages.md)');
     expect(plan).toContain('superseded and must not be used for\na current change');
     expect(plan).not.toContain('\n## Autonomous Agent Goal\n');

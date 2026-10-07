@@ -23,7 +23,7 @@ import {
 } from './lifecycle.js';
 import { WORKER_TYPES } from '../isolation/types.js';
 import { classifyAttempt, type AttemptClassification } from './classify-attempt.js';
-import { buildRuntimeHardErrorMessage } from './error-messages.js';
+import { buildAgentFailureError, buildRuntimeHardErrorMessage } from './error-messages.js';
 import { decideCompletionOutcome, type CompletionOutcome } from './decide-outcome.js';
 import type { ComplianceValidationInput } from '../agent-compliance-validator.js';
 import type { DispatcherContext } from './dispatcher-context.js';
@@ -634,11 +634,7 @@ export class CompletionPipeline {
         const message =
           failureReason !== '' ? `${baseMessage} (reason: ${failureReason})` : baseMessage;
         /* v8 ignore stop @preserve */
-        const error: TaskError = {
-          code: 'TASK_RUNTIME_HARD_ERROR',
-          message,
-          remediation: { action: 'retry' },
-        };
+        const error = buildAgentFailureError(task.agentType, failureReason, message, claudeError);
         ctx.appendOrchestratorTaskLog(
           task.taskId,
           `${failureAgentLabel} reported failed outcome: ${error.message}`
@@ -815,11 +811,11 @@ export class CompletionPipeline {
       let exitCodeOverrideError: TaskError;
       if (isAgentFailedOutcome) {
         const runtimeName = ctx.getRuntimeDisplayName(task);
-        /* v8 ignore start -- ts-type: verification.data['failure_reason'] is typed as unknown under noUncheckedIndexedAccess; the `: undefined` arm fires only when a test emits a non-string failure_reason, which current fail-exit-override fixtures never do @preserve */
+        /* v8 ignore start -- ts-type: verification.data['failure_reason'] is typed as unknown under noUncheckedIndexedAccess; the `: ''` arm fires only when a test emits a non-string failure_reason, which current fail-exit-override fixtures never do @preserve */
         const failureReason =
           typeof verification.data['failure_reason'] === 'string'
             ? verification.data['failure_reason']
-            : undefined; // @allow-undefined-type -- positional fallback; callers below explicitly check for undefined vs ''
+            : '';
         /* v8 ignore stop @preserve */
         const runtimePrefix = buildRuntimeHardErrorMessage({
           exitCode: outcome.exitCode,
@@ -833,15 +829,14 @@ export class CompletionPipeline {
             ? `${runtimePrefix}; ${failureAgentLabel} reported task failed`
             : `${failureAgentLabel} reported task failed`;
         const message =
-          failureReason !== undefined && failureReason !== ''
-            ? `${baseMessage} (reason: ${failureReason})`
-            : baseMessage;
+          failureReason !== '' ? `${baseMessage} (reason: ${failureReason})` : baseMessage;
         /* v8 ignore stop @preserve */
-        exitCodeOverrideError = {
-          code: 'TASK_RUNTIME_HARD_ERROR',
+        exitCodeOverrideError = buildAgentFailureError(
+          task.agentType,
+          failureReason,
           message,
-          remediation: { action: 'retry' },
-        };
+          claudeErrorForHardFailure
+        );
         ctx.appendOrchestratorTaskLog(
           task.taskId,
           `Execution agent reported failed outcome: ${exitCodeOverrideError.message}`

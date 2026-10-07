@@ -64,7 +64,7 @@ Adjust the scaffold so the new service validates the env vars it actually needs 
 - `INTEXURAOS_ORCHESTRATOR_SECRET`
 - standard Sentry/environment vars already used by the repo
 - register the new service and required env-var wiring in `ecosystem.config.cjs`
-- update `terraform/environments/dev/main.tf` alongside `apps/llm-usage-service/src/index.ts` when new service env vars are introduced, per repo convention
+- update `terraform/shared-gcp/main.tf` alongside `apps/llm-usage-service/src/index.ts` when new service env vars are introduced, per repo convention
 
 - [ ] **Step 4: Verify the service still boots with the scaffolded health route**
 

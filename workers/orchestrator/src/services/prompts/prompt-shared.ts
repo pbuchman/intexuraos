@@ -12,9 +12,6 @@ Always use \`gh\` CLI instead of raw \`git\` commands. Use \`gh\` for status, di
 Code workers intentionally receive no GCP service-account credential and no Secret Manager access. Use repository evidence and authenticated application diagnostics. If direct cloud inspection is genuinely required, request the separately audited, least-privilege operator workflow.
 
 ### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)
-When asked to debug or investigate a code task from \`dev.intexuraos.cloud\` (dev environment), you MUST immediately exit with a clear message:
-> "Dev environment code tasks cannot be debugged from the code worker. Only production (\`intexuraos.cloud\`) code tasks can be investigated."
-
 For production code tasks (\`intexuraos.cloud\`), run:
 \`node scripts/agent-tools/fetch-code-task.cjs <taskId> [--logs] [--logs-only]\``;
 

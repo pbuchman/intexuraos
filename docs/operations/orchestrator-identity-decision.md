@@ -82,48 +82,14 @@ Neither pending gate permits a DEV callback fallback. If either fails, stop the 
 the preceding protected environment projection; rotate secrets only through a separately approved,
 version-pinned package operation.
 
-## Regression gate
+## Regression tests
 
-`pnpm run verify:production-dev-dependencies` derives its source universe from every tracked and
-non-ignored untracked repository file; the policy cannot remove a directory, file type, app,
-package, workflow, document, or IaC input from that universe. Every intentional
-`dev.intexuraos.cloud` occurrence requires an exact byte-preserving line, exact occurrence count,
-classification, owner, and reason in
-`config/environments/production-dev-dependency-allowlist.json`. Matching delegates literal host
-canonicalization to Node's WHATWG/UTS-46 `domainToASCII` implementation after bounded lexical
-decoding for JavaScript/JSON, YAML/HCL, shell ANSI-C, CSS, and HTML/XML entities. This covers case,
-terminal DNS dots, percent-encoded bytes, compatible Unicode labels, source escapes, and supported
-line continuations without maintaining a second handwritten IDNA table. The gate also resolves its
-bounded set of common static JavaScript/TypeScript expressions and literal GitHub Actions `env`
-references, including multiline expressions and conservative YAML anchor/alias handling. Workflow
-analysis composes statically enumerable `env` values with literal `format(...)` calls and
-shell-adjacent quote/ANSI-C projections. After all supported projections, any unresolved workflow
-value that could complete the forbidden hostname fails closed; a standalone unresolved value with
-no static hostname context does not. An exception always names the exact discovered source line:
-for a computed or cross-line occurrence, that is the mapped sink line and need not itself contain
-the complete hostname.
-
-The reader rejects duplicate JSON keys, non-canonical paths, symlinks, malformed UTF-8, and NUL
-bytes. It requires identical Git inventories before and after scanning and re-reads every file to
-verify its SHA-256 after the canonical dependency check. Known image assets are
-signature-validated; the sole intentional NUL-bearing regression fixture is separately pinned by
-path and SHA-256. New, duplicate, stale, non-exact, case-variant, inventory-race, or
-file-swap-hidden occurrences fail CI.
-
-The gate's explicit trust boundary is repository input plus the documented bounded static folds:
-literal/one-definition templates and concatenation, literal array joins, `String(...)`, supported
-literal UTF-8 base64 decoding, and the documented compositional GitHub Actions workflow folds.
-Unresolved workflow values in static forbidden-host context fail the gate; unrelated unresolved or
-mutable identifiers, runtime branches, general shell substitution, reversal, and arbitrary custom
-decoders require data-flow or execution evidence. Production web deployment therefore has an
-additional executable sentinel test: the real `deploy-web.sh` must project only the manifest's
-relative `apiPath` into both the build process environment and sanitized dotenv file, never its
-retained `serviceUrl`.
-
-The production Matrix adapter now uses the production-owned hostname
-`matrix-outbound.intexuraos.cloud`. The former production-to-DEV runtime dependency and its
-temporary M4.1 allowlist entry must both remain absent; the final tracked policy may not classify
-any occurrence as `pending-milestone`.
+The generator tests pin production callback and usage endpoints even when the
+parent process supplies localhost or obsolete public DEV URLs. The strict worker
+projection tests prevent unrelated secrets from reaching a code worker. Existing
+production deployment tests execute the web environment renderer and check that
+only relative API paths reach the build. Production Matrix uses
+`matrix-outbound.intexuraos.cloud`; its routing tests belong to `pbuchman-dev`.
 
 ## Reversal
 

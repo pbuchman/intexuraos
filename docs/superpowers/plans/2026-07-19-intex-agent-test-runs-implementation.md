@@ -75,7 +75,7 @@
 - `apps/user-service/src/__tests__/schemas.test.ts`
 - `ecosystem.config.cjs`
 - `ecosystem.config.prod.cjs`
-- `terraform/environments/dev/main.tf`
+- `terraform/shared-gcp/main.tf`
 - `scripts/__tests__/ecosystem.config.test.ts`
 - `scripts/__tests__/ecosystem.prod.config.test.ts`
 - `packages/http-contracts/src/index.ts`

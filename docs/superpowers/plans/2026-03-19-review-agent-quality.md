@@ -251,7 +251,7 @@ When reviewing changes that touch module boundaries, verify:
 - ALL endpoints MUST call \`logIncomingRequest()\`
 - Firestore: one collection owner per service — cross-service access MUST go via HTTP (check \`firestore-collections.json\`)
 - Pub/Sub publishers MUST extend \`BasePubSubPublisher\`
-- New env vars must appear in 3 locations: \`apps/<service>/src/index.ts\` REQUIRED_ENV, \`terraform/environments/dev/main.tf\`, \`ecosystem.config.cjs\`
+- New env vars must appear in 3 locations: \`apps/<service>/src/index.ts\` REQUIRED_ENV, \`terraform/shared-gcp/main.tf\`, \`ecosystem.config.cjs\`
 - Migrations are IMMUTABLE — never edit existing migrations, create new ones
 - PR titles MUST contain \`[INT-XXX]\` identifier
 ```

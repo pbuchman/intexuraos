@@ -1431,6 +1431,101 @@ test('recovery classifier uses closed skip predicates and fails on malformed mes
   assert.equal(redactedTombstone.event.message.text, undefined);
 });
 
+test('recovery classifier preserves valid unstable poll responses without inventing content', () => {
+  const roomContext = { memberDisplayNames: {} };
+  const pollResponse = matrixMessage({
+    type: 'org.matrix.msc3381.poll.response',
+    event_id: '$poll-response',
+    content: {
+      'm.relates_to': {
+        rel_type: 'm.reference',
+        event_id: '$poll-start',
+      },
+      'org.matrix.msc3381.poll.response': {
+        answers: ['answer-a', 'answer-b'],
+      },
+    },
+  });
+
+  const mapped = classifyMatrixEventForRecovery(
+    '!room:home-dev',
+    pollResponse,
+    roomContext,
+    config
+  );
+
+  assert.equal(mapped.classification, 'mapped');
+  assert.deepEqual(mapped.event.message, { direction: 'incoming', type: 'unknown' });
+  assert.equal(mapped.event.rawMatrixEvent, pollResponse);
+
+  const unvote = classifyMatrixEventForRecovery(
+    '!room:home-dev',
+    {
+      ...pollResponse,
+      event_id: '$poll-unvote',
+      content: {
+        ...pollResponse.content,
+        'org.matrix.msc3381.poll.response': { answers: [] },
+      },
+    },
+    roomContext,
+    config
+  );
+  assert.equal(unvote.classification, 'mapped');
+  assert.deepEqual(unvote.event.message, { direction: 'incoming', type: 'unknown' });
+});
+
+test('recovery classifier rejects malformed poll responses and unrelated event types', () => {
+  const roomContext = { memberDisplayNames: {} };
+  const validContent = {
+    'm.relates_to': {
+      rel_type: 'm.reference',
+      event_id: '$poll-start',
+    },
+    'org.matrix.msc3381.poll.response': {
+      answers: ['answer-a'],
+    },
+  };
+  const malformedContents = [
+    {},
+    { ...validContent, 'm.relates_to': { rel_type: 'm.annotation', event_id: '$poll-start' } },
+    { ...validContent, 'm.relates_to': { rel_type: 'm.reference' } },
+    {
+      ...validContent,
+      'm.relates_to': { rel_type: 'm.reference', event_id: '$poll-response' },
+    },
+    { ...validContent, 'org.matrix.msc3381.poll.response': {} },
+    { ...validContent, 'org.matrix.msc3381.poll.response': { answers: 'answer-a' } },
+    { ...validContent, 'org.matrix.msc3381.poll.response': { answers: ['answer-a', 2] } },
+  ];
+
+  for (const content of malformedContents) {
+    assert.deepEqual(
+      classifyMatrixEventForRecovery(
+        '!room:home-dev',
+        matrixMessage({
+          type: 'org.matrix.msc3381.poll.response',
+          event_id: '$poll-response',
+          content,
+        }),
+        roomContext,
+        config
+      ),
+      { classification: 'error', reason: 'malformed_message_like_event' }
+    );
+  }
+
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
+      matrixMessage({ type: 'com.example.unsupported', content: {} }),
+      roomContext,
+      config
+    ),
+    { classification: 'error', reason: 'unsupported_event_type' }
+  );
+});
+
 test('runSyncIteration joins WhatsApp invite rooms before processing joined timelines', async () => {
   const runtime = { state: 'starting', counters: {} };
   const joinedRoomIds = [];

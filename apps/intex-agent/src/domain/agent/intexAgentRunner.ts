@@ -3975,10 +3975,11 @@ function readIanaTimeZoneOffsetMinutes(dateTime: string, timeZone: string): numb
     })
       .formatToParts(instant)
       .find((part) => part.type === 'timeZoneName')?.value;
+    if (offsetPart === 'GMT') return 0;
     /* v8 ignore start -- upstream: Intl longOffset with a schema-validated IANA zone always returns a timeZoneName part @preserve */
     const match = /^GMT([+-])(\d{2}):(\d{2})$/u.exec(offsetPart ?? '');
     /* v8 ignore stop @preserve */
-    /* v8 ignore start -- upstream: Intl longOffset for a validated IANA zone guarantees the numeric GMT format and regex captures @preserve */
+    /* v8 ignore start -- upstream: Intl longOffset for a validated IANA zone after handling zero offset guarantees the numeric GMT format and regex captures @preserve */
     if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
       return undefined;
     }

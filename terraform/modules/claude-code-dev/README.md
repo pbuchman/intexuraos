@@ -29,7 +29,7 @@ module "claude_code_dev" {
 If the service account already exists (e.g., was created manually), import it into Terraform state before applying:
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 
 # Import service account
 terraform import module.claude_code_dev.google_service_account.claude_code_dev \
@@ -47,7 +47,7 @@ If the environment needs to be recreated (e.g., new GCP project), follow these s
 ### 1. Apply Terraform
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 GOOGLE_APPLICATION_CREDENTIALS=<existing-owner-key> terraform apply
 ```
 

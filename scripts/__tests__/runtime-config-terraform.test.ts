@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
-const terraformPath = resolve(repoRoot, 'terraform', 'environments', 'dev', 'main.tf');
-const retainedGcpTerraformPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'retained-gcp.tf');
+const terraformPath = resolve(repoRoot, 'terraform', 'shared-gcp', 'main.tf');
+const retainedGcpTerraformPath = resolve(repoRoot, 'terraform', 'prod-runtime', 'retained-gcp.tf');
 const iamTerraformPath = resolve(repoRoot, 'terraform', 'modules', 'iam', 'main.tf');
 const iamVariablesPath = resolve(repoRoot, 'terraform', 'modules', 'iam', 'variables.tf');
 const cloudBuildTerraformPath = resolve(repoRoot, 'terraform', 'modules', 'cloud-build', 'main.tf');
@@ -26,8 +26,7 @@ const githubWifVariablesPath = resolve(
 const devTfvarsExamplePath = resolve(
   repoRoot,
   'terraform',
-  'environments',
-  'dev',
+  'shared-gcp',
   'terraform.tfvars.example'
 );
 const cloudFunctionTerraformPath = resolve(
@@ -48,23 +47,21 @@ const monitoringTerraformPath = resolve(repoRoot, 'terraform', 'modules', 'monit
 const geminiSecurityTerraformPath = resolve(
   repoRoot,
   'terraform',
-  'environments',
-  'dev',
+  'shared-gcp',
   'gemini-security.tf'
 );
-const hetznerBootstrapPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'bootstrap.tf');
-const hetznerVariablesPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'variables.tf');
-const hetznerOutputsPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'outputs.tf');
-const hetznerAutoTfvarsPath = resolve(
+const prodRuntimeVariablesPath = resolve(repoRoot, 'terraform', 'prod-runtime', 'variables.tf');
+const prodRuntimeOutputsPath = resolve(repoRoot, 'terraform', 'prod-runtime', 'outputs.tf');
+const prodRuntimeAutoTfvarsPath = resolve(
   repoRoot,
   'terraform',
-  'hetzner-prod',
+  'prod-runtime',
   'prod.auto.tfvars.json'
 );
-const hetznerTfvarsExamplePath = resolve(
+const prodRuntimeTfvarsExamplePath = resolve(
   repoRoot,
   'terraform',
-  'hetzner-prod',
+  'prod-runtime',
   'terraform.tfvars.example'
 );
 const deployFunctionPath = resolve(repoRoot, 'cloudbuild', 'scripts', 'deploy-function.sh');
@@ -96,11 +93,10 @@ const cloudFunctionTerraform = readFileSync(cloudFunctionTerraformPath, 'utf8');
 const cloudFunctionVariables = readFileSync(cloudFunctionVariablesPath, 'utf8');
 const monitoringTerraform = readFileSync(monitoringTerraformPath, 'utf8');
 const geminiSecurityTerraform = readFileSync(geminiSecurityTerraformPath, 'utf8');
-const hetznerBootstrap = readFileSync(hetznerBootstrapPath, 'utf8');
-const hetznerVariables = readFileSync(hetznerVariablesPath, 'utf8');
-const hetznerOutputs = readFileSync(hetznerOutputsPath, 'utf8');
-const hetznerAutoTfvars = readFileSync(hetznerAutoTfvarsPath, 'utf8');
-const hetznerTfvarsExample = readFileSync(hetznerTfvarsExamplePath, 'utf8');
+const prodRuntimeVariables = readFileSync(prodRuntimeVariablesPath, 'utf8');
+const prodRuntimeOutputs = readFileSync(prodRuntimeOutputsPath, 'utf8');
+const prodRuntimeAutoTfvars = readFileSync(prodRuntimeAutoTfvarsPath, 'utf8');
+const prodRuntimeTfvarsExample = readFileSync(prodRuntimeTfvarsExamplePath, 'utf8');
 const deployFunction = readFileSync(deployFunctionPath, 'utf8');
 const claudeCodeDevTerraform = readFileSync(claudeCodeDevTerraformPath, 'utf8');
 
@@ -435,11 +431,9 @@ describe('versioned runtime configuration Terraform cutover', () => {
 
     expect(terraform).toContain('versioned_runtime_config = {');
     expect(terraform).toContain(
-      'common = jsondecode(file("${path.module}/../../../config/environments/common.json"))'
+      'common = jsondecode(file("${path.module}/../../config/environments/common.json"))'
     );
-    expect(terraform).toContain(
-      'dev    = jsondecode(file("${path.module}/../../../config/environments/dev.json"))'
-    );
+    expect(terraform).not.toContain('config/environments/dev.json');
 
     expect(migratedSecretTombstones).toHaveLength(27);
     for (const secretName of migratedSecretTombstones) {
@@ -667,7 +661,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(deployFunction).not.toMatch(/(?:versions\/latest|:\s*latest\b)/u);
   });
 
-  it('keeps only the final retained secret inventory and one-shot VM bootstrap', () => {
+  it('keeps only the final retained secret inventory in the production runtime root', () => {
     const targetRetainedIds = [
       ...(retainedGcpTerraform
         .split('retained_gcp_target_secret_ids = toset([')[1]
@@ -679,13 +673,11 @@ describe('versioned runtime configuration Terraform cutover', () => {
 
     expect(targetRetainedIds).toEqual(physicalSecretIds);
     expect(
-      [retainedGcpTerraform, hetznerVariables, hetznerOutputs, hetznerAutoTfvars].join('\n')
+      [retainedGcpTerraform, prodRuntimeVariables, prodRuntimeOutputs, prodRuntimeAutoTfvars].join(
+        '\n'
+      )
     ).not.toContain('legacy_secret');
-    expect(hetznerBootstrap).toContain('provisioner_sa_key_path');
-    expect(hetznerBootstrap).toContain('resource "terraform_data" "bootstrap_prod" {');
-    expect(hetznerBootstrap).not.toContain('runtime_sa_key_path');
-    expect(hetznerBootstrap).not.toContain('legacy_runtime_sa_bootstrap');
-    expect(hetznerTfvarsExample).not.toContain('legacy_');
+    expect(prodRuntimeTfvarsExample).not.toContain('legacy_');
   });
 
   it('enables API Keys and Secret Manager DATA_READ audit logging', () => {
@@ -772,7 +764,6 @@ describe('versioned runtime configuration Terraform cutover', () => {
     const allowedReferrers = replacement.match(/allowed_referrers\s*=\s*\[([^\]]+)\]/su)?.[1];
     expect([...(allowedReferrers ?? '').matchAll(/"([^"]+)"/gu)].map((match) => match[1])).toEqual([
       'https://intexuraos.cloud/*',
-      'https://dev.intexuraos.cloud/*',
       'http://localhost:3000/*',
     ]);
     expect([...replacement.matchAll(/service\s*=\s*"([^"]+)"/gu)].map((match) => match[1])).toEqual(
@@ -818,7 +809,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     );
 
     expect(transcriptionModule).toContain(
-      'INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.dev["INTEXURAOS_SENTRY_DSN_DEV"]'
+      'INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.common["INTEXURAOS_SENTRY_DSN_DEV"]'
     );
     expect(transcriptionModule).not.toContain(
       'INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'

@@ -34,6 +34,8 @@ import {
   mapSingleIssueWithTeam,
   isTransientLinearError,
   retryOnTransient,
+  linearFailureDiagnostics,
+  type RetryOnTransientOptions,
 } from './linearMappers.js';
 import {
   getOrCreateClient,
@@ -140,6 +142,7 @@ export function createLinearApiClient(): LinearApiClient {
         teamId,
         String(completedSinceDays)
       );
+      let operation = 'listIssues.fetchPage';
 
       try {
         const issues = await withDeduplication(dedupKey, async () => {
@@ -150,6 +153,23 @@ export function createLinearApiClient(): LinearApiClient {
           // Retry transient upstream failures (5xx, network errors) before
           // surfacing them to Sentry. INT-1801 reduced 114 transient
           // Cloudflare 502 alerts from scheduled `sync-all` runs.
+          const retryOptions: RetryOnTransientOptions = {
+            maxRetries: 2,
+            onRetry: ({ operationName, attempt, delayMs, error }) => {
+              // Handled retries stay visible in logs without creating Sentry issues.
+              logger.warn(
+                {
+                  teamId,
+                  operationName,
+                  attempt,
+                  delayMs,
+                  error: linearFailureDiagnostics(error, operation).message,
+                  _skipSentry: true,
+                },
+                'Linear listIssues transient failure, retrying'
+              );
+            },
+          };
           const fetchPage = async (afterCursor: string | undefined): Promise<{
             nodes: Issue[];
             endCursor?: string;
@@ -172,17 +192,9 @@ export function createLinearApiClient(): LinearApiClient {
                   hasNextPage: issuesConnection.pageInfo.hasNextPage,
                 };
               },
-              'listIssues',
+              'listIssues.fetchPage',
               Date.now(),
-              {
-                maxRetries: 2,
-                onRetry: ({ operationName, attempt, delayMs, error }) => {
-                  logger.warn(
-                    { teamId, operationName, attempt, delayMs, error: getErrorMessage(error) },
-                    'Linear listIssues transient failure, retrying'
-                  );
-                },
-              }
+              { ...retryOptions, evidenceGroupingOperation: 'listIssues.fetchPage' }
             );
           };
 
@@ -200,7 +212,8 @@ export function createLinearApiClient(): LinearApiClient {
 
           logger.info({ totalIssues: allIssues.length }, 'Fetched all pages');
 
-          const allMappedIssues = await mapIssuesWithBatchedStates(allIssues);
+          operation = 'listIssues.mapIssuesWithBatchedStates';
+          const allMappedIssues = await mapIssuesWithBatchedStates(allIssues, retryOptions);
 
           return filterIssuesByCompletionDate(allMappedIssues, completedSinceDays);
         });
@@ -208,18 +221,17 @@ export function createLinearApiClient(): LinearApiClient {
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
         return ok(issues);
       } catch (error) {
-        // Transient upstream failures (5xx from Cloudflare/Linear) are noise in
-        // logs and Sentry — they self-recover on the next sync tick. Log at
-        // warn level so they remain visible without generating exceptions.
+        // fullSync owns the final Sentry report; retain safe evidence for it.
+        const diagnostics = linearFailureDiagnostics(error, operation);
         if (isTransientLinearError(error)) {
           logger.warn(
             { teamId, _skipSentry: true },
             'Linear API transiently unavailable while listing issues'
           );
-          return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' });
+          return err({ code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable', diagnostics });
         }
-        logger.error({ error, teamId }, 'Failed to list Linear issues');
-        return err(mapLinearError(error));
+        logger.error({ error: diagnostics.message, teamId, _skipSentry: true }, 'Failed to list Linear issues');
+        return err({ ...mapLinearError(error), diagnostics });
       }
     },
 
@@ -261,15 +273,30 @@ export function createLinearApiClient(): LinearApiClient {
     ): Promise<Result<LinearIssueWithTeam | null, LinearError>> {
       const dedupKey = createDedupKey('getIssueByIdentifier', apiKey.slice(0, 8), identifier);
 
+      const operation = 'getIssueByIdentifier';
       try {
         const mapped = await withDeduplication(dedupKey, async () => {
           logger.info({ identifier }, 'Fetching Linear issue by identifier');
 
           const client = getOrCreateClient(apiKey);
 
-          const issue = await client.issue(identifier);
-
-          return await mapSingleIssueWithTeam(issue);
+          return await retryOnTransient(
+            async () => {
+              const issue = await client.issue(identifier);
+              return await mapSingleIssueWithTeam(issue);
+            },
+            'getIssueByIdentifier',
+            Date.now(),
+            {
+              maxRetries: 2,
+              onRetry: ({ attempt, delayMs, error }) => {
+                logger.info(
+                  { attempt, delayMs, ...linearFailureDiagnostics(error, operation) },
+                  'Linear issue validation transient failure, retrying'
+                );
+              },
+            }
+          );
         });
 
         return ok(mapped);
@@ -279,8 +306,16 @@ export function createLinearApiClient(): LinearApiClient {
           logger.info({ identifier }, 'Issue not found by identifier');
           return ok(null);
         }
-        logger.error({ error, identifier }, 'Failed to fetch Linear issue by identifier');
-        return err(mapLinearError(error));
+        const diagnostics = linearFailureDiagnostics(error, operation);
+        // validateIssue owns the final report, including failures shared by deduplication.
+        logger.info({ identifier, ...diagnostics }, 'Failed to fetch Linear issue by identifier');
+        return err({
+          ...mapLinearError(error),
+          ...(isTransientLinearError(error)
+            ? { code: 'UPSTREAM_UNAVAILABLE' as const, message: 'Linear API temporarily unavailable' }
+            : {}),
+          diagnostics,
+        });
       }
     },
 

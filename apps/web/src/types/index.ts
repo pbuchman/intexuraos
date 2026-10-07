@@ -837,6 +837,12 @@ export interface IntexAgentSessionEvent {
  * Application config from environment
  */
 export interface AppConfig {
+  featureAvailability: {
+    research: boolean;
+    messageDigests: boolean;
+    prTriage: boolean;
+    schedulers: boolean;
+  };
   auth0Domain: string;
   auth0ClientId: string;
   authAudience: string;

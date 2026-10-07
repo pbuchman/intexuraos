@@ -10,6 +10,7 @@ import {
   getLinearConnection,
   getLinearApiKey,
   getFullLinearConnection,
+  getAllConnectedUserIds,
   isLinearConnected,
   saveLinearConnection,
   findWebhookSecretByTeamId,
@@ -130,6 +131,18 @@ describe('linearConnectionRepository', () => {
         expect(result.value.teamId).toBeNull();
         expect(result.value.teamName).toBeNull();
       }
+    });
+  });
+
+  describe('getAllConnectedUserIds', () => {
+    it('selects only connected users for scheduled full sync', async () => {
+      await saveLinearConnection('connected-user', 'api-key', 'team-1', 'Engineering');
+      await saveLinearConnection('disconnected-user', 'api-key', 'team-1', 'Engineering');
+      await disconnectLinear('disconnected-user');
+
+      const result = await getAllConnectedUserIds();
+
+      expect(result).toEqual({ ok: true, value: ['connected-user'] });
     });
   });
 

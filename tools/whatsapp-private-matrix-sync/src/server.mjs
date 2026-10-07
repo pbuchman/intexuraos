@@ -12,6 +12,7 @@ const DEFAULT_INITIAL_SYNC_TIMEOUT_MS = 0;
 const MAX_EVENTS_PER_INGEST_REQUEST = 100;
 const MAX_PRIVATE_MEDIA_BYTES = 25 * 1024 * 1024;
 const DEFAULT_BRIDGE_BOT_USERS = ['@whatsappbot:home-dev', '@whatsapp-sync:home-dev'];
+const UNSTABLE_POLL_RESPONSE_EVENT_TYPE = 'org.matrix.msc3381.poll.response';
 
 const defaultBridgeBotUsers = new Set(DEFAULT_BRIDGE_BOT_USERS);
 
@@ -348,7 +349,8 @@ export function classifyMatrixEventForRecovery(roomId, event, roomContext, confi
     type === 'm.room.message' ||
     type === 'm.reaction' ||
     type === 'm.sticker' ||
-    type === 'm.room.redaction'
+    type === 'm.room.redaction' ||
+    type === UNSTABLE_POLL_RESPONSE_EVENT_TYPE
   ) {
     return { classification: 'error', reason: 'malformed_message_like_event' };
   }
@@ -383,7 +385,12 @@ function getWhatsAppMatrixEventDirection(event, config) {
   }
 
   const type = readString(event, 'type');
-  if (type === 'm.reaction' || type === 'm.sticker' || type === 'm.room.redaction') {
+  if (
+    type === 'm.reaction' ||
+    type === 'm.sticker' ||
+    type === 'm.room.redaction' ||
+    type === UNSTABLE_POLL_RESPONSE_EVENT_TYPE
+  ) {
     return direction;
   }
   if (type !== 'm.room.message') {
@@ -1125,6 +1132,25 @@ function matrixEventToMessage(event, direction) {
       text: reactionText,
       reaction: { emoji: reactionText, targetMatrixEventId },
     };
+  }
+
+  if (type === UNSTABLE_POLL_RESPONSE_EVENT_TYPE) {
+    const relation = isRecord(content['m.relates_to']) ? content['m.relates_to'] : {};
+    const response = isRecord(content[UNSTABLE_POLL_RESPONSE_EVENT_TYPE])
+      ? content[UNSTABLE_POLL_RESPONSE_EVENT_TYPE]
+      : {};
+    const targetMatrixEventId = readString(relation, 'event_id');
+    const answers = response.answers;
+    if (
+      readString(relation, 'rel_type') !== 'm.reference' ||
+      targetMatrixEventId === undefined ||
+      targetMatrixEventId === eventId ||
+      !Array.isArray(answers) ||
+      !answers.every((answer) => typeof answer === 'string')
+    ) {
+      return null;
+    }
+    return { direction, type: 'unknown' };
   }
 
   if (type === 'm.sticker') {
