@@ -17,7 +17,7 @@
  *  8. Upsert the PR summary row for display.
  *  9. Publish a PR triage event to Pub/Sub (falling back to inline evaluator).
  * 10. Fire-and-forget `handlePrClose` on PR close events.
- * 11. Fire-and-forget `detectOnPush` on push events.
+ * 11. Fire-and-forget `detectOnPush` on push events when PR triage is enabled.
  *
  * Dependencies are resolved lazily via `getServices()` so that route-level
  * integration tests that call `setServices(...)` mid-flight (to simulate a
@@ -65,6 +65,7 @@ export interface ProcessGitHubWebhookInput {
   body: GitHubWebhookBody;
   logger: Logger;
   webhookSecret: string;
+  prTriageEnabled?: boolean;
   verifySignature: VerifyGitHubSignature;
   parseEvent: ParseGitHubWebhookEvent;
 }
@@ -388,6 +389,7 @@ export async function processGitHubWebhook(
     body,
     logger,
     webhookSecret,
+    prTriageEnabled = true,
     verifySignature,
     parseEvent,
   } = input;
@@ -618,7 +620,7 @@ export async function processGitHubWebhook(
       logger.debug({ deliveryId }, 'Duplicate webhook delivery, replaying triage publication');
       const duplicateEventId = saveResult.error.eventId; // @allow-result-access -- narrowed by !saveResult.ok above
       let triageHandoffSucceeded = true;
-      if (duplicateEventId !== undefined) {
+      if (duplicateEventId !== undefined && prTriageEnabled) {
         triageHandoffSucceeded = await publishPRTriageWithFallback({
           eventId: duplicateEventId,
           repository: parsedEvent.repository,
@@ -631,7 +633,11 @@ export async function processGitHubWebhook(
       if (parsedEvent.pullRequestNumber !== 0) {
         void automationLog.record(
           { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
-          { type: 'skipped', decidedBy: 'webhook_route', reason: 'duplicate_delivery' },
+          {
+            type: 'skipped',
+            decidedBy: 'webhook_route',
+            reason: prTriageEnabled ? 'duplicate_delivery' : 'stage1_unavailable',
+          },
         ).catch((recordErr: unknown) => {
           logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
         });
@@ -639,7 +645,7 @@ export async function processGitHubWebhook(
       const saved = await persistRouteDecision({
         auditEvent,
         pendingEntry,
-        reason: 'duplicate_delivery',
+        reason: prTriageEnabled ? 'duplicate_delivery' : 'stage1_unavailable',
         normalizationStatus: 'duplicate',
         logger,
         decisionLatencyMs: Date.now() - authPassedAt.getTime(),
@@ -719,14 +725,34 @@ export async function processGitHubWebhook(
     'GitHub PR event saved',
   );
 
-  const triageHandoffSucceeded = await publishPRTriageWithFallback({
-    eventId: savedEvent.id,
-    repository: parsedEvent.repository,
-    pullRequestNumber: parsedEvent.pullRequestNumber,
-    auditEvent,
-    pendingEntry,
-    logger,
-  });
+  let triageHandoffSucceeded = true;
+  if (prTriageEnabled) {
+    triageHandoffSucceeded = await publishPRTriageWithFallback({
+      eventId: savedEvent.id,
+      repository: parsedEvent.repository,
+      pullRequestNumber: parsedEvent.pullRequestNumber,
+      auditEvent,
+      pendingEntry,
+      logger,
+    });
+  } else {
+    if (parsedEvent.pullRequestNumber !== 0) {
+      void automationLog.record(
+        { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
+        { type: 'skipped', decidedBy: 'webhook_route', reason: 'stage1_unavailable' },
+      ).catch((recordErr: unknown) => {
+        logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
+      });
+    }
+    triageHandoffSucceeded = await persistRouteDecision({
+      auditEvent,
+      pendingEntry,
+      reason: 'stage1_unavailable',
+      normalizationStatus: 'normalized',
+      logger,
+      decisionLatencyMs: Date.now() - authPassedAt.getTime(),
+    });
+  }
   if (!triageHandoffSucceeded) {
     return {
       ok: false,
@@ -770,7 +796,7 @@ export async function processGitHubWebhook(
     });
   }
 
-  if (parsedEvent.eventType === 'push') {
+  if (prTriageEnabled && parsedEvent.eventType === 'push') {
     const { mergeConflictDetector } = getServices();
     void mergeConflictDetector.detectOnPush(savedEvent, logger).catch((pushErr: unknown) => {
       logger.error({ pushErr }, 'Unhandled error in detectOnPush');

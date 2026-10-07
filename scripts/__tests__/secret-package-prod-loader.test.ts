@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -11,13 +12,13 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parse } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
-const loaderPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
+const loaderPath = resolve(repoRoot, 'scripts/home-prod/load-secrets.sh');
 const manifest = JSON.parse(
   readFileSync(resolve(repoRoot, 'config/environments/secret-packages.json'), 'utf8')
 ) as { packages: { prod: { envNames: string[] } } };
@@ -149,6 +150,57 @@ function runLoader(input: Fixture, args: string[], env: Record<string, string> =
 }
 
 describe('irreversible PROD secret-package loader', () => {
+  it('publishes a mode-600 projection only inside the validated dedicated user home', () => {
+    const input = fixture('home-prod');
+    chmodSync(input.payloadPath, 0o400);
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      SKIP_OWNERSHIP: '0',
+    });
+
+    const projection = join(input.root, '.config', 'intexuraos', 'prod');
+    const envPath = join(projection, '.env.prod');
+    expect(result.status, result.stderr).toBe(0);
+    expect(mode(envPath)).toBe(0o600);
+    expect(mode(join(projection, 'runtime-sa-key.json'))).toBe(0o600);
+    expect(mode(join(projection, 'internal-auth-token'))).toBe(0o600);
+    const env = parse(readFileSync(envPath, 'utf8'));
+    expect(env.HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
+    expect(env.GOOGLE_APPLICATION_CREDENTIALS).toBe(join(projection, 'runtime-sa-key.json'));
+  });
+
+  it('keeps a validated candidate projection private and leaves active user files untouched', () => {
+    const input = fixture('candidate-output');
+    const candidateOutput = join(input.root, 'candidate-output');
+    mkdirSync(candidateOutput, { mode: 0o700 });
+    chmodSync(input.payloadPath, 0o400);
+
+    const result = runLoader(
+      input,
+      [
+        '--user-projection',
+        '--validate-only',
+        '--candidate-output',
+        candidateOutput,
+        '--version',
+        '7',
+      ],
+      {
+        DEPLOY_HOME: input.root,
+        DEPLOY_USER: userInfo().username,
+        SKIP_OWNERSHIP: '0',
+      }
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(mode(candidateOutput)).toBe(0o700);
+    expect(mode(join(candidateOutput, '.env.prod'))).toBe(0o600);
+    expect(existsSync(join(input.root, '.config', 'intexuraos', 'prod', '.env.prod'))).toBe(false);
+    expect(result.stdout).toContain('Validated PROD secret package version 7 without publication');
+  });
+
   it('publishes exactly one complete package and destroys local rollback state', () => {
     const input = fixture();
     const result = runLoader(input, ['--version', '7']);

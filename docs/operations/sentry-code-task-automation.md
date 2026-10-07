@@ -69,10 +69,10 @@ The orchestrator / worker runtime requires:
 | `INTEXURAOS_ERROR_HUB_HOST` | Private SentryBox `.ts.net:8443` host, injected into workers as `ERROR_HUB_HOST`. |
 | `LINEAR_API_KEY` | Existing Linear MCP credential used by the worker for the linked Linear issue. |
 
-Hetzner production receives and authenticates the webhook, so it loads
+Home PROD receives and authenticates the webhook, so it loads
 `INTEXURAOS_SENTRY_WEBHOOK_SECRET` and
 `INTEXURAOS_SENTRY_AUTOMATION_USER_ID` through
-`scripts/hetzner/load-secrets.sh`.
+`scripts/home-prod/load-secrets.sh`.
 
 The home-dev orchestrator systemd environment sets
 `INTEXURAOS_ERROR_HUB_HOST`. The worker image exposes only the `error_hub` MCP

@@ -75,6 +75,7 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         body: request.body,
         logger,
         webhookSecret: config.githubWebhookSecret,
+        prTriageEnabled: config.prTriageEnabled,
         verifySignature: verifyGitHubSignature,
         parseEvent: parseGitHubWebhookEvent,
       });

@@ -1,0 +1,19 @@
+# IntexuraOS production runtime Terraform variables.
+# Production non-secret defaults are committed in prod.auto.tfvars.json.
+# Copy this file to terraform.tfvars only for local, uncommitted overrides.
+# DO NOT commit terraform.tfvars.
+
+project_id         = "intexuraos-dev-pbuchman"
+region             = "europe-central2"
+environment        = "prod"
+source_environment = "dev"
+hetzner_origin     = "https://intexuraos.cloud"
+
+# Historical compatibility pin. Filters are immutable, so this must stay true.
+activate_hetzner_async_consumers = true
+
+# Keep all production Scheduler jobs paused until the basic Home PROD profile
+# restores the omitted research and message-digest handlers.
+production_scheduler_jobs_enabled = false
+
+labels = {}

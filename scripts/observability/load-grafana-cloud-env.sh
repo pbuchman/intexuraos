@@ -94,7 +94,7 @@ main() {
   trap cleanup EXIT
 
   if [[ "${INTEXURAOS_ENVIRONMENT}" != "dev" ]]; then
-    fail "load-grafana-cloud-env.sh is for home-dev; use scripts/hetzner/load-secrets.sh for prod"
+    fail "load-grafana-cloud-env.sh is for home-dev; use scripts/home-prod/load-secrets.sh for prod"
   fi
 
   command -v node >/dev/null 2>&1 || fail "node is required for runtime configuration"

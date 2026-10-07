@@ -8,7 +8,7 @@ phone-visible message flow and browser acceptance checklist, is documented in
 
 The evaluator process and its protected Matrix credentials run only on the Linux host
 `home-dev`, from `$HOME/deploy/intexuraos`, through the SSH alias `home-dev`. The
-system under test is exclusively the Hetzner production deployment at
+system under test is exclusively the Home PROD deployment at
 `https://intexuraos.cloud`, with runtime audience `hetzner-prod`. Its WhatsApp Service,
 Intex Agent, webhook ingress, sessions, LLM calls, strict mocks, and Test Runs are all
 production processes. The runner reaches the two corpus-only control planes through
@@ -238,7 +238,7 @@ configuration, raw provider or endpoint bodies, assistant text, Matrix history,
 tokens, or protected paths.
 
 `revision_mismatch` means that the reviewed revision is not simultaneously present in the
-Home Dev runner checkout and the production Hetzner deployment attestation. Complete the
+Home Dev runner checkout and the Home PROD deployment attestation. Complete the
 normal merge/deployment and update the runner checkout through the established deployment
 workflow; never bypass revision proof. A missing protected runner configuration is
 repaired from the already-established machine-local state rather than by asking again for

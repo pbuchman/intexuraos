@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { WEB_SERVICE_URLS } from './src/config.generated';
 import { PUBLIC_WEB_ENV_KEYS } from './src/publicEnv';
+import { resolveBuildDate } from './src/buildMetadata';
 
 interface BuildInfo {
   version: string;
@@ -54,7 +55,7 @@ function getBuildInfo(): BuildInfo {
     shortSha,
     fullSha,
     commitMessage,
-    buildDate: new Date().toISOString(),
+    buildDate: resolveBuildDate(process.env['SOURCE_DATE_EPOCH']),
   };
 }
 

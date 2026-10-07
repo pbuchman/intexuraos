@@ -697,8 +697,8 @@
       "description": "Classification and consumer policy for repository configuration, package members, and native exceptions"
     },
     {
-      "path": "operations/hetzner-prod-runbook.md",
-      "title": "Hetzner Production Runtime Runbook",
+      "path": "operations/home-prod-runbook.md",
+      "title": "Home PROD Runtime Runbook",
       "category": "operations",
       "description": "Manual exact-SHA production deployment, one-shot package loading, and fix-forward verification"
     },

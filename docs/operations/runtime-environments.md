@@ -1,6 +1,6 @@
 # Runtime Environments
 
-IntexuraOS has production on Hetzner and a manually started localhost stack.
+IntexuraOS has an isolated Home PROD runtime and a manually started localhost stack.
 Home Dev retains the production-serving orchestrator, code workers, Matrix,
 SentryBox, other applications, monitoring, and developer tools. It does not host
 an application DEV deployment or public application DEV hostname.

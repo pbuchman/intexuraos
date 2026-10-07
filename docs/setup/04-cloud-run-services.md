@@ -2,7 +2,7 @@
 
 > **Historical reference.** This page records the retired Cloud Run application
 > fleet. It is not a current deployment runbook. The current
-> application runtime uses manual exact-SHA production deployment on Hetzner
+> application runtime uses manual exact-SHA Home PROD deployment
 > and a manually started localhost stack. Do not use
 > the commands below to deploy the current application or to start Home Dev.
 
@@ -179,7 +179,7 @@ Backend services follow this pattern. Service names correspond to their `apps/` 
 
 This historical command is not part of normal operation. Current application
 deployments are not triggered by pushes to `development`; follow the current
-Hetzner production runbook or the explicit Home Dev resume runbook instead.
+Home PROD runbook or the explicit Home Dev resume runbook instead.
 
 ## Rollback
 

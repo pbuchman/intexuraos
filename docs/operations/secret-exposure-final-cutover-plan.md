@@ -174,7 +174,7 @@ the migrator. No dual-read runtime is allowed.
 8. Require `refs/heads/development` to equal that SHA immediately before manual
    dispatch and require the created workflow run `headSha` to match it.
 9. Deploy that same SHA to Home Dev, static DEV web, orchestrator, Alloy,
-   transcription, and Hetzner production. Start services only after package
+   transcription, and Home PROD. Start services only after package
    projection validation.
 10. Run direct-origin, public, Auth0, Firebase, OAuth, WhatsApp, Matrix,
    transcription, OpenRouter, orchestrator, observability, and browser smokes.

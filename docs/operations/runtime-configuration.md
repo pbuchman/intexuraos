@@ -16,7 +16,7 @@ Values that grant access, signing, impersonation, decryption, or privileged API
 use belong in exactly one environment package:
 
 - `INTEXURAOS_SECRET_PACKAGE_DEV` for local and home-dev;
-- `INTEXURAOS_SECRET_PACKAGE_PROD` for Hetzner production.
+- `INTEXURAOS_SECRET_PACKAGE_PROD` for Home PROD.
 
 The only native individual application secrets are
 `INTEXURAOS_INTERNAL_AUTH_TOKEN` and
@@ -68,7 +68,7 @@ Validation output must contain names/counts/results only.
 | home-dev orchestrator (production-owned) | host-rendered DEV projection with production callback ownership | strict env allowlist plus GitHub App PEM |
 | code-worker | orchestrator projection | task-specific env/files only; no package or Secret Manager access |
 | Grafana/Alloy | exact DEV numeric version | dedicated observability env projection |
-| Hetzner services/web/nginx/TLS | exact PROD numeric version plus versioned config | target-specific files from the production renderer |
+| Home PROD services/web/edge | exact PROD numeric version plus versioned config | target-specific files from the production renderer |
 | Retained transcription | exact numeric native versions | the two native secret env injections only |
 
 Runtime processes consume rendered projections. They do not fetch packages,
@@ -188,22 +188,21 @@ Do not use the former `--add-new` per-secret workflow. Package versions are
 constructed and published as complete validated candidates through
 `scripts/secret-package.mjs`.
 
-## Hetzner Production
+## Home PROD
 
 The protected deployment supplies an exact PROD numeric version.
-`scripts/hetzner/load-secrets.sh` fetches it with the external provisioner
+`scripts/home-prod/load-secrets.sh` fetches it with the external provisioner
 identity, validates it, and stages all target projections before activation.
-It then atomically installs:
-
-- `/etc/intexuraos/.env.prod` as `deploy:deploy`, mode `0600`;
-- `/home/deploy/runtime-sa-key.json` as the runtime user, mode `0600`;
-- `/etc/intexuraos/internal-auth-token`, mode `0640`;
-- the approved Cloudflare/TLS files, mode `0600`.
+It then creates a private candidate for the dedicated `intexuraos-prod` account.
+The release driver publishes the approved projection below
+`/home/intexuraos-prod`, keeps every runtime output mode `0600`, and switches the
+active projection only after validation succeeds. The root-owned provisioner
+credential is never copied into the runtime account.
 
 The production web build receives only its build-time allowlist in an
 ephemeral file. Backend secrets must never reach Vite. PM2/nginx reload only
 after all candidate outputs pass validation. See the
-[Hetzner production runbook](./hetzner-prod-runbook.md).
+[Home PROD runbook](./home-prod-runbook.md).
 
 ## Ownership, Publication, And IAM
 
@@ -213,7 +212,7 @@ is removed immediately. Grant resource-level access to one package:
 
 - publishers may add a version to their approved package;
 - DEV renderers may access only the DEV package;
-- the Hetzner provisioner and protected deploy identity may access only PROD;
+- the Home PROD provisioner identity may access only PROD;
 - runtime service accounts, the orchestrator, and code workers have no Secret
   Manager access;
 - transcription can access only the two native secrets at pinned versions.

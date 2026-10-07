@@ -302,6 +302,25 @@ function LlmUsageViewPageKeyed(): React.JSX.Element {
   return <LlmUsageViewPage key={eventId} />;
 }
 
+function FeatureUnavailable({ feature }: { feature: string }): React.JSX.Element {
+  return (
+    <div className="mx-auto mt-12 max-w-xl rounded-lg border border-slate-200 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-800">
+      <h1 className="text-xl font-semibold text-slate-900 dark:text-white">{feature} is unavailable</h1>
+      <p className="mt-2 text-slate-600 dark:text-slate-300">
+        This feature is temporarily unavailable.
+      </p>
+    </div>
+  );
+}
+
+function featureRoute(
+  available: boolean,
+  feature: string,
+  element: React.ReactNode,
+): React.ReactNode {
+  return available ? element : <FeatureUnavailable feature={feature} />;
+}
+
 export function AppRoutes(): React.JSX.Element {
   return (
     <Suspense fallback={<FullPageSpinner />}>
@@ -339,16 +358,16 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/code-tasks/dispatch-queue" element={<DispatchQueuePage />} />
           <Route path="/code-tasks/:id/view" element={<CodeTaskViewRedirect />} />
           <Route path="/code-tasks/:id" element={<CodeTaskViewPageKeyed />} />
-          <Route path="/code-tasks/pr-events" element={<GitHubEventLogPage />} />
-          <Route path="/code-tasks/merge-queue" element={<MergeQueuePage />} />
+          <Route path="/code-tasks/pr-events" element={featureRoute(config.featureAvailability.prTriage, 'Pull request triage', <GitHubEventLogPage />)} />
+          <Route path="/code-tasks/merge-queue" element={featureRoute(config.featureAvailability.schedulers, 'Merge queue', <MergeQueuePage />)} />
           {/* LLM Usage routes */}
           <Route path="/llm-usage" element={<LlmUsagePage />} />
           <Route path="/llm-usage/pricing" element={<LlmUsagePricingPage />} />
           <Route path="/llm-usage/:eventId" element={<LlmUsageViewPageKeyed />} />
           {/* Research Agent routes */}
-          <Route path="/research/new" element={<ResearchAgentPage />} />
-          <Route path="/research/:id" element={<ResearchDetailPage />} />
-          <Route path="/research" element={<ResearchListPage />} />
+          <Route path="/research/new" element={featureRoute(config.featureAvailability.research, 'Research', <ResearchAgentPage />)} />
+          <Route path="/research/:id" element={featureRoute(config.featureAvailability.research, 'Research', <ResearchDetailPage />)} />
+          <Route path="/research" element={featureRoute(config.featureAvailability.research, 'Research', <ResearchListPage />)} />
           {/* Feature routes */}
           <Route path="/share-target" element={<ShareTargetPage />} />
           <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
@@ -356,48 +375,48 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/whatsapp/conversation-assistant" element={<WhatsAppConversationAssistantListPage />} />
           <Route path="/whatsapp/conversation-assistant/new" element={<WhatsAppConversationAssistantNewPage />} />
           <Route path="/whatsapp/conversation-assistant/:sessionId" element={<WhatsAppConversationAssistantSessionPage />} />
-          <Route path="/whatsapp/message-digests/new" element={<WhatsAppMessageDigestNewPage />} />
+          <Route path="/whatsapp/message-digests/new" element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <WhatsAppMessageDigestNewPage />)} />
           <Route
             path="/whatsapp/message-digests/:definitionId/edit"
-            element={<WhatsAppMessageDigestEditPage />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <WhatsAppMessageDigestEditPage />)}
           />
           <Route
             path="/whatsapp/message-digests/:definitionId/history/:runId"
-            element={<WhatsAppMessageDigestRunPage />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <WhatsAppMessageDigestRunPage />)}
           />
           <Route
             path="/whatsapp/message-digests/:definitionId/history"
-            element={<WhatsAppMessageDigestHistoryPage />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <WhatsAppMessageDigestHistoryPage />)}
           />
           <Route
             path="/whatsapp/message-digests/:definitionId"
-            element={<WhatsAppMessageDigestDetailPage />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <WhatsAppMessageDigestDetailPage />)}
           />
-          <Route path="/whatsapp/message-digests" element={<WhatsAppMessageDigestsPage />} />
+          <Route path="/whatsapp/message-digests" element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <WhatsAppMessageDigestsPage />)} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />
           <Route path="/my-bookmarks" element={<BookmarksListPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/linear/prune-candidates" element={<LinearPruneCandidatesPage />} />
+          <Route path="/linear/prune-candidates" element={featureRoute(config.featureAvailability.schedulers, 'Scheduled maintenance', <LinearPruneCandidatesPage />)} />
           <Route path="/linear" element={<LinearIssuesPage />} />
           <Route path="/bookmarks/:id" element={<BookmarkDetailRedirect />} />
           <Route path="/notifications" element={<MobileNotificationsListPage />} />
           {/* Legacy notification digest redirects (most specific first) */}
           <Route
             path="/notifications/digests/backfill/:runId"
-            element={<Navigate to="/whatsapp/message-digests" replace />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <Navigate to="/whatsapp/message-digests" replace />)}
           />
           <Route
             path="/notifications/digests/:groupKey/:date"
-            element={<MessageDigestLegacyRedirectPage />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <MessageDigestLegacyRedirectPage />)}
           />
           <Route
             path="/notifications/digests/backfill"
-            element={<Navigate to="/whatsapp/message-digests" replace />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <Navigate to="/whatsapp/message-digests" replace />)}
           />
           <Route
             path="/notifications/digests"
-            element={<Navigate to="/whatsapp/message-digests" replace />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <Navigate to="/whatsapp/message-digests" replace />)}
           />
           {/* Intex Agent routes */}
           <Route path="/intex-agent/sessions" element={<IntexAgentSessionsPage />} />
@@ -410,19 +429,19 @@ export function AppRoutes(): React.JSX.Element {
           {/* Legacy Fishing digest redirects */}
           <Route
             path="/fishing-assistant/digests/:groupKey/:date"
-            element={<MessageDigestLegacyRedirectPage />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <MessageDigestLegacyRedirectPage />)}
           />
           <Route
             path="/fishing/digests/:groupKey/:date"
-            element={<MessageDigestLegacyRedirectPage />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <MessageDigestLegacyRedirectPage />)}
           />
           <Route
             path="/fishing-assistant/digests"
-            element={<Navigate to="/whatsapp/message-digests" replace />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <Navigate to="/whatsapp/message-digests" replace />)}
           />
           <Route
             path="/fishing/digests"
-            element={<Navigate to="/whatsapp/message-digests" replace />}
+            element={featureRoute(config.featureAvailability.messageDigests, 'Message digests', <Navigate to="/whatsapp/message-digests" replace />)}
           />
           {/* Fishing Assistant routes */}
           <Route

@@ -208,6 +208,7 @@ function runInput(partial: Partial<ProcessGitHubWebhookInput>): ProcessGitHubWeb
     body: body as never,
     logger: partial.logger ?? createMockLogger(),
     webhookSecret: partial.webhookSecret ?? WEBHOOK_SECRET,
+    prTriageEnabled: partial.prTriageEnabled ?? true,
     verifySignature: partial.verifySignature ?? defaultVerifySignature,
     parseEvent: partial.parseEvent ?? defaultParseEvent,
   };
@@ -372,6 +373,26 @@ describe('processGitHubWebhook', () => {
     );
   });
 
+  it('audits a duplicate as unavailable without publishing or running inline triage', async () => {
+    mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
+      err({ code: 'DUPLICATE_EVENT', message: 'already seen', eventId: 'evt-existing' }),
+    );
+
+    const result = await processGitHubWebhook(runInput({ prTriageEnabled: false }));
+
+    expect(result).toEqual({ ok: true, outcome: 'duplicate', message: 'duplicate' });
+    expect(mocks.prTriagePublisher.publishPRTriage).not.toHaveBeenCalled();
+    expect(mocks.gitHubPREventRepo.acquireTriage).not.toHaveBeenCalled();
+    expect(mocks.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+    expect(mocks.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'stage1_unavailable' }),
+    );
+    expect(mocks.automationLog.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ reason: 'stage1_unavailable' }),
+    );
+  });
+
   it('does not publish triage when a legacy duplicate result has no event id', async () => {
     mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
       err({ code: 'DUPLICATE_EVENT', message: 'already seen' }),
@@ -437,6 +458,22 @@ describe('processGitHubWebhook', () => {
         state: 'open',
         lastConflictCheckedAt: null,
       }),
+    );
+  });
+
+  it('persists an unavailable decision without publishing or running inline triage', async () => {
+    const result = await processGitHubWebhook(runInput({ prTriageEnabled: false }));
+
+    expect(result).toEqual({ ok: true, outcome: 'processed', message: 'processed' });
+    expect(mocks.prTriagePublisher.publishPRTriage).not.toHaveBeenCalled();
+    expect(mocks.gitHubPREventRepo.acquireTriage).not.toHaveBeenCalled();
+    expect(mocks.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+    expect(mocks.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'stage1_unavailable' }),
+    );
+    expect(mocks.automationLog.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ reason: 'stage1_unavailable' }),
     );
   });
 
@@ -710,5 +747,35 @@ describe('processGitHubWebhook', () => {
     // PR summary upsert should be skipped for pullRequestNumber=0
     expect(mocks.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalled();
     expect(mocks.mergeConflictDetector.detectOnPush).toHaveBeenCalledTimes(1);
+  });
+
+  it('records disabled triage for a push without starting automatic conflict repair', async () => {
+    mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
+      ok(buildPREvent({ eventType: 'push', pullRequestNumber: 0, action: null })),
+    );
+    const body = buildPushBody();
+    const { rawBody, signatureHeader } = signPayload(body);
+
+    const result = await processGitHubWebhook({
+      rawBody,
+      signatureHeader,
+      eventType: 'push',
+      deliveryId: 'delivery-push-disabled-triage',
+      body: body as never,
+      logger: createMockLogger(),
+      webhookSecret: WEBHOOK_SECRET,
+      prTriageEnabled: false,
+      verifySignature: defaultVerifySignature,
+      parseEvent: defaultParseEvent,
+    });
+
+    expect(result).toEqual({ ok: true, outcome: 'processed', message: 'processed' });
+    expect(mocks.prTriagePublisher.publishPRTriage).not.toHaveBeenCalled();
+    expect(mocks.gitHubPREventRepo.acquireTriage).not.toHaveBeenCalled();
+    expect(mocks.automationLog.record).not.toHaveBeenCalled();
+    expect(mocks.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'stage1_unavailable' }),
+    );
+    expect(mocks.mergeConflictDetector.detectOnPush).not.toHaveBeenCalled();
   });
 });

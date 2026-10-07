@@ -44,7 +44,7 @@ This runbook covers rollout, verification, recovery, and rollback for immutable 
    `terraform -chdir=terraform/shared-gcp apply "${TTL_PLAN_PATH}"`, then
    re-check the frozen HEAD and record the plan hash.
 2. Dispatch migrations 124/125 from the same ref and wait until all indexes report ready.
-3. Trigger the supported Hetzner production deployment workflow for that exact SHA/ref.
+3. Trigger the supported Home PROD deployment workflow for that exact SHA/ref.
    The emergency local fallback must use a clean checkout; the deploy script
    syncs a `git archive` of the resolved SHA and fails before remote mutation
    when tracked or untracked worktree changes exist.

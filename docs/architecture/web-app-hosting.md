@@ -71,7 +71,7 @@ Implementation: `apps/web/src/App.tsx` uses `HashRouter`.
 
 ## Deployment (Hetzner)
 
-Script: `scripts/hetzner/deploy-web.sh`
+Script: `scripts/home-prod/deploy-web.sh`
 
 It renders production `/api/*` service URLs from `apps/web/service-manifest.json`, builds the Vite
 bundle, and stages the complete output as an immutable release:

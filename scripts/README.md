@@ -115,24 +115,16 @@ sudo -n env \
 
 ## Production Deployment
 
-`scripts/hetzner/github-actions-deploy.sh` deploys the exact GitHub Actions SHA
-and exact protected package version. It validates an isolated secret candidate
-while the current runtime remains online, then stops PM2 and Alloy, publishes
-the admitted package, installs static web and code, starts services, writes the
-deployment attestation, verifies health, and retains existing code and web
-artifacts for recovery. It does not prune code or web releases; storage cleanup
-is a separate deliberate maintenance operation.
-
-Cloudflare checks use the live API to verify an active token, the expected zone
-and account, and DNS read access. They do not require a manually renewed
-permission attestation. DNS write permission is needed by certificate renewal;
-these read-only deployment checks do not prove it.
+Home PROD deploys an exact reviewed Git SHA and protected package version through
+the host-installed launcher. The launcher and its unprivileged release driver
+admit the package and build before switching the dedicated code, web, and PM2
+runtime pointers. See the [Home PROD runbook](../docs/operations/home-prod-runbook.md).
 
 The production loader may run manually only while PM2 and Alloy are stopped:
 
 ```bash
 sudo -n INTEXURAOS_ENVIRONMENT=prod \
-  bash scripts/hetzner/load-secrets.sh --version <numeric-version>
+  bash scripts/home-prod/load-secrets.sh --version <numeric-version>
 ```
 
 It publishes a complete stable projection and has no partial activation or
@@ -140,10 +132,34 @@ secret rollback mode. `--validate-only` renders and checks an isolated candidate
 without changing active files. A publication failure leaves services stopped
 for a fix-forward repair.
 
+### Home PROD native deployment
+
+Home PROD uses a dedicated `intexuraos-prod` account, clone, release roots, and
+`PM2_HOME`. The installed root launcher accepts only an exact 40-character SHA and
+positive numeric package version. Root fetches the package with its fixed provisioner
+credential, then the repository deployment runs as the unprivileged account:
+
+```bash
+sudo /usr/local/sbin/intexuraos-home-prod-deploy <40hex-sha> <numeric-version>
+```
+
+The unprivileged driver is `scripts/home-prod/deploy-release.sh`. It admits an isolated
+secret projection, performs a frozen install, builds non-web workspaces, builds the SPA
+against that isolated candidate, and validates the basic PM2 profile on loopback `181xx`
+ports before stopping the dedicated PM2 home or switching code and web pointers.
+
+`load-secrets.sh --user-projection` is reserved for this driver. It confines all active
+outputs to `/home/intexuraos-prod`, keeps them mode `0600`, requires a private offline
+payload copy with mode `0600` or stricter, and never places the root provisioner credential
+in the runtime environment.
+`--candidate-output` is valid only with user-owned validation-only mode and creates the
+private build input consumed before activation.
+
 ## Runtime Ownership
 
-Production runs on Hetzner. Use `pnpm dev` for a manually started localhost stack.
-Home Dev retains the production-serving orchestrator and workers; it has no
+Production application services run in the isolated Home PROD runtime. Use
+`pnpm dev` for a manually started localhost stack. Home Dev retains the
+production-serving orchestrator and workers; it has no
 hosted application DEV, public DEV edge, or application autostart.
 The host repository `pbuchman-dev` owns Caddy and the static production Matrix
 fragment at `machine-setup/config/matrix-outbound.caddy`.
