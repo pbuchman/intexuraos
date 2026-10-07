@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
@@ -193,7 +193,7 @@ function runDeployment(
       DEPLOY_USER: process.env.USER ?? 'pbuchman',
       HOME: input.deployHome,
       HOME_PROD_TEST_LOG: input.log,
-      PATH: `${join(input.root, 'bin')}:/usr/bin:/bin`,
+      PATH: `${join(input.root, 'bin')}:${dirname(process.execPath)}:/usr/bin:/bin`,
       PM2_HOME: input.expectedPm2Home,
       REPO_DIR: input.clone,
       WEB_CURRENT_LINK: input.webCurrent,

@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
@@ -113,7 +113,7 @@ describe('Home PROD runtime source boundary', () => {
             HOME: scratch,
             INTEXURAOS_COMMIT_SHA: 'a'.repeat(40),
             INTEXURAOS_ENVIRONMENT: 'prod',
-            PATH: `${bin}:/usr/bin:/bin`,
+            PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
             PM2_HEALTH_CONSECUTIVE_SUCCESSES: '1',
             PM2_HEALTH_URLS: 'probe|http://127.0.0.1:1/health',
             PM2_HOME: join(scratch, 'pm2'),
