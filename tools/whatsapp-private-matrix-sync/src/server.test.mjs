@@ -2401,6 +2401,7 @@ test('buildIngestPayload omits empty legacy user id', () => {
 });
 
 test('buildHealthPayload reports credential readiness without exposing secrets', () => {
+  const completedAt = new Date().toISOString();
   assert.equal(
     buildHealthPayload(config, {
       hasMatrixAccessToken: false,
@@ -2427,6 +2428,7 @@ test('buildHealthPayload reports credential readiness without exposing secrets',
       hasOidcCredentials: true,
       runtimeState: 'running',
       counters: { postedEvents: 3 },
+      lastSuccessfulIterationAt: completedAt,
     }),
     {
       ok: true,
@@ -2436,6 +2438,7 @@ test('buildHealthPayload reports credential readiness without exposing secrets',
       ingestUrl: 'https://intexuraos.cloud/internal/whatsapp/private/events',
       sourceAccountId: 'pbuchman-private-whatsapp',
       counters: { postedEvents: 3 },
+      lastSuccessfulIterationAt: completedAt,
     }
   );
 });
@@ -2643,6 +2646,7 @@ test('health returns its exact 200 schema with the authorized bearer', async () 
   });
   harness.runtime.state = 'running';
   harness.runtime.counters = { postedEvents: 3 };
+  harness.runtime.lastSuccessfulIterationAt = new Date().toISOString();
 
   try {
     const response = await harness.request('/health', {
@@ -2658,6 +2662,7 @@ test('health returns its exact 200 schema with the authorized bearer', async () 
       ingestUrl: 'https://intexuraos.cloud/internal/whatsapp/private/events',
       sourceAccountId: 'pbuchman-private-whatsapp',
       counters: { postedEvents: 3 },
+      lastSuccessfulIterationAt: harness.runtime.lastSuccessfulIterationAt,
     });
   } finally {
     await harness.close();
