@@ -278,6 +278,22 @@ node tools/whatsapp-private-matrix-sync/src/backfill-private-events.mjs finalize
 
 Stop on discovery classification errors, unresolved relations, missing media or object evidence, unexpected identities/account counters, pending media, or unexpected live state. Preserve the existing allowlists and evidence checks; do not alter them to advance the cursor. Reviewed policy-skip or operation-metadata repair options are separate diagnostic interventions, not normal prerequisites or blanket bypasses.
 
+If a completed full apply leaves relations whose targets were intentionally skipped, keep the consumer fenced and review them explicitly. Wait for any active apply to finish before using a new reviewed source revision. An incomplete full apply must first be retried normally; this repair cannot stand in for it.
+
+```bash
+node tools/whatsapp-private-matrix-sync/src/backfill-private-events.mjs verify \
+  --manifest "$manifest_file" --review-policy-skipped-relations true
+# A newly staged selection exits with recovery_relation_target_repairs_required_<count>.
+node tools/whatsapp-private-matrix-sync/src/backfill-private-events.mjs apply \
+  --manifest "$manifest_file"
+node tools/whatsapp-private-matrix-sync/src/backfill-private-events.mjs verify \
+  --manifest "$manifest_file"
+```
+
+The review reads every main message document and individually fetches and classifies each missing Matrix target. Only `matrix_notice` and `redacted_reaction_tombstone` are allowed. New reviewed operation hashes become a separate `policyRelationRepairPending` selection, bound by a SHA-256 proof to the account, exact segment/events, original apply/media evidence and reviewed policy evidence. The full segment remains applied, its original events and `lastApply` stay intact, and prior verification is invalidated. Do not edit the selection or combine it with missing-operation-metadata repair.
+
+The next apply posts only those operations in duplicate-safe `backfill` mode, preserving deterministic IDs and draining the existing media queue without re-enqueuing the full history's media. Failures retain the pending selection for retry; it clears only after successful repair and an empty queue. A separate repair outcome appears in the sanitized summary. Pending repair blocks verification, the next discovery and finalization, even if an inconsistent manifest claims it was verified. The final plain `verify` still checks the entire original segment, all relations, media objects/thumbnails, identities and counters. No checkpoint advances during review or repair.
+
 Finalization requires exactly two verified segments with `S0-S1.toToken === S1-S2.fromToken`, an empty media queue, and a live checkpoint equal to preserved S0 or the already-finalized state. It is idempotent and preserves the latest valid state. Only after finalization succeeds may the operator remove the fence and start the separate integration unit. If another limited timeline occurs, keep it fenced and perform another controlled recovery from the latest valid checkpoint. Never restore an older S0 over successful finalization or start the legacy shared consumer in parallel.
 
 ## Troubleshooting

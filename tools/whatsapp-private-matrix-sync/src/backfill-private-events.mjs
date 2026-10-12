@@ -274,8 +274,11 @@ export async function applyRecoverySegment(segment, deps) {
     mediaPending: 0,
     mediaUnavailable: [],
   };
+  assertExclusiveRepairModes(segment);
   const relationTargetPolicySkips = indexRelationTargetPolicySkips(segment);
-  const repairEvents = selectOperationMetadataRepairEvents(segment);
+  const repairEvents =
+    selectPolicyRelationRepairEvents(segment, deps.sourceAccountId) ??
+    selectOperationMetadataRepairEvents(segment);
   const events = repairEvents ?? segment.events;
 
   for (let index = 0; index < events.length; index += MAX_INGEST_BATCH) {
@@ -317,6 +320,52 @@ export async function applyRecoverySegment(segment, deps) {
   summary.mediaPending = media.pending;
   summary.mediaUnavailable = media.unavailable;
   return summary;
+}
+
+export function recordRecoveryApplyResult(segment, result, sourceAccountId) {
+  assertExclusiveRepairModes(segment);
+  if (segment.policyRelationRepairPending === true) {
+    const events = selectPolicyRelationRepairEvents(segment, sourceAccountId);
+    if (
+      !isRecord(result) ||
+      !Number.isInteger(result.accepted) ||
+      result.accepted < 0 ||
+      !Number.isInteger(result.duplicates) ||
+      result.duplicates < 0 ||
+      result.rejected !== 0 ||
+      result.accepted + result.duplicates !== events.length ||
+      !Number.isInteger(result.mediaPending) ||
+      result.mediaPending < 0
+    ) {
+      throw new Error('recovery_policy_relation_repair_result_invalid');
+    }
+    assertPolicyRepairMediaEvidence(segment, result.mediaUnavailable);
+    segment.lastPolicyRelationRepair = result;
+    if (result.mediaPending === 0) segment.policyRelationRepairPending = false;
+    return;
+  }
+  mergeMediaUnavailableEvidence(segment, result.mediaUnavailable);
+  segment.lastApply = result;
+  segment.applied = result.mediaPending === 0;
+  if (segment.applied && segment.operationMetadataRepairPending === true) {
+    segment.operationMetadataRepairPending = false;
+  }
+}
+
+function assertPolicyRepairMediaEvidence(segment, evidenceRecords) {
+  const original = new Map(
+    (segment.mediaUnavailableEvents ?? []).map((evidence) => [evidence.eventHash, evidence.reason])
+  );
+  if (
+    !Array.isArray(evidenceRecords) ||
+    evidenceRecords.some(
+      (evidence) =>
+        !isValidMediaUnavailableEvidence(evidence) ||
+        original.get(evidence.eventHash) !== evidence.reason
+    )
+  ) {
+    throw new Error('recovery_policy_relation_repair_media_evidence_mismatch');
+  }
 }
 
 export async function reviewMissingOperationMetadata(segment, sourceAccountId, deps) {
@@ -448,6 +497,17 @@ export async function reviewPolicySkippedRelationTargets(segment, sourceAccountI
   if (!isRecord(segment) || !Array.isArray(segment.events)) {
     throw new Error('invalid_recovery_segment');
   }
+  assertExclusiveRepairModes(segment);
+  if (segment.operationMetadataRepairPending === true) {
+    throw new Error('recovery_repair_modes_conflict');
+  }
+  if (segment.policyRelationRepairPending === true) {
+    throw new Error('recovery_policy_relation_repair_pending');
+  }
+  if (segment.applied !== true) {
+    throw new Error('recovery_verify_segment_not_applied');
+  }
+  const previousEvidence = indexRelationTargetPolicySkips(segment);
   const mainMessageIds = [];
   const referencesByTarget = new Map();
   for (const event of segment.events) {
@@ -471,6 +531,18 @@ export async function reviewPolicySkippedRelationTargets(segment, sourceAccountI
   if (missingMainCount > 0) {
     throw new Error(`recovery_verify_missing_documents_${missingMainCount}`);
   }
+  for (const event of segment.events) {
+    const document = documents.get(
+      createPrivateWhatsAppMessageId(sourceAccountId, event.matrixEventId)
+    );
+    if (
+      document?.matrixEventId !== event.matrixEventId ||
+      document?.sourceAccountId !== sourceAccountId ||
+      (deps.userId !== undefined && document?.userId !== deps.userId)
+    ) {
+      throw new Error('recovery_verify_deterministic_id_mismatch');
+    }
+  }
 
   const evidence = [];
   let blockedTargetCount = 0;
@@ -488,6 +560,13 @@ export async function reviewPolicySkippedRelationTargets(segment, sourceAccountI
     }
     const roomId = [...roomIds][0];
     const target = await deps.fetchMatrixEvent(roomId, targetMatrixEventId);
+    if (
+      target?.event_id !== targetMatrixEventId ||
+      (target?.room_id !== undefined && target.room_id !== roomId)
+    ) {
+      blockedTargetCount += 1;
+      continue;
+    }
     const classified = deps.classifyTarget(
       roomId,
       target,
@@ -511,8 +590,139 @@ export async function reviewPolicySkippedRelationTargets(segment, sourceAccountI
   if (blockedTargetCount > 0) {
     throw new Error(`recovery_relation_target_review_blocked_${blockedTargetCount}`);
   }
-  mergeRelationTargetPolicySkipEvidence(segment, evidence);
-  return { reviewedTargetCount, repairedEventCount: evidence.length };
+  const reviewedSegment = { ...segment };
+  mergeRelationTargetPolicySkipEvidence(reviewedSegment, evidence);
+  const eventHashes = evidence
+    .filter(({ eventHash }) => !previousEvidence.has(eventHash))
+    .map(({ eventHash }) => eventHash)
+    .sort();
+  if (eventHashes.length > 0) {
+    reviewedSegment.policyRelationRepairPending = true;
+    reviewedSegment.policyRelationRepairProof = createPolicyRelationRepairProof(
+      reviewedSegment,
+      sourceAccountId,
+      eventHashes
+    );
+    selectPolicyRelationRepairEvents(reviewedSegment, sourceAccountId);
+    segment.relationTargetPolicySkips = reviewedSegment.relationTargetPolicySkips;
+    segment.policyRelationRepairProof = reviewedSegment.policyRelationRepairProof;
+    segment.policyRelationRepairPending = true;
+    delete segment.verified;
+    delete segment.verification;
+  }
+  return { reviewedTargetCount, repairedEventCount: eventHashes.length };
+}
+
+function assertExclusiveRepairModes(segment) {
+  if (
+    segment.policyRelationRepairPending === true &&
+    segment.operationMetadataRepairPending === true
+  ) {
+    throw new Error('recovery_repair_modes_conflict');
+  }
+}
+
+function assertNoPendingPolicyRelationRepair(manifest) {
+  if (
+    Array.isArray(manifest?.segments) &&
+    manifest.segments.some((segment) => segment?.policyRelationRepairPending === true)
+  ) {
+    throw new Error('recovery_policy_relation_repair_pending');
+  }
+}
+
+function policyRelationRepairSegmentHash(segment) {
+  return sha256(
+    JSON.stringify({
+      name: segment.name,
+      fromToken: segment.fromToken,
+      toToken: segment.toToken,
+      fromTokenHash: segment.fromTokenHash,
+      toTokenHash: segment.toTokenHash,
+      events: segment.events,
+      roomContexts: segment.roomContexts,
+      summary: segment.summary,
+      skipCounts: segment.skipCounts,
+      errors: segment.errors,
+      lastApply: segment.lastApply,
+      mediaUnavailableEvents: segment.mediaUnavailableEvents,
+      mediaUnavailableEventHashes: segment.mediaUnavailableEventHashes,
+    })
+  );
+}
+
+function createPolicyRelationRepairProof(segment, sourceAccountId, eventHashes) {
+  const proof = {
+    version: 1,
+    sourceAccountHash: sha256(sourceAccountId),
+    segmentHash: policyRelationRepairSegmentHash(segment),
+    evidenceHash: sha256(JSON.stringify(segment.relationTargetPolicySkips)),
+    eventHashes,
+  };
+  return { ...proof, proofHash: sha256(JSON.stringify(proof)) };
+}
+
+function selectPolicyRelationRepairEvents(segment, sourceAccountId) {
+  if (segment.policyRelationRepairPending !== true) return undefined;
+  assertExclusiveRepairModes(segment);
+  if (segment.applied !== true) {
+    throw new Error('recovery_policy_relation_repair_full_apply_required');
+  }
+  const proof = segment.policyRelationRepairProof;
+  if (
+    !isRecord(proof) ||
+    proof.version !== 1 ||
+    Object.keys(proof).sort().join(',') !==
+      'eventHashes,evidenceHash,proofHash,segmentHash,sourceAccountHash,version' ||
+    typeof sourceAccountId !== 'string' ||
+    sourceAccountId === '' ||
+    typeof segment.name !== 'string' ||
+    segment.name === '' ||
+    typeof segment.fromToken !== 'string' ||
+    segment.fromToken === '' ||
+    typeof segment.toToken !== 'string' ||
+    segment.toToken === '' ||
+    [proof.sourceAccountHash, proof.segmentHash, proof.evidenceHash, proof.proofHash].some(
+      (hash) => typeof hash !== 'string' || !/^[a-f0-9]{64}$/u.test(hash)
+    ) ||
+    !Array.isArray(proof.eventHashes) ||
+    proof.eventHashes.length === 0 ||
+    proof.eventHashes.some((hash) => typeof hash !== 'string' || !/^[a-f0-9]{64}$/u.test(hash)) ||
+    new Set(proof.eventHashes).size !== proof.eventHashes.length
+  ) {
+    throw new Error('recovery_policy_relation_repair_evidence_invalid');
+  }
+  const expected = createPolicyRelationRepairProof(segment, sourceAccountId, proof.eventHashes);
+  if (
+    proof.sourceAccountHash !== expected.sourceAccountHash ||
+    proof.segmentHash !== expected.segmentHash ||
+    proof.evidenceHash !== expected.evidenceHash ||
+    proof.proofHash !== expected.proofHash
+  ) {
+    throw new Error('recovery_policy_relation_repair_evidence_stale');
+  }
+  const evidence = indexRelationTargetPolicySkips(segment);
+  const requested = new Set(proof.eventHashes);
+  const known = new Set();
+  const selected = [];
+  for (const event of segment.events) {
+    const eventHash = sha256(event.matrixEventId);
+    if (known.has(eventHash)) {
+      throw new Error('recovery_policy_relation_repair_evidence_duplicate');
+    }
+    known.add(eventHash);
+    if (!requested.has(eventHash)) continue;
+    if (!evidence.has(eventHash) || getRelationTargetMatrixEventId(event) === undefined) {
+      throw new Error('recovery_policy_relation_repair_evidence_mismatch');
+    }
+    annotateReviewedRelationTarget(event, evidence);
+    requested.delete(eventHash);
+    selected.push(event);
+  }
+  if (requested.size > 0) {
+    throw new Error('recovery_policy_relation_repair_evidence_unused');
+  }
+  return selected;
 }
 
 function isValidRelationTargetPolicySkipEvidence(evidence) {
@@ -860,6 +1070,7 @@ async function writeDurablePrivateFile(filePath, bytes) {
 }
 
 function validateFinalizableManifest(manifest) {
+  assertNoPendingPolicyRelationRepair(manifest);
   if (
     !isRecord(manifest) ||
     manifest.version !== 1 ||
@@ -1195,6 +1406,9 @@ function sanitizedManifestSummary(manifest, stage, result) {
       applied: segment.applied === true,
       verified: segment.verified === true,
       lastApply: segment.lastApply,
+      policyRelationRepairPending: segment.policyRelationRepairPending === true,
+      policyRelationRepairEventCount: segment.policyRelationRepairProof?.eventHashes?.length ?? 0,
+      lastPolicyRelationRepair: segment.lastPolicyRelationRepair,
       verification: segment.verification,
     })),
     ...(isRecord(manifest.lastDiscoveryException)
@@ -1233,6 +1447,12 @@ export async function main(argv, env) {
     throw new Error('usage_discover_apply_verify_finalize');
   }
   const options = parseOptions(optionArgs);
+  if (
+    options['review-policy-skipped-relations'] === 'true' &&
+    options['review-missing-operation-metadata'] === 'true'
+  ) {
+    throw new Error('recovery_repair_modes_conflict');
+  }
   const manifestFile = requireOption(options, 'manifest');
   const summaryFile = options.summary ?? `${manifestFile}.summary.json`;
   const config = createConfig(env);
@@ -1304,6 +1524,7 @@ async function runDiscoverStage({ config, manifestFile, options }) {
   if (manifest.sourceAccountId !== config.sourceAccountId) {
     throw new Error('recovery_manifest_source_account_mismatch');
   }
+  assertNoPendingPolicyRelationRepair(manifest);
   if (manifest.segments.length === 2) {
     return { status: 'already_discovered', segmentCount: 2 };
   }
@@ -1356,13 +1577,21 @@ async function runApplyStage({ config, manifestFile }) {
   if (!Array.isArray(manifest.segments) || manifest.segments.length === 0) {
     throw new Error('recovery_apply_missing_segment');
   }
-  const segment = manifest.segments.find((candidate) => candidate.applied !== true);
+  if (manifest.sourceAccountId !== config.sourceAccountId) {
+    throw new Error('recovery_manifest_source_account_mismatch');
+  }
+  for (const candidate of manifest.segments) assertExclusiveRepairModes(candidate);
+  const segment = manifest.segments.find(
+    (candidate) => candidate.policyRelationRepairPending === true || candidate.applied !== true
+  );
   if (segment === undefined) {
     return { status: 'already_applied', segmentCount: manifest.segments.length };
   }
   if (segment.errors?.length > 0) {
     throw new Error('recovery_apply_blocked_by_discovery_errors');
   }
+  const policyRepair = segment.policyRelationRepairPending === true;
+  selectPolicyRelationRepairEvents(segment, config.sourceAccountId);
   await assertPrivateFile(
     config.googleApplicationCredentialsFile,
     'recovery_apply_identity_file_not_private'
@@ -1373,6 +1602,7 @@ async function runApplyStage({ config, manifestFile }) {
   );
   const matrixAccessToken = await readPrivateToken(config.matrixAccessTokenFile);
   const result = await applyRecoverySegment(segment, {
+    sourceAccountId: config.sourceAccountId,
     postBatch: (events, deliveryMode) => postEvents(config, events, deliveryMode),
     enqueueMedia: (events) =>
       enqueuePendingMedia(
@@ -1387,23 +1617,26 @@ async function runApplyStage({ config, manifestFile }) {
         uploadPrivateMedia,
         postPrivateMediaBackfill,
         recordMediaUnavailable: async (evidence) => {
+          if (policyRepair) {
+            assertPolicyRepairMediaEvidence(segment, [evidence]);
+            return;
+          }
           mergeMediaUnavailableEvidence(segment, [evidence]);
           await writePrivateRecoveryJson(manifestFile, manifest);
         },
         nowISOString: () => new Date().toISOString(),
       }),
   });
-  mergeMediaUnavailableEvidence(segment, result.mediaUnavailable);
-  segment.lastApply = result;
-  segment.applied = result.mediaPending === 0;
-  if (segment.applied && segment.operationMetadataRepairPending === true) {
-    segment.operationMetadataRepairPending = false;
-  }
+  recordRecoveryApplyResult(segment, result, config.sourceAccountId);
   await writePrivateRecoveryJson(manifestFile, manifest);
-  if (!segment.applied) {
+  if (result.mediaPending !== 0) {
     throw new Error(`recovery_apply_media_pending_${result.mediaPending}`);
   }
-  return { status: 'applied', segment: segment.name, ...result };
+  return {
+    status: policyRepair ? 'policy_relation_repaired' : 'applied',
+    segment: segment.name,
+    ...result,
+  };
 }
 
 async function runVerifyStage({ config, manifestFile, env, options }) {
@@ -1411,6 +1644,7 @@ async function runVerifyStage({ config, manifestFile, env, options }) {
   if (!Array.isArray(manifest.segments) || manifest.segments.length === 0) {
     throw new Error('recovery_verify_missing_segment');
   }
+  assertNoPendingPolicyRelationRepair(manifest);
   const segment = manifest.segments.find((candidate) => candidate.verified !== true);
   if (segment === undefined) {
     return { status: 'already_verified', segmentCount: manifest.segments.length };
@@ -1440,19 +1674,16 @@ async function runVerifyStage({ config, manifestFile, env, options }) {
     bucket: env.WHATSAPP_RECOVERY_MEDIA_BUCKET ?? 'intexuraos-whatsapp-media-dev',
   });
   if (options['review-policy-skipped-relations'] === 'true') {
-    const beforeEvidence = JSON.stringify(segment.relationTargetPolicySkips ?? []);
     const matrixAccessToken = await readPrivateToken(config.matrixAccessTokenFile);
     const review = await reviewPolicySkippedRelationTargets(segment, config.sourceAccountId, {
+      userId: config.userId,
       fetchDocuments: verifier.fetchDocuments,
       fetchMatrixEvent: (roomId, eventId) =>
         fetchMatrixEventForRecovery(config, matrixAccessToken, roomId, eventId),
       classifyTarget: (roomId, event, roomContext) =>
         classifyMatrixEventForRecovery(roomId, event, roomContext, config),
     });
-    if (JSON.stringify(segment.relationTargetPolicySkips ?? []) !== beforeEvidence) {
-      segment.applied = false;
-      delete segment.verified;
-      delete segment.verification;
+    if (review.repairedEventCount > 0) {
       await writePrivateRecoveryJson(manifestFile, manifest);
       throw new Error(`recovery_relation_target_repairs_required_${review.repairedEventCount}`);
     }
