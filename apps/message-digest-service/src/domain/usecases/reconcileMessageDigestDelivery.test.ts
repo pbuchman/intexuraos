@@ -11,18 +11,121 @@ import { reconcileMessageDigestDelivery } from './reconcileMessageDigestDelivery
 const NOW = '2026-07-27T12:04:00.000Z';
 
 describe('reconcileMessageDigestDelivery', () => {
+  it.each(['delivered', 'read'] as const)(
+    'heals a provider failed confirmation after a later %s receipt',
+    async (status) => {
+      const confirmation = {
+        status,
+        deliveredAt: NOW,
+        ...(status === 'read' ? { readAt: NOW } : {}),
+      };
+      const harness = createHarness({
+        existingStatus: 'sent',
+        existingConfirmation: { status: 'failed', failedAt: '2026-07-27T12:03:30.000Z' },
+        receipt: {
+          status: 'sent',
+          acceptedAt: '2026-07-27T12:03:00.000Z',
+          transportConfirmation: confirmation,
+        },
+      });
+      expect(
+        await reconcileMessageDigestDelivery(validInput(), harness.dependencies)
+      ).toMatchObject({
+        ok: true,
+        disposition: 'delivered',
+        run: { delivery: { transportConfirmation: confirmation } },
+      });
+      expect(harness.getOutboundDeliveryState).toHaveBeenCalledOnce();
+    }
+  );
+
+  it('stops failed confirmation observation seven days after acceptance without resending', async () => {
+    const harness = createHarness({
+      existingStatus: 'sent',
+      existingConfirmation: { status: 'failed', failedAt: NOW },
+    });
+    harness.dependencies.now = (): string => '2026-08-03T12:03:00.000Z';
+    expect(await reconcileMessageDigestDelivery(validInput(), harness.dependencies)).toMatchObject({
+      ok: true,
+      disposition: 'failed',
+    });
+    expect(harness.getOutboundDeliveryState).not.toHaveBeenCalled();
+    expect(harness.recordRunDeliveryState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observedAt: '2026-08-03T12:03:00.000Z',
+        delivery: expect.objectContaining({
+          transportConfirmation: { status: 'failed', failedAt: NOW },
+        }),
+      })
+    );
+  });
+
+  it.each(['NOT_FOUND', 'RESERVATION_LOST'] as const)(
+    'reports %s if retention-expiry persistence loses its record or erasure fence',
+    async (storeFailure) => {
+      const harness = createHarness({
+        existingStatus: 'sent',
+        existingConfirmation: { status: 'failed', failedAt: NOW },
+        storeFailure,
+      });
+      harness.dependencies.now = (): string => '2026-08-03T12:03:00.000Z';
+      expect(await reconcileMessageDigestDelivery(validInput(), harness.dependencies)).toEqual(
+        storeFailure === 'NOT_FOUND'
+          ? { ok: false, code: 'NOT_FOUND' }
+          : { ok: true, disposition: 'deferred' }
+      );
+      expect(harness.getOutboundDeliveryState).not.toHaveBeenCalled();
+    }
+  );
+
+  it('retains a failed confirmation when the owner temporarily returns a missing receipt', async () => {
+    const harness = createHarness({
+      existingStatus: 'sent',
+      existingConfirmation: { status: 'failed', failedAt: NOW },
+      receipt: { status: 'missing' },
+    });
+    expect(await reconcileMessageDigestDelivery(validInput(), harness.dependencies)).toMatchObject({
+      ok: true,
+      disposition: 'failed',
+    });
+    expect(harness.recordRunDeliveryObservation).toHaveBeenCalledWith(
+      expect.objectContaining({ observation: 'missing' })
+    );
+  });
+  it('rechecks transport-accepted runs and persists delivered confirmation without resending', async () => {
+    const harness = createHarness({
+      existingStatus: 'sent',
+      receipt: {
+        status: 'sent',
+        acceptedAt: '2026-07-27T12:03:00.000Z',
+        transportConfirmation: { status: 'delivered', deliveredAt: NOW },
+      },
+    });
+    expect(await reconcileMessageDigestDelivery(validInput(), harness.dependencies)).toMatchObject({
+      ok: true,
+      disposition: 'delivered',
+    });
+    expect(harness.recordRunDeliveryState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delivery: expect.objectContaining({
+          status: 'sent',
+          transportConfirmation: { status: 'delivered', deliveredAt: NOW },
+        }),
+      })
+    );
+  });
   it('persists sent acceptance under the current erasure fence', async () => {
     const harness = createHarness({
       receipt: { status: 'sent', acceptedAt: '2026-07-27T12:03:00.000Z' },
     });
 
-    await expect(reconcileMessageDigestDelivery(validInput(), harness.dependencies)).resolves.toEqual(
-      {
-        ok: true,
-        disposition: 'sent',
-        run: expect.objectContaining({ delivery: expect.objectContaining({ status: 'sent' }) }),
-      }
-    );
+    await expect(
+      reconcileMessageDigestDelivery(validInput(), harness.dependencies)
+    ).resolves.toEqual({
+      ok: true,
+      disposition: 'sent',
+      run: expect.objectContaining({ delivery: expect.objectContaining({ status: 'sent' }) }),
+    });
     expect(harness.getOutboundDeliveryState).toHaveBeenCalledWith({
       userId: 'synthetic-user-001',
       idempotencyKey: 'message-digest:mdr_run_001',
@@ -107,14 +210,17 @@ describe('reconcileMessageDigestDelivery', () => {
       },
       'failed',
     ],
-  ] as const)('terminalizes %s without initiating another delivery', async (receipt, disposition) => {
-    const harness = createHarness({ receipt });
+  ] as const)(
+    'terminalizes %s without initiating another delivery',
+    async (receipt, disposition) => {
+      const harness = createHarness({ receipt });
 
-    await expect(
-      reconcileMessageDigestDelivery(validInput(), harness.dependencies)
-    ).resolves.toMatchObject({ ok: true, disposition });
-    expect(harness.recordRunDeliveryState).toHaveBeenCalledOnce();
-  });
+      await expect(
+        reconcileMessageDigestDelivery(validInput(), harness.dependencies)
+      ).resolves.toMatchObject({ ok: true, disposition });
+      expect(harness.recordRunDeliveryState).toHaveBeenCalledOnce();
+    }
+  );
 
   it('returns an existing terminal state without another owner-service read', async () => {
     const harness = createHarness({ existingStatus: 'ambiguous' });
@@ -191,15 +297,17 @@ describe('reconcileMessageDigestDelivery', () => {
       { ...valid, runId: 'invalid' },
     ]) {
       const harness = createHarness();
-      await expect(
-        reconcileMessageDigestDelivery(input, harness.dependencies)
-      ).resolves.toEqual({ ok: false, code: 'INVALID_REQUEST' });
+      await expect(reconcileMessageDigestDelivery(input, harness.dependencies)).resolves.toEqual({
+        ok: false,
+        code: 'INVALID_REQUEST',
+      });
     }
     const invalidNow = createHarness();
     invalidNow.dependencies.now = (): string => 'not-an-instant';
-    await expect(
-      reconcileMessageDigestDelivery(valid, invalidNow.dependencies)
-    ).resolves.toEqual({ ok: false, code: 'INVALID_REQUEST' });
+    await expect(reconcileMessageDigestDelivery(valid, invalidNow.dependencies)).resolves.toEqual({
+      ok: false,
+      code: 'INVALID_REQUEST',
+    });
 
     const defaultClock = createHarness();
     defaultClock.dependencies.now = undefined;
@@ -238,7 +346,10 @@ describe('reconcileMessageDigestDelivery', () => {
       const terminal = createHarness({ existingStatus });
       await expect(
         reconcileMessageDigestDelivery(validInput(), terminal.dependencies)
-      ).resolves.toMatchObject({ ok: true, disposition: existingStatus });
+      ).resolves.toMatchObject({
+        ok: true,
+        disposition: existingStatus === 'sent' ? 'pending' : existingStatus,
+      });
     }
     const unsent = createHarness({ existingStatus: 'not_sent' });
     await expect(
@@ -258,6 +369,7 @@ describe('reconcileMessageDigestDelivery', () => {
 });
 
 interface HarnessOptions {
+  existingConfirmation?: MessageDigestRun['delivery']['transportConfirmation'];
   receipt?: MessageDigestOutboundDeliveryState;
   receiptFailure?: boolean;
   existingStatus?: 'not_sent' | 'sent' | 'ambiguous' | 'failed';
@@ -283,6 +395,8 @@ function createHarness(options: HarnessOptions = {}): {
 } {
   const definition = activeDefinition();
   const run = completedRun(options.existingStatus ?? 'pending');
+  if (options.existingConfirmation !== undefined)
+    run.delivery.transportConfirmation = options.existingConfirmation;
   if (options.definitionStatus !== undefined) definition.status = options.definitionStatus;
   if (options.generationStatus !== undefined) run.generationStatus = options.generationStatus;
   if (options.reconciliationAttempts !== undefined) {
@@ -302,51 +416,55 @@ function createHarness(options: HarnessOptions = {}): {
         ? { ok: false, code: 'unavailable' }
         : { ok: true, value: options.receipt ?? { status: 'pending' } }
   );
-  const recordRunDeliveryState = vi.fn<MessageDigestStore['recordRunDeliveryState']>(async (input) =>
-    options.storeFailure === undefined
-      ? {
-          ok: true,
-          disposition: 'updated',
-          run: {
-            ...run,
-            delivery: {
-              ...run.delivery,
-              status: input.delivery.status,
-              acceptedAt:
-                input.delivery.status === 'sent' || input.delivery.status === 'ambiguous'
-                  ? (input.delivery.acceptedAt ?? null)
-                  : null,
-              failedAt: input.delivery.status === 'failed' ? input.delivery.failedAt : null,
-              failureCode: input.delivery.status === 'failed' ? input.delivery.failureCode : null,
+  const recordRunDeliveryState = vi.fn<MessageDigestStore['recordRunDeliveryState']>(
+    async (input) =>
+      options.storeFailure === undefined
+        ? {
+            ok: true,
+            disposition: 'updated',
+            run: {
+              ...run,
+              delivery: {
+                ...run.delivery,
+                status: input.delivery.status,
+                ...(input.delivery.status === 'sent' &&
+                input.delivery.transportConfirmation !== undefined
+                  ? { transportConfirmation: input.delivery.transportConfirmation }
+                  : {}),
+                acceptedAt:
+                  input.delivery.status === 'sent' || input.delivery.status === 'ambiguous'
+                    ? (input.delivery.acceptedAt ?? null)
+                    : null,
+                failedAt: input.delivery.status === 'failed' ? input.delivery.failedAt : null,
+                failureCode: input.delivery.status === 'failed' ? input.delivery.failureCode : null,
+              },
             },
-          },
-        }
-      : { ok: false, code: options.storeFailure }
+          }
+        : { ok: false, code: options.storeFailure }
   );
-  const recordRunDeliveryObservation = vi.fn<
-    MessageDigestStore['recordRunDeliveryObservation']
-  >(async (input) =>
-    options.observationStoreFailure === undefined
-      ? {
-          ok: true,
-          disposition: 'updated',
-          run: {
-            ...run,
-            delivery: {
-              ...run.delivery,
-              reconciliationAttempts: input.expectedReconciliationAttempts + 1,
-              nextCheckAt: input.nextCheckAt,
-              missingSince:
-                input.observation === 'missing'
-                  ? (run.delivery.missingSince ?? input.observedAt)
-                  : input.observation === 'pending'
-                    ? null
-                    : run.delivery.missingSince,
+  const recordRunDeliveryObservation = vi.fn<MessageDigestStore['recordRunDeliveryObservation']>(
+    async (input) =>
+      options.observationStoreFailure === undefined
+        ? {
+            ok: true,
+            disposition: 'updated',
+            run: {
+              ...run,
+              delivery: {
+                ...run.delivery,
+                reconciliationAttempts: input.expectedReconciliationAttempts + 1,
+                nextCheckAt: input.nextCheckAt,
+                missingSince:
+                  input.observation === 'missing'
+                    ? (run.delivery.missingSince ?? input.observedAt)
+                    : input.observation === 'pending'
+                      ? null
+                      : run.delivery.missingSince,
+              },
+              updatedAt: input.observedAt,
             },
-            updatedAt: input.observedAt,
-          },
-        }
-      : { ok: false, code: options.observationStoreFailure }
+          }
+        : { ok: false, code: options.observationStoreFailure }
   );
   return {
     dependencies: {
@@ -418,9 +536,7 @@ function activeDefinition(): MessageDigestDefinition {
   };
 }
 
-function completedRun(
-  deliveryStatus: MessageDigestRun['delivery']['status']
-): MessageDigestRun {
+function completedRun(deliveryStatus: MessageDigestRun['delivery']['status']): MessageDigestRun {
   const definition = activeDefinition();
   return {
     version: 1,
@@ -460,8 +576,7 @@ function completedRun(
       failedAt: deliveryStatus === 'failed' ? '2026-07-27T12:03:00.000Z' : null,
       failureCode: deliveryStatus === 'failed' ? 'DELIVERY_DISABLED' : null,
       reconciliationAttempts: 0,
-      nextCheckAt:
-        deliveryStatus === 'pending' ? '2026-07-27T12:02:00.000Z' : null,
+      nextCheckAt: deliveryStatus === 'pending' ? '2026-07-27T12:02:00.000Z' : null,
       missingSince: null,
     },
     safeFailureCode: null,

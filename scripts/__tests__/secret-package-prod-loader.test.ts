@@ -44,7 +44,7 @@ function mode(path: string): number {
 
 function runtimeServiceAccount(
   email = 'ixos-hetzner-runtime-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
-) {
+): Record<string, string> {
   return {
     auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
     auth_uri: 'https://accounts.google.com/o/oauth2/auth',
@@ -60,16 +60,26 @@ function runtimeServiceAccount(
   };
 }
 
-function packagePayload(marker: string, serviceAccount = runtimeServiceAccount()) {
+function packagePayload(
+  marker: string,
+  serviceAccount = runtimeServiceAccount()
+): {
+  schemaVersion: number;
+  environment: string;
+  env: Record<string, string>;
+  files: Record<string, string>;
+} {
   return {
     schemaVersion: 1,
     environment: 'prod',
     env: Object.fromEntries(
       manifest.packages.prod.envNames.map((name) => [
         name,
-        name === 'INTEXURAOS_FIREBASE_API_KEY'
-          ? `AIza${marker.padEnd(35, 'a').slice(0, 35)}`
-          : `${marker}-${name}`,
+        name === 'INTEXURAOS_PROD_PROFILE'
+          ? 'basic'
+          : name === 'INTEXURAOS_FIREBASE_API_KEY'
+            ? `AIza${marker.padEnd(35, 'a').slice(0, 35)}`
+            : `${marker}-${name}`,
       ])
     ),
     files: {
@@ -111,7 +121,11 @@ function fixture(marker = 'candidate'): Fixture {
   return result;
 }
 
-function runLoader(input: Fixture, args: string[], env: Record<string, string> = {}) {
+function runLoader(
+  input: Fixture,
+  args: string[],
+  env: Record<string, string> = {}
+): ReturnType<typeof spawnSync> {
   return spawnSync(
     'bash',
     [
@@ -218,9 +232,11 @@ describe('irreversible PROD secret-package loader', () => {
     expect(env.INTEXURAOS_SECRET_PACKAGE_VERSION).toBe('7');
     for (const name of manifest.packages.prod.envNames) {
       expect(env[name], name).toBe(
-        name === 'INTEXURAOS_FIREBASE_API_KEY'
-          ? `AIza${'candidate'.padEnd(35, 'a').slice(0, 35)}`
-          : `candidate-${name}`
+        name === 'INTEXURAOS_PROD_PROFILE'
+          ? 'basic'
+          : name === 'INTEXURAOS_FIREBASE_API_KEY'
+            ? `AIza${'candidate'.padEnd(35, 'a').slice(0, 35)}`
+            : `candidate-${name}`
       );
     }
     expect(env.PREVIOUS_ENV).toBeUndefined();
@@ -329,7 +345,7 @@ describe('irreversible PROD secret-package loader', () => {
       activeMarker,
       projectionMarker,
     ];
-    const snapshot = () => ({
+    const snapshot = (): Record<string, unknown> => ({
       files: activePaths.map((path) => ({ contents: readFileSync(path), mode: mode(path) })),
       current: readlinkSync(join(input.renderRoot, 'current')),
       releases: readdirSync(input.renderRoot).sort(),

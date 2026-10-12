@@ -14,6 +14,8 @@ import { messageDigestRoutes } from './routes/messageDigestRoutes.js';
 import { internalMessageDigestRoutes } from './routes/internalMessageDigestRoutes.js';
 import { internalLegacyDigestRoutes } from './routes/internalLegacyDigestRoutes.js';
 import { legacyAliasRoutes } from './routes/legacyAliasRoutes.js';
+import { registerDigestJobMonitoring, getDigestNotificationSummary } from './routes/jobMonitoring.js';
+import { getServices } from './services.js';
 
 const SERVICE_NAME = 'message-digest-service';
 const SERVICE_VERSION = '3.8.0';
@@ -56,6 +58,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   await app.register(fastifySwagger, openApiOptions());
   await app.register(fastifySwaggerUi, { routePrefix: '/docs' });
+  registerDigestJobMonitoring(app, () => getServices().jobHeartbeatStore, async () => await getDigestNotificationSummary(getServices().firestore));
   await app.register(messageDigestRoutes);
   await app.register(legacyAliasRoutes);
   await app.register(internalMessageDigestRoutes);

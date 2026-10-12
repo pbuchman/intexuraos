@@ -1,3 +1,4 @@
+import { createFakeJobHeartbeatStore } from '../fakes.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 
@@ -50,6 +51,7 @@ describe('internalIssuesRoutes', () => {
     fakeCodeAgentClient = new FakeCodeAgentClient();
 
     setServices({
+      jobHeartbeatStore: createFakeJobHeartbeatStore(),
       connectionRepository: fakeConnectionRepo,
       linearApiClient: fakeLinearClient,
       failedIssueRepository: new FakeFailedIssueRepository(),

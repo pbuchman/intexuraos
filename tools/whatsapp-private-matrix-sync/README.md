@@ -2,7 +2,7 @@
 
 Operational adapter for synchronizing incoming private WhatsApp messages from an external Matrix homeserver into the IntexuraOS WhatsApp service.
 
-This tool is intentionally placed under `tools/`, not `apps/`, because it is deployed outside IntexuraOS service infrastructure. The current production-like deployment target is the Home Dev machine setup stack in `pbuchman-dev`.
+This tool is deployed independently of the IntexuraOS services and Matrix core. IntexuraOS owns its canonical source, image, deployment and supervisor under [`deploy/home-dev/`](deploy/home-dev/README.md). `pbuchman-dev` owns the standalone homeserver, WhatsApp bridge and host ingress.
 
 ## Runtime
 
@@ -11,8 +11,8 @@ This tool is intentionally placed under `tools/`, not `apps/`, because it is dep
 - On the first successful sync it stores the batch token and skips historical events.
 - Later sync batches are mapped to the private WhatsApp ingest payload and posted to IntexuraOS.
 - Valid unstable Matrix poll responses are preserved in `rawMatrixEvent` and ingested as unknown messages without inventing text or reaction content.
-- For new Matrix image, audio, and video events, the adapter downloads media through the authenticated Matrix media API, uploads bytes to IntexuraOS, and only then posts the ingest event.
-- The adapter is read-only with respect to WhatsApp. It only observes Matrix events and posts ingest batches.
+- For new Matrix image, audio, and video events, the adapter ingests message metadata first and durably queues media before advancing the checkpoint. It then downloads media through the authenticated Matrix media API, uploads bytes to IntexuraOS, and attaches the stored media to the existing message. Pending media stays queued for retry and keeps synchronization health degraded.
+- Live synchronization consumes Matrix events and posts ingest batches. Eligible WhatsApp portal invites may be joined. The separately authorized outbound API sends Matrix messages to configured targets.
 
 ## IntexuraOS Contract
 
@@ -90,6 +90,10 @@ All three endpoints require the exact
 `Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>` header. Missing, empty,
 unreadable, whitespace-only, or non-matching token material fails closed with `401`.
 
+`/health` returns `200` only while `state` is `running` and a complete successful sync iteration finished less than 120 seconds ago. A quiet channel stays healthy after successful polling. Starting, credential waits, errors, recovery fences, pending media and stale progress return `503` with `ok: false`. A retry keeps its previous failure visible until it completes. The response includes `lastSuccessfulPollAt`, `lastCheckpointAt`, `lastIngestAt` and `lastSuccessfulIterationAt` when observed in the current process; no event content or credentials are returned. Poll and checkpoint timestamps can advance while media is pending; only completion clears degraded health.
+
+The image checks authenticated health every 30 seconds with a 120-second start period. Unhealthy health alone does not restart the container. The separate supervisor restarts failed processes with bounded attempts, and recovery remains manual.
+
 Readiness returns only configuration state:
 
 - `{ "status": "ready" }`
@@ -134,8 +138,11 @@ pnpm --filter whatsapp-private-matrix-sync test
 Docker image build:
 
 ```bash
-docker build -t whatsapp-private-matrix-sync:local tools/whatsapp-private-matrix-sync
+# From the exact reviewed commit, with clean canonical tool source:
+bash tools/whatsapp-private-matrix-sync/deploy/home-dev/build.sh "$(git rev-parse HEAD)"
 ```
+
+The image uses `npm ci` with the canonical lockfile, `google-auth-library` 10.9.1 and a digest-pinned Node 22.23.3 base. Real builds carry the exact source revision label. Run the isolated image/TLS/lifecycle rehearsal with `pnpm --filter whatsapp-private-matrix-sync test:image`; it builds a separate fixture-labeled image with a sentinel revision and never mounts live state or credentials.
 
 Stored media backfill for a message ingested before media upload metadata existed:
 
@@ -149,4 +156,4 @@ pnpm --filter whatsapp-private-matrix-sync backfill:media -- \
 
 ## Relationship To Home Dev
 
-`pbuchman-dev` owns the Home Dev machine setup and Docker Compose deployment wiring. IntexuraOS owns this adapter source and the API contract reference, so external Matrix deployments can be kept aligned with the production ingest API without copying undocumented code.
+The integration has its own Compose project `intexuraos-matrix-sync`, unit `intexuraos-matrix-sync.service` and deployment directory `/home/pbuchman/services/intexuraos-matrix-sync`. Its installer only prepares files and never starts a consumer. It connects to `https://home-dev` through the host gateway with the active Caddy public root CA; it does not join the Matrix core network. See the [deployment and rollback procedure](deploy/home-dev/README.md) and [controlled two-segment recovery](../../docs/setup/16-private-whatsapp-matrix-sync.md#controlled-history-recovery).

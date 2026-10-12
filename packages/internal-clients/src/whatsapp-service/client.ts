@@ -1,6 +1,8 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import {
   matrixCorpusCapabilityTokenSchema,
+  notificationRunStateSchema,
+  transportConfirmationSchema,
   matrixCorpusDecimalFenceSchema,
   matrixCorpusExpectedToolScheduleV1Schema,
   matrixCorpusRfc3339TimestampSchema,
@@ -346,7 +348,13 @@ const whatsAppDeliveryReadinessSchema = z.discriminatedUnion('status', [
 
 const outboundDeliveryStateSchema = z.discriminatedUnion('status', [
   z.object({ status: z.enum(['pending', 'missing']) }).strict(),
-  z.object({ status: z.literal('sent'), acceptedAt: timestampSchema }).strict(),
+  z
+    .object({
+      status: z.literal('sent'),
+      acceptedAt: timestampSchema,
+      transportConfirmation: transportConfirmationSchema.optional(),
+    })
+    .strict(),
   z.object({ status: z.literal('ambiguous'), acceptedAt: timestampSchema.optional() }).strict(),
   z
     .object({
@@ -371,7 +379,8 @@ async function parseResponse<T>(
   client: ReturnType<typeof createInternalHttpClient>,
   path: string,
   method: 'GET' | 'POST',
-  body?: unknown
+  body: unknown,
+  timeoutMs: number
 ): Promise<WhatsAppClientResult<T>> {
   const result = await client.request<T>({
     path,
@@ -379,6 +388,7 @@ async function parseResponse<T>(
     ...(body !== undefined ? { body } : {}),
     privateRequest: true,
     skipSentry: true,
+    timeoutMs,
   });
 
   if (result.ok) {
@@ -578,7 +588,9 @@ export function createWhatsAppServiceClient(
       return await parseResponse<PrivateMatrixDeliveryStatus>(
         client,
         `/internal/whatsapp/private/matrix-delivery-status/${encodeURIComponent(userId)}`,
-        'GET'
+        'GET',
+        undefined,
+        5000
       );
     },
 
@@ -589,8 +601,24 @@ export function createWhatsAppServiceClient(
         client,
         '/internal/whatsapp/private/outbound-matrix-messages',
         'POST',
-        request
+        request,
+        30000
       );
+    },
+
+    async getNotificationRunState(
+      input
+    ): ReturnType<NonNullable<WhatsAppServiceClient['getNotificationRunState']>> {
+      const response = await parseResponse<unknown>(
+        client,
+        '/internal/whatsapp/notification-runs/get',
+        'POST',
+        input,
+        5000
+      );
+      if (!response.ok) return response;
+      const parsed = notificationRunStateSchema.safeParse(response.value);
+      return parsed.success ? ok(parsed.data) : err(invalidResponseError());
     },
 
     async provisionMatrixCorpusRun(

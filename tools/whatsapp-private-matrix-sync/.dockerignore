@@ -1,0 +1,8 @@
+.env*
+data
+secrets
+logs
+node_modules
+deploy
+test
+src/*.test.mjs

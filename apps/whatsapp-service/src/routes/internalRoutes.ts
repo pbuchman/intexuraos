@@ -1,5 +1,9 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { authenticateInternalScheduler, logIncomingRequest } from '@intexuraos/common-http';
+import {
+  authenticateInternalScheduler,
+  validateInternalAuth,
+  logIncomingRequest,
+} from '@intexuraos/common-http';
 import {
   ProcessWebhookEventUseCase,
   RetryPendingWebhookEventsUseCase,
@@ -100,6 +104,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userMappingRepository: services.userMappingRepository,
         messageRepository: services.messageRepository,
         outboundMessageRepository: services.outboundMessageRepository,
+        ...(services.notificationDeliveryRepository === undefined
+          ? {}
+          : { notificationDeliveryRepository: services.notificationDeliveryRepository }),
         mediaStorage: services.mediaStorage,
         whatsappCloudApi: services.whatsappCloudApi,
         thumbnailGenerator: services.thumbnailGenerator,
@@ -113,15 +120,65 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         processWebhookEventUseCase,
       });
 
-      const result = await retryPendingWebhookEventsUseCase.execute(
-        (request.body ?? {}) as RetryPendingWebhookEventsInput,
-        request.log
-      );
+      const heartbeat = services.jobHeartbeatStore;
+      const token = await heartbeat?.start('retry_pending_whatsapp_webhooks');
+      try {
+        const result = await retryPendingWebhookEventsUseCase.execute(
+          (request.body ?? {}) as RetryPendingWebhookEventsInput,
+          request.log
+        );
 
-      request.log.info(result, 'Pending WhatsApp webhook retry completed');
-      return await reply.ok(result);
+        if (token !== undefined)
+          await heartbeat?.finish(token, result.failed === 0 ? 'succeeded' : 'failed');
+        request.log.info(result, 'Pending WhatsApp webhook retry completed');
+        return await reply.ok(result);
+      } catch (error) {
+        if (token !== undefined) await heartbeat?.finish(token, 'failed');
+        throw error;
+      }
     }
   );
 
+  fastify.get(
+    '/internal/monitoring/status',
+    {
+      schema: {
+        operationId: 'getWhatsAppMonitoringStatus',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Scheduler and notification monitoring status',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: { type: 'object', additionalProperties: true },
+            },
+            required: ['success', 'data'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received scheduler monitoring request',
+        bodyPreviewLength: 0,
+      });
+      if (!validateInternalAuth(request).valid)
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed');
+      const services = getServices();
+      if (
+        services.jobHeartbeatStore === undefined ||
+        services.notificationDeliveryRepository === undefined
+      )
+        return await reply.fail('MISCONFIGURED', 'Monitoring services unavailable');
+      const observedAt = new Date().toISOString();
+      return await reply.ok({
+        schemaVersion: 1,
+        observedAt,
+        jobs: await services.jobHeartbeatStore.list(['retry_pending_whatsapp_webhooks']),
+        notifications: await services.notificationDeliveryRepository.monitoring(observedAt),
+      });
+    }
+  );
   done();
 };

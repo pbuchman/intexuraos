@@ -25,6 +25,12 @@ export { withSchemaVersion, type SchemaVersionedFields } from './schemaVersion.j
 // TTL helper for retention-driven deletion
 export { computeExpireAt, RETENTION_24H_MS, RETENTION_7D_MS } from './expireAt.js';
 
+export {
+  createJobHeartbeatStore,
+  type JobHeartbeatStore,
+  type JobExecutionToken,
+} from './jobHeartbeat.js';
+
 // Testing utilities
 export {
   createFakeFirestore,

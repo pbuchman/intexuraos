@@ -48,7 +48,7 @@ export const prTriagePubsubRoute: FastifyPluginCallback = (fastify, _opts, done)
       messageId: decoded.messageId,
     });
 
-    const { gitHubPREventRepo, unifiedEvaluator } = getServices();
+    const { gitHubPREventRepo, unifiedEvaluator, getResumeCutoff } = getServices();
 
     const acquiredAt = new Date();
     const acquireResult = await gitHubPREventRepo.acquireTriage({
@@ -80,6 +80,14 @@ export const prTriagePubsubRoute: FastifyPluginCallback = (fastify, _opts, done)
     }
 
     try {
+      const cutoff = await getResumeCutoff?.();
+      // The persisted ingestion timestamp binds the replay guard; payload timestamps are untrusted.
+      // Close events still reconcile PR history and completion evidence.
+      if (cutoff !== undefined && cutoff !== null && acquisition.event.processedAt.getTime() < Date.parse(cutoff) && acquisition.event.action !== 'closed') {
+        const completed = await gitHubPREventRepo.completeTriage({ eventId, leaseToken: acquisition.leaseToken, completedAt: new Date(), skipReason: 'SKIPPED_BEFORE_RESUME' });
+        if (!completed.ok) return await reply.fail('INTERNAL_ERROR', 'triage_completion_failed');
+        return await reply.ok({ disposition: 'skipped_before_resume' });
+      }
       await unifiedEvaluator.evaluate(acquisition.event, requestLogger);
       const completeResult = await gitHubPREventRepo.completeTriage({
         eventId,

@@ -40,42 +40,44 @@ describe('Home PROD runtime source boundary', () => {
     expect(deploy).toContain('scripts/home-prod/reload-pm2.sh');
   });
 
-  it('renders exactly the seventeen basic PM2 apps as nginx upstreams at the same ports', () => {
-    const rendered = execFileSync(
-      process.execPath,
-      [resolve(homeProd, 'render-edge.mjs'), 'nginx'],
-      { cwd: repoRoot, encoding: 'utf8' }
-    );
-    const config = execFileSync(
-      process.execPath,
-      ['-e', "process.stdout.write(JSON.stringify(require('./ecosystem.config.prod.cjs')))"],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          HOME: '/home/intexuraos-prod',
-          INTEXURAOS_ENVIRONMENT: 'prod',
-          INTEXURAOS_PROD_ENV_FILE: '/nonexistent/home-prod-test.env',
-          INTEXURAOS_PROD_PORT_OFFSET: '10000',
-          INTEXURAOS_PROD_PROFILE: 'basic',
-        },
-      }
-    );
-    const apps = (JSON.parse(config) as { apps: Array<{ name: string; env: { PORT: string } }> })
-      .apps;
-    const pm2 = new Map(
-      apps.map((app) => [app.name.replaceAll('-', '_'), Number(app.env.PORT)] as const)
-    );
-    const nginx = new Map(
-      [...rendered.matchAll(/^upstream ([a-z0-9_]+) \{ server 127\.0\.0\.1:(\d+);/gmu)].map(
-        (match) => [match[1], Number(match[2])] as const
-      )
-    );
+  it.each(['basic', 'full'] as const)(
+    'renders the exact %s PM2 service set as nginx upstreams at the same ports',
+    (profile) => {
+      const rendered = execFileSync(
+        process.execPath,
+        [resolve(homeProd, 'render-edge.mjs'), 'nginx', profile],
+        { cwd: repoRoot, encoding: 'utf8' }
+      );
+      const config = execFileSync(
+        process.execPath,
+        ['-e', "process.stdout.write(JSON.stringify(require('./ecosystem.config.prod.cjs')))"],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            HOME: '/home/intexuraos-prod',
+            INTEXURAOS_ENVIRONMENT: 'prod',
+            INTEXURAOS_PROD_ENV_FILE: '/nonexistent/home-prod-test.env',
+            INTEXURAOS_PROD_PORT_OFFSET: '10000',
+            INTEXURAOS_PROD_PROFILE: profile,
+          },
+        }
+      );
+      const apps = (JSON.parse(config) as { apps: { name: string; env: { PORT: string } }[] }).apps;
+      const pm2 = new Map(
+        apps.map((app) => [app.name.replaceAll('-', '_'), Number(app.env.PORT)] as const)
+      );
+      const nginx = new Map(
+        [...rendered.matchAll(/^upstream ([a-z0-9_]+) \{ server 127\.0\.0\.1:(\d+);/gmu)].map(
+          (match) => [match[1], Number(match[2])] as const
+        )
+      );
 
-    expect(apps).toHaveLength(17);
-    expect(nginx).toEqual(pm2);
-  });
+      expect(apps).toHaveLength(profile === 'basic' ? 17 : 19);
+      expect(nginx).toEqual(pm2);
+    }
+  );
 
   it('deletes only the candidate app set when readiness fails after PM2 start', () => {
     const scratch = mkdtempSync(join(tmpdir(), 'home-prod-readiness-'));

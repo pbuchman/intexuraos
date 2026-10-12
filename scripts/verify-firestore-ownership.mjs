@@ -43,6 +43,12 @@ const PATTERNS = [
 
   // Pattern 4: this.collectionName = 'collection_name'
   { regex: /this\.collectionName\s*=\s*['"`]([a-zA-Z0-9_-]+)['"`]/, group: 1 },
+
+  // Service-owned collection supplied to the reusable persisted heartbeat store.
+  {
+    regex: /createJobHeartbeatStore\(\s*\{[^{}]*?\bcollectionName:\s*['"`]([a-zA-Z0-9_-]+)['"`]/,
+    group: 1,
+  },
 ];
 const KNOWN_LITERAL_PATTERN = /(['"`])([a-zA-Z0-9_-]+)\1/g;
 const COLLECTION_MAP_PATTERN =
@@ -88,6 +94,13 @@ function getProductionSourceFiles(dir, options = {}) {
   const skipScripts = options.skipScripts === true;
 
   try {
+    if (statSync(dir).isFile()) {
+      return PRODUCTION_SOURCE_PATTERN.test(dir) &&
+        !TEST_SOURCE_PATTERN.test(dir) &&
+        !dir.endsWith('.d.ts')
+        ? [dir]
+        : [];
+    }
     const entries = readdirSync(dir);
 
     for (const entry of entries) {

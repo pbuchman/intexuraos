@@ -70,6 +70,7 @@ function deploymentFixture(
     occupiedPort?: boolean;
     ownOccupiedPort?: boolean;
     wrongServiceSet?: boolean;
+    profile?: string;
   } = {}
 ): DeploymentFixture {
   const root = mkdtempSync(join(tmpdir(), 'home-prod-deploy-'));
@@ -94,7 +95,11 @@ function deploymentFixture(
     join(repoRoot, 'scripts', 'home-prod', 'validate-port-ownership.mjs'),
     join(source, 'scripts', 'home-prod', 'validate-port-ownership.mjs')
   );
-  const fixtureApps = BASIC_SERVICE_NAMES.map((name, index) => ({
+  const serviceNames =
+    options.profile === 'full'
+      ? [...BASIC_SERVICE_NAMES, 'research-agent', 'message-digest-service']
+      : BASIC_SERVICE_NAMES;
+  const fixtureApps = serviceNames.map((name, index) => ({
     name:
       options.wrongServiceSet === true && index === BASIC_SERVICE_NAMES.length - 1
         ? 'research-agent'
@@ -112,11 +117,11 @@ function deploymentFixture(
   writeFileSync(join(source, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
   executable(
     join(source, 'scripts', 'home-prod', 'load-secrets.sh'),
-    `#!/usr/bin/env bash\nset -euo pipefail\nprintf 'loader:%s\\n' "$*" >> "$HOME_PROD_TEST_LOG"\nprintf 'loader-cwd:%s\\n' "$PWD" >> "$HOME_PROD_TEST_LOG"\nif [[ "$*" == *--validate-only* && ( "${options.candidateFails === true ? '1' : '0'}" == 1 || "\${CANDIDATE_FAIL:-0}" == 1 ) ]]; then exit 23; fi\noutput=''; payload=''\nwhile (($#)); do case "$1" in --candidate-output) output="$2"; shift 2;; --payload-file) payload="$2"; shift 2;; *) shift;; esac; done\n[[ -f "$payload" ]] || exit 45\nprintf 'payload-mode:%s\\n' "$(stat -c '%a' "$payload")" >> "$HOME_PROD_TEST_LOG"\nif [[ -n "$output" ]]; then printf 'INTEXURAOS_AUTH0_DOMAIN="fixture.example"\\n' > "$output/.env.prod"; chmod 600 "$output/.env.prod"; fi\n`
+    `#!/usr/bin/env bash\nset -euo pipefail\nprintf 'loader:%s\\n' "$*" >> "$HOME_PROD_TEST_LOG"\nprintf 'loader-cwd:%s\\n' "$PWD" >> "$HOME_PROD_TEST_LOG"\nif [[ "$*" == *--validate-only* && ( "${options.candidateFails === true ? '1' : '0'}" == 1 || "\${CANDIDATE_FAIL:-0}" == 1 ) ]]; then exit 23; fi\noutput=''; payload=''\nwhile (($#)); do case "$1" in --candidate-output) output="$2"; shift 2;; --payload-file) payload="$2"; shift 2;; *) shift;; esac; done\n[[ -f "$payload" ]] || exit 45\nprintf 'payload-mode:%s\\n' "$(stat -c '%a' "$payload")" >> "$HOME_PROD_TEST_LOG"\nif [[ -n "$output" ]]; then printf 'INTEXURAOS_AUTH0_DOMAIN="fixture.example"\\nINTEXURAOS_PROD_PROFILE="${options.profile ?? 'basic'}"\\n' > "$output/.env.prod"; chmod 600 "$output/.env.prod"; fi\n`
   );
   executable(
     join(source, 'scripts', 'home-prod', 'deploy-web.sh'),
-    '#!/usr/bin/env bash\nset -euo pipefail\nroot=""; env_file=""; profile=""\nwhile (($#)); do case "$1" in --web-root) root="$2"; shift 2;; --env-file) env_file="$2"; shift 2;; --public-deployment-profile) profile="$2"; shift 2;; *) shift;; esac; done\n[[ -f "$env_file" ]] || exit 44\n[[ "$profile" == basic ]] || exit 46\n[[ "${SOURCE_DATE_EPOCH:-}" =~ ^[1-9][0-9]*$ ]] || exit 47\nmkdir -p "$root"\nprintf "<html>candidate:%s:%s:%s</html>\\n" "$SOURCE_DATE_EPOCH" "$profile" "${PUBLIC_CONFIG_VARIANT:-stable}" > "$root/index.html"\nprintf "web:%s:%s:%s\\n" "$env_file" "$SOURCE_DATE_EPOCH" "$profile" >> "$HOME_PROD_TEST_LOG"\n'
+    '#!/usr/bin/env bash\nset -euo pipefail\nroot=""; env_file=""; profile=""\nwhile (($#)); do case "$1" in --web-root) root="$2"; shift 2;; --env-file) env_file="$2"; shift 2;; --public-deployment-profile) profile="$2"; shift 2;; *) shift;; esac; done\n[[ -f "$env_file" ]] || exit 44\n[[ "$profile" == basic || "$profile" == full ]] || exit 46\n[[ "${SOURCE_DATE_EPOCH:-}" =~ ^[1-9][0-9]*$ ]] || exit 47\nmkdir -p "$root"\nprintf "<html>candidate:%s:%s:%s</html>\\n" "$SOURCE_DATE_EPOCH" "$profile" "${PUBLIC_CONFIG_VARIANT:-stable}" > "$root/index.html"\nprintf "web:%s:%s:%s\\n" "$env_file" "$SOURCE_DATE_EPOCH" "$profile" >> "$HOME_PROD_TEST_LOG"\n'
   );
   executable(
     join(source, 'scripts', 'home-prod', 'reload-pm2.sh'),
@@ -231,6 +236,20 @@ describe('Home PROD privileged launcher input boundary', () => {
 });
 
 describe('Home PROD release deployment', () => {
+  it('propagates the pinned full profile to all nineteen runtime apps and frontend capabilities', () => {
+    const input = deploymentFixture({ profile: 'full' });
+    const result = runDeployment(input, { INTEXURAOS_PROD_PROFILE: 'basic' });
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(input.log, 'utf8')).toMatch(/web:.*:full/);
+    const release = readlinkSync(join(input.deployHome, 'deploy', 'current'));
+    expect(readFileSync(join(release, '.intexuraos-prod-profile'), 'utf8')).toBe('full\n');
+  });
+  it('rejects an unvalidated profile before activation', () => {
+    const input = deploymentFixture({ profile: 'unknown' });
+    const result = runDeployment(input);
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(input.log, 'utf8')).not.toContain(':stop all');
+  });
   it('rejects a dirty canonical clone before preparing a release', () => {
     const input = deploymentFixture();
     writeFileSync(join(input.clone, 'operator-note.txt'), 'preserve me\n');

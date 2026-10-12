@@ -2,10 +2,7 @@ import { ok, type Result } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
 import type { CalendarScheduleRepository } from './scheduleRepository.js';
 import type { CalendarSchedule, MatrixDeliveryStatus, WhatsAppScheduleClient } from './types.js';
-import {
-  CALENDAR_DAILY_LOOKAHEAD_PROMPT,
-  CALENDAR_DAILY_LOOKAHEAD_TASK_TYPE,
-} from './types.js';
+import { CALENDAR_DAILY_LOOKAHEAD_PROMPT, CALENDAR_DAILY_LOOKAHEAD_TASK_TYPE } from './types.js';
 import { calculateNextScheduleRunAt, validateScheduleCadence } from './scheduleTime.js';
 
 export interface UpsertDailyLookaheadScheduleRequest {
@@ -68,6 +65,10 @@ export async function upsertDailyLookaheadSchedule(
     ...(existing.value?.lastRunLocalDate !== undefined && {
       lastRunLocalDate: existing.value.lastRunLocalDate,
     }),
+    ...(existing.value?.latestRun === undefined ? {} : { latestRun: existing.value.latestRun }),
+    ...(existing.value?.resumeCutoff === undefined
+      ? {}
+      : { resumeCutoff: existing.value.resumeCutoff }),
     createdAt: existing.value?.createdAt ?? request.now,
     updatedAt: request.now,
     schemaVersion: 1,
@@ -79,18 +80,10 @@ export async function upsertDailyLookaheadSchedule(
   }
 
   const deliveryResult = await deps.whatsAppScheduleClient.getMatrixDeliveryStatus(request.userId);
-  if (!deliveryResult.ok) {
-    return {
-      ok: false,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: deliveryResult.error.message,
-      },
-    };
-  }
-
   return ok({
     schedule: upserted.value,
-    delivery: deliveryResult.value,
+    delivery: deliveryResult.ok
+      ? deliveryResult.value
+      : { status: 'error', message: deliveryResult.error.message },
   });
 }

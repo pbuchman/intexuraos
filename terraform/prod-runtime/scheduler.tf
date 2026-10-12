@@ -193,7 +193,7 @@ resource "google_cloud_scheduler_job" "hetzner_http" {
   schedule    = each.value.schedule
   time_zone   = each.value.time_zone
   region      = var.region
-  paused      = !var.production_scheduler_jobs_enabled
+  paused      = !(var.production_scheduler_jobs_enabled && contains(var.production_scheduler_enabled_job_keys, each.key))
 
   http_target {
     http_method = "POST"

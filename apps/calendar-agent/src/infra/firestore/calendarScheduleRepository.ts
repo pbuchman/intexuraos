@@ -4,6 +4,7 @@ import type { CalendarError } from '../../domain/errors.js';
 import {
   calculateNextDailyRunAfterLocalDate,
   getLocalDateInTimeZone,
+  getUtcIsoForLocalDateTime,
 } from '../../domain/schedules/scheduleTime.js';
 import type {
   CalendarSchedule,
@@ -60,6 +61,7 @@ function toSchedule(id: string, data: Record<string, unknown>): CalendarSchedule
       target: 'intex_agent',
     },
     nextRunAt: typeof data['nextRunAt'] === 'string' ? data['nextRunAt'] : '',
+    ...(typeof data['resumeCutoff'] === 'string' ? { resumeCutoff: data['resumeCutoff'] } : {}),
     ...(typeof data['lastRunAt'] === 'string' ? { lastRunAt: data['lastRunAt'] } : {}),
     ...(typeof data['lastRunLocalDate'] === 'string'
       ? { lastRunLocalDate: data['lastRunLocalDate'] }
@@ -67,7 +69,8 @@ function toSchedule(id: string, data: Record<string, unknown>): CalendarSchedule
     ...(retryRunData !== null
       ? {
           retryRun: {
-            localDate: typeof retryRunData['localDate'] === 'string' ? retryRunData['localDate'] : '',
+            localDate:
+              typeof retryRunData['localDate'] === 'string' ? retryRunData['localDate'] : '',
             scheduledFor:
               typeof retryRunData['scheduledFor'] === 'string' ? retryRunData['scheduledFor'] : '',
           },
@@ -82,6 +85,9 @@ function toSchedule(id: string, data: Record<string, unknown>): CalendarSchedule
             expiresAt: typeof leaseData['expiresAt'] === 'string' ? leaseData['expiresAt'] : '',
           },
         }
+      : {}),
+    ...(typeof data['latestRun'] === 'object' && data['latestRun'] !== null
+      ? { latestRun: data['latestRun'] as CalendarScheduleRun }
       : {}),
     schemaVersion: 1,
   };
@@ -100,6 +106,124 @@ function isTerminalRunForLocalDate(data: Record<string, unknown>): boolean {
 
 export function createCalendarScheduleRepository(): CalendarScheduleRepository {
   return {
+    async listPendingRuns(
+      now
+    ): ReturnType<NonNullable<CalendarScheduleRepository['listPendingRuns']>> {
+      try {
+        const db = getFirestore();
+        const [snapshot, schedules] = await Promise.all([
+          db
+            .collection(RUNS_COLLECTION)
+            .where('scheduledFor', '>=', new Date(Date.parse(now) - 7 * 86400000).toISOString())
+            .get(),
+          db.collection(SCHEDULES_COLLECTION).where('status', 'in', ['active', 'paused']).get(),
+        ]);
+        const cutoffs = new Map(
+          schedules.docs.map((doc) => {
+            const schedule = toSchedule(doc.id, doc.data() as Record<string, unknown>);
+            return [schedule.id, schedule.resumeCutoff];
+          })
+        );
+        return ok(
+          snapshot.docs
+            .map((doc) => ({ ...doc.data(), id: doc.id }) as CalendarScheduleRun)
+            .filter((run) => run.deliveryStatus === 'pending' || run.deliveryStatus === 'failed')
+            .filter((run) => {
+              const cutoff = cutoffs.get(run.scheduleId);
+              return typeof cutoff !== 'string' || run.scheduledFor >= cutoff;
+            })
+        );
+      } catch (error) {
+        return { ok: false, error: toCalendarError(error, 'Failed to load pending calendar runs') };
+      }
+    },
+    async markRunDelivery(
+      input
+    ): ReturnType<NonNullable<CalendarScheduleRepository['markRunDelivery']>> {
+      try {
+        const db = getFirestore();
+        const runRef = db.collection(RUNS_COLLECTION).doc(input.run.id);
+        const scheduleRef = db.collection(SCHEDULES_COLLECTION).doc(input.run.scheduleId);
+        await db.runTransaction(async (tx) => {
+          const run = await tx.get(runRef);
+          const schedule = await tx.get(scheduleRef);
+          if (!run.exists || run.data()?.['deliveryStatus'] === 'delivered') return;
+          const updated = {
+            ...input.run,
+            deliveryStatus: input.status,
+            stage: input.stage ?? input.status,
+            ...(input.status === 'delivered'
+              ? { deliveredAt: input.at }
+              : input.status === 'failed'
+                ? { error: input.failureCode ?? 'FINAL_RESPONSE_FAILED' }
+                : {}),
+          };
+          tx.set(runRef, updated, { merge: true });
+          if (
+            schedule.exists &&
+            (schedule.data()?.['latestRun'] as CalendarScheduleRun | undefined)?.id === input.run.id
+          )
+            tx.update(scheduleRef, { latestRun: updated, updatedAt: input.at });
+        });
+        return ok(undefined);
+      } catch (error) {
+        return { ok: false, error: toCalendarError(error, 'Failed to record calendar delivery') };
+      }
+    },
+    async monitoring(now): ReturnType<NonNullable<CalendarScheduleRepository['monitoring']>> {
+      const db = getFirestore();
+      const [schedules, history] = await Promise.all([
+        db.collection(SCHEDULES_COLLECTION).where('status', '==', 'active').get(),
+        db
+          .collection(RUNS_COLLECTION)
+          .where('scheduledFor', '>=', new Date(Date.parse(now) - 7 * 86400000).toISOString())
+          .get(),
+      ]);
+      const runs = history.docs.map(
+        (doc) => ({ ...doc.data(), id: doc.id }) as CalendarScheduleRun
+      );
+      let pendingCount = 0;
+      let failedCount = 0;
+      let oldestPendingScheduledFor: string | null = null;
+      let lastDeliveredAt: string | null = null;
+      const pending = (scheduledFor: string): void => {
+        pendingCount++;
+        if (oldestPendingScheduledFor === null || scheduledFor < oldestPendingScheduledFor)
+          oldestPendingScheduledFor = scheduledFor;
+      };
+      for (const doc of schedules.docs) {
+        const schedule = toSchedule(doc.id, doc.data() as Record<string, unknown>);
+        const history = runs.filter(
+          (run) => run.scheduleId === schedule.id && run.userId === schedule.userId
+        );
+        for (const run of history) {
+          if (
+            run.deliveredAt !== undefined &&
+            (lastDeliveredAt === null || run.deliveredAt > lastDeliveredAt)
+          )
+            lastDeliveredAt = run.deliveredAt;
+        }
+        const owned = history.filter(
+          (run) => schedule.resumeCutoff === undefined || run.scheduledFor >= schedule.resumeCutoff
+        );
+        for (const run of owned) {
+          const superseded = owned.some(
+            (next) => next.scheduledFor > run.scheduledFor && next.deliveryStatus === 'delivered'
+          );
+          if (superseded || run.deliveryStatus === 'delivered') continue;
+          if (run.status === 'failed' || run.deliveryStatus === 'failed') failedCount++;
+          else pending(run.scheduledFor);
+        }
+        // Missing generation is monitored from the scheduler's due cursor too.
+        if (
+          schedule.nextRunAt <= now &&
+          (schedule.resumeCutoff === undefined || schedule.nextRunAt >= schedule.resumeCutoff) &&
+          !owned.some((run) => run.scheduledFor === schedule.nextRunAt)
+        )
+          pending(schedule.nextRunAt);
+      }
+      return { pendingCount, failedCount, oldestPendingScheduledFor, lastDeliveredAt };
+    },
     async upsert(schedule: CalendarSchedule): Promise<Result<CalendarSchedule, CalendarError>> {
       try {
         const db = getFirestore();
@@ -178,9 +302,7 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
           const schedule = toSchedule(doc.id, doc.data() as Record<string, unknown>);
           /* v8 ignore start -- source-map: branch coverage false positive misattributed to Firestore transaction callback alignment @preserve */
           const claim = await db.runTransaction(
-            async (
-              transaction: FirestoreTransaction
-            ): Promise<ClaimedCalendarSchedule | null> => {
+            async (transaction: FirestoreTransaction): Promise<ClaimedCalendarSchedule | null> => {
               const scheduleRef = db.collection(SCHEDULES_COLLECTION).doc(schedule.id);
               const freshSnapshot = await transaction.get(scheduleRef);
               /* v8 ignore start -- upstream: fake Firestore cannot simulate concurrent deletion between query and transaction; guard is defensive for production races @preserve */
@@ -201,17 +323,36 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
                 return null;
               }
               /* v8 ignore stop @preserve */
-              if (
-                freshSchedule.lease !== undefined &&
-                freshSchedule.lease.expiresAt > input.now
-              ) {
+              if (freshSchedule.lease !== undefined && freshSchedule.lease.expiresAt > input.now) {
                 return null;
               }
 
-              const localDate =
+              const today = getLocalDateInTimeZone(input.now, freshSchedule.cadence.timeZone);
+              const dueDate =
                 freshSchedule.retryRun?.localDate ??
                 getLocalDateInTimeZone(freshSchedule.nextRunAt, freshSchedule.cadence.timeZone);
-              const scheduledFor = freshSchedule.retryRun?.scheduledFor ?? freshSchedule.nextRunAt;
+              const localDate = dueDate < today ? today : dueDate;
+              const scheduledFor =
+                dueDate < today
+                  ? getUtcIsoForLocalDateTime(
+                      today,
+                      freshSchedule.cadence.localTime,
+                      freshSchedule.cadence.timeZone
+                    )
+                  : (freshSchedule.retryRun?.scheduledFor ?? freshSchedule.nextRunAt);
+              if (dueDate < today) {
+                // Record the skipped interval explicitly; old-date retries never send.
+                if (scheduledFor > input.now) {
+                  transaction.update(scheduleRef, {
+                    nextRunAt: scheduledFor,
+                    retryRun: null,
+                    lease: null,
+                    skippedThroughLocalDate: dueDate,
+                    updatedAt: input.now,
+                  });
+                  return null;
+                }
+              }
               const runId = `${freshSchedule.id}_${localDate}`;
               const runRef = db.collection(RUNS_COLLECTION).doc(runId);
               const existingRun = await transaction.get(runRef);
@@ -242,18 +383,30 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
                   userId: freshSchedule.userId,
                   taskType: freshSchedule.taskType,
                   status: 'leased',
+                  stage: 'trigger_pending',
                   localDate,
                   scheduledFor,
                   startedAt,
                 })
               );
               transaction.update(scheduleRef, {
+                ...(dueDate < today ? { retryRun: null, skippedThroughLocalDate: dueDate } : {}),
                 lease: {
                   ownerId: input.leaseOwnerId,
                   expiresAt: new Date(
                     new Date(input.now).getTime() + input.leaseDurationMs
                   ).toISOString(),
                 },
+                latestRun: toRun(runId, {
+                  scheduleId: freshSchedule.id,
+                  userId: freshSchedule.userId,
+                  taskType: freshSchedule.taskType,
+                  status: 'leased',
+                  stage: 'trigger_pending',
+                  localDate,
+                  scheduledFor,
+                  startedAt,
+                }),
                 updatedAt: input.now,
               });
 
@@ -288,6 +441,8 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
             runRef,
             {
               status: 'sent',
+              deliveryStatus: 'pending',
+              stage: 'awaiting_ingress',
               finishedAt: input.finishedAt,
               matrixEventId: input.matrixEventId,
               localDate: input.localDate,
@@ -301,6 +456,20 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
           );
           transaction.update(scheduleRef, {
             nextRunAt: input.nextRunAt,
+            latestRun: {
+              id: `${input.scheduleId}_${input.localDate}`,
+              scheduleId: input.scheduleId,
+              userId: input.userId,
+              taskType: input.taskType,
+              localDate: input.localDate,
+              scheduledFor: input.scheduledFor,
+              startedAt: input.startedAt,
+              finishedAt: input.finishedAt,
+              status: 'sent',
+              deliveryStatus: 'pending',
+              stage: 'awaiting_ingress',
+              matrixEventId: input.matrixEventId,
+            },
             lastRunAt: input.finishedAt,
             lastRunLocalDate: input.localDate,
             updatedAt: input.finishedAt,
@@ -341,6 +510,21 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
             nextRunAt: input.nextRunAt,
             updatedAt: input.finishedAt,
             lease: null,
+            latestRun: {
+              id: `${input.scheduleId}_${input.localDate}`,
+              scheduleId: input.scheduleId,
+              userId: input.userId,
+              taskType: input.taskType,
+              localDate: input.localDate,
+              scheduledFor: input.scheduledFor,
+              startedAt: input.startedAt,
+              finishedAt: input.finishedAt,
+              status: 'failed',
+              deliveryStatus: 'failed',
+              stage: 'failed',
+              error: input.error,
+              retryable: input.retryable,
+            },
             retryRun: input.retryable
               ? {
                   localDate: input.localDate,

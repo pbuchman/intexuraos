@@ -132,6 +132,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             ...clearedLease,
             triageState: 'completed',
             triageCompletedAt: input.completedAt,
+            ...(input.skipReason === undefined ? {} : { triageSkipReason: input.skipReason }),
             triageFailedAt: null,
             triageFailureReason: null,
           });

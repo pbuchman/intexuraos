@@ -71,10 +71,29 @@ describe('CalendarDailyNotificationCard', () => {
     ).not.toBeChecked();
     expect(screen.getByRole('combobox', { name: /time/i })).toBeDisabled();
     expect(screen.getByText(/Matrix delivery setup required/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/outbound adapter endpoint, auth token, and intex_agent target room mapping/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Connect your private WhatsApp account/i)).toBeInTheDocument();
     expect(screen.getByText(/target mapping missing/i)).toBeInTheDocument();
+  });
+
+  it('shows enabled, readiness and final delivery as independent states', async () => {
+    vi.mocked(getCalendarDailyNotificationSettings).mockResolvedValue(
+      settings({
+        schedule: { enabled: true, localTime: '15:30', timeZone: 'Europe/Warsaw' },
+        delivery: { status: 'ready' },
+        latestRun: {
+          id: 'run',
+          status: 'sent',
+          deliveryStatus: 'pending',
+          scheduledFor: '2026-10-12T13:30:00.000Z',
+        },
+      })
+    );
+    render(<CalendarDailyNotificationCard getAccessToken={getAccessToken} />);
+    expect(await screen.findByText('Schedule: enabled')).toBeInTheDocument();
+    expect(screen.getByText('Matrix delivery is ready')).toBeInTheDocument();
+    expect(
+      screen.getByText('Latest WhatsApp delivery: waiting for final summary delivery')
+    ).toBeInTheDocument();
   });
 
   it('offers 15-minute time options and saves updates', async () => {
@@ -168,5 +187,27 @@ describe('CalendarDailyNotificationCard', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Matrix adapter readiness request failed/i)).toBeInTheDocument();
     expect(screen.queryByText(/outbound adapter endpoint/i)).not.toBeInTheDocument();
+  });
+  it.each([
+    ['trigger_pending', 'sending trigger'],
+    ['processing', 'preparing summary'],
+    ['awaiting_delivery', 'waiting for WhatsApp delivery'],
+  ])('renders %s stage while preserving the 15:30 schedule', async (stage, label) => {
+    vi.mocked(getCalendarDailyNotificationSettings).mockResolvedValue(
+      settings({
+        schedule: { enabled: true, localTime: '15:30', timeZone: 'Europe/Warsaw' },
+        delivery: { status: 'ready' },
+        latestRun: {
+          id: 'r',
+          status: 'sent',
+          stage,
+          deliveryStatus: 'pending',
+          scheduledFor: '2026-10-12T13:30:00.000Z',
+        },
+      })
+    );
+    render(<CalendarDailyNotificationCard getAccessToken={getAccessToken} />);
+    expect(await screen.findByText(new RegExp(label))).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /time/i })).toHaveValue('15:30');
   });
 });

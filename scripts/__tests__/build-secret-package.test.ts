@@ -1,8 +1,15 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
 import {
   buildSecretPackageCandidate,
   loadSecretPackageSources,
@@ -11,6 +18,7 @@ import {
 } from '../build-secret-package.mjs';
 import {
   crc32c,
+  crc32cBase64,
   loadSecretPackageManifest,
   validateSecretPackagePayload,
 } from '../lib/secret-package.mjs';
@@ -22,7 +30,7 @@ const sourcesPath = resolve(repoRoot, 'config/environments/secret-package-source
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const privateKeyPem = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
 
-function serviceAccount() {
+function serviceAccount(): Record<string, string> {
   const email = 'ixos-hetzner-runtime-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com';
   return {
     auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
@@ -39,7 +47,12 @@ function serviceAccount() {
   };
 }
 
-function payload(environment: 'dev' | 'prod') {
+function payload(environment: 'dev' | 'prod'): {
+  schemaVersion: number;
+  environment: 'dev' | 'prod';
+  env: Record<string, string>;
+  files: Record<string, string>;
+} {
   const manifest = loadSecretPackageManifest({ manifestPath });
   const definition = manifest.packages[environment];
   return {
@@ -48,7 +61,11 @@ function payload(environment: 'dev' | 'prod') {
     env: Object.fromEntries(
       definition.envNames.map((name) => [
         name,
-        name === 'INTEXURAOS_FIREBASE_API_KEY' ? `AIza${'f'.repeat(35)}` : `value-${name}`,
+        name === 'INTEXURAOS_PROD_PROFILE'
+          ? 'basic'
+          : name === 'INTEXURAOS_FIREBASE_API_KEY'
+            ? `AIza${'f'.repeat(35)}`
+            : `value-${name}`,
       ])
     ),
     files: Object.fromEntries(
@@ -66,14 +83,19 @@ function payload(environment: 'dev' | 'prod') {
   };
 }
 
-function adapterFor(environment: 'dev' | 'prod') {
+function adapterFor(environment: 'dev' | 'prod'): {
+  accessVersion: Mock<() => Promise<{ data: Buffer; dataCrc32c: bigint }>>;
+} {
   const data = Buffer.from(JSON.stringify(payload(environment)));
   return {
     accessVersion: vi.fn(async () => ({ data, dataCrc32c: BigInt(crc32c(data)) })),
   };
 }
 
-function explicitOverrides(environment: 'dev' | 'prod') {
+function explicitOverrides(environment: 'dev' | 'prod'): {
+  env: Record<string, Buffer>;
+  files: Record<string, Buffer>;
+} {
   const source = payload(environment);
   return {
     env: Object.fromEntries(
@@ -162,6 +184,118 @@ describe('final secret package builder', () => {
       expect(Object.keys(result.payload.files)).toEqual(manifest.packages[environment].files);
     }
   );
+
+  it('migrates exact legacy PROD packages only when every missing member is explicitly supplied', async () => {
+    const base = payload('prod');
+    Reflect.deleteProperty(base.env, 'INTEXURAOS_PROD_PROFILE');
+    const data = Buffer.from(JSON.stringify(base));
+    const adapter = {
+      accessVersion: vi.fn().mockResolvedValue({ data, dataCrc32c: crc32cBase64(data) }),
+    };
+    const options = {
+      adapter,
+      baseVersion: 4,
+      environment: 'prod' as const,
+      projectId: 'intexuraos-dev-pbuchman',
+    };
+    await expect(buildSecretPackageCandidate(options)).rejects.toThrow();
+    const result = await buildSecretPackageCandidate({
+      ...options,
+      overrides: { env: { INTEXURAOS_PROD_PROFILE: Buffer.from('full') }, files: {} },
+    });
+    expect(result.payload.env.INTEXURAOS_PROD_PROFILE).toBe('full');
+    expect(result.payload.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe(
+      base.env.INTEXURAOS_INTERNAL_AUTH_TOKEN
+    );
+    await expect(
+      buildSecretPackageCandidate({
+        ...options,
+        overrides: { env: { INTEXURAOS_PROD_PROFILE: Buffer.from('unknown') }, files: {} },
+      })
+    ).rejects.toThrow('production profile must be full or basic');
+    Reflect.deleteProperty(base.env, 'INTEXURAOS_INTERNAL_AUTH_TOKEN');
+    const incomplete = Buffer.from(JSON.stringify(base));
+    adapter.accessVersion.mockResolvedValue({
+      data: incomplete,
+      dataCrc32c: crc32cBase64(incomplete),
+    });
+    await expect(
+      buildSecretPackageCandidate({
+        ...options,
+        overrides: { env: { INTEXURAOS_PROD_PROFILE: Buffer.from('full') }, files: {} },
+      })
+    ).rejects.toThrow();
+  });
+
+  it('keeps migration validation strict for unknown members and invalid base types', async () => {
+    const validBase = payload('prod');
+    Reflect.deleteProperty(validBase.env, 'INTEXURAOS_PROD_PROFILE');
+    const candidates = [
+      { ...validBase, unexpected: true },
+      { ...validBase, env: { ...validBase.env, UNKNOWN_MEMBER: 'value' } },
+      { ...validBase, env: [] },
+      { ...validBase, env: { ...validBase.env, INTEXURAOS_INTERNAL_AUTH_TOKEN: 5 } },
+      { ...validBase, env: { ...validBase.env, INTEXURAOS_PROD_PROFILE: 'invalid' } },
+      { ...validBase, files: { ...validBase.files, UNKNOWN_FILE: 'dmFsdWU=' } },
+    ];
+    for (const candidate of candidates) {
+      const data = Buffer.from(JSON.stringify(candidate));
+      await expect(
+        buildSecretPackageCandidate({
+          adapter: {
+            accessVersion: vi.fn().mockResolvedValue({ data, dataCrc32c: crc32cBase64(data) }),
+          },
+          baseVersion: 4,
+          environment: 'prod',
+          projectId: 'intexuraos-dev-pbuchman',
+          overrides: { env: { INTEXURAOS_PROD_PROFILE: Buffer.from('full') }, files: {} },
+        })
+      ).rejects.toThrow();
+    }
+    await expect(
+      buildSecretPackageCandidate({
+        adapter: adapterFor('prod'),
+        baseVersion: 4,
+        environment: 'prod',
+        projectId: 'intexuraos-dev-pbuchman',
+        overrides: { env: { UNKNOWN_MEMBER: Buffer.from('full') }, files: {} },
+      })
+    ).rejects.toThrow();
+  });
+
+  it('migrates through the canonical CLI only from a private regular override file', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'intexuraos-package-profile-migration-'));
+    const output = join(root, 'candidate.json');
+    const profilePath = join(root, 'profile');
+    const linkedPath = join(root, 'linked-profile');
+    writeFileSync(profilePath, 'full', { mode: 0o600 });
+    chmodSync(profilePath, 0o644);
+    symlinkSync(profilePath, linkedPath);
+    const base = payload('prod');
+    Reflect.deleteProperty(base.env, 'INTEXURAOS_PROD_PROFILE');
+    const data = Buffer.from(JSON.stringify(base));
+    const adapter = {
+      accessVersion: vi.fn().mockResolvedValue({ data, dataCrc32c: crc32cBase64(data) }),
+    };
+    const argv = (path: string): string[] => [
+      '--environment',
+      'prod',
+      '--project-id',
+      'intexuraos-dev-pbuchman',
+      '--base-version',
+      '4',
+      '--override-env',
+      `INTEXURAOS_PROD_PROFILE=${path}`,
+      '--output',
+      output,
+    ];
+    await expect(runBuildSecretPackageCli(argv(profilePath), { adapter })).rejects.toThrow();
+    chmodSync(profilePath, 0o600);
+    await expect(runBuildSecretPackageCli(argv(linkedPath), { adapter })).rejects.toThrow();
+    await runBuildSecretPackageCli(argv(profilePath), { adapter, stdout: vi.fn() });
+    expect(JSON.parse(readFileSync(output, 'utf8')).env.INTEXURAOS_PROD_PROFILE).toBe('full');
+    expect(statSync(output).mode & 0o7777).toBe(0o600);
+  });
 
   it('rejects incomplete explicit input, mutable versions, and removed CLI options', async () => {
     const manifest = loadSecretPackageManifest({ manifestPath });

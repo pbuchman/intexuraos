@@ -23,10 +23,13 @@ test('isolated HTTP edge has only the home listener and shifted active upstreams
   assert.ok(!config.includes('location ^~ /api/code/'));
   assert.ok(config.includes('proxy_set_header X-Forwarded-Proto https;'));
 });
-test('Lua keeps the existing policy with only its secret-file location changed', () => {
+test('Lua derives exact delivery policy from Terraform and preserves the remaining policy', () => {
   const source = readFileSync(new URL('../nginx/jwt-verify.lua', import.meta.url), 'utf8');
   assert.equal(
-    render('lua'),
+    render('lua').replace(
+      /local HOME_PROD_DELIVERY_ROUTES = \{[\s\S]*?\n\}/u,
+      'local HOME_PROD_DELIVERY_ROUTES = {}'
+    ),
     source.replace(
       '/etc/intexuraos/internal-auth-token',
       '/home/intexuraos-prod/.config/intexuraos/prod/internal-auth-token'
@@ -56,4 +59,31 @@ test('callback exceptions are exact, method-specific, and sanitize caller roles'
   );
   assert.match(render('callback-proxy'), /proxy_set_header X-Internal-Caller-Role "";/);
   assert.match(render('callback-proxy'), /proxy_set_header From "";/);
+});
+
+test('full profile restores research and digest upstreams without bypassing internal auth', () => {
+  const result = spawnSync(process.execPath, [renderer.pathname, 'nginx', 'full'], {
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /upstream research_agent \{ server 127\.0\.0\.1:18116;/);
+  assert.match(result.stdout, /upstream message_digest_service \{ server 127\.0\.0\.1:18135;/);
+  assert.match(result.stdout, /location \/internal\/message-digests\/ \{ access_by_lua_file/);
+  assert.ok(result.stdout.includes('location ~ ^/api/[a-z0-9-]+/internal(?:/|$) {'));
+  assert.ok(!result.stdout.includes('include /etc/nginx/intexuraos-message-digests-public.conf'));
+});
+test('unknown profiles are rejected', () => {
+  const result = spawnSync(process.execPath, [renderer.pathname, 'nginx', 'unknown'], {
+    encoding: 'utf8',
+  });
+  assert.notEqual(result.status, 0);
+});
+
+test('generated Lua policy covers all fourteen schedules and five restored consumers', () => {
+  const lua = render('lua');
+  const table = lua
+    .split('-- BEGIN HOME PROD DELIVERY ROUTES')[1]
+    .split('-- END HOME PROD DELIVERY ROUTES')[0];
+  assert.equal((table.match(/\[\"\/internal\//g) ?? []).length, 19);
+  assert.equal((table.match(/email = \"intexuraos-scheduler-dev@/g) ?? []).length, 14);
 });

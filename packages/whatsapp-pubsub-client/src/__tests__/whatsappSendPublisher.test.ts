@@ -50,6 +50,38 @@ describe('createWhatsAppSendPublisher', () => {
     vi.clearAllMocks();
   });
 
+  it('publishes validated notification context and rejects invalid context before publication', async () => {
+    const publisher = createWhatsAppSendPublisher(config);
+    const notificationContext = {
+      source: 'calendar' as const,
+      runId: 'run-1',
+      phase: 'ack' as const,
+    };
+    expect(
+      await publisher.publishSendMessage({
+        userId: 'user-123',
+        message: 'Working',
+        notificationContext,
+      })
+    ).toEqual({ ok: true, value: undefined });
+    const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+    expect(JSON.parse(call[0].data.toString())).toMatchObject({ notificationContext });
+    mockPublishMessage.mockClear();
+    const invalid = await publisher.publishSendMessage({
+      userId: 'user-123',
+      message: 'Working',
+      notificationContext: { ...notificationContext, runId: '' },
+    });
+    expect(invalid).toEqual({
+      ok: false,
+      error: {
+        code: 'PUBLISH_FAILED',
+        message: 'Invalid notification context',
+      },
+    });
+    expect(mockPublishMessage).not.toHaveBeenCalled();
+  });
+
   it('exports a pure builder for a caller-frozen send event', async () => {
     const publisherModule = (await import('../whatsappSendPublisher.js')) as unknown as {
       buildSendMessageEvent?: (params: {

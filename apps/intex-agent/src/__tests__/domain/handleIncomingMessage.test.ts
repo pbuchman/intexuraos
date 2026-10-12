@@ -60,6 +60,82 @@ function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMe
 }
 
 describe('handleIncomingMessage', () => {
+  it('publishes an acknowledgment separately from a successful final calendar response', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        toolName: 'query_calendar_events',
+        toolResult: { events: [] },
+        reply: 'No events in the next 24 hours.',
+      },
+    ]);
+    await handleIncomingMessage(
+      message({
+        text: 'new session: next 24 hours',
+        notificationContext: { source: 'calendar', runId: 'run', phase: 'ack' },
+      }),
+      deps(repo, runner, replies)
+    );
+    expect(replies.messages).toHaveLength(2);
+    expect(replies.messages[0]).toMatchObject({
+      correlationId: 'session-1',
+      notificationContext: { source: 'calendar', runId: 'run', phase: 'ack' },
+    });
+    expect(replies.messages[1]).toMatchObject({
+      correlationId: 'session-1',
+      notificationContext: {
+        source: 'calendar',
+        runId: 'run',
+        phase: 'final',
+        outcome: 'succeeded',
+        partIndex: 0,
+        partCount: 1,
+      },
+    });
+  });
+
+  it('labels a completed non-calendar tool as a failed calendar notification', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        toolName: 'create_note',
+        toolResult: { id: 'note-1' },
+        reply: 'Created a note.',
+      },
+    ]);
+    await handleIncomingMessage(
+      message({ notificationContext: { source: 'calendar', runId: 'run', phase: 'ack' } }),
+      deps(repo, runner, replies)
+    );
+    expect(replies.messages.at(-1)).toMatchObject({
+      notificationContext: { phase: 'final', outcome: 'failed' },
+    });
+  });
+
+  it('labels an error reply as a failed final notification even if delivered', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const runner = new FakeRunner([
+      {
+        outcome: 'tool_failed',
+        toolName: 'query_calendar_events',
+        error: 'unavailable',
+        reply: 'Could not read the calendar.',
+      },
+    ]);
+    await handleIncomingMessage(
+      message({ notificationContext: { source: 'calendar', runId: 'run', phase: 'ack' } }),
+      deps(repo, runner, replies)
+    );
+    expect(replies.messages.at(-1)).toMatchObject({
+      notificationContext: { phase: 'final', outcome: 'failed' },
+    });
+  });
+
   it('resolves one immutable runtime snapshot before an ordinary runner turn', async () => {
     const repo = new FakeSessionRepository();
     const replies = new FakeReplyPublisher();
@@ -227,17 +303,12 @@ describe('handleIncomingMessage', () => {
     const replies = new FakeReplyPublisher();
     const runner = new FakeRunner([{ outcome: 'no_action', reply: 'must not run' }]);
     const logger = { warn: vi.fn() };
-    const dependencies = deps(
-      repo,
-      runner,
-      replies,
-      { now: () => NOW },
-      async () =>
-        err({
-          code: 'API_ERROR',
-          message:
-            'resolver-cause-sentinel raw-resolver-user-sentinel https://private.invalid/raw provider-sentinel model-sentinel',
-        })
+    const dependencies = deps(repo, runner, replies, { now: () => NOW }, async () =>
+      err({
+        code: 'API_ERROR',
+        message:
+          'resolver-cause-sentinel raw-resolver-user-sentinel https://private.invalid/raw provider-sentinel model-sentinel',
+      })
     );
     dependencies.logger = logger;
 
@@ -256,7 +327,8 @@ describe('handleIncomingMessage', () => {
     ]);
     expect(eventPayloads(repo, 'clarification_requested')).toEqual([
       {
-        message: 'I could not process that request right now. Please restate what you want me to do.',
+        message:
+          'I could not process that request right now. Please restate what you want me to do.',
         blockerReason: 'not_enough_context',
         suggestedNextStep: 'Ask the user to restate the action.',
         fallbackReason: 'runtime_resolution_failed',
@@ -284,12 +356,8 @@ describe('handleIncomingMessage', () => {
       const replies = new FakeReplyPublisher();
       const runner = new FakeRunner([{ outcome: 'no_action', reply: 'must not run' }]);
       const logger = { warn: vi.fn() };
-      const dependencies = deps(
-        repo,
-        runner,
-        replies,
-        { now: () => NOW },
-        async () => err({ code, message: `private-${code}-cause` })
+      const dependencies = deps(repo, runner, replies, { now: () => NOW }, async () =>
+        err({ code, message: `private-${code}-cause` })
       );
       dependencies.logger = logger;
 
@@ -297,8 +365,13 @@ describe('handleIncomingMessage', () => {
 
       expect(runner.calls).toEqual([]);
       expect(logger.warn).toHaveBeenCalledTimes(1);
-      expect(JSON.stringify({ events: repo.events, replies: replies.messages, logs: logger.warn.mock.calls }))
-        .not.toContain(`private-${code}-cause`);
+      expect(
+        JSON.stringify({
+          events: repo.events,
+          replies: replies.messages,
+          logs: logger.warn.mock.calls,
+        })
+      ).not.toContain(`private-${code}-cause`);
     }
   );
 
@@ -381,20 +454,20 @@ describe('handleIncomingMessage', () => {
         replyToMessageId: 'wamid-1',
         correlationId: 'session-1',
         buttons: [
-	          {
-	            type: 'reply',
-	            reply: {
-	              id: 'intex_confirm:confirmation-3:yes',
-	              title: 'Yes',
-	            },
-	          },
-	          {
-	            type: 'reply',
-	            reply: {
-	              id: 'intex_confirm:confirmation-3:no',
-	              title: 'No',
-	            },
-	          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'intex_confirm:confirmation-3:yes',
+              title: 'Yes',
+            },
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'intex_confirm:confirmation-3:no',
+              title: 'No',
+            },
+          },
         ],
       },
     ]);
@@ -549,14 +622,17 @@ describe('handleIncomingMessage', () => {
       message: 'Czy dodać notatkę?',
       sourceMessageId: 'wamid-original',
     });
-    const runner = new FakeRunner([], [
-      {
-        outcome: 'completed',
-        reply: 'Zapisałem notatkę.',
-        toolName: 'create_note',
-        toolResult: { status: 'completed', id: 'note-1' },
-      },
-    ]);
+    const runner = new FakeRunner(
+      [],
+      [
+        {
+          outcome: 'completed',
+          reply: 'Zapisałem notatkę.',
+          toolName: 'create_note',
+          toolResult: { status: 'completed', id: 'note-1' },
+        },
+      ]
+    );
     const replies = new FakeReplyPublisher();
     const resolveRuntimeSettings = runtimeResolverSpy();
 
@@ -757,18 +833,21 @@ describe('handleIncomingMessage', () => {
       toolName: 'create_note',
       toolArgs: { content: 'The door code is 1234.' },
     });
-    const runner = new FakeRunner([], [
-      {
-        outcome: 'tool_failed',
-        reply: 'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.',
-        toolName: 'create_note',
-        error: 'downstream denied it',
-        errorCategory: 'business',
-        isRetryable: false,
-        attemptedAction: 'create_note',
-        toolSelection: { turnIndex: 1, ordinal: 1 },
-      },
-    ]);
+    const runner = new FakeRunner(
+      [],
+      [
+        {
+          outcome: 'tool_failed',
+          reply: 'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.',
+          toolName: 'create_note',
+          error: 'downstream denied it',
+          errorCategory: 'business',
+          isRetryable: false,
+          attemptedAction: 'create_note',
+          toolSelection: { turnIndex: 1, ordinal: 1 },
+        },
+      ]
+    );
     const replies = new FakeReplyPublisher();
 
     await handleIncomingMessage(
@@ -861,7 +940,10 @@ describe('handleIncomingMessage', () => {
       message: 'Przenieść dwa wydarzenia?',
       sourceMessageId: 'wamid-original',
     });
-    const runner = new FakeRunner([], [{ outcome: 'completed', reply: 'Zaktualizowano 2 wydarzenia.' }]);
+    const runner = new FakeRunner(
+      [],
+      [{ outcome: 'completed', reply: 'Zaktualizowano 2 wydarzenia.' }]
+    );
     const replies = new FakeReplyPublisher();
 
     await handleIncomingMessage(
@@ -900,32 +982,35 @@ describe('handleIncomingMessage', () => {
         calendarUpdateOperation('event-4'),
       ],
     });
-    const runner = new FakeRunner([], [
-      {
-        outcome: 'completed',
-        reply: 'Zaktualizowano 1 z 2 wydarzeń w kalendarzu.',
-        operationResults: [
-          {
-            toolName: 'update_calendar_event',
-            status: 'completed',
-            toolResult: { eventId: 'event-1' },
-          },
-          {
-            toolName: 'update_calendar_event',
-            status: 'failed',
-            error: 'event changed',
-          },
-          {
-            toolName: 'update_calendar_event',
-            status: 'completed',
-          },
-          {
-            toolName: 'update_calendar_event',
-            status: 'failed',
-          },
-        ],
-      },
-    ]);
+    const runner = new FakeRunner(
+      [],
+      [
+        {
+          outcome: 'completed',
+          reply: 'Zaktualizowano 1 z 2 wydarzeń w kalendarzu.',
+          operationResults: [
+            {
+              toolName: 'update_calendar_event',
+              status: 'completed',
+              toolResult: { eventId: 'event-1' },
+            },
+            {
+              toolName: 'update_calendar_event',
+              status: 'failed',
+              error: 'event changed',
+            },
+            {
+              toolName: 'update_calendar_event',
+              status: 'completed',
+            },
+            {
+              toolName: 'update_calendar_event',
+              status: 'failed',
+            },
+          ],
+        },
+      ]
+    );
     const replies = new FakeReplyPublisher();
 
     await handleIncomingMessage(
@@ -1233,14 +1318,17 @@ describe('handleIncomingMessage', () => {
       toolName: 'create_note',
       toolArgs: { content: 'The door code is 1234.' },
     });
-    const runner = new FakeRunner([], [
-      {
-        outcome: 'tool_failed',
-        reply: 'I could not complete that action.',
-        toolName: 'create_note',
-        error: 'downstream denied it',
-      },
-    ]);
+    const runner = new FakeRunner(
+      [],
+      [
+        {
+          outcome: 'tool_failed',
+          reply: 'I could not complete that action.',
+          toolName: 'create_note',
+          error: 'downstream denied it',
+        },
+      ]
+    );
     const replies = new FakeReplyPublisher();
 
     await handleIncomingMessage(
@@ -1336,8 +1424,14 @@ describe('handleIncomingMessage', () => {
   });
 
   it.each([
-    { buttonTitle: 'Yes', expectedReply: 'This confirmation is no longer current. Send the request again.' },
-    { buttonTitle: 'Maybe', expectedReply: 'This confirmation is no longer current. Send the request again.' },
+    {
+      buttonTitle: 'Yes',
+      expectedReply: 'This confirmation is no longer current. Send the request again.',
+    },
+    {
+      buttonTitle: 'Maybe',
+      expectedReply: 'This confirmation is no longer current. Send the request again.',
+    },
   ])(
     'uses the fallback language for a $buttonTitle confirmation button without an active session',
     async ({ buttonTitle, expectedReply }) => {
@@ -1568,16 +1662,19 @@ describe('handleIncomingMessage', () => {
       toolArgs: operations[0]?.toolArgs ?? {},
       operations,
     });
-    const runner = new FakeRunner([], [
-      {
-        outcome: 'completed',
-        reply: 'Zaktualizowano 4 z 4 wydarzeń w kalendarzu.',
-        operationResults: operations.map(() => ({
-          toolName: 'update_calendar_event' as const,
-          status: 'completed' as const,
-        })),
-      },
-    ]);
+    const runner = new FakeRunner(
+      [],
+      [
+        {
+          outcome: 'completed',
+          reply: 'Zaktualizowano 4 z 4 wydarzeń w kalendarzu.',
+          operationResults: operations.map(() => ({
+            toolName: 'update_calendar_event' as const,
+            status: 'completed' as const,
+          })),
+        },
+      ]
+    );
     const replies = new FakeReplyPublisher();
 
     await handleIncomingMessage(
@@ -1593,9 +1690,7 @@ describe('handleIncomingMessage', () => {
       resolution: 'accepted',
     });
     expect(eventPayloads(repo, 'tool_call_completed')).toHaveLength(4);
-    expect(replies.messages[0]?.message).toBe(
-      'Zaktualizowano 4 z 4 wydarzeń w kalendarzu.'
-    );
+    expect(replies.messages[0]?.message).toBe('Zaktualizowano 4 z 4 wydarzeń w kalendarzu.');
   });
 
   it('rejects a pending confirmation when the user replies with plain text Nie', async () => {
@@ -1885,11 +1980,7 @@ describe('handleIncomingMessage', () => {
     });
     expect(repo.sessions[0]?.endedAt).toBeUndefined();
     expect(repo.sessions[0]?.endReason).toBeUndefined();
-    expect(eventTypes(repo)).toEqual([
-      'session_started',
-      'user_message',
-      'assistant_message',
-    ]);
+    expect(eventTypes(repo)).toEqual(['session_started', 'user_message', 'assistant_message']);
     expect(replies.messages).toEqual([
       {
         userId: 'user-1',
@@ -2190,10 +2281,7 @@ describe('handleIncomingMessage', () => {
     ]);
     const replies = new FakeReplyPublisher();
 
-    await handleIncomingMessage(
-      message({ text: 'make it happen' }),
-      deps(repo, runner, replies)
-    );
+    await handleIncomingMessage(message({ text: 'make it happen' }), deps(repo, runner, replies));
 
     expect(eventPayloads(repo, 'clarification_requested')[0]).toEqual({
       message: 'Which action did you mean?',
@@ -2309,13 +2397,11 @@ describe('handleIncomingMessage', () => {
       },
     ]);
     const replies = new FakeReplyPublisher();
-    const longText = 'What are events in my calendar tomorrow and which ones conflict with preparation time';
+    const longText =
+      'What are events in my calendar tomorrow and which ones conflict with preparation time';
     const repeatedText = `${longText} ${longText}`;
 
-    await handleIncomingMessage(
-      message({ text: repeatedText }),
-      deps(repo, runner, replies)
-    );
+    await handleIncomingMessage(message({ text: repeatedText }), deps(repo, runner, replies));
 
     expect(repo.sessions[0]?.summary).toBe(`${repeatedText.slice(0, 117)}...`);
   });
@@ -2387,11 +2473,7 @@ describe('handleIncomingMessage', () => {
         startReason: 'user_requested_new_session',
       },
     ]);
-    expect(eventTypes(repo)).toEqual([
-      'session_closed',
-      'session_started',
-      'assistant_message',
-    ]);
+    expect(eventTypes(repo)).toEqual(['session_closed', 'session_started', 'assistant_message']);
     expect(runner.calls).toEqual([]);
     expect(resolveRuntimeSettings).not.toHaveBeenCalled();
     expect(replies.messages[0]?.message).toBe(NEW_SESSION_READY_REPLY);
@@ -2927,16 +3009,17 @@ function deps(
   runner: IntexAgentRunner,
   replies: FakeReplyPublisher,
   clock: { now: () => string } = { now: () => NOW },
-  resolveRuntimeSettings: Parameters<typeof handleIncomingMessage>[1]['resolveRuntimeSettings'] =
-    async () =>
-      ok({
-        status: 'available',
-        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
-        explicitModel: null,
-        source: 'default_absent',
-        revision: 0,
-        timeZone: 'UTC',
-      })
+  resolveRuntimeSettings: Parameters<
+    typeof handleIncomingMessage
+  >[1]['resolveRuntimeSettings'] = async () =>
+    ok({
+      status: 'available',
+      effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+      explicitModel: null,
+      source: 'default_absent',
+      revision: 0,
+      timeZone: 'UTC',
+    })
 ): Parameters<typeof handleIncomingMessage>[1] {
   return {
     sessionRepository,
@@ -2954,9 +3037,9 @@ function deps(
   };
 }
 
-function runtimeResolverSpy(): ReturnType<typeof vi.fn<
-  Parameters<typeof handleIncomingMessage>[1]['resolveRuntimeSettings']
->> {
+function runtimeResolverSpy(): ReturnType<
+  typeof vi.fn<Parameters<typeof handleIncomingMessage>[1]['resolveRuntimeSettings']>
+> {
   return vi.fn(async () =>
     ok({
       status: 'available',
@@ -3180,7 +3263,11 @@ class FakeSessionRepository implements SessionRepository {
     this.sessions.push(session);
   }
 
-  seedEvent(sessionId: string, type: IntexAgentSessionEventType, payload: Record<string, unknown>): void {
+  seedEvent(
+    sessionId: string,
+    type: IntexAgentSessionEventType,
+    payload: Record<string, unknown>
+  ): void {
     this.events.push({
       id: `seed-${String(this.events.length + 1)}`,
       sessionId,
@@ -3228,7 +3315,10 @@ class FakeSessionRepository implements SessionRepository {
     return Promise.resolve(session);
   }
 
-  updateSession(sessionId: string, update: SessionRepositorySessionUpdate): Promise<IntexAgentSession> {
+  updateSession(
+    sessionId: string,
+    update: SessionRepositorySessionUpdate
+  ): Promise<IntexAgentSession> {
     const index = this.sessions.findIndex((session) => session.id === sessionId);
     if (index < 0) {
       throw new Error(`Missing session ${sessionId}`);
@@ -3264,7 +3354,9 @@ class FakeRunner implements IntexAgentRunner {
     private readonly confirmedResults: IntexAgentRunnerResult[] = []
   ) {}
 
-  executeConfirmed(input: Parameters<IntexAgentRunner['executeConfirmed']>[0]): Promise<IntexAgentRunnerResult> {
+  executeConfirmed(
+    input: Parameters<IntexAgentRunner['executeConfirmed']>[0]
+  ): Promise<IntexAgentRunnerResult> {
     this.executeConfirmedCalls.push(input);
     const next = this.confirmedResults.shift();
     if (next === undefined) {

@@ -3,6 +3,7 @@ import type {
   MessageDigestSchedule,
   MessageDigestSource,
 } from './messageDigestDefinition.js';
+import type { TransportConfirmation } from '@intexuraos/http-contracts';
 
 export type MessageDigestGenerationStatus =
   | 'queued'
@@ -70,6 +71,7 @@ export interface MessageDigestRun {
     costUsd: number;
   } | null;
   delivery: {
+    transportConfirmation?: TransportConfirmation | undefined;
     type: 'whatsapp_primary';
     status: 'not_sent' | 'pending' | 'sent' | 'ambiguous' | 'failed';
     idempotencyKey: string;

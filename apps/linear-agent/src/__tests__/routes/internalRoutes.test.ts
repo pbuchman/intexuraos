@@ -1,3 +1,4 @@
+import { createFakeJobHeartbeatStore } from '../fakes.js';
 /**
  * Tests for internal API routes.
  */
@@ -53,6 +54,7 @@ describe('internalRoutes', () => {
     fakeUserServiceClient.setLlmClient(fakeLlmClient);
 
     setServices({
+      jobHeartbeatStore: createFakeJobHeartbeatStore(),
       connectionRepository: fakeConnectionRepo,
       linearApiClient: fakeLinearClient,
       extractionService: fakeExtractionService,

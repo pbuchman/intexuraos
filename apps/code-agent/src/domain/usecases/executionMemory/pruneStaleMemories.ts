@@ -7,6 +7,7 @@ export interface PruneStaleMemoriesDeps {
 }
 
 export interface PruneStaleMemoriesResult {
+  failedCount?: number;
   archived: number;
   skipped: number;
 }
@@ -28,6 +29,7 @@ export async function pruneStaleMemories(
 
   let archived = 0;
   let skipped = 0;
+  let failedCount = 0;
 
   for (const memory of staleResult.value) {
     if (dryRun) {
@@ -44,6 +46,7 @@ export async function pruneStaleMemories(
     });
 
     if (!updateResult.ok) {
+      failedCount += 1;
       deps.logger.warn(
         { memoryId: memory.id, error: updateResult.error.message },
         'Prune: failed to archive memory'
@@ -56,5 +59,5 @@ export async function pruneStaleMemories(
     archived += 1;
   }
 
-  return ok({ archived, skipped });
+  return ok({ archived, skipped, ...(failedCount > 0 ? { failedCount } : {}) });
 }

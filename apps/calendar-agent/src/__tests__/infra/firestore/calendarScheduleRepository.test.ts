@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  createFakeFirestore,
-  resetFirestore,
-  setFirestore,
-} from '@intexuraos/infra-firestore';
+import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import { createCalendarScheduleRepository } from '../../../infra/firestore/calendarScheduleRepository.js';
 import type { CalendarSchedule } from '../../../domain/index.js';
 
@@ -36,6 +32,67 @@ describe('calendarScheduleRepository', () => {
     resetFirestore();
   });
 
+  it('skips old local dates after a multi-day outage and claims today once', async () => {
+    const repository = createCalendarScheduleRepository();
+    await repository.upsert(
+      schedule({
+        cadence: { type: 'daily', localTime: '15:30', timeZone: 'Europe/Warsaw' },
+        nextRunAt: '2026-10-08T13:30:00.000Z',
+        retryRun: { localDate: '2026-10-08', scheduledFor: '2026-10-08T13:30:00.000Z' },
+      })
+    );
+    const input = {
+      now: '2026-10-12T14:00:00.000Z',
+      limit: 10,
+      leaseOwnerId: 'worker',
+      leaseDurationMs: 900000,
+    };
+    const result = await repository.claimDueSchedules(input);
+    expect(result.ok && result.value.map((run) => run.localDate)).toEqual(['2026-10-12']);
+    expect(result.ok && result.value[0]?.scheduledFor).toBe('2026-10-12T13:30:00.000Z');
+    const repeated = await repository.claimDueSchedules(input);
+    expect(repeated.ok && repeated.value).toEqual([]);
+  });
+
+  it('advances an overdue old date without sending before today scheduled time', async () => {
+    const repository = createCalendarScheduleRepository();
+    await repository.upsert(
+      schedule({
+        cadence: { type: 'daily', localTime: '15:30', timeZone: 'Europe/Warsaw' },
+        nextRunAt: '2026-10-08T13:30:00.000Z',
+      })
+    );
+    const result = await repository.claimDueSchedules({
+      now: '2026-10-12T10:00:00.000Z',
+      limit: 10,
+      leaseOwnerId: 'worker',
+      leaseDurationMs: 900000,
+    });
+    expect(result.ok && result.value).toEqual([]);
+    const saved = await repository.getByUserAndTaskType('user-123', 'calendar_daily_lookahead');
+    expect(saved.ok && saved.value?.nextRunAt).toBe('2026-10-12T13:30:00.000Z');
+  });
+
+  it('keeps the oldest pending delivery visible when the next daily run is due', async () => {
+    const repository = createCalendarScheduleRepository();
+    await repository.upsert(schedule());
+    await repository.markRunSent({
+      scheduleId: schedule().id,
+      userId: 'user-123',
+      taskType: 'calendar_daily_lookahead',
+      localDate: '2026-07-04',
+      scheduledFor: '2026-07-04T13:15:00.000Z',
+      startedAt: '2026-07-04T13:15:00.000Z',
+      finishedAt: '2026-07-04T13:15:01.000Z',
+      matrixEventId: 'event',
+      nextRunAt: '2026-07-05T13:15:00.000Z',
+    });
+    expect(await repository.monitoring?.('2026-07-05T13:30:00.000Z')).toMatchObject({
+      pendingCount: 2,
+      oldestPendingScheduledFor: '2026-07-04T13:15:00.000Z',
+    });
+  });
+
   it('upserts and looks up a schedule by user and task type', async () => {
     const repository = createCalendarScheduleRepository();
 
@@ -43,10 +100,7 @@ describe('calendarScheduleRepository', () => {
 
     expect(created.ok).toBe(true);
 
-    const loaded = await repository.getByUserAndTaskType(
-      'user-123',
-      'calendar_daily_lookahead'
-    );
+    const loaded = await repository.getByUserAndTaskType('user-123', 'calendar_daily_lookahead');
 
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
@@ -281,9 +335,11 @@ describe('calendarScheduleRepository', () => {
   it('reclaims a due schedule after the lease expires', async () => {
     const repository = createCalendarScheduleRepository();
 
-    await repository.upsert(schedule({
-      lease: { ownerId: 'worker-a', expiresAt: '2026-07-04T13:15:10.000Z' },
-    }));
+    await repository.upsert(
+      schedule({
+        lease: { ownerId: 'worker-a', expiresAt: '2026-07-04T13:15:10.000Z' },
+      })
+    );
 
     const claim = await repository.claimDueSchedules({
       now: '2026-07-04T13:16:00.000Z',
@@ -395,12 +451,12 @@ describe('calendarScheduleRepository', () => {
     }
   });
 
-  it('preserves retry local date when the retry crosses local midnight', async () => {
+  it('skips previous-date retries across local midnight', async () => {
     const repository = createCalendarScheduleRepository();
     await repository.upsert(
       schedule({
-        cadence: { type: 'daily', localTime: '23:50', timeZone: 'America/New_York' },
-        nextRunAt: '2026-07-05T03:50:00.000Z',
+        cadence: { type: 'daily', localTime: '23:45', timeZone: 'America/New_York' },
+        nextRunAt: '2026-07-05T03:45:00.000Z',
       })
     );
 
@@ -409,9 +465,9 @@ describe('calendarScheduleRepository', () => {
       userId: 'user-123',
       taskType: 'calendar_daily_lookahead',
       localDate: '2026-07-04',
-      scheduledFor: '2026-07-05T03:50:00.000Z',
-      startedAt: '2026-07-05T03:50:00.000Z',
-      finishedAt: '2026-07-05T03:50:05.000Z',
+      scheduledFor: '2026-07-05T03:45:00.000Z',
+      startedAt: '2026-07-05T03:45:00.000Z',
+      finishedAt: '2026-07-05T03:45:05.000Z',
       error: 'socket hang up',
       retryable: true,
       nextRunAt: '2026-07-05T04:05:00.000Z',
@@ -426,11 +482,7 @@ describe('calendarScheduleRepository', () => {
 
     expect(claim.ok).toBe(true);
     if (claim.ok) {
-      expect(claim.value).toHaveLength(1);
-      expect(claim.value[0]).toMatchObject({
-        localDate: '2026-07-04',
-        scheduledFor: '2026-07-05T03:50:00.000Z',
-      });
+      expect(claim.value).toEqual([]);
     }
   });
 
@@ -503,5 +555,182 @@ describe('calendarScheduleRepository', () => {
 
     expect(sent.ok).toBe(false);
     expect(failed.ok).toBe(false);
+  });
+  it('shows an active trigger lease, records processing/delivery and preserves delivered against late failures', async () => {
+    const repo = createCalendarScheduleRepository();
+    await repo.upsert(schedule());
+    await repo.claimDueSchedules({
+      now: '2026-07-04T13:15:10.000Z',
+      limit: 1,
+      leaseOwnerId: 'w',
+      leaseDurationMs: 900000,
+    });
+    const leased = await repo.getByUserAndTaskType('user-123', 'calendar_daily_lookahead');
+    expect(leased.ok && leased.value?.latestRun).toMatchObject({
+      status: 'leased',
+      stage: 'trigger_pending',
+    });
+    await repo.markRunSent({
+      scheduleId: schedule().id,
+      userId: 'user-123',
+      taskType: 'calendar_daily_lookahead',
+      localDate: '2026-07-04',
+      scheduledFor: '2026-07-04T13:15:00.000Z',
+      startedAt: '2026-07-04T13:15:10.000Z',
+      finishedAt: '2026-07-04T13:15:11.000Z',
+      matrixEventId: 'event',
+      nextRunAt: '2026-07-05T13:15:00.000Z',
+    });
+    const pending = await repo.listPendingRuns?.('2026-07-04T14:00:00.000Z');
+    const run = pending?.ok ? pending.value[0] : undefined;
+    if (run === undefined) throw new Error('missing run');
+    expect(
+      await repo.markRunDelivery?.({
+        run,
+        status: 'pending',
+        stage: 'processing',
+        at: '2026-07-04T13:16:00.000Z',
+      })
+    ).toEqual({ ok: true, value: undefined });
+    const processing = await repo.getByUserAndTaskType('user-123', 'calendar_daily_lookahead');
+    expect(processing.ok && processing.value?.latestRun).toMatchObject({
+      deliveryStatus: 'pending',
+      stage: 'processing',
+    });
+    await repo.markRunDelivery?.({
+      run,
+      status: 'delivered',
+      stage: 'delivered',
+      at: '2026-07-04T13:17:00.000Z',
+    });
+    await repo.markRunDelivery?.({ run, status: 'failed', at: '2026-07-04T13:18:00.000Z' });
+    expect(await repo.monitoring?.('2026-07-04T13:20:00.000Z')).toEqual({
+      pendingCount: 0,
+      failedCount: 0,
+      oldestPendingScheduledFor: null,
+      lastDeliveredAt: '2026-07-04T13:17:00.000Z',
+    });
+    expect(await repo.listPendingRuns?.('2026-07-04T14:00:00.000Z')).toEqual({
+      ok: true,
+      value: [],
+    });
+  });
+  it('reports delivery failures until a later delivery supersedes them and propagates storage errors', async () => {
+    const repo = createCalendarScheduleRepository();
+    await repo.upsert(schedule());
+    const failed = {
+      id: schedule().id + '_2026-07-04',
+      scheduleId: schedule().id,
+      userId: 'user-123',
+      taskType: 'calendar_daily_lookahead' as const,
+      status: 'sent' as const,
+      deliveryStatus: 'pending' as const,
+      localDate: '2026-07-04',
+      scheduledFor: '2026-07-04T13:15:00.000Z',
+      startedAt: '2026-07-04T13:15:00.000Z',
+    };
+    fakeFirestore.seedCollection('calendar_schedule_runs', [{ id: failed.id, data: failed }]);
+    await repo.markRunDelivery?.({ run: failed, status: 'failed', at: failed.startedAt });
+    const unresolved = await repo.listPendingRuns?.('2026-07-04T14:00:00.000Z');
+    expect(unresolved?.ok && unresolved.value).toHaveLength(1);
+    expect((await repo.monitoring?.('2026-07-04T14:00:00.000Z'))?.failedCount).toBe(1);
+    fakeFirestore.seedCollection('calendar_schedule_runs', [
+      { id: failed.id, data: { ...failed, deliveryStatus: 'failed' } },
+      {
+        id: 'later',
+        data: {
+          ...failed,
+          id: 'later',
+          scheduledFor: '2026-07-05T13:15:00.000Z',
+          deliveryStatus: 'delivered',
+          deliveredAt: '2026-07-05T13:16:00.000Z',
+        },
+      },
+    ]);
+    expect((await repo.monitoring?.('2026-07-05T14:00:00.000Z'))?.failedCount).toBe(0);
+    await repo.markRunDelivery?.({
+      run: { ...failed, id: 'absent' },
+      status: 'failed',
+      failureCode: 'ABSENT',
+      at: failed.startedAt,
+    });
+    fakeFirestore.configure({ errorToThrow: new Error('storage unavailable') });
+    expect((await repo.listPendingRuns?.('2026-07-04T14:00:00.000Z'))?.ok).toBe(false);
+    expect(
+      (
+        await repo.markRunDelivery?.({
+          run: failed,
+          status: 'failed',
+          failureCode: 'FAIL',
+          at: failed.startedAt,
+        })
+      )?.ok
+    ).toBe(false);
+    await expect(repo.monitoring?.(failed.startedAt)).rejects.toThrow('storage unavailable');
+  });
+  it('keeps the newest delivery timestamp and excludes due cursors before the resume cutoff', async () => {
+    const repo = createCalendarScheduleRepository();
+    const cutoff = '2026-07-05T12:00:00.000Z';
+    await repo.upsert(schedule({ nextRunAt: '2026-07-04T13:15:00.000Z', resumeCutoff: cutoff }));
+    const run = {
+      scheduleId: schedule().id,
+      userId: 'user-123',
+      taskType: 'calendar_daily_lookahead',
+      status: 'sent',
+      deliveryStatus: 'delivered',
+      localDate: '2026-07-04',
+      scheduledFor: '2026-07-04T13:15:00.000Z',
+      startedAt: '2026-07-04T13:15:00.000Z',
+    };
+    fakeFirestore.seedCollection('calendar_schedule_runs', [
+      { id: 'newer-delivery', data: { ...run, deliveredAt: '2026-07-04T15:00:00.000Z' } },
+      { id: 'older-delivery', data: { ...run, deliveredAt: '2026-07-04T14:00:00.000Z' } },
+    ]);
+    expect(await repo.monitoring?.(cutoff)).toEqual({
+      pendingCount: 0,
+      failedCount: 0,
+      oldestPendingScheduledFor: null,
+      lastDeliveredAt: '2026-07-04T15:00:00.000Z',
+    });
+  });
+
+  it('excludes pre-resume pending and failed runs from monitoring and reconciliation while preserving history', async () => {
+    const repo = createCalendarScheduleRepository();
+    const cutoff = '2026-07-05T12:00:00.000Z';
+    const previous = {
+      id: 'old-pending',
+      scheduleId: schedule().id,
+      userId: 'user-123',
+      taskType: 'calendar_daily_lookahead' as const,
+      status: 'sent' as const,
+      deliveryStatus: 'pending' as const,
+      localDate: '2026-07-04',
+      scheduledFor: '2026-07-04T13:15:00.000Z',
+      startedAt: '2026-07-04T13:15:00.000Z',
+    };
+    const failed = { ...previous, id: 'old-failed', deliveryStatus: 'failed' as const };
+    const boundary = { ...previous, id: 'boundary', scheduledFor: cutoff };
+    await repo.upsert(schedule({ nextRunAt: '2026-07-05T13:15:00.000Z', resumeCutoff: cutoff }));
+    fakeFirestore.seedCollection('calendar_schedule_runs', [
+      { id: previous.id, data: previous },
+      { id: failed.id, data: failed },
+    ]);
+    expect(await repo.monitoring?.(cutoff)).toEqual({
+      pendingCount: 0,
+      failedCount: 0,
+      oldestPendingScheduledFor: null,
+      lastDeliveredAt: null,
+    });
+    expect(await repo.listPendingRuns?.(cutoff)).toEqual({ ok: true, value: [] });
+    const stored = await repo.getByUserAndTaskType('user-123', 'calendar_daily_lookahead');
+    expect(stored.ok && stored.value?.resumeCutoff).toBe(cutoff);
+    const retained = await fakeFirestore.collection('calendar_schedule_runs').get();
+    expect(retained.docs.map((doc) => ({ id: doc.id, data: doc.data() }))).toEqual([
+      { id: previous.id, data: previous },
+      { id: failed.id, data: failed },
+    ]);
+    fakeFirestore.seedCollection('calendar_schedule_runs', [{ id: boundary.id, data: boundary }]);
+    expect(await repo.listPendingRuns?.(cutoff)).toEqual({ ok: true, value: [boundary] });
+    expect(await repo.monitoring?.(cutoff)).toMatchObject({ pendingCount: 1, failedCount: 0 });
   });
 });

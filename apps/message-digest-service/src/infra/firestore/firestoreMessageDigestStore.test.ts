@@ -8,6 +8,7 @@ import {
 import type { MessageDigestStore } from '../../domain/ports/messageDigestStore.js';
 import type { MessageDigestWhatsAppClient } from '../../domain/ports/messageDigestClients.js';
 import { prepareMessageDigestRun } from '../../domain/usecases/prepareMessageDigestRun.js';
+import { reconcileMessageDigestDelivery } from '../../domain/usecases/reconcileMessageDigestDelivery.js';
 import { reserveMessageDigestRun } from '../../domain/usecases/reserveMessageDigestRun.js';
 import { updateMessageDigest } from '../../domain/usecases/updateMessageDigest.js';
 import { getMessageDigestDeliveryOutboxId } from '../../domain/messageDigestIds.js';
@@ -80,6 +81,521 @@ describe('FirestoreMessageDigestStore', () => {
     ({ fake, store } = createStoreHarness());
     const domainStore: MessageDigestStore = store;
     expect(domainStore).toBe(store);
+  });
+
+  it('atomically advances obsolete windows and records a content-free skip audit under both revisions', async () => {
+    await store.createDefinition({ definition: makeDefinition(), state: makeState() });
+    const patch = {
+      resetCheckpointAt: '2026-08-01T00:00:00.000Z',
+      nextRunAt: '2026-08-02T01:00:00.000Z',
+      skipObsoleteWindows: {
+        expectedStateRevision: 1,
+        windowStart: '2026-07-27T00:00:00.000Z',
+        windowEnd: '2026-08-01T00:00:00.000Z',
+      },
+    };
+    const input = {
+      userId: 'synthetic-user-001',
+      definitionId: 'md_definition_001',
+      expectedRevision: 1,
+      updatedAt: '2026-08-01T01:00:00.000Z',
+      patch,
+    };
+    expect(
+      await store.updateDefinition({
+        ...input,
+        patch: {
+          ...patch,
+          skipObsoleteWindows: { ...patch.skipObsoleteWindows, expectedStateRevision: 9 },
+        },
+      })
+    ).toEqual({ ok: false, code: 'REVISION_CONFLICT' });
+    expect((await store.updateDefinition(input)).ok).toBe(true);
+    const state = (await store.getOwnedRunContext(input.userId, input.definitionId))?.state;
+    expect(state).toMatchObject({ checkpointAt: patch.resetCheckpointAt, revision: 2 });
+    expect(fake.getAllData().get('message_digest_skipped_windows')?.size).toBe(1);
+  });
+
+  it.each([
+    'paused',
+    'pending-window',
+    'wrong-start',
+    'wrong-end',
+    'reversed-window',
+    'missing-cadence',
+    'cadence-before-end',
+  ] as const)('rejects an unsafe obsolete-window reset: %s', async (reason) => {
+    await createDefinition(store);
+    if (reason === 'paused')
+      seedDefinitions(fake, [makeDefinition({ status: 'paused', listStatus: 'paused' })]);
+    if (reason === 'pending-window') await store.reserveRun(reservationInput());
+    const context = await store.getOwnedRunContext('synthetic-user-001', 'md_definition_001');
+    if (context === null) throw new Error('Expected context');
+    const patch: Parameters<MessageDigestStore['updateDefinition']>[0]['patch'] = {
+      resetCheckpointAt: '2026-08-01T00:00:00.000Z',
+      nextRunAt: '2026-08-02T00:00:00.000Z',
+      skipObsoleteWindows: {
+        expectedStateRevision: context.state.revision,
+        windowStart: context.state.checkpointAt,
+        windowEnd: '2026-08-01T00:00:00.000Z',
+      },
+    };
+    if (patch.skipObsoleteWindows === undefined) throw new Error('Expected skip patch');
+    if (reason === 'wrong-start')
+      patch.skipObsoleteWindows.windowStart = '2026-07-26T00:00:00.000Z';
+    if (reason === 'wrong-end') patch.skipObsoleteWindows.windowEnd = '2026-07-31T00:00:00.000Z';
+    if (reason === 'reversed-window') {
+      patch.skipObsoleteWindows.windowEnd = '2026-07-26T00:00:00.000Z';
+      patch.resetCheckpointAt = patch.skipObsoleteWindows.windowEnd;
+    }
+    if (reason === 'missing-cadence') delete patch.nextRunAt;
+    if (reason === 'cadence-before-end') patch.nextRunAt = patch.skipObsoleteWindows.windowEnd;
+    expect(
+      await store.updateDefinition({
+        userId: 'synthetic-user-001',
+        definitionId: 'md_definition_001',
+        expectedRevision: context.definition.revision,
+        updatedAt: '2026-08-01T01:00:00.000Z',
+        patch,
+      })
+    ).toEqual({ ok: false, code: 'RUN_IN_PROGRESS' });
+    expect(await store.getOwnedRunContext('synthetic-user-001', 'md_definition_001')).toEqual(
+      context
+    );
+    expect(fake.getAllData().get('message_digest_skipped_windows')?.size ?? 0).toBe(0);
+  });
+
+  it.each([
+    'foreign-user',
+    'foreign-definition',
+    'authorization-live',
+    'authorization-expired',
+    'authorization-released',
+    'dispatch-live',
+    'paused',
+    'retire-with-state',
+    'retire-without-state',
+    'already-skipped',
+  ] as const)('safely fences or retires an old dispatch: %s', async (scenario) => {
+    seedDeliveryAuthorizationContext(fake);
+    fake.seedCollection(MESSAGE_DIGEST_STATES_COLLECTION, [
+      { id: 'md_definition_001', data: makeState() },
+    ]);
+    const now = '2026-08-02T02:00:00.000Z';
+    const expiresAt = '2026-08-02T02:05:00.000Z';
+    const run = MessageDigestRunDocumentSchema.parse(
+      readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, 'mdr_run_001')
+    );
+    run.trigger = 'scheduled';
+    if (scenario === 'foreign-user') run.userId = 'other-user';
+    if (scenario === 'foreign-definition') run.definitionId = 'md_other_001';
+    if (scenario.startsWith('authorization-'))
+      run.deliveryAuthorization = {
+        ownerDigest: 'e'.repeat(64),
+        fence: 1,
+        renewedAt: '2026-08-02T01:00:00.000Z',
+        expiresAt: scenario === 'authorization-expired' ? '2026-08-02T01:30:00.000Z' : expiresAt,
+        releasedAt: scenario === 'authorization-released' ? '2026-08-02T01:10:00.000Z' : null,
+      };
+    if (scenario === 'already-skipped')
+      run.delivery = {
+        ...run.delivery,
+        status: 'failed',
+        failedAt: now,
+        failureCode: 'SKIPPED_BEFORE_RESUME',
+        nextCheckAt: null,
+      };
+    seedRuns(fake, [run]);
+    if (scenario === 'paused')
+      seedDefinitions(fake, [
+        makeDefinition({ status: 'paused', listStatus: 'paused', hasRuns: true }),
+      ]);
+    if (scenario === 'retire-without-state')
+      fake.seedCollection(MESSAGE_DIGEST_STATES_COLLECTION, []);
+    const outboxId = getMessageDigestDeliveryOutboxId(run.runId);
+    if (scenario === 'dispatch-live') {
+      const outbox = MessageDigestDispatchOutboxDocumentSchema.parse(
+        readDocument(fake, MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION, outboxId)
+      );
+      fake.seedCollection(MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION, [
+        {
+          id: outboxId,
+          data: { ...outbox, claim: { ownerDigest: 'e'.repeat(64), fence: 1, expiresAt } },
+        },
+      ]);
+    }
+    const runBefore = readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, run.runId);
+    const outboxBefore = readDocument(fake, MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION, outboxId);
+    const code = ['foreign-user', 'foreign-definition', 'paused'].includes(scenario)
+      ? 'RESERVATION_LOST'
+      : ['authorization-live', 'dispatch-live'].includes(scenario)
+        ? 'CLAIM_BUSY'
+        : 'TERMINAL';
+    expect(
+      await store.claimDispatch({ outboxId, ownerDigest: 'd'.repeat(64), now, expiresAt })
+    ).toEqual({ ok: false, code });
+    if (code !== 'TERMINAL') {
+      expect(readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, run.runId)).toEqual(runBefore);
+      expect(readDocument(fake, MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION, outboxId)).toEqual(
+        outboxBefore
+      );
+    } else {
+      expect(readDocument(fake, MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION, outboxId)).toMatchObject(
+        {
+          status: 'terminal',
+          terminalCode:
+            scenario === 'already-skipped' ? 'SKIPPED_BEFORE_RESUME' : 'OBSOLETE_SCHEDULE_WINDOW',
+          claim: null,
+        }
+      );
+      if (scenario !== 'retire-without-state' && scenario !== 'already-skipped')
+        expect(readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, run.runId)).toMatchObject({
+          delivery: { status: 'failed', failureCode: 'OBSOLETE_SCHEDULE_WINDOW' },
+          deliveryAuthorization: null,
+        });
+    }
+  });
+
+  it('denies an old authorization under a paused definition without retiring its history', async () => {
+    seedDeliveryAuthorizationContext(fake);
+    seedDefinitions(fake, [
+      makeDefinition({ status: 'paused', listStatus: 'paused', hasRuns: true }),
+    ]);
+    const run = MessageDigestRunDocumentSchema.parse(
+      readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, 'mdr_run_001')
+    );
+    seedRuns(fake, [{ ...run, trigger: 'scheduled' }]);
+    expect(
+      await store.claimDeliveryAuthorization({
+        userId: run.userId,
+        definitionId: run.definitionId,
+        runId: run.runId,
+        idempotencyKey: run.delivery.idempotencyKey,
+        payloadDigest: AUTHORIZATION_PAYLOAD_DIGEST,
+        ownerDigest: 'd'.repeat(64),
+        now: '2026-08-02T02:00:00.000Z',
+        expiresAt: '2026-08-02T02:05:00.000Z',
+      })
+    ).toEqual({ ok: false, code: 'NOT_AUTHORIZED' });
+    expect(readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, run.runId)).toMatchObject({
+      generationStatus: 'completed',
+      delivery: { status: 'pending' },
+    });
+  });
+
+  it('refuses to turn a definitive legacy failed delivery into an accepted send', async () => {
+    seedDeliveryAuthorizationContext(fake);
+    const input = {
+      userId: 'synthetic-user-001',
+      definitionId: 'md_definition_001',
+      runId: 'mdr_run_001',
+      expectedErasureEpoch: 0,
+      observedAt: '2026-07-27T02:00:00.000Z',
+    };
+    expect(
+      await store.recordRunDeliveryState({
+        ...input,
+        delivery: {
+          status: 'failed',
+          failedAt: input.observedAt,
+          failureCode: 'DELIVERY_DISABLED',
+        },
+      })
+    ).toMatchObject({ ok: true });
+    expect(
+      await store.recordRunDeliveryState({
+        ...input,
+        delivery: { status: 'sent', acceptedAt: input.observedAt },
+      })
+    ).toEqual({ ok: false, code: 'DELIVERY_CONFLICT' });
+  });
+
+  it('retires an obsolete scheduled generation and its stale outbox without reclaiming live leases', async () => {
+    await createDefinition(store);
+    const reservation = reservationInput();
+    reservation.run.trigger = 'scheduled';
+    await store.reserveRun(reservation);
+    const claimInput = {
+      userId: 'synthetic-user-001',
+      runId: 'mdr_run_001',
+      ownerDigest: 'e'.repeat(64),
+      now: '2026-08-02T02:00:00.000Z',
+      expiresAt: '2026-08-02T02:05:00.000Z',
+    };
+    expect(await store.claimRunLease(claimInput)).toEqual({ ok: false, code: 'RUN_TERMINAL' });
+    expect(
+      (await store.getOwnedRunContext(claimInput.userId, 'md_definition_001'))?.state.pendingWindow
+    ).toBeNull();
+    expect(
+      await store.claimDispatch({
+        outboxId: 'mdo_run_request_001',
+        ownerDigest: 'd'.repeat(64),
+        now: claimInput.now,
+        expiresAt: claimInput.expiresAt,
+      })
+    ).toEqual({ ok: false, code: 'TERMINAL' });
+    expect(readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, claimInput.runId)).toMatchObject({
+      generationStatus: 'failed',
+      safeFailureCode: 'OBSOLETE_SCHEDULE_WINDOW',
+    });
+  });
+
+  it('preserves live stale generation leases and denies late completed delivery payloads after downtime', async () => {
+    await createDefinition(store);
+    const reservation = reservationInput();
+    reservation.run.trigger = 'scheduled';
+    await store.reserveRun(reservation);
+    const now = '2026-08-02T02:00:00.000Z';
+    const expiresAt = '2026-08-02T02:05:00.000Z';
+    const run = MessageDigestRunDocumentSchema.parse(
+      readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, 'mdr_run_001')
+    );
+    seedRuns(fake, [
+      { ...run, lease: { ownerDigest: 'e'.repeat(64), fence: 1, renewedAt: now, expiresAt } },
+    ]);
+    expect(
+      await store.claimRunLease({
+        userId: run.userId,
+        runId: run.runId,
+        ownerDigest: 'f'.repeat(64),
+        now,
+        expiresAt,
+      })
+    ).toEqual({ ok: false, code: 'LEASE_BUSY' });
+    expect(
+      await store.claimDispatch({
+        outboxId: 'mdo_run_request_001',
+        ownerDigest: 'd'.repeat(64),
+        now,
+        expiresAt,
+      })
+    ).toEqual({ ok: false, code: 'CLAIM_BUSY' });
+    expect(readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, run.runId)['lease']).toEqual(
+      run.lease === null
+        ? { ownerDigest: 'e'.repeat(64), fence: 1, renewedAt: now, expiresAt }
+        : run.lease
+    );
+
+    seedDeliveryAuthorizationContext(fake);
+    const completed = MessageDigestRunDocumentSchema.parse(
+      readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, run.runId)
+    );
+    seedRuns(fake, [{ ...completed, trigger: 'scheduled' }]);
+    fake.seedCollection(MESSAGE_DIGEST_STATES_COLLECTION, [
+      { id: 'md_definition_001', data: makeState() },
+    ]);
+    const input = {
+      userId: run.userId,
+      definitionId: run.definitionId,
+      runId: run.runId,
+      idempotencyKey: completed.delivery.idempotencyKey,
+      payloadDigest: AUTHORIZATION_PAYLOAD_DIGEST,
+      ownerDigest: 'd'.repeat(64),
+      now,
+      expiresAt,
+    };
+    expect(await store.claimDeliveryAuthorization(input)).toEqual({
+      ok: false,
+      code: 'NOT_AUTHORIZED',
+    });
+    expect(readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, run.runId)).toMatchObject({
+      generationStatus: 'completed',
+      delivery: { status: 'failed', failureCode: 'OBSOLETE_SCHEDULE_WINDOW' },
+      deliveryAuthorization: null,
+    });
+    expect(
+      await store.retryFailedDelivery({
+        userId: run.userId,
+        definitionId: run.definitionId,
+        runId: run.runId,
+        retriedAt: now,
+        originalOutboxId: getMessageDigestDeliveryOutboxId(run.runId),
+        outbox: makeDeliveryOutbox({
+          outboxId: 'mdo_retry_old',
+          payloadJson: AUTHORIZATION_PAYLOAD_JSON,
+          payloadDigest: AUTHORIZATION_PAYLOAD_DIGEST,
+        }),
+      })
+    ).toEqual({ ok: false, code: 'RESERVATION_LOST' });
+  });
+
+  it('polls accepted delivery without resending and persists delivered/read monotonically', async () => {
+    seedDeliveryAuthorizationContext(fake);
+    const input = {
+      userId: 'synthetic-user-001',
+      definitionId: 'md_definition_001',
+      runId: 'mdr_run_001',
+      expectedErasureEpoch: 0,
+      observedAt: '2026-07-27T02:00:00.000Z',
+      delivery: { status: 'sent' as const, acceptedAt: '2026-07-27T01:30:00.000Z' },
+    };
+    expect(await store.recordRunDeliveryState(input)).toMatchObject({
+      ok: true,
+      run: {
+        delivery: {
+          status: 'sent',
+          transportConfirmation: { status: 'pending' },
+          nextCheckAt: '2026-07-27T02:01:00.000Z',
+        },
+      },
+    });
+    expect(
+      (await store.listPendingDeliveryRuns({ now: '2026-07-27T02:02:00.000Z', limit: 25 })).items
+    ).toHaveLength(1);
+    expect(
+      await store.recordRunDeliveryObservation({
+        ...input,
+        expectedReconciliationAttempts: 1,
+        nextCheckAt: '2026-07-27T02:03:00.000Z',
+        observation: 'missing',
+      })
+    ).toMatchObject({ ok: true, run: { delivery: { status: 'sent', missingSince: null } } });
+    const delivered = {
+      ...input.delivery,
+      transportConfirmation: {
+        status: 'delivered' as const,
+        deliveredAt: '2026-07-27T02:02:00.000Z',
+      },
+    };
+    expect(
+      await store.recordRunDeliveryState({
+        ...input,
+        observedAt: '2026-07-27T02:02:00.000Z',
+        delivery: delivered,
+      })
+    ).toMatchObject({
+      ok: true,
+      run: {
+        delivery: {
+          status: 'sent',
+          transportConfirmation: delivered.transportConfirmation,
+          nextCheckAt: null,
+        },
+      },
+    });
+    expect(
+      await store.recordRunDeliveryState({ ...input, observedAt: '2026-07-27T02:03:00.000Z' })
+    ).toMatchObject({ ok: true, disposition: 'existing' });
+    const read = {
+      ...delivered,
+      transportConfirmation: {
+        ...delivered.transportConfirmation,
+        status: 'read' as const,
+        readAt: '2026-07-27T02:04:00.000Z',
+      },
+    };
+    expect(
+      await store.recordRunDeliveryState({
+        ...input,
+        observedAt: '2026-07-27T02:04:00.000Z',
+        delivery: read,
+      })
+    ).toMatchObject({
+      ok: true,
+      run: { delivery: { transportConfirmation: read.transportConfirmation } },
+    });
+    expect(await store.recordRunDeliveryState({ ...input, delivery: delivered })).toMatchObject({
+      ok: true,
+      disposition: 'existing',
+    });
+    expect(
+      await store.recordRunDeliveryState({
+        ...input,
+        delivery: { ...read, acceptedAt: '2026-07-27T01:31:00.000Z' },
+      })
+    ).toEqual({ ok: false, code: 'DELIVERY_CONFLICT' });
+  });
+
+  it.each(['delivered', 'read'] as const)(
+    'keeps provider failures observable and heals them to %s without another send',
+    async (status) => {
+      seedDeliveryAuthorizationContext(fake);
+      const acceptedAt = '2026-07-27T01:30:00.000Z';
+      let observedAt = '2026-07-27T02:00:00.000Z';
+      let confirmation: NonNullable<
+        import('../../domain/models/messageDigestRun.js').MessageDigestRun['delivery']['transportConfirmation']
+      > = { status: 'failed', failedAt: observedAt, failureCode: 'PROVIDER_FAILURE' };
+      const getOutboundDeliveryState = vi.fn<
+        MessageDigestWhatsAppClient['getOutboundDeliveryState']
+      >(async () => ({
+        ok: true,
+        value: { status: 'sent', acceptedAt, transportConfirmation: confirmation },
+      }));
+      const input = {
+        userId: 'synthetic-user-001',
+        definitionId: 'md_definition_001',
+        runId: 'mdr_run_001',
+      };
+      const dependencies = {
+        store,
+        whatsappClient: { getOutboundDeliveryState },
+        now: (): string => observedAt,
+      };
+      expect(await reconcileMessageDigestDelivery(input, dependencies)).toMatchObject({
+        ok: true,
+        disposition: 'failed',
+        run: { delivery: { nextCheckAt: '2026-07-27T02:01:00.000Z' } },
+      });
+      expect(
+        (await store.listPendingDeliveryRuns({ now: '2026-07-27T02:02:00.000Z', limit: 25 })).items
+      ).toHaveLength(1);
+      observedAt = '2026-07-27T02:02:00.000Z';
+      confirmation = {
+        status,
+        deliveredAt: observedAt,
+        ...(status === 'read' ? { readAt: observedAt } : {}),
+      };
+      expect(await reconcileMessageDigestDelivery(input, dependencies)).toMatchObject({
+        ok: true,
+        disposition: 'delivered',
+        run: { delivery: { transportConfirmation: confirmation, nextCheckAt: null } },
+      });
+      expect(
+        (await store.listPendingDeliveryRuns({ now: observedAt, limit: 25 })).items
+      ).toHaveLength(0);
+      expect(getOutboundDeliveryState).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it('bounds failed receipt polling at seven days even when confirmation remains failed or unavailable', async () => {
+    seedDeliveryAuthorizationContext(fake);
+    const input = {
+      userId: 'synthetic-user-001',
+      definitionId: 'md_definition_001',
+      runId: 'mdr_run_001',
+      expectedErasureEpoch: 0,
+      observedAt: '2026-08-03T01:29:30.000Z',
+      delivery: {
+        status: 'sent' as const,
+        acceptedAt: '2026-07-27T01:30:00.000Z',
+        transportConfirmation: { status: 'failed' as const, failedAt: '2026-07-27T02:00:00.000Z' },
+      },
+    };
+    expect(await store.recordRunDeliveryState(input)).toMatchObject({
+      ok: true,
+      run: { delivery: { nextCheckAt: '2026-08-03T01:30:00.000Z' } },
+    });
+    expect(
+      await store.recordRunDeliveryObservation({
+        ...input,
+        expectedReconciliationAttempts: 1,
+        nextCheckAt: '2026-08-03T02:30:00.000Z',
+        observation: 'unavailable',
+      })
+    ).toMatchObject({ ok: true, run: { delivery: { nextCheckAt: '2026-08-03T01:30:00.000Z' } } });
+    const getOutboundDeliveryState =
+      vi.fn<MessageDigestWhatsAppClient['getOutboundDeliveryState']>();
+    expect(
+      await reconcileMessageDigestDelivery(input, {
+        store,
+        whatsappClient: { getOutboundDeliveryState },
+        now: () => '2026-08-03T01:30:00.000Z',
+      })
+    ).toMatchObject({ ok: true, disposition: 'failed', run: { delivery: { nextCheckAt: null } } });
+    expect(getOutboundDeliveryState).not.toHaveBeenCalled();
+    expect(
+      (await store.listPendingDeliveryRuns({ now: '2026-08-03T02:30:00.000Z', limit: 25 })).items
+    ).toHaveLength(0);
   });
 
   it('creates definition and state atomically and replays only the same request idempotently', async () => {

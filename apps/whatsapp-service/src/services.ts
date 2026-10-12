@@ -1,3 +1,6 @@
+import { createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
+import type { NotificationDeliveryRepository } from './domain/whatsapp/ports/notificationDeliveryRepository.js';
+import { createNotificationDeliveryRepository } from './infra/firestore/notificationDeliveryRepository.js';
 /**
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
@@ -168,10 +171,13 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
  * Uses domain interface types for proper type inference.
  */
 export interface ServiceContainer {
+  jobHeartbeatStore?: JobHeartbeatStore;
   webhookEventRepository: WhatsAppWebhookEventRepository;
   userMappingRepository: WhatsAppUserMappingRepository;
   messageRepository: WhatsAppMessageRepository;
   outboundMessageRepository: OutboundMessageRepository;
+  notificationDeliveryRepository?: NotificationDeliveryRepository;
+  outboundPhoneNumberId?: string;
   phoneVerificationRepository: PhoneVerificationRepository;
   notificationPreferencesRepository: NotificationPreferencesRepository;
   messageDigestDeliveryAuthorizationClient?: MessageDigestDeliveryAuthorizationClient;
@@ -251,10 +257,13 @@ export function getServices(): ServiceContainer {
     });
   const eventPublisher = new GcpPubSubPublisher(buildPubSubConfig(serviceConfig));
   const ordinaryContainer: ServiceContainer = {
+    jobHeartbeatStore: createJobHeartbeatStore({ collectionName: 'whatsapp_job_heartbeats' }),
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
     outboundMessageRepository: createOutboundMessageRepository(),
+    notificationDeliveryRepository: createNotificationDeliveryRepository(),
+    outboundPhoneNumberId: serviceConfig.whatsappPhoneNumberId,
     phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
     messageDigestDeliveryAuthorizationClient: createMessageDigestDeliveryAuthorizationClient({

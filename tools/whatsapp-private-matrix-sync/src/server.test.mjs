@@ -29,6 +29,7 @@ import {
   prepareEventsForIngest,
   privateMediaUploadFailureCode,
   runSyncIteration,
+  uploadPrivateMedia,
   validateGoogleCredentialIdentity,
   validateIngestResponse,
 } from './server.mjs';
@@ -1758,6 +1759,78 @@ test('pending media retry skips deterministic messages whose media is already st
   assert.deepEqual(JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8')).items, []);
 });
 
+test('private media upload normalizes unsupported transport MIME while retaining declared metadata and bytes', async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wa-upload-contract-'));
+  try {
+    for (const mimeType of [
+      'model/stl',
+      'application/zip',
+      'text/plain',
+      'image/jpeg',
+      'audio/ogg',
+      'video/mp4',
+      'application/octet-stream',
+      'application/pdf',
+    ]) {
+      const media = {
+        mxcUri: 'mxc://fixture/file',
+        mimeType,
+        fileName: 'original-file.stl',
+        sizeBytes: 113884,
+      };
+      const original = structuredClone(media);
+      const buffer = Buffer.from('unaltered fixture bytes');
+      const supported =
+        /^(?:image|audio|video)\//u.test(mimeType) ||
+        mimeType === 'application/octet-stream' ||
+        mimeType === 'application/pdf';
+      const transportMime = supported ? mimeType : 'application/octet-stream';
+      const result = await uploadPrivateMedia(
+        {
+          ...config,
+          googleApplicationCredentialsFile: path.join(directory, 'absent-fixture-credential.json'),
+        },
+        { matrixEventId: '$file' },
+        media,
+        { buffer, contentType: mimeType },
+        {
+          createAuthorizationHeader: async () => 'Bearer fixture-only',
+          fetch: async (input, init) => {
+            const url = new URL(String(input));
+            assert.equal(url.searchParams.get('mimeType'), transportMime);
+            assert.equal(url.searchParams.get('fileName'), media.fileName);
+            assert.equal(url.searchParams.get('sourceAccountId'), config.sourceAccountId);
+            assert.equal(url.searchParams.get('matrixEventId'), '$file');
+            assert.equal(init.headers['content-type'], 'application/octet-stream');
+            assert.equal(init.body, buffer);
+            return new Response(
+              JSON.stringify({
+                success: true,
+                data: {
+                  media: {
+                    mimeType: transportMime,
+                    storedMimeType: transportMime,
+                    fileName: media.fileName,
+                    gcsPath: 'fixture/file',
+                    storageStatus: 'stored',
+                  },
+                },
+              }),
+              { status: 200 }
+            );
+          },
+        }
+      );
+      assert.equal(result.mimeType, mimeType);
+      assert.equal(result.storedMimeType, transportMime);
+      assert.equal(result.fileName, media.fileName);
+      assert.deepEqual(media, original);
+    }
+  } finally {
+    await fsp.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('pending media retry safely skips only unsupported PDFs and oversized Matrix media', async () => {
   const stateFile = await createTempStateFile({ nextBatch: 's0' });
   const pendingMediaFile = path.join(path.dirname(stateFile), 'pending-media.json');
@@ -2401,6 +2474,7 @@ test('buildIngestPayload omits empty legacy user id', () => {
 });
 
 test('buildHealthPayload reports credential readiness without exposing secrets', () => {
+  const completedAt = new Date().toISOString();
   assert.equal(
     buildHealthPayload(config, {
       hasMatrixAccessToken: false,
@@ -2427,6 +2501,7 @@ test('buildHealthPayload reports credential readiness without exposing secrets',
       hasOidcCredentials: true,
       runtimeState: 'running',
       counters: { postedEvents: 3 },
+      lastSuccessfulIterationAt: completedAt,
     }),
     {
       ok: true,
@@ -2436,6 +2511,7 @@ test('buildHealthPayload reports credential readiness without exposing secrets',
       ingestUrl: 'https://intexuraos.cloud/internal/whatsapp/private/events',
       sourceAccountId: 'pbuchman-private-whatsapp',
       counters: { postedEvents: 3 },
+      lastSuccessfulIterationAt: completedAt,
     }
   );
 });
@@ -2643,6 +2719,7 @@ test('health returns its exact 200 schema with the authorized bearer', async () 
   });
   harness.runtime.state = 'running';
   harness.runtime.counters = { postedEvents: 3 };
+  harness.runtime.lastSuccessfulIterationAt = new Date().toISOString();
 
   try {
     const response = await harness.request('/health', {
@@ -2658,6 +2735,7 @@ test('health returns its exact 200 schema with the authorized bearer', async () 
       ingestUrl: 'https://intexuraos.cloud/internal/whatsapp/private/events',
       sourceAccountId: 'pbuchman-private-whatsapp',
       counters: { postedEvents: 3 },
+      lastSuccessfulIterationAt: harness.runtime.lastSuccessfulIterationAt,
     });
   } finally {
     await harness.close();

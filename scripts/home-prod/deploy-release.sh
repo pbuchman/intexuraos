@@ -165,11 +165,24 @@ install_and_build() {
 
 validate_runtime_candidate() {
   local rendered="${CANDIDATE_OUTPUT}/pm2-ecosystem.json"
+  PROD_PROFILE="$(node - "${CANDIDATE_OUTPUT}/.env.prod" <<'NODE'
+const fs = require('node:fs');
+const { parse } = require('dotenv');
+const profile = parse(fs.readFileSync(process.argv[2], 'utf8')).INTEXURAOS_PROD_PROFILE;
+if (profile !== 'basic' && profile !== 'full') {
+  process.stderr.write('Pinned production profile must be full or basic\n');
+  process.exit(1);
+}
+process.stdout.write(profile);
+NODE
+  )" || fail 'Invalid pinned production profile'
+  printf '%s\n' "${PROD_PROFILE}" > "${STAGING_RELEASE}/.intexuraos-prod-profile"
+  chmod 600 "${STAGING_RELEASE}/.intexuraos-prod-profile"
   INTEXURAOS_COMMIT_SHA="${TARGET_SHA}" \
     INTEXURAOS_ENVIRONMENT=prod \
     INTEXURAOS_PROD_ENV_FILE="${CANDIDATE_OUTPUT}/.env.prod" \
     INTEXURAOS_PROD_PORT_OFFSET=10000 \
-    INTEXURAOS_PROD_PROFILE=basic \
+    INTEXURAOS_PROD_PROFILE="${PROD_PROFILE}" \
     HOME="${DEPLOY_HOME}" \
     node - "${STAGING_RELEASE}/ecosystem.config.prod.cjs" > "${rendered}" <<'NODE'
 const path = require('node:path');
@@ -194,6 +207,7 @@ const expectedNames = [
   'web-agent',
   'api-docs-hub',
 ];
+if (process.env.INTEXURAOS_PROD_PROFILE === 'full') expectedNames.push('research-agent', 'message-digest-service');
 const names = new Set();
 const ports = new Set();
 for (const app of config.apps) {
@@ -212,10 +226,10 @@ for (const app of config.apps) {
   ports.add(port);
 }
 if (names.size !== expectedNames.length || expectedNames.some((name) => !names.has(name))) {
-  process.stderr.write('PM2 candidate does not contain the exact Home PROD basic service set\n');
+  process.stderr.write(`PM2 candidate does not contain the exact Home PROD ${process.env.INTEXURAOS_PROD_PROFILE} service set\n`);
   process.exit(1);
 }
-if (names.has('research-agent') || names.has('message-digest-service')) process.exit(1);
+if (process.env.INTEXURAOS_PROD_PROFILE === 'basic' && (names.has('research-agent') || names.has('message-digest-service'))) process.exit(1);
 process.stdout.write(JSON.stringify(config, null, 2));
 NODE
   chmod 600 "${rendered}"
@@ -243,7 +257,7 @@ stage_web_candidate() {
     bash "${STAGING_RELEASE}/scripts/home-prod/deploy-web.sh" \
       --repo-dir "${STAGING_RELEASE}" \
       --env-file "${CANDIDATE_OUTPUT}/.env.prod" \
-      --public-deployment-profile basic \
+      --public-deployment-profile "${PROD_PROFILE}" \
       --web-root "${TEMP_WEB_RELEASE}" >/dev/null
   [[ -f "${TEMP_WEB_RELEASE}/index.html" ]] || fail 'Candidate web release is incomplete'
   if [[ "${WEB_RELEASE_EXISTS}" == '1' ]]; then
@@ -352,7 +366,7 @@ publish_staged_release() {
       INTEXURAOS_ENVIRONMENT=prod \
       INTEXURAOS_PROD_ENV_FILE="${PROD_ENV_FILE}" \
       INTEXURAOS_PROD_PORT_OFFSET=10000 \
-      INTEXURAOS_PROD_PROFILE=basic \
+      INTEXURAOS_PROD_PROFILE="${PROD_PROFILE}" \
       PM2_HOME="${EXPECTED_PM2_HOME}" \
       bash scripts/home-prod/reload-pm2.sh \
         --config ecosystem.config.prod.cjs \
