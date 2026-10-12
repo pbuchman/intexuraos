@@ -42,6 +42,16 @@ describe('Message Digest Firestore document codecs', () => {
     ]);
 
     expect(MessageDigestDefinitionDocumentSchema.safeParse(definition()).success).toBe(true);
+    expect(
+      MessageDigestDefinitionDocumentSchema.parse({
+        ...definition(),
+        resumeCutoff: '2026-10-12T12:00:00.000Z',
+      }).resumeCutoff
+    ).toBe('2026-10-12T12:00:00.000Z');
+    expect(
+      MessageDigestDefinitionDocumentSchema.safeParse({ ...definition(), resumeCutoff: 'invalid' })
+        .success
+    ).toBe(false);
     expect(MessageDigestStateDocumentSchema.safeParse(state()).success).toBe(true);
     expect(MessageDigestRunDocumentSchema.safeParse(run()).success).toBe(true);
     expect(MessageDigestDispatchOutboxDocumentSchema.safeParse(outbox()).success).toBe(true);
@@ -97,7 +107,13 @@ describe('Message Digest Firestore document codecs', () => {
     expect(authorized.success).toBe(true);
 
     for (const deliveryAuthorization of [
-      { ownerDigest: 'private-owner', fence: 1, expiresAt: 'invalid', renewedAt: 'invalid', releasedAt: null },
+      {
+        ownerDigest: 'private-owner',
+        fence: 1,
+        expiresAt: 'invalid',
+        renewedAt: 'invalid',
+        releasedAt: null,
+      },
       {
         ownerDigest: 'd'.repeat(64),
         fence: 0,
@@ -204,7 +220,9 @@ describe('Message Digest Firestore document codecs', () => {
       { candidateHash: null },
       { sourceWatermarkHash: null },
       { sourceCandidateHash: null },
-      { delivery: { ...run().delivery, status: 'pending', nextCheckAt: '2026-07-27T01:01:00.000Z' } },
+      {
+        delivery: { ...run().delivery, status: 'pending', nextCheckAt: '2026-07-27T01:01:00.000Z' },
+      },
     ]) {
       expect(MessageDigestRunDocumentSchema.safeParse({ ...base, ...patch }).success).toBe(false);
     }
@@ -578,9 +596,9 @@ describe('Message Digest cursor codec', () => {
     expect(codec.read('not-a-cursor', { kind: 'runs', queryFingerprint: 'runs-v1' }).ok).toBe(
       false
     );
-    expect(codec.read('mdc2.payload.signature', { kind: 'runs', queryFingerprint: 'runs-v1' }).ok).toBe(
-      false
-    );
+    expect(
+      codec.read('mdc2.payload.signature', { kind: 'runs', queryFingerprint: 'runs-v1' }).ok
+    ).toBe(false);
     const [prefix, payload, signature] = issued.split('.');
     if (prefix === undefined || payload === undefined || signature === undefined) {
       throw new Error('Expected cursor parts');
@@ -598,9 +616,9 @@ describe('Message Digest cursor codec', () => {
     expect(() => createMessageDigestCursorCodec({ secret: '' })).toThrow(
       'Invalid Message Digest cursor configuration'
     );
-    expect(() =>
-      createMessageDigestCursorCodec({ secret: 'secret', ttlMs: 1.5 })
-    ).toThrow('Invalid Message Digest cursor configuration');
+    expect(() => createMessageDigestCursorCodec({ secret: 'secret', ttlMs: 1.5 })).toThrow(
+      'Invalid Message Digest cursor configuration'
+    );
     expect(() => createMessageDigestCursorCodec({ secret: 'secret', ttlMs: 0 })).toThrow(
       'Invalid Message Digest cursor configuration'
     );

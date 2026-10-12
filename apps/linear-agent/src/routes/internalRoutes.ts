@@ -69,6 +69,15 @@ interface ProcessActionBody {
 }
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.get('/internal/monitoring/status', {
+    schema: { operationId: 'getMonitoringStatus', tags: ['internal'], description: 'Aggregate scheduled job execution state' },
+  }, async (request, reply) => {
+    logIncomingRequest(request, { message: 'Received scheduler monitoring request', bodyPreviewLength: 0 });
+    if (!validateInternalAuth(request).valid) return await reply.status(401).fail('UNAUTHORIZED', 'Unauthorized');
+    return await reply.ok({ schemaVersion: 1, observedAt: new Date().toISOString(),
+      jobs: await getServices().jobHeartbeatStore.list(['linear_sync_hourly', 'linear_issues_prune_hourly']) });
+  });
+
   fastify.post<{ Body: ProcessActionBody }>(
     '/internal/linear/process-action',
     {
@@ -498,6 +507,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!isAuthed) return;
 
       const services = getServices();
+      const token = await services.jobHeartbeatStore.start('linear_sync_hourly');
+      let outcome: 'succeeded' | 'failed' = 'failed';
+      try {
 
       request.log.info('internal/fullSyncAll: starting sync for all users');
 
@@ -522,7 +534,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/fullSyncAll: sync completed'
       );
 
+      outcome = 'succeeded';
       return await reply.ok(result.value);
+      } finally {
+        await services.jobHeartbeatStore.finish(token, outcome);
+      }
     }
   );
 
@@ -706,6 +722,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!isAuthed) return;
 
       const services = getServices();
+      const token = await services.jobHeartbeatStore.start('linear_issues_prune_hourly');
+      let outcome: 'succeeded' | 'failed' = 'failed';
+      try {
 
       request.log.info('internal/pruneIssues: starting issue pruning');
 
@@ -717,6 +736,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (userIdsResult.value.length === 0) {
         request.log.info('internal/pruneIssues: no connected users, skipping');
+        outcome = 'succeeded';
         return await reply.ok({
           skipped: true,
           skipReason: 'No connected users',
@@ -776,7 +796,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/pruneIssues: pruning completed'
       );
 
+      outcome = 'succeeded';
       return await reply.ok(result.value);
+      } finally {
+        await services.jobHeartbeatStore.finish(token, outcome);
+      }
     }
   );
 

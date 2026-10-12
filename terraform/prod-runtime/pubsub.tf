@@ -180,7 +180,7 @@ resource "google_pubsub_subscription" "hetzner_push" {
   message_retention_duration = "604800s"
 
   dynamic "push_config" {
-    for_each = each.value.delivery_mode == "push" ? [each.value] : []
+    for_each = each.value.delivery_mode == "push" || contains(var.production_pubsub_push_enabled_subscription_keys, each.key) ? [each.value] : []
     content {
       push_endpoint = "${var.hetzner_origin}${push_config.value.push_path}"
 

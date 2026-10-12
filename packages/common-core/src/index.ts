@@ -54,3 +54,9 @@ export * from './tracing/index.js';
 
 // Redaction helpers for logging
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+
+export type {
+  JobExecutionRecord,
+  NotificationMonitoringSummary,
+  MonitoringStatus,
+} from './monitoring.js';

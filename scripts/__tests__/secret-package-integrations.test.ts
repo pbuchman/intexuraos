@@ -87,7 +87,7 @@ describe('final secret-package integrations', () => {
       'INTEXURAOS_SPEECHMATICS_APP_API_KEY',
     ]);
     expect(manifest.packages.dev?.envNames).toHaveLength(22);
-    expect(manifest.packages.prod?.envNames).toHaveLength(21);
+    expect(manifest.packages.prod?.envNames).toHaveLength(22);
     expect(manifest.packages.prod?.envNames).toContain(
       'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'
     );

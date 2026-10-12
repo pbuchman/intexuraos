@@ -40,9 +40,11 @@ function makeDevSecretPackagePayload(): {
   const env = Object.fromEntries(
     manifest.packages.dev.envNames.map((name) => [
       name,
-      name === 'INTEXURAOS_FIREBASE_API_KEY'
-        ? `AIza${'d'.repeat(35)}`
-        : `package-value-for-${name}`,
+      name === 'INTEXURAOS_PROD_PROFILE'
+        ? 'basic'
+        : name === 'INTEXURAOS_FIREBASE_API_KEY'
+          ? `AIza${'d'.repeat(35)}`
+          : `package-value-for-${name}`,
     ])
   );
   return {
@@ -87,9 +89,11 @@ function makeProdSecretPackagePayload(overrides: Record<string, string> = {}): {
   const env = Object.fromEntries(
     manifest.packages.prod.envNames.map((name) => [
       name,
-      name === 'INTEXURAOS_FIREBASE_API_KEY'
-        ? `AIza${'p'.repeat(35)}`
-        : `package-value-for-${name}`,
+      name === 'INTEXURAOS_PROD_PROFILE'
+        ? 'basic'
+        : name === 'INTEXURAOS_FIREBASE_API_KEY'
+          ? `AIza${'p'.repeat(35)}`
+          : `package-value-for-${name}`,
     ])
   );
   Object.assign(env, overrides);

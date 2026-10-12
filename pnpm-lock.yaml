@@ -6,12 +6,21 @@ settings:
 
 catalogs:
   default:
+    '@google-cloud/firestore':
+      specifier: ^7.10.0
+      version: 7.11.6
     fastify:
       specifier: ^5.6.2
       version: 5.6.2
+    openai:
+      specifier: ^6.15.0
+      version: 6.16.0
     pino:
       specifier: ^10.1.1
       version: 10.1.1
+    zod:
+      specifier: ^3.24.1
+      version: 3.25.76
 
 importers:
   .:
@@ -44,6 +53,9 @@ importers:
       '@intexuraos/common-http':
         specifier: workspace:*
         version: link:packages/common-http
+      '@intexuraos/http-contracts':
+        specifier: workspace:*
+        version: link:packages/http-contracts
       '@intexuraos/infra-firestore':
         specifier: workspace:*
         version: link:packages/infra-firestore
@@ -53,6 +65,9 @@ importers:
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:packages/llm-contract
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:packages/llm-utils
       '@notionhq/client':
         specifier: ^5.6.0
         version: 5.6.0
@@ -1887,6 +1902,9 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
+      '@intexuraos/http-contracts':
+        specifier: workspace:*
+        version: link:../http-contracts
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../infra-pubsub

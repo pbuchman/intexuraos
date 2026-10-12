@@ -1,3 +1,4 @@
+import {createJobHeartbeatStore,createFakeFirestore,type Firestore} from '@intexuraos/infra-firestore';
 /**
  * Test fakes for linear-agent.
  */
@@ -1118,4 +1119,8 @@ export class FakePruneCandidateRepository implements PruneCandidateRepository {
   getCandidates(): StoredPruneCandidate[] {
     return [...this.candidates];
   }
+}
+
+export function createFakeJobHeartbeatStore(): import('@intexuraos/infra-firestore').JobHeartbeatStore {
+  return createJobHeartbeatStore({collectionName:'linear_job_heartbeats',firestore:createFakeFirestore() as unknown as Firestore});
 }

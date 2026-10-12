@@ -1,0 +1,28 @@
+# Final selection template only: NOT automatically loaded, NOT an apply instruction.
+# Copy to a private variable file and trim keys for each reviewed activation stage.
+# First prove full-profile runtime, resume-policy safety, retained backlog handling
+# and executable monitor readiness. Preserve the existing seven push consumers.
+production_scheduler_jobs_enabled = true
+production_scheduler_enabled_job_keys = [
+  "message_digest_tick",
+  "linear_sync_hourly",
+  "linear_issues_prune_hourly",
+  "retry_pending_whatsapp_webhooks",
+  "calendar_schedule_tick",
+  "drain_task_queue",
+  "merge_conflict_reconcile",
+  "merge_queue_tick",
+  "code_tasks_zombie_sweep",
+  "archive_stale_groups",
+  "auto_archive_merged_tasks",
+  "execution_memory_process",
+  "execution_memory_sweep_errored",
+  "execution_memory_prune_stale",
+]
+production_pubsub_push_enabled_subscription_keys = [
+  "message_digest_runs",
+  "research_process",
+  "llm_analytics",
+  "llm_call",
+  "pr_triage",
+]

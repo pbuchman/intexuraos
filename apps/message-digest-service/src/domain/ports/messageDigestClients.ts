@@ -3,6 +3,7 @@ import type {
   MessageDigestPreviousSummary,
   MessageDigestSourceMessage,
 } from '@intexuraos/llm-prompts';
+import type { TransportConfirmation } from '@intexuraos/http-contracts';
 
 export interface ValidatedMessageDigestSource {
   sourceAccountId: string;
@@ -25,7 +26,7 @@ export interface MessageDigestDeliveryReadiness {
 
 export type MessageDigestOutboundDeliveryState =
   | { status: 'pending' | 'missing' }
-  | { status: 'sent'; acceptedAt: string }
+  | { status: 'sent'; acceptedAt: string; transportConfirmation?: TransportConfirmation }
   | { status: 'ambiguous'; acceptedAt?: string | undefined }
   | { status: 'failed'; failedAt: string; failureCode: string };
 

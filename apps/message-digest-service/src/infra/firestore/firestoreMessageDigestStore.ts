@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { FieldPath, type Firestore } from '@intexuraos/infra-firestore';
 import { getMessageDigestDeliveryOutboxId } from '../../domain/messageDigestIds.js';
+import { boundFailedConfirmationCheck } from '../../domain/messageDigestReceiptObservation.js';
+import { getMessageDigestBoundaryAtOrBefore } from '../../domain/schedules/messageDigestSchedule.js';
 import type {
   DefinitionUpdatePatch,
   MessageDigestCompletionOutput,
@@ -37,6 +39,7 @@ interface StoreConfig {
   firestore: Firestore;
   cursorCodec: MessageDigestCursorCodec;
 }
+type StoreTransaction = Parameters<Parameters<Firestore['runTransaction']>[0]>[0];
 
 export class FirestoreMessageDigestStore implements MessageDigestStore {
   private readonly legacyArchive: FirestoreLegacyDigestArchive;
@@ -346,7 +349,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       .where('recordRole', '==', 'canonical')
       .where('visibilityMigrationId', '==', null)
       .where('generationStatus', '==', 'completed')
-      .where('delivery.status', '==', 'pending')
+      .where('delivery.status', 'in', ['pending', 'sent'])
       .where('delivery.nextCheckAt', '<=', input.now)
       .orderBy('delivery.nextCheckAt', 'asc')
       .orderBy(FieldPath.documentId(), 'asc');
@@ -415,6 +418,22 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       }
       if (definition.revision !== input.expectedRevision) {
         return { ok: false as const, code: 'REVISION_CONFLICT' as const };
+      }
+      if (input.patch.skipObsoleteWindows !== undefined) {
+        const skipped = input.patch.skipObsoleteWindows;
+        if (state.revision !== skipped.expectedStateRevision)
+          return { ok: false as const, code: 'REVISION_CONFLICT' as const };
+        if (
+          definition.status !== 'active' ||
+          state.pendingWindow !== null ||
+          skipped.windowStart !== state.checkpointAt ||
+          skipped.windowEnd !== input.patch.resetCheckpointAt ||
+          skipped.windowEnd < skipped.windowStart ||
+          input.patch.nextRunAt === undefined ||
+          input.patch.nextRunAt <= skipped.windowEnd
+        ) {
+          return { ok: false as const, code: 'RUN_IN_PROGRESS' as const };
+        }
       }
       if (definition.status === 'deleting') {
         return { ok: false as const, code: 'INVALID_TRANSITION' as const };
@@ -503,7 +522,31 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         updatedAt: input.updatedAt,
       });
       transaction.set(definitionRef, nextDefinition);
-      if (input.patch.source !== undefined && input.patch.resetCheckpointAt !== undefined) {
+      if (input.patch.skipObsoleteWindows !== undefined) {
+        const skipped = input.patch.skipObsoleteWindows;
+        transaction.set(
+          stateRef,
+          MessageDigestStateDocumentSchema.parse({
+            ...state,
+            revision: state.revision + 1,
+            checkpointAt: skipped.windowEnd,
+            updatedAt: input.updatedAt,
+          })
+        );
+        transaction.set(
+          this.config.firestore
+            .collection('message_digest_skipped_windows')
+            .doc(digestJson({ definitionId: definition.definitionId, ...skipped })),
+          {
+            schemaVersion: 1,
+            definitionId: definition.definitionId,
+            windowStart: skipped.windowStart,
+            windowEnd: skipped.windowEnd,
+            reason: 'OBSOLETE_SCHEDULE_WINDOWS',
+            recordedAt: input.updatedAt,
+          }
+        );
+      } else if (input.patch.source !== undefined && input.patch.resetCheckpointAt !== undefined) {
         const nextState = MessageDigestStateDocumentSchema.parse({
           ...state,
           revision: state.revision + 1,
@@ -684,9 +727,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       }
       const definition = parseDefinition(definitionSnapshot.data());
       const state = parseState(stateSnapshot.data());
-      if (
-        !hasCurrentRunReservation(definition, state, run, input.userId)
-      ) {
+      if (!hasCurrentRunReservation(definition, state, run, input.userId)) {
         return { ok: false as const, code: 'RESERVATION_LOST' as const };
       }
       if (run.lease !== null && Date.parse(run.lease.expiresAt) > Date.parse(input.now)) {
@@ -699,6 +740,10 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
           fence: run.lease.fence,
           run,
         };
+      }
+      if (isObsoleteScheduledRun(run, input.now)) {
+        this.retireObsoleteRun(transaction, definition, state, run, input.now);
+        return { ok: false as const, code: 'RUN_TERMINAL' as const };
       }
       const fence = (run.lease?.fence ?? 0) + 1;
       const nextRun = MessageDigestRunDocumentSchema.parse({
@@ -757,9 +802,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       }
       const definition = parseDefinition(definitionSnapshot.data());
       const state = parseState(stateSnapshot.data());
-      if (
-        !hasCurrentRunReservation(definition, state, run, input.userId)
-      ) {
+      if (!hasCurrentRunReservation(definition, state, run, input.userId)) {
         return { ok: false as const, code: 'RESERVATION_LOST' as const };
       }
       if (!ownsLease(run, input) || Date.parse(run.lease.expiresAt) <= Date.parse(input.now)) {
@@ -961,9 +1004,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     failedAt: string;
     safeFailureCode: string;
     pauseDefinition: boolean;
-  }): Promise<
-    { ok: true } | { ok: false; code: 'NOT_FOUND' | 'LEASE_LOST' | 'RESERVATION_LOST' }
-  > {
+  }): Promise<{ ok: true } | { ok: false; code: 'NOT_FOUND' | 'LEASE_LOST' | 'RESERVATION_LOST' }> {
     assertTimestamp(input.failedAt);
     const runRef = this.config.firestore
       .collection(MESSAGE_DIGEST_RUNS_COLLECTION)
@@ -1072,7 +1113,9 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     const stateRef = this.config.firestore
       .collection(MESSAGE_DIGEST_STATES_COLLECTION)
       .doc(input.definitionId);
-    const runRef = this.config.firestore.collection(MESSAGE_DIGEST_RUNS_COLLECTION).doc(input.runId);
+    const runRef = this.config.firestore
+      .collection(MESSAGE_DIGEST_RUNS_COLLECTION)
+      .doc(input.runId);
     const outboxRef = this.config.firestore
       .collection(MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION)
       .doc(outbox.outboxId);
@@ -1172,7 +1215,9 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     const definitionRef = this.config.firestore
       .collection(MESSAGE_DIGEST_DEFINITIONS_COLLECTION)
       .doc(input.definitionId);
-    const runRef = this.config.firestore.collection(MESSAGE_DIGEST_RUNS_COLLECTION).doc(input.runId);
+    const runRef = this.config.firestore
+      .collection(MESSAGE_DIGEST_RUNS_COLLECTION)
+      .doc(input.runId);
     const originalOutboxRef = this.config.firestore
       .collection(MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION)
       .doc(input.originalOutboxId);
@@ -1202,6 +1247,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       ) {
         return { ok: false as const, code: 'NOT_FOUND' as const };
       }
+      if (isRetiredRun(run)) return { ok: false as const, code: 'RESERVATION_LOST' as const };
       if (retrySnapshot.exists) {
         const existingOutbox = parseOutbox(retrySnapshot.data());
         return sameFrozenDispatch(existingOutbox, outbox)
@@ -1252,7 +1298,11 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     expectedErasureEpoch: number;
     observedAt: string;
     delivery:
-      | { status: 'sent'; acceptedAt: string }
+      | {
+          status: 'sent';
+          acceptedAt: string;
+          transportConfirmation?: import('@intexuraos/http-contracts').TransportConfirmation;
+        }
       | { status: 'ambiguous'; acceptedAt?: string | undefined }
       | { status: 'failed'; failedAt: string; failureCode: string };
   }): Promise<
@@ -1305,22 +1355,59 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       if (run.generationStatus !== 'completed') {
         return { ok: false as const, code: 'DELIVERY_CONFLICT' as const };
       }
-      if (run.delivery.status !== 'pending') {
+      if (
+        run.delivery.status !== 'pending' &&
+        !(run.delivery.status === 'sent' && input.delivery.status === 'sent')
+      ) {
+        if (input.delivery.status === 'sent')
+          return { ok: false as const, code: 'DELIVERY_CONFLICT' as const };
         return deliveryObservationMatches(run, input.delivery)
           ? { ok: true as const, disposition: 'existing' as const, run }
           : { ok: false as const, code: 'DELIVERY_CONFLICT' as const };
       }
 
+      if (run.delivery.status === 'sent' && input.delivery.status === 'sent') {
+        if (run.delivery.acceptedAt !== input.delivery.acceptedAt)
+          return { ok: false as const, code: 'DELIVERY_CONFLICT' as const };
+        const current = run.delivery.transportConfirmation?.status;
+        const incoming = input.delivery.transportConfirmation?.status;
+        if (current === 'read' || (current === 'delivered' && incoming !== 'read'))
+          return { ok: true as const, disposition: 'existing' as const, run };
+        if (run.updatedAt === input.observedAt && (incoming ?? 'pending') === current)
+          return { ok: true as const, disposition: 'existing' as const, run };
+      }
+
+      const confirmation =
+        input.delivery.status === 'sent'
+          ? run.delivery.transportConfirmation?.status === 'failed' &&
+            input.delivery.transportConfirmation?.status !== 'delivered' &&
+            input.delivery.transportConfirmation?.status !== 'read'
+            ? run.delivery.transportConfirmation
+            : (input.delivery.transportConfirmation ?? { status: 'pending' as const })
+          : undefined;
       const delivery =
         input.delivery.status === 'sent'
           ? {
               ...run.delivery,
               status: 'sent' as const,
               acceptedAt: input.delivery.acceptedAt,
+              transportConfirmation: confirmation,
               failedAt: null,
               failureCode: null,
               reconciliationAttempts: run.delivery.reconciliationAttempts + 1,
-              nextCheckAt: null,
+              nextCheckAt:
+                confirmation?.status === 'delivered' || confirmation?.status === 'read'
+                  ? null
+                  : boundFailedConfirmationCheck(
+                      {
+                        ...run.delivery,
+                        status: 'sent',
+                        acceptedAt: input.delivery.acceptedAt,
+                        transportConfirmation: confirmation,
+                      },
+                      input.observedAt,
+                      new Date(Date.parse(input.observedAt) + 60_000).toISOString()
+                    ),
               missingSince: null,
             }
           : input.delivery.status === 'ambiguous'
@@ -1413,7 +1500,9 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       }
       if (
         run.generationStatus !== 'completed' ||
-        run.delivery.status !== 'pending' ||
+        (run.delivery.status !== 'pending' && run.delivery.status !== 'sent') ||
+        run.delivery.transportConfirmation?.status === 'delivered' ||
+        run.delivery.transportConfirmation?.status === 'read' ||
         run.delivery.reconciliationAttempts !== input.expectedReconciliationAttempts
       ) {
         return { ok: false as const, code: 'DELIVERY_CONFLICT' as const };
@@ -1424,13 +1513,19 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         delivery: {
           ...run.delivery,
           reconciliationAttempts: run.delivery.reconciliationAttempts + 1,
-          nextCheckAt: input.nextCheckAt,
+          nextCheckAt: boundFailedConfirmationCheck(
+            run.delivery,
+            input.observedAt,
+            input.nextCheckAt
+          ),
           missingSince:
-            input.observation === 'missing'
-              ? (run.delivery.missingSince ?? input.observedAt)
-              : input.observation === 'pending'
-                ? null
-                : run.delivery.missingSince,
+            run.delivery.status === 'sent'
+              ? null
+              : input.observation === 'missing'
+                ? (run.delivery.missingSince ?? input.observedAt)
+                : input.observation === 'pending'
+                  ? null
+                  : run.delivery.missingSince,
         },
         updatedAt: input.observedAt,
       });
@@ -1487,9 +1582,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     if (input.deliveryStatus !== undefined) {
       query = query.where('delivery.status', '==', input.deliveryStatus);
     }
-    query = query
-      .orderBy('windowStart', direction)
-      .orderBy(FieldPath.documentId(), direction);
+    query = query.orderBy('windowStart', direction).orderBy(FieldPath.documentId(), direction);
     if (input.cursor !== undefined) {
       const cursor = this.config.cursorCodec.read(input.cursor, {
         kind: 'runs',
@@ -1553,9 +1646,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     if (input.scheduledBoundaryBefore !== undefined) {
       query = query.where('scheduledBoundary', '<', input.scheduledBoundaryBefore);
     }
-    query = query
-      .orderBy('scheduledBoundary', 'desc')
-      .orderBy(FieldPath.documentId(), 'desc');
+    query = query.orderBy('scheduledBoundary', 'desc').orderBy(FieldPath.documentId(), 'desc');
     if (input.cursor !== undefined) {
       const cursor = this.config.cursorCodec.read(input.cursor, {
         kind: 'legacy_runs',
@@ -1639,6 +1730,53 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       ) {
         return { ok: false as const, code: 'RESERVATION_LOST' as const };
       }
+      const runSnapshot = await transaction.get(
+        this.config.firestore.collection(MESSAGE_DIGEST_RUNS_COLLECTION).doc(dispatch.runId)
+      );
+      if (runSnapshot.exists) {
+        const run = parseRun(runSnapshot.data());
+        if (run.userId !== dispatch.userId || run.definitionId !== dispatch.definitionId)
+          return { ok: false as const, code: 'RESERVATION_LOST' as const };
+        const retired = isRetiredRun(run);
+        if (retired || isObsoleteScheduledRun(run, input.now)) {
+          if (
+            (run.lease !== null && run.lease.expiresAt > input.now) ||
+            (run.deliveryAuthorization !== null &&
+              run.deliveryAuthorization.releasedAt === null &&
+              run.deliveryAuthorization.expiresAt > input.now) ||
+            (dispatch.claim !== null && dispatch.claim.expiresAt > input.now)
+          )
+            return { ok: false as const, code: 'CLAIM_BUSY' as const };
+          if (definition.status !== 'active')
+            return { ok: false as const, code: 'RESERVATION_LOST' as const };
+          const stateSnapshot = await transaction.get(
+            this.config.firestore.collection(MESSAGE_DIGEST_STATES_COLLECTION).doc(run.definitionId)
+          );
+          if (!retired && stateSnapshot.exists)
+            this.retireObsoleteRun(
+              transaction,
+              definition,
+              parseState(stateSnapshot.data()),
+              run,
+              input.now
+            );
+          transaction.set(
+            ref,
+            MessageDigestDispatchOutboxDocumentSchema.parse({
+              ...dispatch,
+              status: 'terminal',
+              terminalCode:
+                run.safeFailureCode === 'SKIPPED_BEFORE_RESUME' ||
+                run.delivery.failureCode === 'SKIPPED_BEFORE_RESUME'
+                  ? 'SKIPPED_BEFORE_RESUME'
+                  : 'OBSOLETE_SCHEDULE_WINDOW',
+              claim: null,
+              updatedAt: input.now,
+            })
+          );
+          return { ok: false as const, code: 'TERMINAL' as const };
+        }
+      }
       if (Date.parse(dispatch.nextAttemptAt) > Date.parse(input.now)) {
         return { ok: false as const, code: 'NOT_READY' as const };
       }
@@ -1670,16 +1808,78 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     });
   }
 
+  private retireObsoleteRun(
+    transaction: StoreTransaction,
+    definition: MessageDigestDefinitionDocument,
+    state: MessageDigestStateDocument,
+    run: MessageDigestRunDocument,
+    now: string
+  ): void {
+    const nextRun = MessageDigestRunDocumentSchema.parse({
+      ...run,
+      ...(run.generationStatus === 'completed'
+        ? {}
+        : {
+            generationStatus: 'failed',
+            processingStage: 'failed',
+            safeFailureCode: 'OBSOLETE_SCHEDULE_WINDOW',
+            completedAt: now,
+          }),
+      lease: null,
+      deliveryAuthorization: null,
+      delivery: {
+        ...run.delivery,
+        status: 'failed',
+        failedAt: now,
+        failureCode: 'OBSOLETE_SCHEDULE_WINDOW',
+        nextCheckAt: null,
+        missingSince: null,
+      },
+      updatedAt: now,
+    });
+    transaction.set(
+      this.config.firestore.collection(MESSAGE_DIGEST_RUNS_COLLECTION).doc(run.runId),
+      nextRun
+    );
+    transaction.set(
+      this.config.firestore
+        .collection(MESSAGE_DIGEST_DEFINITIONS_COLLECTION)
+        .doc(definition.definitionId),
+      withLatestRunProjection(definition, nextRun)
+    );
+    if (state.pendingWindow?.runId === run.runId)
+      transaction.set(
+        this.config.firestore.collection(MESSAGE_DIGEST_STATES_COLLECTION).doc(state.definitionId),
+        MessageDigestStateDocumentSchema.parse({
+          ...state,
+          pendingWindow: null,
+          revision: state.revision + 1,
+          updatedAt: now,
+        })
+      );
+    transaction.set(
+      this.config.firestore
+        .collection('message_digest_skipped_windows')
+        .doc(digestJson({ runId: run.runId })),
+      {
+        schemaVersion: 1,
+        definitionId: run.definitionId,
+        runId: run.runId,
+        windowStart: run.windowStart,
+        windowEnd: run.windowEnd,
+        reason: 'OBSOLETE_SCHEDULE_WINDOW',
+        recordedAt: now,
+      }
+    );
+  }
+
   async renewDispatchClaim(input: {
     outboxId: string;
     ownerDigest: string;
     fence: number;
     now: string;
     expiresAt: string;
-  }): Promise<
-    | { ok: true; expiresAt: string }
-    | { ok: false; code: 'NOT_FOUND' | 'CLAIM_LOST' }
-  > {
+  }): Promise<{ ok: true; expiresAt: string } | { ok: false; code: 'NOT_FOUND' | 'CLAIM_LOST' }> {
     assertLeaseTimes(input.now, input.expiresAt);
     const ref = this.config.firestore
       .collection(MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION)
@@ -1877,6 +2077,20 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
           expiresAt: renewedAuthorization.expiresAt,
         };
       }
+      if (isRetiredRun(run) || isObsoleteScheduledRun(run, input.now)) {
+        const stateSnapshot = await transaction.get(
+          this.config.firestore.collection(MESSAGE_DIGEST_STATES_COLLECTION).doc(run.definitionId)
+        );
+        if (definition.status === 'active' && !isRetiredRun(run) && stateSnapshot.exists)
+          this.retireObsoleteRun(
+            transaction,
+            definition,
+            parseState(stateSnapshot.data()),
+            run,
+            input.now
+          );
+        return { ok: false as const, code: 'NOT_AUTHORIZED' as const };
+      }
       const authorization = {
         ownerDigest: input.ownerDigest,
         fence: (current?.fence ?? 0) + 1,
@@ -1942,10 +2156,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         return { ok: false as const, code: 'LEASE_LOST' as const };
       }
       const current = run.deliveryAuthorization;
-      if (
-        current?.ownerDigest !== input.ownerDigest ||
-        current.fence !== input.fence
-      ) {
+      if (current?.ownerDigest !== input.ownerDigest || current.fence !== input.fence) {
         return { ok: false as const, code: 'LEASE_LOST' as const };
       }
       if (current.releasedAt !== null) return { ok: true as const };
@@ -2033,10 +2244,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         if (definition.userId !== input.userId) {
           return { ok: false as const, code: 'NOT_FOUND' as const };
         }
-        if (
-          definition.status === 'deleting' ||
-          definition.activeErasureRequestId !== null
-        ) {
+        if (definition.status === 'deleting' || definition.activeErasureRequestId !== null) {
           return { ok: false as const, code: 'ERASURE_CONFLICT' as const };
         }
         request = MessageDigestErasureRequestDocumentSchema.parse({
@@ -2118,42 +2326,40 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
     if (request.stage === 'quiescing') {
       const [activeRunLeases, activeDispatchClaims, activeDeliveryAuthorizations] =
         await Promise.all([
-        transaction.get(
-          this.config.firestore
-            .collection(MESSAGE_DIGEST_RUNS_COLLECTION)
-            .where('userId', '==', request.userId)
-            .where('definitionId', '==', request.definitionId)
-            .where('lease.expiresAt', '>', now)
-            .orderBy('lease.expiresAt', 'asc')
-            .limit(1)
-        ),
-        transaction.get(
-          this.config.firestore
-            .collection(MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION)
-            .where('userId', '==', request.userId)
-            .where('definitionId', '==', request.definitionId)
-            .where('claim.expiresAt', '>', now)
-            .orderBy('claim.expiresAt', 'asc')
-            .limit(1)
-        ),
-        transaction.get(
-          this.config.firestore
-            .collection(MESSAGE_DIGEST_RUNS_COLLECTION)
-            .where('userId', '==', request.userId)
-            .where('definitionId', '==', request.definitionId)
-            .where('deliveryAuthorization.expiresAt', '>', now)
-            .orderBy('deliveryAuthorization.expiresAt', 'asc')
-            .limit(1)
-        ),
-      ]);
+          transaction.get(
+            this.config.firestore
+              .collection(MESSAGE_DIGEST_RUNS_COLLECTION)
+              .where('userId', '==', request.userId)
+              .where('definitionId', '==', request.definitionId)
+              .where('lease.expiresAt', '>', now)
+              .orderBy('lease.expiresAt', 'asc')
+              .limit(1)
+          ),
+          transaction.get(
+            this.config.firestore
+              .collection(MESSAGE_DIGEST_DISPATCH_OUTBOX_COLLECTION)
+              .where('userId', '==', request.userId)
+              .where('definitionId', '==', request.definitionId)
+              .where('claim.expiresAt', '>', now)
+              .orderBy('claim.expiresAt', 'asc')
+              .limit(1)
+          ),
+          transaction.get(
+            this.config.firestore
+              .collection(MESSAGE_DIGEST_RUNS_COLLECTION)
+              .where('userId', '==', request.userId)
+              .where('definitionId', '==', request.definitionId)
+              .where('deliveryAuthorization.expiresAt', '>', now)
+              .orderBy('deliveryAuthorization.expiresAt', 'asc')
+              .limit(1)
+          ),
+        ]);
       return {
         documents: [],
         cleanupDocuments: [],
         countKey: null,
         nextStage:
-          activeRunLeases.empty &&
-          activeDispatchClaims.empty &&
-          activeDeliveryAuthorizations.empty
+          activeRunLeases.empty && activeDispatchClaims.empty && activeDeliveryAuthorizations.empty
             ? 'runs'
             : 'quiescing',
       };
@@ -2298,6 +2504,9 @@ function toLatestRunProjection(
     generationStatus: run.generationStatus,
     processingStage: run.processingStage,
     deliveryStatus: run.delivery.status,
+    ...(run.delivery.transportConfirmation === undefined
+      ? {}
+      : { transportConfirmation: run.delivery.transportConfirmation }),
   };
 }
 
@@ -2467,18 +2676,15 @@ function validateCompletionOutbox(input: {
 function deliveryObservationMatches(
   run: MessageDigestRunDocument,
   delivery:
-    | { status: 'sent'; acceptedAt: string }
     | { status: 'ambiguous'; acceptedAt?: string | undefined }
     | { status: 'failed'; failedAt: string; failureCode: string }
 ): boolean {
   if (run.delivery.status !== delivery.status) return false;
-  if (delivery.status === 'sent') return run.delivery.acceptedAt === delivery.acceptedAt;
   if (delivery.status === 'ambiguous') {
     return run.delivery.acceptedAt === (delivery.acceptedAt ?? null);
   }
   return (
-    run.delivery.failedAt === delivery.failedAt &&
-    run.delivery.failureCode === delivery.failureCode
+    run.delivery.failedAt === delivery.failedAt && run.delivery.failureCode === delivery.failureCode
   );
 }
 
@@ -2493,4 +2699,22 @@ function isVisibleOwnedRun(
     run.recordRole === 'canonical' &&
     run.visibilityMigrationId === null
   );
+}
+
+function isRetiredRun(run: MessageDigestRunDocument): boolean {
+  return [run.safeFailureCode, run.delivery.failureCode].some(
+    (code) => code === 'SKIPPED_BEFORE_RESUME' || code === 'OBSOLETE_SCHEDULE_WINDOW'
+  );
+}
+
+function isObsoleteScheduledRun(run: MessageDigestRunDocument, now: string): boolean {
+  if (
+    run.trigger !== 'scheduled' ||
+    run.deliveryMode === 'silent' ||
+    run.delivery.status === 'sent' ||
+    run.delivery.status === 'ambiguous'
+  )
+    return false;
+  const boundary = getMessageDigestBoundaryAtOrBefore(run.scheduleSnapshot, now);
+  return boundary.ok && run.scheduledBoundary < boundary.value;
 }

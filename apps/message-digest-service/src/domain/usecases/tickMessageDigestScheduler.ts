@@ -3,8 +3,8 @@ import type { MessageDigestDefinition } from '../models/messageDigestDefinition.
 import type { MessageDigestDispatchOutbox, MessageDigestRun } from '../models/messageDigestRun.js';
 import type { MessageDigestWhatsAppClient } from '../ports/messageDigestClients.js';
 import type { MessageDigestStore } from '../ports/messageDigestStore.js';
-import { getNextMessageDigestBoundary } from '../schedules/messageDigestSchedule.js';
-import { recoverMessageDigestWork } from './recoverMessageDigestWork.js';
+import { getMessageDigestBoundaryAtOrBefore, getNextMessageDigestBoundary } from '../schedules/messageDigestSchedule.js';
+import { recoverMessageDigestWork, isDigestWorkFailure } from './recoverMessageDigestWork.js';
 import type {
   ReconcileMessageDigestDeliveryInput,
   ReconcileMessageDigestDeliveryResult,
@@ -48,6 +48,7 @@ export type TickMessageDigestSchedulerResult =
       reservedRuns: number;
       deferredDefinitions: number;
       nextCursor: string | null;
+      failures?: number;
     }
   | { ok: false; code: 'INVALID_REQUEST' };
 
@@ -78,6 +79,7 @@ export async function tickMessageDigestScheduler(
     }
   );
   const successfulRecovery = recovery as Extract<typeof recovery, { ok: true }>;
+  let failures = successfulRecovery.failures ?? 0;
 
   let reservedRuns = 0;
   let deferredDefinitions = 0;
@@ -99,8 +101,13 @@ export async function tickMessageDigestScheduler(
         deferredDefinitions += 1;
         continue;
       }
+      if ('failed' in disposition) {
+        failures += 1;
+        deferredDefinitions += 1;
+        continue;
+      }
       reservedRuns += 1;
-      await dependencies.dispatchOutbox(disposition.outboxId);
+      if (isDigestWorkFailure(await dependencies.dispatchOutbox(disposition.outboxId))) failures++;
     }
     nextCursor = due.nextCursor;
     if (nextCursor === null) break;
@@ -114,6 +121,7 @@ export async function tickMessageDigestScheduler(
     reservedRuns,
     deferredDefinitions,
     nextCursor,
+    ...(failures > 0 ? { failures } : {}),
   };
 }
 
@@ -121,8 +129,8 @@ async function reserveDueDefinition(
   candidate: MessageDigestDefinition,
   now: string,
   dependencies: TickMessageDigestSchedulerDependencies
-): Promise<{ outboxId: string } | null> {
-  const context = await dependencies.store.getOwnedRunContext(
+): Promise<{ outboxId: string } | { failed: true } | null> {
+  let context = await dependencies.store.getOwnedRunContext(
     candidate.userId,
     candidate.definitionId
   );
@@ -134,11 +142,27 @@ async function reserveDueDefinition(
   ) {
     return null;
   }
+  const currentBoundary = getMessageDigestBoundaryAtOrBefore(context.definition.schedule, now);
+  if (!currentBoundary.ok) return { failed: true };
+  if (context.definition.nextRunAt < currentBoundary.value) {
+    const preceding = getMessageDigestBoundaryAtOrBefore(context.definition.schedule, new Date(Date.parse(currentBoundary.value) - 1).toISOString());
+    if (!preceding.ok) return { failed: true };
+    const checkpointAt = context.state.checkpointAt > preceding.value ? context.state.checkpointAt : preceding.value;
+    const updated = await dependencies.store.updateDefinition({
+      userId: context.definition.userId, definitionId: context.definition.definitionId,
+      expectedRevision: context.definition.revision, updatedAt: now,
+      patch: { resetCheckpointAt: checkpointAt, nextRunAt: currentBoundary.value,
+        skipObsoleteWindows: { expectedStateRevision: context.state.revision, windowStart: context.state.checkpointAt, windowEnd: checkpointAt },
+      },
+    });
+    if (!updated.ok) return null;
+    context = { definition: updated.definition, state: { ...context.state, revision: context.state.revision + 1, checkpointAt } };
+  }
   const nextBoundary = getNextMessageDigestBoundary(
     context.definition.schedule,
     context.definition.nextRunAt
   );
-  if (!nextBoundary.ok) return null;
+  if (!nextBoundary.ok) return { failed: true };
   const source = await dependencies.whatsappClient.validateSource({
     userId: candidate.userId,
     chatId: context.definition.source.chatId,
@@ -152,8 +176,9 @@ async function reserveDueDefinition(
         now,
         dependencies
       );
+      return null;
     }
-    return null;
+    return { failed: true };
   }
   if (
     source.value.sourceAccountId !== context.definition.source.sourceAccountId ||
@@ -170,7 +195,7 @@ async function reserveDueDefinition(
     return null;
   }
   const readiness = await dependencies.whatsappClient.getDeliveryReadiness(candidate.userId);
-  if (!readiness.ok) return null;
+  if (!readiness.ok) return { failed: true };
   if (readiness.value.status !== 'ready') {
     await moveDefinitionToAttention(
       context.definition,

@@ -5,6 +5,9 @@ local EXPECTED_ISS = "https://accounts.google.com"
 local EXPECTED_AUD = "https://intexuraos.cloud"
 local INTERNAL_AUTH_TOKEN_FILE = "/etc/intexuraos/internal-auth-token"
 local EVALUATOR_ROUTE_PREFIX = "/internal/evals/"
+-- BEGIN HOME PROD DELIVERY ROUTES
+local HOME_PROD_DELIVERY_ROUTES = {}
+-- END HOME PROD DELIVERY ROUTES
 local GLOBAL_ALLOWED_SERVICE_ACCOUNTS = {
   ["intexuraos-scheduler-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-whatsapp-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
@@ -136,6 +139,11 @@ local function read_internal_auth_token()
 end
 
 local function is_service_account_allowed(email)
+  local delivery_route = HOME_PROD_DELIVERY_ROUTES[ngx.var.uri]
+  if delivery_route ~= nil then
+    local allowed = ngx.req.get_method() == "POST" and email == delivery_route.email
+    return allowed, allowed and delivery_route.caller_role or nil
+  end
   local route_allowed_service_accounts = ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]
   if route_allowed_service_accounts ~= nil then
     return route_allowed_service_accounts[email] == true, nil
@@ -226,4 +234,6 @@ ngx.req.clear_header("Cookie")
 ngx.req.clear_header("From")
 ngx.var.edge_internal_auth_token = internal_auth_token
 ngx.var.edge_internal_caller_role = caller_role or ""
-ngx.var.edge_pubsub_from = caller_role == "intex_message_ingest_pubsub" and "noreply@google.com" or ""
+ngx.var.edge_pubsub_from = (caller_role == "intex_message_ingest_pubsub"
+  or caller_role == "message_digest_run_pubsub"
+  or caller_role == "home_prod_restored_pubsub") and "noreply@google.com" or ""

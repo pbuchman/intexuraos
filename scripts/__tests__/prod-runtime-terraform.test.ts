@@ -13,14 +13,14 @@ function topLevelKeys(source: string, localName: string): string[] {
   const start = source.indexOf(`  ${localName} = {`);
   expect(start).toBeGreaterThanOrEqual(0);
   const body = source.slice(start).split('\n  }\n', 1)[0] ?? '';
-  return [...body.matchAll(/^    ([a-z0-9_]+) = \{$/gmu)].map((match) => match[1]);
+  return [...body.matchAll(/^ {4}([a-z0-9_]+) = \{$/gmu)].map((match) => match[1]);
 }
 
 function topLevelBlocks(source: string, localName: string): Map<string, string> {
   const start = source.indexOf(`  ${localName} = {`);
   expect(start).toBeGreaterThanOrEqual(0);
   const body = source.slice(start).split('\n  }\n', 1)[0] ?? '';
-  const entries = [...body.matchAll(/^    ([a-z0-9_]+) = \{$/gmu)];
+  const entries = [...body.matchAll(/^ {4}([a-z0-9_]+) = \{$/gmu)];
   return new Map(
     entries.map((entry, index) => [
       entry[1],
@@ -30,6 +30,18 @@ function topLevelBlocks(source: string, localName: string): Map<string, string> 
 }
 
 describe('production runtime Terraform ownership', () => {
+  it('grants only Scheduler and metrics reads to a dedicated keyless monitor identity', () => {
+    const monitor = read('monitoring.tf');
+    expect(monitor).toContain('cloudscheduler.jobs.get');
+    expect(monitor).toContain('cloudscheduler.jobs.list');
+    expect(monitor).toContain('monitoring.timeSeries.list');
+    expect(monitor).toContain('serviceAccount:ixos-home-orchestrator-dev@');
+    expect(monitor).toContain('google_service_account_iam_member');
+    expect(monitor).not.toContain('google_service_account_key');
+    expect(monitor).not.toMatch(
+      /monitoring\.(?:timeSeries\.create|metricWriter)|roles\/monitoring\.admin/u
+    );
+  });
   it('uses the renamed Google-only root while retaining the production backend identity', () => {
     expect(existsSync(runtimeRoot)).toBe(true);
     expect(existsSync(resolve(repoRoot, 'terraform/hetzner-prod'))).toBe(false);
@@ -53,7 +65,7 @@ describe('production runtime Terraform ownership', () => {
     const imports = read('imports.tf');
     expect(imports.match(/^import \{$/gmu)).toHaveLength(7);
     expect(imports).not.toContain('hcloud_');
-    expect([...imports.matchAll(/^  to = (.+)$/gmu)].map((match) => match[1])).toEqual([
+    expect([...imports.matchAll(/^ {2}to = (.+)$/gmu)].map((match) => match[1])).toEqual([
       'google_pubsub_subscription.hetzner_push["whatsapp_media_cleanup"]',
       'google_pubsub_subscription.hetzner_push["whatsapp_webhook_process"]',
       'google_pubsub_subscription.hetzner_push["research_process"]',
@@ -97,7 +109,9 @@ describe('production runtime Terraform ownership', () => {
     for (const [, block] of subscriptions) {
       expect(block).not.toContain('filter');
     }
-    expect(pubsub).toContain('for_each = each.value.delivery_mode == "push" ? [each.value] : []');
+    expect(pubsub).toContain(
+      'for_each = each.value.delivery_mode == "push" || contains(var.production_pubsub_push_enabled_subscription_keys, each.key) ? [each.value] : []'
+    );
     expect(pubsub).toContain(
       'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
     );
@@ -120,7 +134,11 @@ describe('production runtime Terraform ownership', () => {
       'pubsub_staging_filter = "attributes.intexuraos_hetzner_cutover = \\"active\\""'
     );
     expect(topLevelKeys(scheduler, 'hetzner_scheduler_jobs')).toHaveLength(14);
-    expect(scheduler).toContain('paused      = !var.production_scheduler_jobs_enabled');
+    expect(scheduler).toContain(
+      'paused      = !(var.production_scheduler_jobs_enabled && contains(var.production_scheduler_enabled_job_keys, each.key))'
+    );
+    expect(variables).toContain('production_scheduler_enabled_job_keys');
+    expect(variables).toContain('production_pubsub_push_enabled_subscription_keys');
     expect(scheduler).not.toContain('paused      = !var.activate_hetzner_async_consumers');
   });
 
@@ -134,6 +152,8 @@ describe('production runtime Terraform ownership', () => {
       'hetzner_origin',
       'activate_hetzner_async_consumers',
       'production_scheduler_jobs_enabled',
+      'production_scheduler_enabled_job_keys',
+      'production_pubsub_push_enabled_subscription_keys',
       'labels',
     ]);
 
@@ -145,6 +165,8 @@ describe('production runtime Terraform ownership', () => {
         'hetzner_origin',
         'labels',
         'production_scheduler_jobs_enabled',
+        'production_scheduler_enabled_job_keys',
+        'production_pubsub_push_enabled_subscription_keys',
         'project_id',
         'region',
         'source_environment',
@@ -152,5 +174,7 @@ describe('production runtime Terraform ownership', () => {
     );
     expect(values.activate_hetzner_async_consumers).toBe(true);
     expect(values.production_scheduler_jobs_enabled).toBe(false);
+    expect(values.production_scheduler_enabled_job_keys).toEqual([]);
+    expect(values.production_pubsub_push_enabled_subscription_keys).toEqual([]);
   });
 });

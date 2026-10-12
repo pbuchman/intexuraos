@@ -11,6 +11,50 @@ function replaceOnce(text, from, to) {
   if (text.split(from).length !== 2) throw new Error(`Production edge contract changed: ${from}`);
   return text.replace(from, to);
 }
+// The Terraform inventory is the authority for the bounded delivery surface.
+// Unexpected inventory shapes fail closed when rendering, never at ingress.
+function deliveryRoutePolicy() {
+  const readTerraform = (name) =>
+    readFileSync(new URL(`../../terraform/prod-runtime/${name}.tf`, import.meta.url), 'utf8');
+  const schedulerPaths = [
+    ...readTerraform('scheduler').matchAll(/^\s+path\s+= "([^"\n]+)"$/gmu),
+  ].map((match) => match[1]);
+  const serviceIds = new Map(
+    [
+      ...readTerraform('main').matchAll(
+        /^\s+([a-z_]+)\s+= "([a-z0-9-]+)-\$\{var.source_environment\}"$/gmu
+      ),
+    ].map((match) => [match[1], `${match[2]}-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com`])
+  );
+  const schedulerEmail = serviceIds.get('cloud_scheduler_service_account_id');
+  const restored = [
+    ...readTerraform('pubsub').matchAll(/^    ([a-z0-9_]+) = \{\n([\s\S]*?)^    \}/gmu),
+  ]
+    .filter((match) => /delivery_mode\s+= "pull"/u.test(match[2]))
+    .map((match) => ({
+      key: match[1],
+      path: /push_path\s+= "([^"\n]+)"/u.exec(match[2])?.[1],
+      email: serviceIds.get(/service_account_key\s+= "([^"\n]+)"/u.exec(match[2])?.[1]),
+    }));
+  if (
+    schedulerEmail === undefined ||
+    schedulerPaths.length !== 14 ||
+    restored.length !== 5 ||
+    new Set(schedulerPaths).size !== 14 ||
+    restored.some(({ path, email }) => path === undefined || email === undefined)
+  ) {
+    throw new Error(
+      'Home PROD delivery inventory changed; review exact route policy before activation'
+    );
+  }
+  const entries = schedulerPaths.map((path) => `  ["${path}"] = { email = "${schedulerEmail}" },`);
+  for (const { key, path, email } of restored) {
+    const role =
+      key === 'message_digest_runs' ? 'message_digest_run_pubsub' : 'home_prod_restored_pubsub';
+    entries.push(`  ["${path}"] = { email = "${email}", caller_role = "${role}" },`);
+  }
+  return `local HOME_PROD_DELIVERY_ROUTES = {\n${entries.join('\n')}\n}`;
+}
 const unavailable = `default_type application/json;
         add_header Cache-Control "no-store" always;
         add_header Retry-After "60" always;
@@ -25,10 +69,15 @@ const callbacks = [
   ['code/heartbeat', 'POST', false],
   ['code-tasks/status', 'PATCH', true],
 ];
-export function renderEdge(kind) {
+export function renderEdge(kind, profile = 'basic') {
+  if (profile !== 'basic' && profile !== 'full') throw new Error('Profile must be full or basic');
   if (kind === 'lua')
     return replaceOnce(
-      source('jwt-verify.lua'),
+      replaceOnce(
+        source('jwt-verify.lua'),
+        'local HOME_PROD_DELIVERY_ROUTES = {}',
+        deliveryRoutePolicy()
+      ),
       '/etc/intexuraos/internal-auth-token',
       '/home/intexuraos-prod/.config/intexuraos/prod/internal-auth-token'
     );
@@ -48,11 +97,21 @@ proxy_set_header From "";
 `;
   if (kind !== 'nginx') throw new Error('Usage: render-edge.mjs nginx|lua|callback-proxy');
   const original = source('intexuraos.conf');
-  const upstreams = original
-    .slice(0, original.indexOf('# Local-only maintenance proof surface.'))
-    .replace(/upstream research_agent \{[^}]+\}\n/, '')
-    .replace(/upstream message_digest_service \{[^}]+\}\n/, '')
-    .replace(/127\.0\.0\.1:(81\d\d)/g, (_, port) => `127.0.0.1:${Number(port) + 10000}`);
+  let upstreams = original.slice(0, original.indexOf('# Local-only maintenance proof surface.'));
+  if (profile === 'basic')
+    upstreams = upstreams
+      .replace(/upstream research_agent \{[^}]+\}\n/, '')
+      .replace(/upstream message_digest_service \{[^}]+\}\n/, '');
+  if (profile === 'full')
+    upstreams = replaceOnce(
+      upstreams,
+      'upstream message_digest_service {\n    include /etc/nginx/intexuraos-message-digest-upstream.conf;\n    keepalive 16;\n}',
+      'upstream message_digest_service { server 127.0.0.1:8135; keepalive 16; }'
+    );
+  upstreams = upstreams.replace(
+    /127\.0\.0\.1:(81\d\d)/g,
+    (_, port) => `127.0.0.1:${Number(port) + 10000}`
+  );
   let server = original.slice(original.indexOf('server {\n    listen 443'));
   if (!server.startsWith('server {\n    listen 443'))
     throw new Error('Production HTTPS server missing');
@@ -102,29 +161,33 @@ proxy_set_header From "";
 
     location ~ ^/api/[a-z0-9-]+/internal(?:/|$) {`
   );
-  server = replaceOnce(
-    server,
-    '    location = /api/research { proxy_pass http://research_agent/; }\n    location /api/research/ { proxy_pass http://research_agent/; }',
-    `    location = /api/research { ${unavailable} }
+  if (profile === 'basic')
+    server = replaceOnce(
+      server,
+      '    location = /api/research { proxy_pass http://research_agent/; }\n    location /api/research/ { proxy_pass http://research_agent/; }',
+      `    location = /api/research { ${unavailable} }
     location /api/research/ { ${unavailable} }`
-  );
+    );
   server = replaceOnce(
     server,
     '    include /etc/nginx/intexuraos-message-digests-public.conf;',
-    `    location = /api/message-digests { ${unavailable} }
+    profile === 'basic'
+      ? `    location = /api/message-digests { ${unavailable} }
     location /api/message-digests/ { ${unavailable} }`
+      : '    location = /api/message-digests { proxy_pass http://message_digest_service/; }\n    location /api/message-digests/ { proxy_pass http://message_digest_service/; }'
   );
-  for (const [route, upstream] of [
-    ['llm', 'research_agent'],
-    ['message-digests', 'message_digest_service'],
-  ]) {
-    server = replaceOnce(
-      server,
-      `    location /internal/${route}/ { access_by_lua_file ${root}/jwt-verify.lua; proxy_pass http://${upstream}; }`,
-      `    location = /internal/${route} { ${unavailable} }
+  if (profile === 'basic')
+    for (const [route, upstream] of [
+      ['llm', 'research_agent'],
+      ['message-digests', 'message_digest_service'],
+    ]) {
+      server = replaceOnce(
+        server,
+        `    location /internal/${route}/ { access_by_lua_file ${root}/jwt-verify.lua; proxy_pass http://${upstream}; }`,
+        `    location = /internal/${route} { ${unavailable} }
     location /internal/${route}/ { ${unavailable} }`
-    );
-  }
+      );
+    }
   // GCS locations override proxy headers, so the inherited caller-role scrub must
   // be repeated. Never forward browser credentials or privileged identity there.
   server = server.replaceAll(
@@ -168,7 +231,7 @@ ${upstreams}\n${server}\n}\n`;
 }
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
-    process.stdout.write(renderEdge(process.argv[2]));
+    process.stdout.write(renderEdge(process.argv[2], process.argv[3]));
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;

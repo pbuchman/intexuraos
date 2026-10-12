@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { transportConfirmationSchema } from '@intexuraos/http-contracts';
 import type {
   MessageDigestDefinition,
   MessageDigestDefinitionStatus as DomainMessageDigestDefinitionStatus,
@@ -131,6 +132,7 @@ const messageDigestLatestRunProjectionSchema = z
     generationStatus: messageDigestGenerationStatusSchema,
     processingStage: messageDigestProcessingStageSchema,
     deliveryStatus: messageDigestDeliveryStatusSchema,
+    transportConfirmation: transportConfirmationSchema.optional(),
   })
   .strict()
   .superRefine((latestRun, context) => {
@@ -168,6 +170,7 @@ export const MessageDigestDefinitionDocumentSchema = z
       })
       .strict(),
     checkpointAt: isoTimestampSchema,
+    resumeCutoff: isoTimestampSchema.optional(),
     nextRunAt: isoTimestampSchema,
     lastRunAt: isoTimestampSchema.nullable(),
     latestRun: messageDigestLatestRunProjectionSchema.nullable().default(null),
@@ -219,9 +222,7 @@ export const MessageDigestDefinitionDocumentSchema = z
         path: ['attentionCode'],
       });
     }
-    if (
-      (definition.status === 'deleting') !== (definition.activeErasureRequestId !== null)
-    ) {
+    if ((definition.status === 'deleting') !== (definition.activeErasureRequestId !== null)) {
       context.addIssue({
         code: 'custom',
         message: 'Deleting definition must retain exactly one active erasure request',
@@ -376,6 +377,7 @@ export const MessageDigestRunDocumentSchema = z
         status: messageDigestDeliveryStatusSchema,
         idempotencyKey: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u),
         acceptedAt: isoTimestampSchema.nullable(),
+        transportConfirmation: transportConfirmationSchema.optional(),
         failedAt: isoTimestampSchema.nullable(),
         failureCode: z.string().trim().min(1).max(128).nullable(),
         reconciliationAttempts: z.number().int().nonnegative(),
@@ -411,7 +413,15 @@ export const MessageDigestRunDocumentSchema = z
         path: ['safeFailureCode'],
       });
     }
-    if ((run.delivery.status === 'pending') !== (run.delivery.nextCheckAt !== null)) {
+    const awaitingConfirmation =
+      run.delivery.status === 'sent' && run.delivery.transportConfirmation?.status === 'pending';
+    const observableFailure =
+      run.delivery.status === 'sent' && run.delivery.transportConfirmation?.status === 'failed';
+    if (
+      run.delivery.status === 'pending' || awaitingConfirmation
+        ? run.delivery.nextCheckAt === null
+        : !observableFailure && run.delivery.nextCheckAt !== null
+    ) {
       context.addIssue({
         code: 'custom',
         message: 'Pending delivery must retain exactly one next reconciliation time',
@@ -569,15 +579,7 @@ export const MessageDigestErasureRequestDocumentSchema = z
     userId: userIdSchema,
     definitionId: definitionIdSchema,
     erasureEpoch: z.number().int().positive(),
-    stage: z.enum([
-      'quiescing',
-      'runs',
-      'outbox',
-      'state',
-      'definition',
-      'legacy',
-      'completed',
-    ]),
+    stage: z.enum(['quiescing', 'runs', 'outbox', 'state', 'definition', 'legacy', 'completed']),
     cursor: z.string().max(512).nullable(),
     deletedCounts: erasedCountsSchema,
     createdAt: isoTimestampSchema,

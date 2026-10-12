@@ -77,7 +77,7 @@ output "hetzner_edge_auth_contract" {
     allowed_oidc_principals = {
       pubsub_push = {
         for key, config in local.hetzner_pubsub_push_subscriptions : key => data.google_service_account.service[config.service_account_key].email
-        if config.delivery_mode == "push"
+        if config.delivery_mode == "push" || contains(var.production_pubsub_push_enabled_subscription_keys, key)
       }
       scheduler = data.google_service_account.cloud_scheduler.email
     }
@@ -92,11 +92,11 @@ output "hetzner_edge_auth_contract" {
 output "cutover_activation_contract" {
   description = "Current production runtime activation constraints."
   value = {
-    step_name = "home-prod-basic-runtime-safety"
+    step_name = "home-prod-staged-runtime-restoration"
     order = [
       "keep activate_hetzner_async_consumers=true so existing immutable subscription filters remain empty",
-      "remove push delivery only from message_digest_runs, research_process, llm_call, llm_analytics, and pr_triage while their handlers are unavailable",
-      "keep production_scheduler_jobs_enabled=false so all fourteen jobs remain paused during the basic Home PROD stage",
+      "retain pull delivery until selected individually via production_pubsub_push_enabled_subscription_keys",
+      "keep production_scheduler_jobs_enabled=false until reviewed resume boundaries and the full runtime are healthy; select jobs independently with production_scheduler_enabled_job_keys",
       "verify the production edge auth and routing contract before re-enabling any unavailable consumer",
     ]
   }
@@ -113,12 +113,14 @@ output "cutover_old_root_ownership_contract" {
 }
 
 output "hetzner_staging_controls" {
-  description = "Compatibility and Scheduler controls for the basic Home PROD stage."
+  description = "Compatibility and independent Scheduler/PubSub controls for staged restoration."
   value = {
     activate_hetzner_async_consumers = var.activate_hetzner_async_consumers
     pubsub_staging_filter            = local.pubsub_staging_filter
     pubsub_filter_compatibility_note = "The deprecated activation pin stays true so Terraform preserves the existing empty immutable filters."
-    scheduler_jobs_paused            = !var.production_scheduler_jobs_enabled
+    scheduler_jobs_paused            = !var.production_scheduler_jobs_enabled || length(var.production_scheduler_enabled_job_keys) == 0
+    enabled_scheduler_job_keys       = var.production_scheduler_enabled_job_keys
+    restored_push_subscription_keys  = var.production_pubsub_push_enabled_subscription_keys
   }
 }
 

@@ -524,6 +524,15 @@ describe('processExecutionMemoryBacklog', () => {
     }));
   });
 
+  it('reports failed completion persistence instead of a successful benign skip', async () => {
+    const task = createTask({ executionMemoryContext: { status: 'none' } });
+    codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
+    codeTaskRepo.update.mockResolvedValueOnce(ok(task)).mockResolvedValueOnce(err({ code: 'INTERNAL_ERROR', message: 'storage unavailable' }));
+    userServiceClient.getLlmClient.mockResolvedValue(err({ code: 'NOT_FOUND', message: 'User model not configured' }));
+    const result = await processExecutionMemoryBacklog({ logger, codeTaskRepo: codeTaskRepo as never, logLineRepo: logLineRepo as never, turnMetricsRepo: turnMetricsRepo as never, linearAgentClient: linearAgentClient as never, executionMemoryRepo: executionMemoryRepo as never, executionMemoryApplicationRepo: executionMemoryApplicationRepo as never, userServiceClient: userServiceClient as never, embeddingClient: embeddingClient as never, limit: 10 });
+    expect(result).toMatchObject({ ok: true, value: { completed: 0, skipped: 0, errored: 1 } });
+  });
+
   it('marks the task as error after the third processor failure', async () => {
     const task = createTask({
       executionMemoryContext: {

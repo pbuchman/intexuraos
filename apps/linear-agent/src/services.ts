@@ -1,3 +1,4 @@
+import { createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
 /**
  * Service container for linear-agent.
  */
@@ -29,9 +30,12 @@ import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
+const LINEAR_JOB_HEARTBEAT_COLLECTION = 'linear_job_heartbeats';
+
 const logger = createAppLogger({ name: 'linear-agent' });
 
 export interface ServiceContainer {
+  jobHeartbeatStore: JobHeartbeatStore;
   connectionRepository: LinearConnectionRepository;
   linearApiClient: LinearApiClient;
   extractionService: LinearActionExtractionService;
@@ -80,6 +84,7 @@ export function initServices(config: ServiceConfig): void {
   );
 
   container = {
+    jobHeartbeatStore: createJobHeartbeatStore({collectionName: LINEAR_JOB_HEARTBEAT_COLLECTION}),
     connectionRepository: createLinearConnectionRepository(),
     linearApiClient: createLinearApiClient(),
     extractionService,

@@ -239,6 +239,9 @@ export function validateSecretPackagePayload(options) {
       throw packageError('payload env contains a forbidden line break');
     }
   }
+  if (environment === 'prod' && !['basic', 'full'].includes(payload.env.INTEXURAOS_PROD_PROFILE)) {
+    throw packageError('payload production profile must be full or basic');
+  }
   assertPlainObject(payload.files, 'payload files');
   assertExactKeys(payload.files, definition.files, 'payload files');
   const serializedData =
@@ -311,6 +314,7 @@ export function crc32cBase64(value) {
  *   manifest?: ReturnType<typeof validateSecretPackageManifest>,
  *   projectId: string,
  *   version: number | string,
+ *   missingEnvOverrides?: Record<string, string>,
  * }} options
  */
 export async function fetchSecretPackage(options) {
@@ -339,6 +343,20 @@ export async function fetchSecretPackage(options) {
   validateChecksum(response.dataCrc32c, data, 'Secret Manager payload');
 
   const payload = parseStrictJson(data.toString('utf8'), 'payload');
+  // Schema additions may be supplied explicitly by the canonical candidate
+  // builder. Existing base members still undergo their original validation;
+  // only absent members are filled, never invalid or unknown base members.
+  if (options.missingEnvOverrides !== undefined) {
+    assertPlainObject(payload, 'payload');
+    assertPlainObject(payload.env, 'payload env');
+    assertPlainObject(options.missingEnvOverrides, 'missing env overrides');
+    for (const [name, value] of Object.entries(options.missingEnvOverrides)) {
+      if (!manifest.packages[environment].envNames.includes(name)) {
+        throw packageError('missing env override has an unknown member');
+      }
+      if (!Object.hasOwn(payload.env, name)) payload.env[name] = value;
+    }
+  }
   const metadata = validateSecretPackagePayload({
     environment,
     manifest,

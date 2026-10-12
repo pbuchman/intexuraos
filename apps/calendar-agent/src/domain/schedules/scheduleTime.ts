@@ -55,9 +55,7 @@ function getZonedParts(instantIso: string, timeZone: string): ZonedParts {
   });
   const parts = formatter.formatToParts(new Date(instantIso));
   const values = Object.fromEntries(
-    parts
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value])
+    parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value])
   );
   /* v8 ignore start -- upstream: Intl.DateTimeFormat requests all returned fields; nullish fallbacks are defensive for runtime/ICU corruption @preserve */
   return {
@@ -89,7 +87,11 @@ function getNextValidUtcIsoForLocalDateTime(
   }
 }
 
-function getUtcIsoForLocalDateTime(localDate: string, localTime: string, timeZone: string): string {
+export function getUtcIsoForLocalDateTime(
+  localDate: string,
+  localTime: string,
+  timeZone: string
+): string {
   const dateParts = parseIsoDate(localDate);
   const timeParts = parseLocalTime(localTime);
   if (timeParts === null) {
@@ -135,9 +137,7 @@ function addDays(localDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function validateScheduleCadence(
-  input: ScheduleCadenceInput
-): Result<void, CalendarError> {
+export function validateScheduleCadence(input: ScheduleCadenceInput): Result<void, CalendarError> {
   if (parseLocalTime(input.localTime) === null) {
     return err({
       code: 'INVALID_REQUEST',

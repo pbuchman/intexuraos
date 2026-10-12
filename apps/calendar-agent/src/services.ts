@@ -1,3 +1,4 @@
+import { createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
 /**
  * Service container for calendar-agent.
  */
@@ -32,6 +33,7 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 const logger = createAppLogger({ name: 'calendar-agent' });
 
 export interface ServiceContainer {
+  jobHeartbeatStore?: JobHeartbeatStore;
   googleCalendarClient: GoogleCalendarClient;
   userServiceClient: UserServiceClient;
   failedEventRepository: FailedEventRepository;
@@ -96,19 +98,30 @@ function createWhatsAppScheduleClient(config: {
       return ok(mapDeliveryStatus(result.value));
     },
 
+    async getNotificationRunState(
+      input
+    ): ReturnType<NonNullable<WhatsAppScheduleClient['getNotificationRunState']>> {
+      if (client.getNotificationRunState === undefined)
+        return err(new Error('Notification observation unavailable'));
+      return await client.getNotificationRunState(input);
+    },
     async sendOutboundMatrixMessage(input: {
       userId: string;
       target: 'intex_agent';
       text: string;
       startNewSession?: boolean;
       idempotencyKey?: string;
+      notificationContext?: import('@intexuraos/http-contracts').NotificationContext;
+      scheduledFor?: string;
     }): Promise<Result<OutboundMatrixMessageResult>> {
       const result = await client.sendPrivateOutboundMatrixMessage({
         userId: input.userId,
         text: input.text,
-        ...(input.startNewSession !== undefined
-          ? { startNewSession: input.startNewSession }
-          : {}),
+        ...(input.notificationContext === undefined
+          ? {}
+          : { notificationContext: input.notificationContext }),
+        ...(input.scheduledFor === undefined ? {} : { scheduledFor: input.scheduledFor }),
+        ...(input.startNewSession !== undefined ? { startNewSession: input.startNewSession } : {}),
         ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });
       if (!result.ok) {
@@ -134,9 +147,13 @@ export function initServices(config: ServiceConfig): void {
     platformOpenRouterApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'],
   });
 
-  const calendarActionExtractionService = createCalendarActionExtractionService(userServiceClient, logger);
+  const calendarActionExtractionService = createCalendarActionExtractionService(
+    userServiceClient,
+    logger
+  );
 
   container = {
+    jobHeartbeatStore: createJobHeartbeatStore({ collectionName: 'calendar_job_heartbeats' }),
     googleCalendarClient: new GoogleCalendarClientImpl(),
     userServiceClient,
     failedEventRepository: createFailedEventRepository(),

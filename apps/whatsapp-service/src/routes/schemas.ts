@@ -50,6 +50,7 @@ const statusSchema = z.object({
   status: z.enum(['delivered', 'read', 'sent', 'failed']),
   timestamp: z.string(),
   recipient_id: z.string(),
+  errors: z.array(z.object({ code: z.number() })).optional(),
 });
 
 /**

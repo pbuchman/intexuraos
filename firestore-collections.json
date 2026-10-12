@@ -247,6 +247,56 @@
       "owner": "calendar-agent",
       "description": "Calendar event previews generated async before user approval"
     },
+    "calendar_job_heartbeats": {
+      "owner": "calendar-agent",
+      "description": "Aggregate persisted scheduled job execution heartbeats; no user identifiers or payloads.",
+      "scanPaths": ["apps/calendar-agent/src/services.ts"]
+    },
+    "whatsapp_job_heartbeats": {
+      "owner": "whatsapp-service",
+      "description": "Aggregate persisted webhook retry job execution heartbeats.",
+      "scanPaths": ["apps/whatsapp-service/src/services.ts"]
+    },
+    "linear_job_heartbeats": {
+      "owner": "linear-agent",
+      "description": "Aggregate persisted sync and issue pruning execution heartbeats.",
+      "scanPaths": ["apps/linear-agent/src/services.ts"]
+    },
+    "code_job_heartbeats": {
+      "owner": "code-agent",
+      "description": "Aggregate persisted execution, queue, merge and archive job heartbeats.",
+      "scanPaths": ["apps/code-agent/src/services.ts"]
+    },
+    "message_digest_job_heartbeats": {
+      "owner": "message-digest-service",
+      "description": "Aggregate persisted digest scheduler execution heartbeats.",
+      "scanPaths": ["apps/message-digest-service/src/services.ts"]
+    },
+    "whatsapp_notification_intents": {
+      "owner": "whatsapp-service",
+      "description": "Durable notification intent metadata with seven-day native ttlExpiresAt retention."
+    },
+    "whatsapp_transport_receipts": {
+      "owner": "whatsapp-service",
+      "description": "Provider acceptance and delivery receipts with seven-day native ttlExpiresAt retention."
+    },
+    "whatsapp_notification_markers": {
+      "owner": "whatsapp-service",
+      "description": "Aggregate delivery markers with seven-day native ttlExpiresAt retention."
+    },
+    "home_prod_resume_policy": {
+      "owner": "code-agent",
+      "description": "Reviewed scheduler restoration boundary policy; code-agent reads archive policy.",
+      "scanPaths": ["apps/code-agent/src/services.ts"]
+    },
+    "home_prod_resume_audit": {
+      "owner": "code-agent",
+      "description": "Operational audit of approved Home PROD resume actions; written only by the bounded operator."
+    },
+    "message_digest_skipped_windows": {
+      "owner": "message-digest-service",
+      "description": "Payload-free audit of digest windows skipped by the reviewed restoration boundary."
+    },
     "calendar_schedules": {
       "owner": "calendar-agent",
       "description": "Per-user reusable calendar schedules, including daily lookahead notifications."

@@ -19,6 +19,27 @@ describe('decodeIntexMessageIngestPush', () => {
     expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
   });
 
+  it('decodes scheduled notification context and rejects malformed context', () => {
+    const event = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-1',
+      text: 'look ahead',
+      sourceType: 'whatsapp_text',
+      timestamp: '2026-06-24T10:00:00.000Z',
+      notificationContext: { source: 'calendar', runId: 'run-1', phase: 'ack' },
+    };
+    expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
+    expect(() =>
+      decodeIntexMessageIngestPush(
+        push({
+          ...event,
+          notificationContext: { ...event.notificationContext, phase: 'invalid' },
+        })
+      )
+    ).toThrow();
+  });
+
   it('decodes messages without optional WhatsApp sender metadata', () => {
     const event = {
       type: 'intex.message.ingest',
@@ -49,9 +70,9 @@ describe('decodeIntexMessageIngestPush', () => {
     expect(() => decodeIntexMessageIngestPush(push(event))).toThrow(
       'Expected intex.message.ingest event'
     );
-    expect(() =>
-      decodeIntexMessageIngestPushEnvelope(push({ ...event, trusted: true }))
-    ).toThrow('Invalid Matrix corpus ingest event');
+    expect(() => decodeIntexMessageIngestPushEnvelope(push({ ...event, trusted: true }))).toThrow(
+      'Invalid Matrix corpus ingest event'
+    );
   });
 
   it('decodes optional source URLs for external-save image and link forwarding', () => {
@@ -135,12 +156,12 @@ describe('decodeIntexMessageIngestPush', () => {
       timestamp: '2026-06-24T10:00:00.000Z',
     };
 
-    expect(() =>
-      decodeIntexMessageIngestPush(push({ ...baseEvent, replyContext: null }))
-    ).toThrow('Invalid intex.message.ingest event: replyContext must be an object');
-    expect(() =>
-      decodeIntexMessageIngestPush(push({ ...baseEvent, replyContext: [] }))
-    ).toThrow('Invalid intex.message.ingest event: replyContext must be an object');
+    expect(() => decodeIntexMessageIngestPush(push({ ...baseEvent, replyContext: null }))).toThrow(
+      'Invalid intex.message.ingest event: replyContext must be an object'
+    );
+    expect(() => decodeIntexMessageIngestPush(push({ ...baseEvent, replyContext: [] }))).toThrow(
+      'Invalid intex.message.ingest event: replyContext must be an object'
+    );
     expect(() =>
       decodeIntexMessageIngestPush(
         push({
