@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import {
   classifyMatrixEventForRecovery,
   collectWhatsAppInviteRoomIds,
@@ -320,6 +321,116 @@ export async function applyRecoverySegment(segment, deps) {
   summary.mediaPending = media.pending;
   summary.mediaUnavailable = media.unavailable;
   return summary;
+}
+
+function assertPendingMediaRetry(segment, sourceAccountId, queue) {
+  const lastApply = segment?.lastApply;
+  if (
+    !isRecord(segment) ||
+    !Array.isArray(segment.events) ||
+    segment.applied !== false ||
+    segment.verified === true ||
+    segment.policyRelationRepairPending === true ||
+    segment.operationMetadataRepairPending === true ||
+    (segment.errors !== undefined &&
+      (!Array.isArray(segment.errors) || segment.errors.length > 0)) ||
+    typeof sourceAccountId !== 'string' ||
+    sourceAccountId === '' ||
+    !isRecord(lastApply) ||
+    !Number.isInteger(lastApply.accepted) ||
+    lastApply.accepted < 0 ||
+    !Number.isInteger(lastApply.duplicates) ||
+    lastApply.duplicates < 0 ||
+    lastApply.accepted + lastApply.duplicates !== segment.events.length ||
+    lastApply.rejected !== 0 ||
+    !Number.isInteger(lastApply.mediaStored) ||
+    lastApply.mediaStored < 0 ||
+    !Number.isInteger(lastApply.mediaPending) ||
+    lastApply.mediaPending <= 0 ||
+    !Array.isArray(lastApply.mediaUnavailable) ||
+    lastApply.mediaUnavailable.some((evidence) => !isValidMediaUnavailableEvidence(evidence))
+  ) {
+    throw new Error('recovery_media_retry_full_metadata_required');
+  }
+  indexRelationTargetPolicySkips(segment);
+  mergeMediaUnavailableEvidence({ ...segment }, lastApply.mediaUnavailable);
+  const events = new Map();
+  for (const event of segment.events) {
+    if (
+      typeof event?.matrixEventId !== 'string' ||
+      event.matrixEventId === '' ||
+      events.has(event.matrixEventId)
+    ) {
+      throw new Error('recovery_media_retry_segment_invalid');
+    }
+    events.set(event.matrixEventId, event);
+  }
+  if (
+    !isRecord(queue) ||
+    queue.version !== 1 ||
+    !Array.isArray(queue.items) ||
+    queue.items.length !== lastApply.mediaPending
+  ) {
+    throw new Error('recovery_media_retry_queue_mismatch');
+  }
+  const seen = new Set();
+  for (const item of queue.items) {
+    const event = events.get(item?.matrixEventId);
+    if (
+      !isRecord(item) ||
+      event === undefined ||
+      seen.has(item.matrixEventId) ||
+      item.messageId !== createPrivateWhatsAppMessageId(sourceAccountId, item.matrixEventId) ||
+      !['image', 'audio', 'video', 'file', 'sticker'].includes(item.mediaKind) ||
+      item.mediaKind !== event.message?.type ||
+      !isRecord(item.media) ||
+      typeof item.media.mxcUri !== 'string' ||
+      item.media.mxcUri === '' ||
+      item.media.gcsPath !== undefined ||
+      !isDeepStrictEqual(item.media, event.message?.media) ||
+      !Number.isInteger(item.attempts) ||
+      item.attempts < 0 ||
+      typeof item.queuedAt !== 'string' ||
+      !Number.isFinite(Date.parse(item.queuedAt))
+    ) {
+      throw new Error('recovery_media_retry_queue_mismatch');
+    }
+    seen.add(item.matrixEventId);
+  }
+}
+
+export async function retryPendingRecoveryMedia(segment, sourceAccountId, queue, deps) {
+  assertPendingMediaRetry(segment, sourceAccountId, queue);
+  const media = await deps.drainMedia();
+  const queuedHashes = new Set(queue.items.map((item) => sha256(item.matrixEventId)));
+  if (
+    !isRecord(media) ||
+    !Number.isInteger(media.stored) ||
+    media.stored < 0 ||
+    !Number.isInteger(media.pending) ||
+    media.pending < 0 ||
+    !Array.isArray(media.unavailable) ||
+    media.unavailable.some(
+      (evidence) =>
+        !isValidMediaUnavailableEvidence(evidence) || !queuedHashes.has(evidence.eventHash)
+    ) ||
+    new Set(media.unavailable.map((evidence) => evidence.eventHash)).size !==
+      media.unavailable.length ||
+    media.stored + media.pending + media.unavailable.length !== queue.items.length
+  ) {
+    throw new Error('recovery_apply_invalid_media_summary');
+  }
+  const accumulated = { ...segment };
+  mergeMediaUnavailableEvidence(accumulated, [
+    ...segment.lastApply.mediaUnavailable,
+    ...media.unavailable,
+  ]);
+  return {
+    ...segment.lastApply,
+    mediaStored: segment.lastApply.mediaStored + media.stored,
+    mediaPending: media.pending,
+    mediaUnavailable: accumulated.mediaUnavailableEvents,
+  };
 }
 
 export function recordRecoveryApplyResult(segment, result, sourceAccountId) {
@@ -1448,6 +1559,15 @@ export async function main(argv, env) {
   }
   const options = parseOptions(optionArgs);
   if (
+    options['retry-pending-media'] !== undefined &&
+    (stage !== 'apply' ||
+      options['retry-pending-media'] !== 'true' ||
+      options['review-policy-skipped-relations'] === 'true' ||
+      options['review-missing-operation-metadata'] === 'true')
+  ) {
+    throw new Error('invalid_recovery_media_retry_options');
+  }
+  if (
     options['review-policy-skipped-relations'] === 'true' &&
     options['review-missing-operation-metadata'] === 'true'
   ) {
@@ -1466,7 +1586,7 @@ export async function main(argv, env) {
     if (stage === 'discover') {
       result = await runDiscoverStage({ config, manifestFile, options });
     } else if (stage === 'apply') {
-      result = await runApplyStage({ config, manifestFile });
+      result = await runApplyStage({ config, manifestFile, options });
     } else if (stage === 'verify') {
       result = await runVerifyStage({ config, manifestFile, env, options });
     } else {
@@ -1572,7 +1692,7 @@ async function runDiscoverStage({ config, manifestFile, options }) {
   return { status: 'discovered', segment: segment.name, ...segment.summary };
 }
 
-async function runApplyStage({ config, manifestFile }) {
+async function runApplyStage({ config, manifestFile, options }) {
   const manifest = await readPrivateRecoveryJson(manifestFile);
   if (!Array.isArray(manifest.segments) || manifest.segments.length === 0) {
     throw new Error('recovery_apply_missing_segment');
@@ -1592,6 +1712,22 @@ async function runApplyStage({ config, manifestFile }) {
   }
   const policyRepair = segment.policyRelationRepairPending === true;
   selectPolicyRelationRepairEvents(segment, config.sourceAccountId);
+  const mediaRetry = options['retry-pending-media'] === 'true';
+  let retryQueue;
+  if (mediaRetry) {
+    const s0Bytes = Buffer.from(manifest.s0StateBytesBase64 ?? '', 'base64');
+    await assertPrivateFile(config.stateFile, 'recovery_media_retry_state_not_private');
+    if (
+      manifest.version !== 1 ||
+      manifest.lastDiscoveryException !== undefined ||
+      manifest.s0StateHash !== sha256(s0Bytes) ||
+      !s0Bytes.equals(await fsp.readFile(config.stateFile))
+    ) {
+      throw new Error('recovery_media_retry_state_mismatch');
+    }
+    retryQueue = await readPrivateRecoveryJson(config.pendingMediaFile);
+    assertPendingMediaRetry(segment, config.sourceAccountId, retryQueue);
+  }
   await assertPrivateFile(
     config.googleApplicationCredentialsFile,
     'recovery_apply_identity_file_not_private'
@@ -1601,7 +1737,7 @@ async function runApplyStage({ config, manifestFile }) {
     await fsp.readFile(config.googleApplicationCredentialsFile, 'utf8')
   );
   const matrixAccessToken = await readPrivateToken(config.matrixAccessTokenFile);
-  const result = await applyRecoverySegment(segment, {
+  const deps = {
     sourceAccountId: config.sourceAccountId,
     postBatch: (events, deliveryMode) => postEvents(config, events, deliveryMode),
     enqueueMedia: (events) =>
@@ -1626,14 +1762,21 @@ async function runApplyStage({ config, manifestFile }) {
         },
         nowISOString: () => new Date().toISOString(),
       }),
-  });
+  };
+  const result = mediaRetry
+    ? await retryPendingRecoveryMedia(segment, config.sourceAccountId, retryQueue, deps)
+    : await applyRecoverySegment(segment, deps);
   recordRecoveryApplyResult(segment, result, config.sourceAccountId);
   await writePrivateRecoveryJson(manifestFile, manifest);
   if (result.mediaPending !== 0) {
     throw new Error(`recovery_apply_media_pending_${result.mediaPending}`);
   }
   return {
-    status: policyRepair ? 'policy_relation_repaired' : 'applied',
+    status: mediaRetry
+      ? 'pending_media_retried'
+      : policyRepair
+        ? 'policy_relation_repaired'
+        : 'applied',
     segment: segment.name,
     ...result,
   };

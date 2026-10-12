@@ -1770,16 +1770,25 @@ export function validateIngestResponse(body, events) {
   }
 }
 
-export async function uploadPrivateMedia(config, event, media, downloaded) {
+export async function uploadPrivateMedia(config, event, media, downloaded, deps = {}) {
   if (config.mediaUploadUrl === '') {
     throw new Error('missing_private_media_upload_url');
   }
-  const authorization = await createGoogleIdentityAuthorizationHeader(config);
+  const authorization = await (
+    deps.createAuthorizationHeader ?? createGoogleIdentityAuthorizationHeader
+  )(config);
+  const declaredMimeType = media.mimeType ?? downloaded.contentType;
+  const uploadMimeType =
+    /^(?:image|audio|video)\//u.test(declaredMimeType) ||
+    declaredMimeType === 'application/octet-stream' ||
+    declaredMimeType === 'application/pdf'
+      ? declaredMimeType
+      : 'application/octet-stream';
   const params = new URLSearchParams({
     sourceAccountId: config.sourceAccountId,
     matrixEventId: event.matrixEventId,
     mxcUri: media.mxcUri,
-    mimeType: media.mimeType ?? downloaded.contentType,
+    mimeType: uploadMimeType,
     mediaId: mediaIdFromMxcUri(media.mxcUri),
   });
   if (typeof media.fileName === 'string' && media.fileName !== '') {
@@ -1789,7 +1798,7 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
     params.set('sha256', media.sha256);
   }
 
-  const response = await fetch(`${config.mediaUploadUrl}?${params.toString()}`, {
+  const response = await (deps.fetch ?? fetch)(`${config.mediaUploadUrl}?${params.toString()}`, {
     method: 'POST',
     headers: {
       authorization,
@@ -1821,7 +1830,7 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
   ) {
     throw new Error('intexuraos_private_media_upload_invalid_response');
   }
-  return body.data.media;
+  return { ...body.data.media, mimeType: declaredMimeType };
 }
 
 export function privateMediaUploadFailureCode(status, body, storageFailureReason) {

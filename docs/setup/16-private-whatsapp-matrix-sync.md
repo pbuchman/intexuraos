@@ -278,7 +278,18 @@ node tools/whatsapp-private-matrix-sync/src/backfill-private-events.mjs finalize
 
 Stop on discovery classification errors, unresolved relations, missing media or object evidence, unexpected identities/account counters, pending media, or unexpected live state. Preserve the existing allowlists and evidence checks; do not alter them to advance the cursor. Reviewed policy-skip or operation-metadata repair options are separate diagnostic interventions, not normal prerequisites or blanket bypasses.
 
-If a completed full apply leaves relations whose targets were intentionally skipped, keep the consumer fenced and review them explicitly. Wait for any active apply to finish before using a new reviewed source revision. An incomplete full apply must first be retried normally; this repair cannot stand in for it.
+If a full apply completed every metadata batch but returned pending media, wait for that process to exit and keep the consumer fenced. With the reviewed source revision, explicitly retry only the existing media queue:
+
+```bash
+node tools/whatsapp-private-matrix-sync/src/backfill-private-events.mjs apply \
+  --manifest "$manifest_file" --retry-pending-media true
+```
+
+This requires persisted full metadata counts (`accepted + duplicates === events.length`, zero rejected), an unapplied segment with positive pending media, preserved S0, and an exact, duplicate-free queue whose count and account/event/type/MXC/media metadata match the segment. Discovery errors, repair conflicts or a stale queue refuse the retry before drain. It never posts metadata or re-enqueues media. Partial retries accumulate stored media and allowlisted unavailable evidence without double-counting; only an empty queue makes the segment applied. A crash that leaves queue and persisted counts inconsistent fails closed: preserve the artifacts rather than inventing progress. Ordinary full apply remains available when the full metadata proof is absent. Never drain concurrently with another apply.
+
+Unsupported generic file MIME types such as `model/stl` upload as `application/octet-stream`, retaining the declared MIME, filename and original bytes in the message metadata. Supported image/audio/video uploads retain their existing MIME behavior. The explicit PDF and 25 MiB unavailable policies remain unchanged.
+
+If a completed full apply leaves relations whose targets were intentionally skipped, keep the consumer fenced and review them explicitly. Wait for any active apply to finish before using a new reviewed source revision. Full metadata and media application must complete before this relation repair; it cannot stand in for an incomplete apply.
 
 ```bash
 node tools/whatsapp-private-matrix-sync/src/backfill-private-events.mjs verify \
