@@ -9,6 +9,7 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from 'pino';
 import { err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
 import type { PRTriageEvent } from '@intexuraos/pr-triage-pubsub-client';
@@ -286,6 +287,7 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
   });
 
   it('lets only one parallel delivery evaluate and returns retryable 5xx to the active foreign lease', async () => {
+    const warnSpy = vi.spyOn(server.log, 'warn');
     const eventId = await saveEvent('delivery-parallel');
     let releaseEvaluation: (() => void) | undefined;
     const evaluationGate = new Promise<void>((resolve) => {
@@ -309,6 +311,13 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     });
 
     expect(competingResponse.statusCode).toBe(500);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'PR triage lease is active — returning 5xx for Pub/Sub retry'
+    );
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ [SKIP_SENTRY_KEY]: true }),
+      expect.any(String)
+    );
     expect(evaluateMock).toHaveBeenCalledOnce();
     releaseEvaluation?.();
     const ownerResponse = await firstRequest;
@@ -355,6 +364,7 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
   // 3. Not found (eventId does not exist)
   // -------------------------------------------------------------------------
   it('should return 200 and NOT call evaluate when event not found in Firestore', async () => {
+    const warnSpy = vi.spyOn(server.log, 'warn');
     const response = await server.inject({
       method: 'POST',
       url: '/internal/code/pubsub/pr-triage',
@@ -364,12 +374,17 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
 
     expect(response.statusCode).toBe(200);
     expect(evaluateMock).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      { [SKIP_SENTRY_KEY]: true },
+      'github-pr-events doc not found — acking to drop message'
+    );
   });
 
   // -------------------------------------------------------------------------
   // 4. Firestore error
   // -------------------------------------------------------------------------
   it('should return 500 when acquireTriage returns a Firestore error', async () => {
+    const errorSpy = vi.spyOn(server.log, 'error');
     const services = getServices();
     const originalRepo = services.gitHubPREventRepo;
     services.gitHubPREventRepo = {
@@ -391,6 +406,10 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
 
     expect(response.statusCode).toBe(500);
     expect(evaluateMock).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      { error: 'Simulated Firestore failure' },
+      'Failed to acquire github-pr-events triage lease'
+    );
   });
 
   // -------------------------------------------------------------------------
