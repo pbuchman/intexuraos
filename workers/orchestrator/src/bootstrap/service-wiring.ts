@@ -56,6 +56,8 @@ import { reconcileRepoGitIdentity } from './git-identity.js';
 import { ensureDirectoryExists } from './fs-utils.js';
 import type { ProviderApiKeyHealth } from '../types/api.js';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { withTimeout } from '../with-timeout.js';
+import { IMAGE_PULL_TIMEOUT_MS } from '../services/task-dispatcher/retry-logic.js';
 
 const DOCKER_NETWORK_NAME = 'code-worker-net';
 const TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
@@ -87,6 +89,27 @@ export interface WiredServices {
 
 export function resolveSettingsLocalTemplatePath(repoPath: string): string {
   return join(repoPath, 'docker', 'code-worker', 'config-defaults', 'settings.local.json');
+}
+
+export function createWorkerAuthImageResolver(
+  isolationProvider: IsolationProvider
+): () => Promise<string> {
+  let pendingPull: Promise<string> | undefined;
+  return async () => {
+    if (isolationProvider.pullImage === undefined) {
+      throw new Error('Worker auth refresh requires worker image pulling');
+    }
+    pendingPull ??= isolationProvider.pullImage('worker-auth-refresh').finally(() => {
+      pendingPull = undefined;
+    });
+    // A caller deadline does not cancel Docker. Keep the shared pull until the
+    // underlying operation settles so later watchdog ticks cannot duplicate it.
+    return await withTimeout(
+      pendingPull,
+      IMAGE_PULL_TIMEOUT_MS,
+      `Worker auth image pull timed out after ${String(IMAGE_PULL_TIMEOUT_MS / 1000)}s`
+    );
+  };
 }
 
 export function buildTaskDispatcherWorkerSecrets(
@@ -225,6 +248,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
   const credentialsPath = join(sharedCredsPath, '.credentials.json');
   const codexAuthPath = join(sharedCodexAuthPath, 'auth.json');
   const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+  const resolveRefreshImage = createWorkerAuthImageResolver(isolationProvider);
 
   const credentialMonitor = new CredentialMonitor(
     { credentialsPath, reloadIntervalMs: CREDENTIAL_RELOAD_INTERVAL_MS },
@@ -232,7 +256,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
   );
 
   const credentialRefresher = new CredentialRefresher(
-    { sharedCredsPath, imageName: env.workerImage, networkName: DOCKER_NETWORK_NAME },
+    { sharedCredsPath, resolveImage: resolveRefreshImage, networkName: DOCKER_NETWORK_NAME },
     docker,
     logger
   );
@@ -240,7 +264,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
   const codexAuthRefresher = new CodexAuthRefresher(
     {
       sharedAuthPath: sharedCodexAuthPath,
-      imageName: env.workerImage,
+      resolveImage: resolveRefreshImage,
       networkName: DOCKER_NETWORK_NAME,
     },
     docker,
