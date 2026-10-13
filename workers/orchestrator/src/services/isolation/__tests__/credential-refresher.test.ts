@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 
 // Mock os.userInfo() to prevent crashing in Docker environments without /etc/passwd.
 vi.mock('node:os', async (importOriginal) => {
@@ -19,6 +19,7 @@ vi.mock('node:os', async (importOriginal) => {
 
 import { CredentialRefresher } from '../credential-refresher.js';
 import type { Logger } from '@intexuraos/common-core';
+import type Docker from 'dockerode';
 
 const createMockLogger = (): Logger => ({
   info: vi.fn() as unknown as Logger['info'],
@@ -50,6 +51,7 @@ describe('CredentialRefresher', () => {
   let mockLogger: Logger;
   let mockContainer: MockContainer;
   let mockDocker: MockDocker;
+  let resolveImage: Mock<() => Promise<string>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,12 +65,15 @@ describe('CredentialRefresher', () => {
       remove: vi.fn().mockResolvedValue(undefined),
     };
     mockDocker = createMockDocker(mockContainer);
+    resolveImage = vi
+      .fn<() => Promise<string>>()
+      .mockResolvedValue('registry/code-worker@sha256:resolved');
 
     refresher = new CredentialRefresher(
       {
         sharedCredsPath: '/home/user/.code-orchestrator/claude-creds',
-        imageName: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
         networkName: 'code-worker-net',
+        resolveImage,
       },
       mockDocker as never,
       mockLogger
@@ -79,18 +84,43 @@ describe('CredentialRefresher', () => {
     vi.restoreAllMocks();
   });
 
+  it('waits for the worker image pull before creating a refresh container', async () => {
+    let finishPull: ((image: string) => void) | undefined;
+    resolveImage.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          finishPull = resolve;
+        })
+    );
+
+    const result = refresher.refresh();
+    expect(mockDocker.createContainer).not.toHaveBeenCalled();
+    finishPull?.('registry/code-worker@sha256:resolved');
+
+    expect(await result).toBe(true);
+    expect(mockDocker.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ Image: 'registry/code-worker@sha256:resolved' })
+    );
+  });
+
+  it('does not create a refresh container when the registry pull fails', async () => {
+    resolveImage.mockRejectedValue(new Error('registry access denied'));
+
+    expect(await refresher.refresh()).toBe(false);
+    expect(mockDocker.createContainer).not.toHaveBeenCalled();
+    expect(mockContainer.remove).not.toHaveBeenCalled();
+  });
+
   it('creates container with correct mounts and command', async () => {
     await refresher.refresh();
 
     expect(mockDocker.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
-        Image: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
+        Image: 'registry/code-worker@sha256:resolved',
         Entrypoint: ['/bin/bash', '-lc'],
         Cmd: [expect.stringContaining('cp -r /opt/claude-defaults/. /home/claude/')],
         HostConfig: expect.objectContaining({
-          Binds: expect.arrayContaining([
-            '/home/user/.code-orchestrator/claude-creds:/home/claude/.claude:rw',
-          ]),
+          Binds: ['/home/user/.code-orchestrator/claude-creds:/home/claude/.claude:rw'],
           NetworkMode: 'code-worker-net',
           AutoRemove: false,
         }),
@@ -100,6 +130,11 @@ describe('CredentialRefresher', () => {
       | { Cmd?: string[] }
       | undefined;
     expect(createArg?.Cmd?.[0]).toContain('exec claude --print --model haiku');
+    const spec = mockDocker.createContainer.mock.calls[0]?.[0] as Docker.ContainerCreateOptions;
+    expect(spec.User).toBe(
+      `${String(process.getuid?.() ?? 1000)}:${String(process.getgid?.() ?? 1000)}`
+    );
+    expect(spec.Env).toBeUndefined();
   });
 
   it('returns true on exit code 0', async () => {

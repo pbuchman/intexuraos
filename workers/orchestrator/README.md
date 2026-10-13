@@ -309,11 +309,9 @@ sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP  # block cloud metadata
 
 # 5. Create env file (see "Updating Secrets" above)
 
-# 6. Install Claude Code and login (for Anthropic OAuth)
-curl -fsSL https://claude.ai/install.sh | bash
-# Use SSH reverse tunnel for headless login:
-# From workstation: ssh -R 8080:localhost:8080 user@vm
-# On VM: claude login
+# 6. Bootstrap the separate Claude worker session (Anthropic OAuth)
+workers/orchestrator/scripts/claude-login.sh
+# Inside the container: claude login, complete the owner login, then exit.
 
 # Optional: bootstrap shared Codex auth for code-worker
 workers/orchestrator/scripts/codex-login.sh
@@ -442,50 +440,36 @@ brew install cloudflared && sudo cloudflared service install
 
 The orchestrator uses Claude Code OAuth credentials (Max subscription) instead of a static API key.
 
-**Prerequisite:** Run `claude login` on the orchestrator machine before first start.
+Bootstrap or renew the separate worker session from the deployment checkout:
 
-For headless machines (SSH-only, no browser):
+```bash
+workers/orchestrator/scripts/claude-login.sh
+```
 
-1. Open an SSH session with reverse port forwarding from your workstation:
-
-   ```bash
-   ssh -R 8080:localhost:8080 user@orchestrator-vm
-   ```
-
-   This forwards port 8080 on the VM back to your workstation, allowing the OAuth
-   callback to reach your local browser.
-
-2. On the VM, run the Claude login command:
-
-   ```bash
-   claude login
-   ```
-
-3. A URL is printed to the terminal. Open it in your workstation's browser.
-   Complete the Anthropic OAuth consent flow and authorize the CLI.
-
-4. On success, credentials are written to `~/.claude/.credentials.json` on the VM.
-
-5. Start the orchestrator — it reads credentials automatically:
-   ```bash
-   node workers/orchestrator/dist/index.js
-   ```
+Inside the container, run `claude login`, complete the supported owner login
+flow, then exit. The script mounts `~/.code-orchestrator/claude-creds` at
+`/home/claude/.claude` and runs as the host user's UID/GID. Credentials are
+stored in `~/.code-orchestrator/claude-creds/.credentials.json`.
 
 The orchestrator:
 
-- Reads OAuth credentials from `~/.claude/.credentials.json` at startup
-- Logs credential expiry time and subscription type on boot
-- Refreshes access tokens automatically (30-minute check cycle, tokens last ~4-5h)
-- Persists rotated refresh tokens back to the credentials file
-- Alerts code-agent via webhook if the refresh token is revoked
-- Rejects new Anthropic tasks when credentials are degraded
+- Reads the shared worker credentials at startup and reloads them every minute.
+- Checks every minute for tokens within five minutes of expiry; refresh waits
+  until task workers are idle.
+- Pulls and resolves the configured image through the existing registry contract
+  before starting the refresh container.
+- Lets Claude CLI refresh the shared worker store through its mounted directory.
+- Reports authentication state through `/health`; dispatch checks require active
+  Claude authorization.
 
-**Credential isolation:** The orchestrator reads from the global `~/.claude/.credentials.json` on the host.
-For each task, it copies the credentials into the task's session directory (`~/.code-orchestrator/secrets/{taskId}/`),
-which is bind-mounted into the Docker container at `/home/claude/.claude/`. Containers never access the host's global file directly.
-When tokens are refreshed, the orchestrator updates both the global file and all active task session directories.
+**Credential isolation:** Task and refresh containers mount the shared worker
+store at `/home/claude/.claude`. The primary host session in `~/.claude` is a
+separate credential domain. Never copy its credentials into the worker store.
 
-**Re-authentication:** If the refresh token is revoked, SSH tunnel into the VM and run `claude login` again.
+**Re-authentication:** If worker refresh is rejected, rerun
+`workers/orchestrator/scripts/claude-login.sh` and complete `claude login` inside
+its container. The running orchestrator reloads the store automatically; verify
+`workerAuths.claude.status` is `active` before dispatching Claude tasks.
 
 ### Codex Auth
 
@@ -498,6 +482,11 @@ workers/orchestrator/scripts/codex-login.sh
 Inside the container, run `codex login --device-auth` and complete the ChatGPT device-auth flow.
 
 This writes shared auth to `~/.code-orchestrator/codex-auth/auth.json`.
+
+The refresh container uses the same registry image resolver as task workers.
+If the worker session is revoked, repeat this worker login flow. Keep the primary
+host's `~/.codex` session separate; never copy its authentication into this store.
+The running orchestrator reloads worker authentication every minute.
 
 Check worker auth status: `curl http://localhost:8199/health | jq .workerAuths`
 
@@ -700,13 +689,14 @@ cd ../../workers/orchestrator && pnpm test:e2e
 ## Directory Structure
 
 ```
-~/.claude/
-+-- .credentials.json       # OAuth credentials (created by `claude login`)
-
 ~/code-workers/
 +-- worktrees/              # Git worktrees for tasks (auto-created)
 
 ~/.code-orchestrator/
++-- claude-creds/
+|   +-- .credentials.json   # Separate Claude worker session
++-- codex-auth/
+|   +-- auth.json           # Separate Codex worker session
 +-- github-app.pem          # GitHub App private key (host-rendered DEV projection)
 +-- state.json              # Task state (auto-created)
 +-- github-token            # Current GitHub token (auto-created)
@@ -719,23 +709,23 @@ cd ../../workers/orchestrator && pnpm test:e2e
 
 ## Troubleshooting
 
-| Issue                               | Fix                                                                          |
-| ----------------------------------- | ---------------------------------------------------------------------------- |
-| Missing `INTEXURAOS_REPOSITORY_URL` | Validate `config/environments/common.json`, then rerun sync and generator    |
-| 502 from tunnel                     | Orchestrator not running: `pnpm --filter orchestrator dev`                   |
-| HMAC signature mismatch             | `dispatchSigningSecret` in UI must match `INTEXURAOS_ORCHESTRATOR_SECRET`    |
-| DEV package render failed           | Verify external renderer identity, numeric version, CRC/schema, and manifest |
-| GitHub App PEM missing              | Re-render the same DEV version; verify mode `0600`; do not fetch in process  |
-| Tests skipped                       | Check E2E prerequisites above                                                |
-| "Network not found"                 | `./scripts/setup-worker-network.sh`                                          |
-| "Image not found"                   | `docker build -t code-worker:test -f Dockerfile.test .`                      |
-| Container name conflict             | `docker rm -f $(docker ps -aq --filter name=code-worker-)`                   |
-| OAuth credentials missing           | Run `claude login` on VM (use SSH tunnel for headless)                       |
-| OAuth token expired                 | Orchestrator auto-refreshes; if refresh token revoked, re-run `claude login` |
+| Issue                               | Fix                                                                                          |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| Missing `INTEXURAOS_REPOSITORY_URL` | Validate `config/environments/common.json`, then rerun sync and generator                    |
+| 502 from tunnel                     | Orchestrator not running: `pnpm --filter orchestrator dev`                                   |
+| HMAC signature mismatch             | `dispatchSigningSecret` in UI must match `INTEXURAOS_ORCHESTRATOR_SECRET`                    |
+| DEV package render failed           | Verify external renderer identity, numeric version, CRC/schema, and manifest                 |
+| GitHub App PEM missing              | Re-render the same DEV version; verify mode `0600`; do not fetch in process                  |
+| Tests skipped                       | Check E2E prerequisites above                                                                |
+| "Network not found"                 | `./scripts/setup-worker-network.sh`                                                          |
+| "Image not found"                   | `docker build -t code-worker:test -f Dockerfile.test .`                                      |
+| Container name conflict             | `docker rm -f $(docker ps -aq --filter name=code-worker-)`                                   |
+| OAuth credentials missing           | Run `workers/orchestrator/scripts/claude-login.sh`, then `claude login` inside the container |
+| OAuth token expired                 | Observe automatic refresh; if rejected, renew through the separate worker login script       |
 
 ### Worker Image Policy
 
-- Orchestrator pulls the worker image before each new task container.
+- Orchestrator pulls the worker image before each new task or authentication-refresh container.
 - Pull failure is fail-fast (no cached-image fallback) to prevent stale runtime behavior.
 - Startup logs include requested image ref and resolved digest.
 
