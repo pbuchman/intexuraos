@@ -24,6 +24,7 @@ export type AcquireGitHubPRTriageResult =
   | { kind: 'not_found' };
 
 export interface CompleteGitHubPRTriageInput {
+  skipReason?: 'SKIPPED_BEFORE_RESUME';
   eventId: string;
   leaseToken: string;
   completedAt: Date;

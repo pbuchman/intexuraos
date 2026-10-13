@@ -119,9 +119,9 @@ pnpm run verify:firestore-artifacts
 pnpm run verify:service-wiring
 pnpm run verify:route-resource-names
 pnpm run verify:hash-routing
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/environments/dev fmt -check
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/environments/dev init -backend=false
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/environments/dev validate
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/shared-gcp fmt -check
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/shared-gcp init -backend=false
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/shared-gcp validate
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/hetzner-prod fmt -check
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/hetzner-prod init -backend=false
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json terraform -chdir=terraform/hetzner-prod validate
@@ -278,7 +278,7 @@ production mutation.
    routes, scheduler no-op, Pub/Sub rejection, and zero outbound effects before Terraform.
 4. On the production host, clear all emulator variables and use
    `/home/deploy/provisioner-sa-key.json`. Apply the reviewed forward plan for
-   `terraform/environments/dev` first (topic/identity/IAM), then `terraform/hetzner-prod`
+   `terraform/shared-gcp` first (topic/identity/IAM), then `terraform/hetzner-prod`
    (subscription/DLQ/scheduler and removal of only the old digest scheduler). After forward state
    exists, generate and review inverse plans from the previous immutable release configuration
    against that current state; do not reuse a stale precomputed inverse plan.

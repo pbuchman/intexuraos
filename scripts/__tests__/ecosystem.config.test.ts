@@ -396,13 +396,13 @@ describe('ecosystem.config.cjs', () => {
     });
   });
 
-  it('uses externally reachable dev web app URL for WhatsApp link producers', () => {
+  it('uses the local web app URL for WhatsApp link producers', () => {
     expect(loadWhatsAppLinkProducerWebAppEnv()).toEqual({
-      'code-agent': 'https://dev.intexuraos.cloud',
-      'intex-agent': 'https://dev.intexuraos.cloud',
-      'message-digest-service': 'https://dev.intexuraos.cloud',
-      'mobile-notifications-service': 'https://dev.intexuraos.cloud',
-      'research-agent': 'https://dev.intexuraos.cloud',
+      'code-agent': 'http://localhost:3000',
+      'intex-agent': 'http://localhost:3000',
+      'message-digest-service': 'http://localhost:3000',
+      'mobile-notifications-service': 'http://localhost:3000',
+      'research-agent': 'http://localhost:3000',
     });
   });
 
@@ -521,7 +521,7 @@ describe('ecosystem.config.cjs', () => {
   });
 
   it('keeps the production Terraform selector fail-closed without a tracked subject or User Service key grant', () => {
-    const terraform = readFileSync('terraform/environments/dev/main.tf', 'utf8');
+    const terraform = readFileSync('terraform/shared-gcp/main.tf', 'utf8');
 
     expect(terraform).toContain('INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID = "disabled"');
     expect(terraform).not.toMatch(/auth0\|/u);

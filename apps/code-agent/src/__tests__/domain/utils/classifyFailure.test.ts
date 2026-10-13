@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { classifyFailure, type FailureVerdict } from '../../../domain/utils/classifyFailure.js';
 
 describe('classifyFailure', () => {
+  it('does not retry unavailable Sentry evidence even with a legacy retry hint', () => {
+    expect(classifyFailure({ code: 'SENTRY_EVIDENCE_UNAVAILABLE', message: 'Event has no cause', remediation: { action: 'retry' } })).toBe('fail');
+  });
   // Infrastructure — always retry
   it.each([
     ['SETUP_FAILED', 'Docker tmpfs mount failed'],

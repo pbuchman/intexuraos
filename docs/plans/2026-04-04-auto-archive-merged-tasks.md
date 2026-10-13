@@ -24,7 +24,7 @@
 | `apps/code-agent/src/routes/internalRoutes.ts`                                       | Modify   | Add `POST /internal/auto-archive-merged-tasks` endpoint                                 |
 | `apps/code-agent/src/services.ts`                                                    | Modify   | Add `autoArchiveMergedTasks` to `ServiceContainer`                                      |
 | `apps/code-agent/src/infra/migrations/prMergedAtStatusIndex.ts` (optional)           | Create   | Firestore composite index on `(prMergedAt, status)` — if using composite query approach |
-| `terraform/environments/dev/main.tf`                                                 | Modify   | New Cloud Scheduler job for auto-archive                                                |
+| `terraform/shared-gcp/main.tf`                                                 | Modify   | New Cloud Scheduler job for auto-archive                                                |
 | `apps/code-agent/src/__tests__/usecases/autoArchiveMergedTasks.test.ts`              | Create   | Unit tests for use case                                                                 |
 | `apps/code-agent/src/__tests__/routes/internalRoutes.autoArchiveMergedTasks.test.ts` | Create   | Route tests                                                                             |
 | `apps/code-agent/src/__tests__/usecases/handlePrClose.test.ts`                       | Modify   | Add tests for `prMergedAt` population                                                   |
@@ -658,11 +658,11 @@ git commit -m "feat(code-agent): add POST /internal/auto-archive-merged-tasks en
 ### Task 7: Add Cloud Scheduler Terraform configuration
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Add Cloud Scheduler resource**
 
-In `terraform/environments/dev/main.tf`, add after the `archive_stale_groups` scheduler block (line ~2061):
+In `terraform/shared-gcp/main.tf`, add after the `archive_stale_groups` scheduler block (line ~2061):
 
 ```terraform
 # -----------------------------------------------------------------------------
@@ -704,7 +704,7 @@ resource "google_cloud_scheduler_job" "auto_archive_merged_tasks" {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add terraform/environments/dev/main.tf
+git add terraform/shared-gcp/main.tf
 git commit -m "infra: add Cloud Scheduler for auto-archive merged tasks (INT-1174)"
 ```
 

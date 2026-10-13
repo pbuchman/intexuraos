@@ -18,10 +18,6 @@ const cloudbuildPath = resolve(repoRoot, 'apps/web/cloudbuild.yaml');
 const monolithCloudbuildPath = resolve(repoRoot, 'cloudbuild/cloudbuild.yaml');
 const deployWorkflowPath = resolve(repoRoot, '.github/workflows/deploy.yml');
 const viteConfigPath = resolve(repoRoot, 'apps/web/vite.config.ts');
-const terraformServiceUrlsPath = resolve(
-  repoRoot,
-  'terraform/environments/dev/service-urls.auto.tfvars.json'
-);
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
 const ENV_SUFFIX_REGEX = /^[A-Z][A-Z0-9_]+$/;
@@ -90,16 +86,6 @@ describe('apps/web/service-manifest.json', () => {
       apiPaths.add(entry.apiPath);
     }
   });
-
-  it('terraform service URL tfvars mirror manifest serviceUrl values', () => {
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    const tfvars = JSON.parse(readFileSync(terraformServiceUrlsPath, 'utf8'));
-    const expected: Record<string, string> = {};
-    for (const entry of manifest.services) {
-      expected[`INTEXURAOS_${entry.envSuffix}_URL`] = entry.serviceUrl;
-    }
-    expect(tfvars.service_urls).toEqual(expected);
-  });
 });
 
 describe('migrated web deployment is not wired to GCP Cloud Build', () => {
@@ -118,5 +104,6 @@ describe('migrated web deployment is not wired to GCP Cloud Build', () => {
     expect(content).toContain('navigateFallbackDenylist');
     expect(content).toContain('/^\\/share\\//');
     expect(content).toContain('/^\\/images\\//');
+    expect(content).toContain('/^\\/oauth\\/connections');
   });
 });

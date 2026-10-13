@@ -23,7 +23,7 @@
 - Today is **2026-04-20**. The Cloud Scheduler resource was committed on **2026-04-17** in `4c3e4c6d1 feat(infra): add Cloud Scheduler for daily WhatsApp digest (0 1 * * * UTC)`:
 
   ```text
-  $ git log --oneline -- terraform/environments/dev/main.tf | head -5
+  $ git log --oneline -- terraform/shared-gcp/main.tf | head -5
   4c3e4c6d1 feat(infra): add Cloud Scheduler for daily WhatsApp digest (0 1 * * * UTC)
   ```
 - `gcloud scheduler jobs describe` confirms the resource is live and `userUpdateTime = 2026-04-17T11:05:31Z`. So the 3-day gap maps exactly to the scheduler's lifetime.
@@ -91,7 +91,7 @@ httpTarget:
 
 Cloud Scheduler's default `Content-Type` when a request has a body and no headers block is `application/octet-stream`. Fastify's built-in content-type parser only handles `application/json` and `text/plain` by default, so the request is rejected before the route handler runs.
 
-Source of the bug — `terraform/environments/dev/main.tf:1024-1053` (commit `4c3e4c6d1`):
+Source of the bug — `terraform/shared-gcp/main.tf:1024-1053` (commit `4c3e4c6d1`):
 
 ```hcl
 resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
@@ -125,7 +125,7 @@ async (req, reply) => {
   }
 ```
 
-`validateInternalAuth` reads the `x-internal-auth` header (`packages/common-http/src/auth/internalAuth.ts:24`). The scheduler does not send it, so the next failure after unblocking Content-Type would be a 401. No other scheduler in `terraform/environments/dev/main.tf` passes `x-internal-auth`; they all rely on the OIDC invoker IAM binding plus an application-layer check for a JWT-shaped bearer. The pattern is established in `apps/retired-scheduler-service/src/routes/internal-routes.ts:42-68` (see below for the template we mirror).
+`validateInternalAuth` reads the `x-internal-auth` header (`packages/common-http/src/auth/internalAuth.ts:24`). The scheduler does not send it, so the next failure after unblocking Content-Type would be a 401. No other scheduler in `terraform/shared-gcp/main.tf` passes `x-internal-auth`; they all rely on the OIDC invoker IAM binding plus an application-layer check for a JWT-shaped bearer. The pattern is established in `apps/retired-scheduler-service/src/routes/internal-routes.ts:42-68` (see below for the template we mirror).
 
 ### 5. Why other schedulers work and this one doesn't
 
@@ -147,7 +147,7 @@ The `POST /internal/notifications/digest/run-yesterday` handler never reaches `r
 
 | #   | Area      | Change                                                                                                                                                  | File                                                                          |
 | --- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| 1   | Terraform | Drop `body = base64encode("{}")` from the scheduler (matches sibling schedulers; eliminates the Content-Type mismatch).                                 | `terraform/environments/dev/main.tf:1031-1040`                                |
+| 1   | Terraform | Drop `body = base64encode("{}")` from the scheduler (matches sibling schedulers; eliminates the Content-Type mismatch).                                 | `terraform/shared-gcp/main.tf:1031-1040`                                |
 | 2   | Route     | Accept either a JWT-shaped `Authorization: Bearer …` (OIDC) **or** the existing `x-internal-auth` header. Mirrors `retired-scheduler-service/internal/cron/tick`.      | `apps/mobile-notifications-service/src/routes/digestRoutes.ts:257-262`        |
 | 3   | Tests     | Add regression tests: (a) OIDC Bearer is accepted; (b) bare `Bearer garbage` is rejected; (c) no auth at all is rejected (existing test, leave intact). | `apps/mobile-notifications-service/src/__tests__/routes/digestRoutes.test.ts` |
 | 4   | Backfill  | After the fix deploys, trigger `/notifications/digests/backfill` for `fromDate=2026-04-17 toDate=2026-04-19` per active subscription.                   | Operational, not code.                                                        |
@@ -157,7 +157,7 @@ The `POST /internal/notifications/digest/run-yesterday` handler never reaches `r
 ## File Structure
 
 - **Modified:**
-  - `terraform/environments/dev/main.tf` — remove one line from `google_cloud_scheduler_job.mobile_notifications_digest_yesterday`.
+  - `terraform/shared-gcp/main.tf` — remove one line from `google_cloud_scheduler_job.mobile_notifications_digest_yesterday`.
   - `apps/mobile-notifications-service/src/routes/digestRoutes.ts` — replace the `validateInternalAuth`-only check on `run-yesterday` with the dual-auth helper pattern used by retired-scheduler-service.
   - `apps/mobile-notifications-service/src/__tests__/routes/digestRoutes.test.ts` — add two tests (OIDC accepted / bare Bearer rejected).
 - **Created:** none.
@@ -336,7 +336,7 @@ git commit -m "fix(mobile-notifications): accept OIDC Bearer on /internal/notifi
 ### Task 3: Remove the `body` attribute from the Cloud Scheduler Terraform resource
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf:1031-1040`
+- Modify: `terraform/shared-gcp/main.tf:1031-1040`
 
 - [ ] **Step 1: Delete the one offending line**
 
@@ -374,7 +374,7 @@ Why not also add `headers = { "Content-Type" = "application/json" }`? The endpoi
 - [ ] **Step 2: `terraform fmt` and `terraform validate`**
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform fmt -check
 terraform validate
 cd -
@@ -385,7 +385,7 @@ Expected: both succeed.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add terraform/environments/dev/main.tf
+git add terraform/shared-gcp/main.tf
 git commit -m "fix(infra): drop empty body from digest scheduler so Cloud Scheduler sends no Content-Type (INT-1420)"
 ```
 
@@ -420,7 +420,7 @@ Scheduler `mobile-notifications-digest-yesterday-dev` (committed 2026-04-17) sen
 ## Test plan
 - [x] `pnpm --filter=@intexuraos/mobile-notifications-service test`
 - [x] `pnpm run verify:workspace:tracked -- mobile-notifications-service`
-- [x] `terraform fmt -check && terraform validate` (in `terraform/environments/dev`)
+- [x] `terraform fmt -check && terraform validate` (in `terraform/shared-gcp`)
 - [x] `pnpm run ci:tracked`
 - [ ] After merge + deploy: trigger scheduler once (`gcloud scheduler jobs run mobile-notifications-digest-yesterday-dev --location=europe-central2`) and confirm Cloud Run log shows `msg: "request completed"` with `statusCode: 200`.
 - [ ] Manually backfill the three missed days (see Operational runbook below).
@@ -456,4 +456,4 @@ EOF
 
 **3. Type consistency:** the new OIDC guard uses `req.headers.authorization` (Fastify types it as `string | string[] | undefined`), matching retired-scheduler-service's identical check; `JWT_STRUCTURE` is declared inside the handler so no cross-file type drift.
 
-**4. Blast radius:** changes are confined to `mobile-notifications-service` (one route + its tests) and one line in `terraform/environments/dev/main.tf`. No other schedulers, services, or Firestore collections are touched.
+**4. Blast radius:** changes are confined to `mobile-notifications-service` (one route + its tests) and one line in `terraform/shared-gcp/main.tf`. No other schedulers, services, or Firestore collections are touched.

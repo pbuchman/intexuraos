@@ -26,7 +26,7 @@ This plan covers one migration with 12 sequential phases. The phases are interde
 These are choices the user must make before execution. The plan assumes the default answers below. Flag these back to the user if the defaults are wrong.
 
 **Decision 1: api-docs-hub deployment target**
-The `api-docs-hub` app exists at `apps/api-docs-hub/` and is referenced in Terraform (`terraform/environments/dev/main.tf:307` sets `INTEXURAOS_API_DOCS_HUB_URL`), but it is **not** in `ecosystem.config.cjs` and `docs/validation/meta-validation-report.md:126` documents it as "forward-looking infrastructure" with only `GET /docs` and `GET /health` endpoints and no internal callers.
+The `api-docs-hub` app exists at `apps/api-docs-hub/` and is referenced in Terraform (`terraform/shared-gcp/main.tf:307` sets `INTEXURAOS_API_DOCS_HUB_URL`), but it is **not** in `ecosystem.config.cjs` and `docs/validation/meta-validation-report.md:126` documents it as "forward-looking infrastructure" with only `GET /docs` and `GET /health` endpoints and no internal callers.
 - **Default assumption:** Do not include api-docs-hub in the Hetzner PM2 config. Keep the Terraform env var pointing at Cloud Run (or set to empty). Revisit after migration.
 - **Alternative:** Add it to the Hetzner PM2 config — adds one port and one nginx route.
 
@@ -76,7 +76,7 @@ The plan assumes the existing `~/.config/gcloud/sa-key.json` is reused for the H
 - `.github/scripts/smart-dispatch.mjs` — teach analyzer about hetzner strategy
 - `CLAUDE.md` — update "Environments" line to reflect new prod architecture
 - `.claude/reference/environments.md` — updated environment documentation
-- `terraform/environments/dev/main.tf` — remove any prod-aliased Cloud Run services (only if Decision 1 says to drop api-docs-hub)
+- `terraform/shared-gcp/main.tf` — remove any prod-aliased Cloud Run services (only if Decision 1 says to drop api-docs-hub)
 
 ### Unchanged / deliberately not touched
 
@@ -152,7 +152,7 @@ Expected:
 - [ ] **Step 1:** List all prod-required secrets
 
 Run: `gcloud secrets list --project=intexuraos-dev-pbuchman --format='value(name)' | sort`
-Expected: a list that includes at minimum the secrets named in `terraform/environments/dev/main.tf` under `module "secret_manager"` (currently around line 479 — read it to get the full list). Record the list; Phase 4 will consume it.
+Expected: a list that includes at minimum the secrets named in `terraform/shared-gcp/main.tf` under `module "secret_manager"` (currently around line 479 — read it to get the full list). Record the list; Phase 4 will consume it.
 
 - [ ] **Step 2:** Verify the SA key at `$HOME/.config/gcloud/sa-key.json` has permission to read them
 
@@ -305,7 +305,7 @@ git commit -m "feat(terraform): add prod environment variables (INT-750)"
 
 - [ ] **Step 1: Find the existing backend bucket name**
 
-Run: `grep -rn "backend \"gcs\"" terraform/environments/dev/`
+Run: `grep -rn "backend \"gcs\"" terraform/shared-gcp/`
 Expected: path and bucket name. Record the bucket name as `<BUCKET>` for the next step.
 
 - [ ] **Step 2: Create `terraform/environments/prod/backend.tf`**
@@ -823,7 +823,7 @@ NODE_ENV=production
 EOF
 
 # Pull secrets from Secret Manager.
-# This list MUST match terraform/environments/dev/main.tf module "secret_manager".
+# This list MUST match terraform/shared-gcp/main.tf module "secret_manager".
 # Keep in sync manually — or generate from terraform via a follow-up issue.
 SECRETS=(
   INTEXURAOS_AUTH0_DOMAIN
@@ -1686,7 +1686,7 @@ git commit -m "feat(nginx): wire jwt verification into /internal/* routes (INT-7
 # push SUBSCRIPTIONS with push endpoints pointing at https://intexuraos.cloud.
 # -----------------------------------------------------------------------------
 
-# Existing topics from dev environment (names hardcoded — match terraform/environments/dev/main.tf)
+# Existing topics from dev environment (names hardcoded — match terraform/shared-gcp/main.tf)
 locals {
   topics = {
     whatsapp_media_cleanup       = "intexuraos-whatsapp-media-cleanup-dev"
@@ -1757,7 +1757,7 @@ data "google_service_account" "todos_agent" {
 }
 ```
 
-**Note:** the exact SA account_ids must match what `terraform/environments/dev/main.tf` `module "iam"` creates. Before applying, run `grep -n 'service_accounts\|account_id' terraform/modules/iam/main.tf` to confirm the names.
+**Note:** the exact SA account_ids must match what `terraform/shared-gcp/main.tf` `module "iam"` creates. Before applying, run `grep -n 'service_accounts\|account_id' terraform/modules/iam/main.tf` to confirm the names.
 
 ### Task 8.2: Create prod subscriptions — one resource per topic
 
@@ -2549,10 +2549,10 @@ Trigger a WhatsApp message to your verified number. Expected: the message is rec
 ### Task 12.2: Decommission Cloud Run services (separate PR)
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf` — remove Cloud Run service modules
+- Modify: `terraform/shared-gcp/main.tf` — remove Cloud Run service modules
 
 - [ ] **Step 1:** Create a new branch `chore/decommission-cloudrun-prod`
-- [ ] **Step 2:** Comment out or remove every `module "*"` block in `terraform/environments/dev/main.tf` that creates a Cloud Run service. **Do NOT** remove the `firestore`, `pubsub-*`, `iam`, `secret_manager`, or bucket modules.
+- [ ] **Step 2:** Comment out or remove every `module "*"` block in `terraform/shared-gcp/main.tf` that creates a Cloud Run service. **Do NOT** remove the `firestore`, `pubsub-*`, `iam`, `secret_manager`, or bucket modules.
 - [ ] **Step 3:** Plan. Expected: destroys for `google_cloud_run_v2_service.*`, `google_compute_global_address.web_app[0]`, `google_compute_forwarding_rule.*`, `google_compute_managed_ssl_certificate.*`. **Verify no destroys for Firestore, Pub/Sub topics, IAM, secrets.**
 - [ ] **Step 4:** Open PR, let CI run, review, merge, apply.
 - [ ] **Step 5:** Verify old Cloud Run URLs return 404: `curl -I https://intexuraos-web-dev-...a.run.app`
@@ -2602,7 +2602,7 @@ git commit -m "docs: update environments for hetzner prod migration (INT-750)"
 Ran through the checklist after writing:
 
 1. **Spec coverage** — INT-750's phases 0-7 are all covered. Plus: INT-1335 prerequisite (Phase 0), web app static build (Phase 9), DNS TTL management (Phase 11), decommission as separate PR (Phase 12).
-2. **Placeholder scan** — audited for "TBD", "similar to", "add error handling" — none found. Every code block is complete. One gap: the `scripts/hetzner/load-secrets.sh` secret list is hardcoded and must be kept in sync with `terraform/environments/dev/main.tf` `module "secret_manager"` — explicit note added in the script comment.
+2. **Placeholder scan** — audited for "TBD", "similar to", "add error handling" — none found. Every code block is complete. One gap: the `scripts/hetzner/load-secrets.sh` secret list is hardcoded and must be kept in sync with `terraform/shared-gcp/main.tf` `module "secret_manager"` — explicit note added in the script comment.
 3. **Type consistency** — `SERVER_IP`, `${SERVER_IP}`, `HCLOUD_TOKEN`, `deploy` user name are used consistently.
 4. **Known gap** — Task 10.2's web-app build block in `deploy-hetzner.yml` is abbreviated (only 3 env vars shown) to keep the plan readable. The full list from Task 9.1 Step 1 must be inlined when executed.
-5. **Known gap** — the `SERVICE_ENV_MAPPINGS` block in `ecosystem.config.prod.cjs` (Phase 5.1) uses hardcoded topic names like `intexuraos-whatsapp-send-prod`. The engineer MUST verify these match the topic names in `terraform/environments/dev/main.tf` before the first deploy — if dev uses `-dev` suffix and no prod suffix exists yet, these must be updated. Alternatively, use real dev topic names and defer the prod topic naming to a later issue.
+5. **Known gap** — the `SERVICE_ENV_MAPPINGS` block in `ecosystem.config.prod.cjs` (Phase 5.1) uses hardcoded topic names like `intexuraos-whatsapp-send-prod`. The engineer MUST verify these match the topic names in `terraform/shared-gcp/main.tf` before the first deploy — if dev uses `-dev` suffix and no prod suffix exists yet, these must be updated. Alternatively, use real dev topic names and defer the prod topic naming to a later issue.

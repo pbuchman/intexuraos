@@ -234,7 +234,7 @@ The system can only delegate work safely because the engineering discipline is s
 | ------------------ | ---------------------------------------------------------------------------- |
 | **Runtime**        | Node.js, TypeScript strict mode                                              |
 | **Web**            | React, Vite, TailwindCSS                                                     |
-| **Services**       | Fastify apps on Cloud Run / Hetzner PM2                                      |
+| **Services**       | Fastify apps on the dedicated Home PROD PM2 runtime                          |
 | **Workers**        | Cloud Functions and VM-hosted orchestrator                                   |
 | **Data**           | Firestore, Google Cloud Storage                                              |
 | **Messaging**      | Cloud Pub/Sub                                                                |

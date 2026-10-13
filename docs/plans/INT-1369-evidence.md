@@ -33,7 +33,7 @@
 
 | Area                          | Files                                                                                                                                                                                                                              | Responsibility                                                                                                       |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Orchestrator env + boot       | `workers/orchestrator/src/start.ts`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`, `workers/orchestrator/README.md`                                                                                                | Parse one ordered validation-model env var, wire required secrets, document the new configuration                    |
+| Orchestrator env + boot       | `workers/orchestrator/src/start.ts`, `terraform/shared-gcp/main.tf`, `ecosystem.config.cjs`, `workers/orchestrator/README.md`                                                                                                | Parse one ordered validation-model env var, wire required secrets, document the new configuration                    |
 | Orchestrator client selection | `workers/orchestrator/src/services/completion-verifier.ts`, `workers/orchestrator/src/services/agent-compliance-validator.ts`, new helper in `workers/orchestrator/src/services/`                                                  | Build provider-agnostic validation clients from prioritized models and retry/fallback on failure                     |
 | Orchestrator tests            | `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`, `workers/orchestrator/src/services/__tests__/agent-compliance-validator.test.ts`, possibly `workers/orchestrator/src/__tests__/task-dispatcher.test.ts` | Cover ordered-model parsing, missing-key handling, primary failure -> secondary fallback, and logging                |
 | Hellscript migration          | `apps/hellscript-agent/src/index.ts`, `apps/hellscript-agent/src/services.ts`, `apps/hellscript-agent/src/infra/llm/geminiIntentInterpreter.ts`, `apps/hellscript-agent/src/infra/llm/geminiDraftGenerator.ts`, related tests      | Remove direct Gemini bootstrapping and use a generic user-backed generate client                                     |
@@ -70,7 +70,7 @@ None.
 - Create or modify: `workers/orchestrator/src/services/<validation-model-helper>.ts`
 - Modify: `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`
 - Modify: `workers/orchestrator/src/services/__tests__/agent-compliance-validator.test.ts`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `workers/orchestrator/README.md`
 

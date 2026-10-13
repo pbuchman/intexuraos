@@ -191,6 +191,23 @@ describe('retryTask use case', () => {
     };
   }
 
+  it.each([true, false])('keeps validation failures reportable only when not already reported: %s', async (alreadyReported) => {
+    const failure = { code: 'UNAVAILABLE', message: 'Validation unavailable', alreadyReported };
+    mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(createMockTask({ completedAt: Timestamp.fromDate(new Date(Date.now() - 6 * 60 * 1000)) })));
+    mockCodeTaskRepo.hasActiveTaskForLinearIssue.mockResolvedValue(ok({ hasActive: false }));
+    mockCodeTaskRepo.create.mockResolvedValue(ok(createMockTask({ id: 'retry-task-1' })));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(err(failure));
+    mockLinearAgentClient.updateIssueState.mockResolvedValue(ok(undefined));
+    mockLinearAgentClient.addComment.mockResolvedValue(ok(undefined));
+    const result = await retryTask(createDeps(), { originalTaskId, userId });
+    expect(result.ok).toBe(true);
+    expect(mockLogger[alreadyReported ? 'info' : 'warn']).toHaveBeenCalledWith(expect.any(Object), 'Failed to refresh Linear issue labels for retry; dispatching with empty labels');
+    if (alreadyReported) {
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    }
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
   describe('validation', () => {
     it('should return error when original task not found', async () => {
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(

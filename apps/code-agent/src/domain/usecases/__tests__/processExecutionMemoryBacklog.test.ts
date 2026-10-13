@@ -640,6 +640,7 @@ describe('sweepErroredApplications', () => {
       expect.objectContaining({ taskId: 'task_update_fail', error: 'write conflict' }),
       'Sweep: failed to requeue task',
     );
+    expect(result.ok && result.value.failedCount).toBe(1);
   });
 });
 
@@ -749,6 +750,7 @@ describe('pruneStaleMemories', () => {
     if (result.ok) {
       expect(result.value.archived).toBe(1);
       expect(result.value.skipped).toBe(1);
+      expect(result.value.failedCount).toBe(1);
     }
   });
 });

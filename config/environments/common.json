@@ -25,6 +25,7 @@
   "INTEXURAOS_REPOSITORY_URL": "https://github.com/pbuchman/intexuraos.git",
   "INTEXURAOS_SENTRY_AUTOMATION_USER_ID": "google-oauth2|113131655542389277022",
   "INTEXURAOS_SENTRY_DSN": "https://929d1ffdc984da036e1200d3e9fa0a54@errors.intexuraos.cloud/1",
+  "INTEXURAOS_SENTRY_DSN_DEV": "https://bed3cc6084035e2a8cb497d8fe1653cd@errors.intexuraos.cloud/1",
   "INTEXURAOS_SENTRY_DSN_WEB": "https://9ee242c608788ec16f034edb1c810d29@errors.intexuraos.cloud/2",
   "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID": "884630258074972",
   "INTEXURAOS_WHATSAPP_WABA_ID": "1218425096837868"

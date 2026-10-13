@@ -13,6 +13,8 @@ RUN apk add --no-cache \
     curl \
     bash \
     jq \
+    rsync \
+    flock \
     && rm -rf /var/cache/apk/*
 
 # Install ripgrep, fd, bat, github-cli from edge/community
@@ -62,6 +64,7 @@ RUN rm -f /usr/bin/wget /usr/bin/nc 2>/dev/null || true
 # Set environment
 ENV HOME=/home/claude
 ENV NODE_ENV=test
+ENV TMPDIR=/var/tmp
 
 # Switch to non-root user
 USER claude

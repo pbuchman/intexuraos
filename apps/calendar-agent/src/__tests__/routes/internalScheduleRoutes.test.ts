@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import type { JobHeartbeatStore } from '@intexuraos/infra-firestore';
 import type { FastifyInstance } from 'fastify';
-import { ok } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 import type { ClaimedCalendarSchedule } from '../../domain/index.js';
 import { buildServer } from '../../server.js';
-import { resetServices, setServices } from '../../services.js';
+import { getServices, resetServices, setServices } from '../../services.js';
 import {
   FakeCalendarActionExtractionService,
   FakeCalendarPreviewRepository,
@@ -51,9 +52,7 @@ describe('internalScheduleRoutes', () => {
 
     scheduleRepository = new FakeCalendarScheduleRepository();
     whatsAppScheduleClient = new FakeWhatsAppScheduleClient();
-    scheduleRepository.setClaimDueSchedulesResult(
-      ok([claimedSchedule()])
-    );
+    scheduleRepository.setClaimDueSchedulesResult(ok([claimedSchedule()]));
 
     setServices({
       userServiceClient: new FakeUserServiceClient(),
@@ -96,7 +95,13 @@ describe('internalScheduleRoutes', () => {
       {
         userId: 'user-123',
         target: 'intex_agent',
-        text: 'Send me events that they have in the calendar in the next 24 hours.',
+        text: expect.stringContaining('Look ahead from the current time'),
+        notificationContext: {
+          source: 'calendar',
+          runId: 'user-123_calendar_daily_lookahead_2026-07-04',
+          phase: 'ack',
+        },
+        scheduledFor: '2026-07-04T13:00:00.000Z',
         startNewSession: true,
         idempotencyKey: 'calendar:user-123_calendar_daily_lookahead:2026-07-04',
       },
@@ -147,5 +152,103 @@ describe('internalScheduleRoutes', () => {
     });
 
     expect(response.statusCode).toBe(500);
+  });
+  function heartbeat(): {
+    start: Mock<JobHeartbeatStore['start']>;
+    finish: Mock<JobHeartbeatStore['finish']>;
+    list: Mock<JobHeartbeatStore['list']>;
+  } {
+    return {
+      start: vi.fn().mockResolvedValue({
+        key: 'calendar_schedule_tick',
+        runId: 'r',
+        startedAt: new Date().toISOString(),
+      }),
+      finish: vi.fn().mockResolvedValue(undefined),
+      list: vi.fn().mockResolvedValue([
+        {
+          key: 'calendar_schedule_tick',
+          lastStartedAt: null,
+          lastFinishedAt: null,
+          lastSucceededAt: null,
+          lastOutcome: 'never',
+        },
+      ]),
+    };
+  }
+  it('persists successful no-work heartbeats and reports authenticated aggregate monitoring', async () => {
+    const store = heartbeat();
+    getServices().jobHeartbeatStore = store;
+    getServices().calendarScheduleRepository = Object.assign(scheduleRepository, {
+      monitoring: vi.fn().mockResolvedValue({
+        pendingCount: 0,
+        failedCount: 0,
+        oldestPendingScheduledFor: null,
+        lastDeliveredAt: null,
+      }),
+    });
+    scheduleRepository.setClaimDueSchedulesResult(ok([]));
+    const request = {
+      method: 'POST' as const,
+      url: '/internal/calendar/schedules/tick',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+    };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    expect(store.finish).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'calendar_schedule_tick' }),
+      'succeeded'
+    );
+    expect(
+      (await app.inject({ method: 'GET', url: '/internal/monitoring/status' })).statusCode
+    ).toBe(401);
+    const monitor = await app.inject({
+      method: 'GET',
+      url: '/internal/monitoring/status',
+      headers: request.headers,
+    });
+    expect(monitor.statusCode).toBe(200);
+    expect(monitor.json().data).toMatchObject({
+      schemaVersion: 1,
+      jobs: [{ key: 'calendar_schedule_tick', lastOutcome: 'never' }],
+      notifications: { pendingCount: 0, failedCount: 0 },
+    });
+    expect(store.list).toHaveBeenCalledWith(['calendar_schedule_tick']);
+  });
+  it('marks failed work and unexpected exceptions as failed heartbeat outcomes', async () => {
+    const store = heartbeat();
+    getServices().jobHeartbeatStore = store;
+    whatsAppScheduleClient.setSendOutboundMatrixMessageResult(err(new Error('send unavailable')));
+    const request = {
+      method: 'POST' as const,
+      url: '/internal/calendar/schedules/tick',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+    };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    expect(store.finish).toHaveBeenLastCalledWith(expect.anything(), 'failed');
+    vi.spyOn(scheduleRepository, 'claimDueSchedules').mockRejectedValueOnce(
+      new Error('unexpected storage exception')
+    );
+    expect((await app.inject(request)).statusCode).toBe(500);
+    expect(store.finish).toHaveBeenLastCalledWith(expect.anything(), 'failed');
+  });
+  it('returns unexpected processing errors when heartbeat tracking is unavailable', async () => {
+    vi.spyOn(scheduleRepository, 'claimDueSchedules').mockRejectedValueOnce(
+      new Error('unexpected storage exception')
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/calendar/schedules/tick',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+    });
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('fails unavailable monitoring configuration explicitly', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/internal/monitoring/status',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+    });
+    expect(response.statusCode).toBe(503);
   });
 });

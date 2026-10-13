@@ -44,15 +44,13 @@ const COMMON_CONFIG_NAMES = [
   'INTEXURAOS_REPOSITORY_URL',
   'INTEXURAOS_SENTRY_AUTOMATION_USER_ID',
   'INTEXURAOS_SENTRY_DSN',
+  'INTEXURAOS_SENTRY_DSN_DEV',
   'INTEXURAOS_SENTRY_DSN_WEB',
   'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
   'INTEXURAOS_WHATSAPP_WABA_ID',
 ] as const;
 
-const DEV_CONFIG_NAMES = [
-  'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
-  'INTEXURAOS_SENTRY_DSN_DEV',
-] as const;
+const LOCAL_CONFIG_NAMES = ['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] as const;
 const PROD_CONFIG_NAMES = ['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] as const;
 const DEAD_GEMINI_KEY_NAME = 'INTEXURAOS_GEMINI_APP_API_KEY';
 const DEAD_REDIRECT_NAME = 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI';
@@ -74,12 +72,12 @@ afterEach(() => {
 });
 
 describe('versioned runtime configuration', () => {
-  it('loads 29 common values plus environment-specific Matrix URLs and the dev Sentry DSN', () => {
+  it('loads 30 shared values plus environment-specific Matrix URLs', () => {
     const prod = loadRuntimeConfig({ environment: 'prod', configRoot });
-    const dev = loadRuntimeConfig({ environment: 'dev', configRoot });
+    const dev = loadRuntimeConfig({ environment: 'local', configRoot });
 
     expect(Object.keys(prod).sort()).toEqual([...COMMON_CONFIG_NAMES, ...PROD_CONFIG_NAMES].sort());
-    expect(Object.keys(dev).sort()).toEqual([...COMMON_CONFIG_NAMES, ...DEV_CONFIG_NAMES].sort());
+    expect(Object.keys(dev).sort()).toEqual([...COMMON_CONFIG_NAMES, ...LOCAL_CONFIG_NAMES].sort());
     expect(Object.values(prod).every((value) => typeof value === 'string' && value !== '')).toBe(
       true
     );
@@ -96,9 +94,9 @@ describe('versioned runtime configuration', () => {
 
   it('keeps versioned configuration fully disjoint from Secret Manager', () => {
     const policy = loadRuntimePolicy({ configRoot });
-    const validation = validateRuntimeConfig({ environment: 'dev', configRoot });
+    const validation = validateRuntimeConfig({ environment: 'local', configRoot });
     const configNames = [
-      ...new Set([...policy.scopes.common, ...policy.scopes.dev, ...policy.scopes.prod]),
+      ...new Set([...policy.scopes.common, ...policy.scopes.local, ...policy.scopes.prod]),
     ];
     const overlap = configNames.filter((name) => policy.secretManagerNames.includes(name)).sort();
 
@@ -113,7 +111,7 @@ describe('versioned runtime configuration', () => {
     const policy = loadRuntimePolicy({ configRoot });
     const activeNames = [
       ...policy.scopes.common,
-      ...policy.scopes.dev,
+      ...policy.scopes.local,
       ...policy.scopes.prod,
       ...policy.secretManagerNames,
       ...policy.migrationRollbackSecretNames,
@@ -170,9 +168,9 @@ describe('versioned runtime configuration', () => {
   });
 
   it('renders deterministic shell and dotenv without printing diagnostics', () => {
-    const dev = loadRuntimeConfig({ environment: 'dev', configRoot });
-    const shell = renderRuntimeConfig({ environment: 'dev', configRoot, format: 'shell-export' });
-    const dotenv = renderRuntimeConfig({ environment: 'dev', configRoot, format: 'dotenv' });
+    const dev = loadRuntimeConfig({ environment: 'local', configRoot });
+    const shell = renderRuntimeConfig({ environment: 'local', configRoot, format: 'shell-export' });
+    const dotenv = renderRuntimeConfig({ environment: 'local', configRoot, format: 'dotenv' });
 
     expect(shell.endsWith('\n')).toBe(true);
     expect(dotenv.endsWith('\n')).toBe(true);
@@ -312,7 +310,7 @@ function makeFixture(): string {
     `${JSON.stringify(makeSyntheticCommonConfig(), null, 2)}\n`
   );
   writeFileSync(
-    resolve(directory, 'dev.json'),
+    resolve(directory, 'local.json'),
     `${JSON.stringify(
       {
         INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL: 'http://127.0.0.1:8099',

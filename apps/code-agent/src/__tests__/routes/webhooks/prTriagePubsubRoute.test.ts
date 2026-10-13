@@ -9,6 +9,7 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from 'pino';
 import { err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../../helpers/mockServices.js';
 import type { PRTriageEvent } from '@intexuraos/pr-triage-pubsub-client';
@@ -21,10 +22,7 @@ import nock from 'nock';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function pushEnvelope(
-  event: Partial<PRTriageEvent>,
-  messageId = 'msg-1',
-): Record<string, unknown> {
+function pushEnvelope(event: Partial<PRTriageEvent>, messageId = 'msg-1'): Record<string, unknown> {
   const payload: PRTriageEvent = {
     type: 'code.pr.triage.requested',
     eventId: 'will-override',
@@ -62,7 +60,8 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
-    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] =
+      'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -105,7 +104,9 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
+      resolveToolCallingClient: (() => {
+        throw new Error('unused');
+      }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator,
@@ -128,7 +129,10 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     nock.cleanAll();
   });
 
-  async function saveEvent(deliveryId: string): Promise<string> {
+  async function saveEvent(
+    deliveryId: string,
+    action: GitHubPREvent['action'] = 'opened'
+  ): Promise<string> {
     const savedResult = await gitHubPREventRepo.save({
       githubEventId: 12345,
       deliveryId,
@@ -137,7 +141,7 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
       pullRequestNumber: 9999,
       pullRequestId: 111,
       eventType: 'pull_request',
-      action: 'opened',
+      action,
       senderLogin: 'user1',
       senderId: 42,
       senderType: 'User',
@@ -154,6 +158,89 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     if (!savedResult.ok) throw new Error('save failed');
     return savedResult.value.id;
   }
+
+  it('retires replayed pre-cutoff triage without dispatching work and retains its audit', async () => {
+    const eventId = await saveEvent('delivery-pre-cutoff');
+    getServices().getResumeCutoff = async (): Promise<string | null> => '2099-01-01T00:00:00.000Z';
+    const response = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(evaluateMock).not.toHaveBeenCalled();
+    const record = fakeFirestore.getAllData().get('github-pr-events')?.get(eventId);
+    expect(record).toMatchObject({
+      triageState: 'completed',
+      triageSkipReason: 'SKIPPED_BEFORE_RESUME',
+    });
+  });
+
+  it('retains old close events and post-cutoff events for normal evaluation', async () => {
+    getServices().getResumeCutoff = async (): Promise<string | null> => '2099-01-01T00:00:00.000Z';
+    const closed = await saveEvent('delivery-old-closed', 'closed');
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/internal/code/pubsub/pr-triage',
+          headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+          payload: pushEnvelope({ eventId: closed }),
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(evaluateMock).toHaveBeenCalledOnce();
+    getServices().getResumeCutoff = async (): Promise<string | null> => '2000-01-01T00:00:00.000Z';
+    const recent = await saveEvent('delivery-new');
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/internal/code/pubsub/pr-triage',
+          headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+          payload: pushEnvelope({ eventId: recent }),
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(evaluateMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns a retryable failure when retiring old triage loses its completion lease', async () => {
+    const eventId = await saveEvent('delivery-retire-completion-conflict');
+    getServices().getResumeCutoff = async (): Promise<string | null> => '2099-01-01T00:00:00.000Z';
+    vi.spyOn(gitHubPREventRepo, 'completeTriage').mockResolvedValueOnce(
+      err({ code: 'TRIAGE_LEASE_NOT_OWNED', message: 'lease changed' })
+    );
+    const response = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }),
+    });
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error.message).toBe('triage_completion_failed');
+    expect(evaluateMock).not.toHaveBeenCalled();
+  });
+
+  it('releases the triage claim and returns failure if resume-policy storage is unavailable', async () => {
+    const eventId = await saveEvent('delivery-policy-unavailable');
+    getServices().getResumeCutoff = async (): Promise<string | null> => {
+      throw new Error('storage unavailable');
+    };
+    const response = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }),
+    });
+    expect(response.statusCode).toBe(500);
+    expect(evaluateMock).not.toHaveBeenCalled();
+    expect(fakeFirestore.getAllData().get('github-pr-events')?.get(eventId)).toMatchObject({
+      triageState: 'pending',
+      triageLeaseToken: null,
+    });
+  });
 
   // -------------------------------------------------------------------------
   // 1. Happy path
@@ -200,6 +287,7 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
   });
 
   it('lets only one parallel delivery evaluate and returns retryable 5xx to the active foreign lease', async () => {
+    const warnSpy = vi.spyOn(server.log, 'warn');
     const eventId = await saveEvent('delivery-parallel');
     let releaseEvaluation: (() => void) | undefined;
     const evaluationGate = new Promise<void>((resolve) => {
@@ -223,6 +311,13 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     });
 
     expect(competingResponse.statusCode).toBe(500);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'PR triage lease is active — returning 5xx for Pub/Sub retry'
+    );
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ [SKIP_SENTRY_KEY]: true }),
+      expect.any(String)
+    );
     expect(evaluateMock).toHaveBeenCalledOnce();
     releaseEvaluation?.();
     const ownerResponse = await firstRequest;
@@ -269,6 +364,7 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
   // 3. Not found (eventId does not exist)
   // -------------------------------------------------------------------------
   it('should return 200 and NOT call evaluate when event not found in Firestore', async () => {
+    const warnSpy = vi.spyOn(server.log, 'warn');
     const response = await server.inject({
       method: 'POST',
       url: '/internal/code/pubsub/pr-triage',
@@ -278,20 +374,27 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
 
     expect(response.statusCode).toBe(200);
     expect(evaluateMock).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      { [SKIP_SENTRY_KEY]: true },
+      'github-pr-events doc not found — acking to drop message'
+    );
   });
 
   // -------------------------------------------------------------------------
   // 4. Firestore error
   // -------------------------------------------------------------------------
   it('should return 500 when acquireTriage returns a Firestore error', async () => {
+    const errorSpy = vi.spyOn(server.log, 'error');
     const services = getServices();
     const originalRepo = services.gitHubPREventRepo;
     services.gitHubPREventRepo = {
       ...originalRepo,
-      acquireTriage: vi.fn().mockResolvedValue(err({
-        code: 'FIRESTORE_ERROR',
-        message: 'Simulated Firestore failure',
-      })),
+      acquireTriage: vi.fn().mockResolvedValue(
+        err({
+          code: 'FIRESTORE_ERROR',
+          message: 'Simulated Firestore failure',
+        })
+      ),
     };
 
     const response = await server.inject({
@@ -303,6 +406,10 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
 
     expect(response.statusCode).toBe(500);
     expect(evaluateMock).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      { error: 'Simulated Firestore failure' },
+      'Failed to acquire github-pr-events triage lease'
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -361,10 +468,12 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     const services = getServices();
     services.gitHubPREventRepo = {
       ...services.gitHubPREventRepo,
-      completeTriage: vi.fn().mockResolvedValue(err({
-        code: 'FIRESTORE_ERROR',
-        message: 'completion unavailable',
-      })),
+      completeTriage: vi.fn().mockResolvedValue(
+        err({
+          code: 'FIRESTORE_ERROR',
+          message: 'completion unavailable',
+        })
+      ),
     };
 
     const response = await server.inject({
@@ -384,10 +493,12 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     const services = getServices();
     services.gitHubPREventRepo = {
       ...services.gitHubPREventRepo,
-      failTriage: vi.fn().mockResolvedValue(err({
-        code: 'FIRESTORE_ERROR',
-        message: 'release unavailable',
-      })),
+      failTriage: vi.fn().mockResolvedValue(
+        err({
+          code: 'FIRESTORE_ERROR',
+          message: 'release unavailable',
+        })
+      ),
     };
 
     const response = await server.inject({

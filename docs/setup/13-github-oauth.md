@@ -1,86 +1,81 @@
 # GitHub OAuth App Setup
 
-This guide covers creating a GitHub OAuth App and configuring the secrets for IntexuraOS GitHub integration.
+This guide covers updating the existing GitHub OAuth App callback allowlist for the
+IntexuraOS GitHub integration.
 
 ## Prerequisites
 
-- GitHub account with permission to create OAuth Apps
+- GitHub account with permission to manage the existing OAuth App
 - GCP Secret Manager access for the OAuth client secret
 - Terraform applied with GitHub OAuth secret resources
 
-## Step 1: Create GitHub OAuth App
+## Step 1: Configure The Existing GitHub OAuth App
 
-1. Go to **https://github.com/settings/developers** → **OAuth Apps** → **New OAuth App**
-2. Fill in the form:
+1. Go to **https://github.com/settings/developers** → **OAuth Apps** and open the
+   existing IntexuraOS app whose client ID matches
+   `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID`.
+2. Keep the production homepage and configure both callback URLs:
 
-| Field                      | Retained DEV recovery value                                           | Production value                                                  |
-| -------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Application name           | `IntexuraOS Dev`                                                      | `IntexuraOS`                                                      |
-| Homepage URL               | `https://dev.intexuraos.cloud`                                        | `https://intexuraos.cloud`                                        |
-| Authorization callback URL | `https://dev.intexuraos.cloud/api/user-service/oauth/github/callback` | `https://intexuraos.cloud/api/user-service/oauth/github/callback` |
+| Field                      | Required values                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Homepage URL               | `https://intexuraos.cloud`                                                                           |
+| Authorization callback URL | `http://localhost:3000/oauth/connections/github/callback`                                             |
+| Authorization callback URL | `https://intexuraos.cloud/oauth/connections/github/callback`                                         |
 
-3. Click **Register application**
-4. Copy the **Client ID**
-5. Click **Generate a new client secret** and copy the **Client Secret**
+Add the production and localhost URLs as exact entries. Remove only obsolete callbacks
+whose origin is `https://dev.intexuraos.cloud`; preserve unrelated callbacks and the
+existing legacy callback matching setting. Do not generate a new client secret.
 
-> **Note:** GitHub OAuth Apps do not use refresh tokens. Access tokens do not expire unless the user revokes access.
+> **Note:** Keep user-token expiration disabled for the existing app. The current
+> implementation stores a non-expiring token and does not implement GitHub refresh tokens.
 
-Keep the retained DEV recovery callback allow-listed so a reviewed resume remains possible, but
-do not use it for routine login or verification while DEV is hibernated. Normal OAuth traffic and
-all ordinary checks use production.
+The same client ID and secret serve production and localhost.
 
-## Step 2: Configure Client ID And Secret
+## Step 2: Verify The Existing Client ID And Secret
 
-The client ID is non-secret repository-backed configuration. Update
-`INTEXURAOS_GITHUB_OAUTH_CLIENT_ID` in
-`config/environments/common.json` and keep its classification in
-`config/environments/policy.json`.
+Verify that `INTEXURAOS_GITHUB_OAUTH_CLIENT_ID` in
+`config/environments/common.json` matches the existing GitHub OAuth App opened in
+Step 1. Keep its classification in `config/environments/policy.json` unchanged.
 
-Only the client secret belongs in Secret Manager:
+Verify that the existing client secret has an enabled Secret Manager version:
 
 ```bash
-# Activate service account
-gcloud auth activate-service-account --key-file=$HOME/.config/gcloud/sa-key.json
-
-echo -n "YOUR_GITHUB_CLIENT_SECRET" | gcloud secrets versions add INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET \
-  --data-file=- --project=intexuraos-dev-pbuchman
+gcloud secrets versions list INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET \
+  --project=intexuraos-dev-pbuchman
 ```
 
-Use `versions add` rather than `create`; Terraform owns the secret container.
-Do not add a new Secret Manager version for the client ID.
+Changing callback URLs does not change either credential. Do not update the client ID,
+add a secret version, or rotate the secret.
 
-## Step 3: Stage The Retained DEV Recovery Configuration
+## Step 3: Render Local Configuration
 
-During an approved Home Dev staging window, regenerate the merged environment without starting the
-retained DEV application stack:
+Render the existing local/worker secret package without changing its version:
 
 ```bash
 ./scripts/sync-secrets.sh
 direnv allow
 ```
 
-Do not restart `user-service` while DEV is hibernated. If callback recovery must be exercised, use
-the DEV hibernation runbook's explicitly authorized resume transaction; its mode controller owns
-validation and service start order. A direct `pm2 restart` is not a resume procedure.
+Start the localhost stack manually with `pnpm dev` when needed.
 
-## Step 4: Deploy The Versioned Configuration
+## Step 4: Confirm No Versioned Configuration Change
 
-Commit the `config/environments/` change with the application change and use
-the normal deployment workflow. Terraform is required only when the actual
-client-secret container or its IAM policy changes.
+No application configuration commit or deployment is required when only the callback
+allowlist changes and the checks above match. Use the normal provisioning and deployment
+workflow only for a separate, explicitly approved credential change.
 
 ## Verification
 
 ```bash
 # Validate the versioned client ID without reading Secret Manager
-node scripts/render-runtime-config.mjs --environment dev --format dotenv \
+node scripts/render-runtime-config.mjs --environment local --format dotenv \
   --key INTEXURAOS_GITHUB_OAUTH_CLIENT_ID >/dev/null
 
 # Check only the client secret has an enabled version
 gcloud secrets versions list INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET --project=intexuraos-dev-pbuchman
 
 # Test the OAuth initiation endpoint
-curl -X POST https://intexuraos.cloud/api/user-service/oauth/connections/github/initiate \
+curl -X POST https://intexuraos.cloud/api/user/oauth/connections/github/initiate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -92,6 +87,6 @@ Expected: response with `authorizationUrl` pointing to `https://github.com/login
 | ------------------------------------ | ---------------------------------------------------- |
 | `config/environments/common.json`    | Stores the versioned OAuth client ID                  |
 | `config/environments/policy.json`    | Enforces config-versus-secret classification          |
-| `terraform/environments/dev/main.tf` | Retains the OAuth client secret and its access policy |
+| `terraform/shared-gcp/main.tf` | Retains the OAuth client secret and its access policy |
 | `apps/user-service/src/index.ts`     | Lists in `REQUIRED_ENV` for startup validation       |
 | `ecosystem.config.cjs`               | Maps env vars for PM2 dev environment                |

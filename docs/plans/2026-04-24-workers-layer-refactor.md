@@ -194,7 +194,7 @@ Each worker subtask's tests MUST pass against the real package once Subtask 1 me
 | D   | `workers/vm-lifecycle` migration + auth fix + config fix            | `workers/vm-lifecycle/**`                                                                                                                                                  | common-worker contract §3                      |
 | E   | `workers/orchestrator` task-dispatcher decomposition + shutdown fix | `workers/orchestrator/**`                                                                                                                                                  | — (no common-worker dep; not a Cloud Function) |
 | F   | `code-worker` move                                                  | `docker/code-worker/**` (new), legacy `code-worker/` location under `workers/` (delete), `cloudbuild.yaml`, `apps/code-agent/src/infra/docker/DockerProvider.ts` image ref | —                                              |
-| G   | Terraform DLQ topics + subscription dead-letter policies            | `terraform/environments/dev/**.tf` (only new DLQ resources), `terraform/modules/**` if a new module is added                                                               | Contract §3.3 topic names                      |
+| G   | Terraform DLQ topics + subscription dead-letter policies            | `terraform/shared-gcp/**.tf` (only new DLQ resources), `terraform/modules/**` if a new module is added                                                               | Contract §3.3 topic names                      |
 | H   | Documentation + architecture reference                              | `docs/architecture/pubsub-standards.md`, `.claude/reference/architecture.md`                                                                                               | Contract §3                                    |
 
 **Parallelism rule:** No two subtasks share writable paths. The only cross-boundary artifact is the **frozen contract in Section 3 of this document**. Subtasks B–D may start immediately against a local interface stub mirroring §3.3 and swap to the real import when Subtask A lands.
@@ -743,7 +743,7 @@ Each worker subtask's tests MUST pass against the real package once Subtask 1 me
 ### Env var wiring (coordinates with Subtask G)
 - Add `INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC` to:
   - `workers/transcription/package.json`? (No — env vars are not declared there.)
-  - `terraform/environments/dev/main.tf` — handled in Subtask G.
+  - `terraform/shared-gcp/main.tf` — handled in Subtask G.
   - Subtask C declares the env var is required in `types.ts`. Deployment wiring is Subtask G's responsibility.
 
 ---
@@ -836,7 +836,7 @@ The auth header format change is breaking for any external caller. Audit with `r
 **Owner agent:** full write access to `terraform/**` only.
 
 ### Files
-- Modify: `terraform/environments/dev/main.tf` — add DLQ topic resources and update existing subscription resources for `transcription` (audio-stored subscription) and `log-cleanup` with `dead_letter_policy`.
+- Modify: `terraform/shared-gcp/main.tf` — add DLQ topic resources and update existing subscription resources for `transcription` (audio-stored subscription) and `log-cleanup` with `dead_letter_policy`.
 - Modify: `terraform/environments/prod/main.tf` — same pattern.
 - Modify: `ecosystem.config.cjs` is NOT touched (workers are Cloud Functions, not PM2).
 - Modify: `apps/<service>`/terraform env var injection — each Cloud Function's runtime env needs `INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC`. Add to the Terraform `google_cloudfunctions2_function` resource for `transcription` only.

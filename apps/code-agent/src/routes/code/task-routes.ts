@@ -391,7 +391,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!result.ok) {
         const error = result.error;
-        request.log.warn(
+        request.log[error.alreadyReported === true ? 'info' : 'warn'](
           {
             errorCode: error.code,
             errorMessage: error.message,
@@ -1114,7 +1114,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!result.ok) {
         const error = result.error;
-        request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Submit-phase2 failed');
+        request.log[error.alreadyReported === true ? 'info' : 'warn']({ taskId, errorCode: error.code, errorMessage: error.message }, 'Submit-phase2 failed');
 
         switch (error.code) {
           case 'task_not_found':

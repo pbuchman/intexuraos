@@ -1,3 +1,4 @@
+import { notificationContextSchema } from '@intexuraos/http-contracts';
 /**
  * Pub/Sub Push Subscription Routes.
  * Receives Pub/Sub push messages for outbound WhatsApp messaging.
@@ -71,6 +72,9 @@ function matrixDeliveryPayloadDigest(event: SendMessageEvent): string {
     deliveryAuthorization: event.deliveryAuthorization ?? null,
     retainMessageText: event.retainMessageText ?? null,
     important: event.important ?? null,
+    ...(event.notificationContext === undefined
+      ? {}
+      : { notificationContext: event.notificationContext }),
   });
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
@@ -566,6 +570,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           );
           return await reply.ok({});
         }
+        if (
+          eventData.notificationContext !== undefined &&
+          !notificationContextSchema.safeParse(eventData.notificationContext).success
+        )
+          return await reply.fail('INVALID_REQUEST', 'Invalid notification context');
         const isMatrixDelivery = idempotencyKey !== null;
 
         if (typeof eventData.userId !== 'string' || eventData.userId.trim() === '') {
@@ -754,21 +763,19 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           preflightFailure ??= 'DELIVERY_DISABLED';
         }
 
-        let digestDeliveryAuthorization:
-          | {
-              identity: {
-                userId: string;
-                definitionId: string;
-                runId: string;
-                idempotencyKey: string;
-                payloadDigest: string;
-                ownerDigest: string;
-              };
-              fence: number;
-              expiresAt: string;
-              client: MessageDigestDeliveryAuthorizationClient;
-            }
-          | null = null;
+        let digestDeliveryAuthorization: {
+          identity: {
+            userId: string;
+            definitionId: string;
+            runId: string;
+            idempotencyKey: string;
+            payloadDigest: string;
+            ownerDigest: string;
+          };
+          fence: number;
+          expiresAt: string;
+          client: MessageDigestDeliveryAuthorizationClient;
+        } | null = null;
 
         const releaseDigestDeliveryAuthorization = async (): Promise<boolean> => {
           if (digestDeliveryAuthorization === null) return true;
@@ -866,45 +873,80 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         try {
-        if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
-          const reservation = await outboundMessageRepository.reserveIdempotentDelivery({
-            userId: eventData.userId,
-            idempotencyKey,
-            payloadDigest: deliveryPayloadDigest,
-            now: deliveryStartedAt.toISOString(),
-            expiresAt: deliveryExpiresAt,
-          });
-          if (!reservation.ok) {
-            request.log.warn(
-              {
-                lane: 'matrix_corpus',
-                errorCode: reservation.code,
-                [SKIP_SENTRY_KEY]: true,
-              },
-              'Matrix WhatsApp delivery reservation rejected'
-            );
-            const released = await releaseDigestDeliveryAuthorization();
-            if (!released) {
-              void reply.status(503);
+          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+            const reservation = await outboundMessageRepository.reserveIdempotentDelivery({
+              userId: eventData.userId,
+              idempotencyKey,
+              payloadDigest: deliveryPayloadDigest,
+              now: deliveryStartedAt.toISOString(),
+              expiresAt: deliveryExpiresAt,
+            });
+            if (!reservation.ok) {
+              request.log.warn(
+                {
+                  lane: 'matrix_corpus',
+                  errorCode: reservation.code,
+                  [SKIP_SENTRY_KEY]: true,
+                },
+                'Matrix WhatsApp delivery reservation rejected'
+              );
+              const released = await releaseDigestDeliveryAuthorization();
+              if (!released) {
+                void reply.status(503);
+                return await reply.ok({});
+              }
+              return reservation.code === 'PERSISTENCE_ERROR'
+                ? await reply.fail('INTERNAL_ERROR', 'Delivery reservation failed')
+                : await reply.ok({});
+            }
+            if (reservation.disposition !== 'acquired') {
+              request.log.info(
+                { lane: 'matrix_corpus', disposition: reservation.disposition },
+                'Suppressed duplicate Matrix WhatsApp delivery'
+              );
+              if (reservation.disposition === 'duplicate_in_flight') {
+                void reply.status(503);
+              }
+              const released = await releaseDigestDeliveryAuthorization();
+              if (!released) void reply.status(503);
               return await reply.ok({});
             }
-            return reservation.code === 'PERSISTENCE_ERROR'
-              ? await reply.fail('INTERNAL_ERROR', 'Delivery reservation failed')
-              : await reply.ok({});
           }
-          if (reservation.disposition !== 'acquired') {
-            request.log.info(
-              { lane: 'matrix_corpus', disposition: reservation.disposition },
-              'Suppressed duplicate Matrix WhatsApp delivery'
-            );
-            if (reservation.disposition === 'duplicate_in_flight') {
-              void reply.status(503);
-            }
-            const released = await releaseDigestDeliveryAuthorization();
-            if (!released) void reply.status(503);
-            return await reply.ok({});
-          }
-          if (preflightFailure !== null) {
+
+          const deliveryTracker = getServices().notificationDeliveryRepository;
+          const trackedIntent =
+            deliveryTracker === undefined
+              ? undefined
+              : await deliveryTracker.begin({
+                  userId: eventData.userId,
+                  correlationId: eventData.correlationId,
+                  ...(parsedMessageDigestPresentation.disposition !== 'valid'
+                    ? {}
+                    : {
+                        producerKey: `message_digest:${parsedMessageDigestPresentation.value.authorization.definitionId}`,
+                      }),
+                  idempotencyKey: idempotencyKey ?? `pubsub:${body.message.messageId}`,
+                  retryAuthorized: idempotencyKey !== null,
+                  ...(eventData.replyToMessageId === undefined
+                    ? {}
+                    : { replyToMessageId: eventData.replyToMessageId }),
+                  ...(eventData.notificationContext === undefined
+                    ? {}
+                    : { notificationContext: eventData.notificationContext }),
+                  now: new Date().toISOString(),
+                });
+          if (trackedIntent !== undefined && !trackedIntent.acquired) return await reply.ok({});
+          if (
+            preflightFailure !== null &&
+            idempotencyKey !== null &&
+            deliveryPayloadDigest !== null
+          ) {
+            if (trackedIntent !== undefined)
+              await deliveryTracker?.failed({
+                intentId: trackedIntent.id,
+                at: new Date().toISOString(),
+                failureCode: preflightFailure,
+              });
             const recorded = await recordTerminalFailure(
               idempotencyKey,
               deliveryPayloadDigest,
@@ -915,132 +957,92 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             if (!released) void reply.status(503);
             return await reply.ok({});
           }
-        }
 
-        const resolvedPhoneNumber = phoneNumber as string;
+          const resolvedPhoneNumber = phoneNumber as string;
 
-        if (digestDeliveryAuthorization !== null) {
-          const authorization = digestDeliveryAuthorization;
-          let renewalDisposition: 'authorized' | 'revoked' | 'unavailable' = 'unavailable';
-          try {
-            const renewed = await authorization.client.acquire(authorization.identity);
-            if (renewed.ok && renewed.disposition === 'authorized') {
-              digestDeliveryAuthorization = {
-                identity: authorization.identity,
-                fence: renewed.fence,
-                expiresAt: renewed.expiresAt,
-                client: authorization.client,
-              };
-              const minimumExpiry =
-                Date.now() +
-                WHATSAPP_MESSAGE_SEND_TIMEOUT_MS +
-                MESSAGE_DIGEST_DELIVERY_AUTHORIZATION_SAFETY_MS;
-              renewalDisposition =
-                Date.parse(renewed.expiresAt) >= minimumExpiry ? 'authorized' : 'unavailable';
-            } else if (renewed.ok && renewed.disposition === 'denied') {
-              renewalDisposition = 'revoked';
+          if (digestDeliveryAuthorization !== null) {
+            const authorization = digestDeliveryAuthorization;
+            let renewalDisposition: 'authorized' | 'revoked' | 'unavailable' = 'unavailable';
+            try {
+              const renewed = await authorization.client.acquire(authorization.identity);
+              if (renewed.ok && renewed.disposition === 'authorized') {
+                digestDeliveryAuthorization = {
+                  identity: authorization.identity,
+                  fence: renewed.fence,
+                  expiresAt: renewed.expiresAt,
+                  client: authorization.client,
+                };
+                const minimumExpiry =
+                  Date.now() +
+                  WHATSAPP_MESSAGE_SEND_TIMEOUT_MS +
+                  MESSAGE_DIGEST_DELIVERY_AUTHORIZATION_SAFETY_MS;
+                renewalDisposition =
+                  Date.parse(renewed.expiresAt) >= minimumExpiry ? 'authorized' : 'unavailable';
+              } else if (renewed.ok && renewed.disposition === 'denied') {
+                renewalDisposition = 'revoked';
+              }
+            } catch {
+              renewalDisposition = 'unavailable';
             }
-          } catch {
-            renewalDisposition = 'unavailable';
-          }
 
-          if (renewalDisposition !== 'authorized') {
-            const failureCode =
-              renewalDisposition === 'revoked'
-                ? 'DELIVERY_AUTHORIZATION_REVOKED'
-                : 'DELIVERY_AUTHORIZATION_UNAVAILABLE';
-            request.log.warn(
-              {
-                lane: 'message_digest',
-                errorCode: failureCode,
-                [SKIP_SENTRY_KEY]: true,
-              },
-              'Message Digest delivery authorization renewal failed closed'
-            );
-            const recorded = await recordTerminalFailure(
-              authorization.identity.idempotencyKey,
-              authorization.identity.payloadDigest,
-              failureCode
-            );
-            if (!recorded || renewalDisposition === 'unavailable') void reply.status(503);
-            const released = await releaseDigestDeliveryAuthorization();
-            if (!released) void reply.status(503);
-            return await reply.ok({});
-          }
-        }
-
-        let result;
-        try {
-          if (parsedMessageDigestPresentation.disposition === 'valid') {
-            result = await messageSender.sendMessageDigestTemplate(
-              resolvedPhoneNumber,
-              parsedMessageDigestPresentation.value.template
-            );
-          } else if (eventData.ctaUrl !== undefined) {
-            // Send CTA URL message (opens link in browser)
-            result = await messageSender.sendCtaUrlMessage(
-              resolvedPhoneNumber,
-              eventData.message,
-              eventData.ctaUrl
-            );
-          } else if (eventData.buttons !== undefined && eventData.buttons.length > 0) {
-            // Send interactive message with reply buttons
-            result = await messageSender.sendInteractiveMessage(
-              resolvedPhoneNumber,
-              eventData.message,
-              eventData.buttons
-            );
-          } else {
-            // Send plain text message
-            result = await messageSender.sendTextMessage(resolvedPhoneNumber, eventData.message);
-          }
-        } catch {
-          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
-            const ambiguous = await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
-              idempotencyKey,
-              payloadDigest: deliveryPayloadDigest,
-              now: new Date().toISOString(),
-            });
-            if (!ambiguous.ok) void reply.status(503);
-            request.log.error(
-              {
-                lane: 'matrix_corpus',
-                errorCode: ambiguous.ok ? 'AMBIGUOUS_EXTERNAL_EFFECT' : ambiguous.code,
-                [SKIP_SENTRY_KEY]: true,
-              },
-              'Matrix WhatsApp delivery ended ambiguously'
-            );
-            const released = await releaseDigestDeliveryAuthorization();
-            if (!released) void reply.status(503);
-            return await reply.ok({});
-          }
-          throw new Error('WhatsApp message sender threw');
-        }
-
-        if (!result.ok) {
-          const isPermanentError =
-            result.error.httpStatus !== undefined &&
-            result.error.httpStatus >= 400 &&
-            result.error.httpStatus < 500 &&
-            result.error.httpStatus !== 429;
-
-          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
-            if (isPermanentError) {
-              const recorded = await recordTerminalFailure(
-                idempotencyKey,
-                deliveryPayloadDigest,
-                'PROVIDER_REJECTED'
-              );
-              if (!recorded) void reply.status(503);
-              request.log.error(
+            if (renewalDisposition !== 'authorized') {
+              const failureCode =
+                renewalDisposition === 'revoked'
+                  ? 'DELIVERY_AUTHORIZATION_REVOKED'
+                  : 'DELIVERY_AUTHORIZATION_UNAVAILABLE';
+              request.log.warn(
                 {
-                  lane: 'matrix_corpus',
-                  errorCode: 'PROVIDER_REJECTED',
+                  lane: 'message_digest',
+                  errorCode: failureCode,
                   [SKIP_SENTRY_KEY]: true,
                 },
-                'Matrix WhatsApp delivery was rejected before an external effect'
+                'Message Digest delivery authorization renewal failed closed'
+              );
+              if (trackedIntent !== undefined)
+                await deliveryTracker?.failed({
+                  intentId: trackedIntent.id,
+                  at: new Date().toISOString(),
+                  failureCode,
+                });
+              const recorded = await recordTerminalFailure(
+                authorization.identity.idempotencyKey,
+                authorization.identity.payloadDigest,
+                failureCode
+              );
+              if (!recorded || renewalDisposition === 'unavailable') void reply.status(503);
+              const released = await releaseDigestDeliveryAuthorization();
+              if (!released) void reply.status(503);
+              return await reply.ok({});
+            }
+          }
+
+          let result;
+          try {
+            if (parsedMessageDigestPresentation.disposition === 'valid') {
+              result = await messageSender.sendMessageDigestTemplate(
+                resolvedPhoneNumber,
+                parsedMessageDigestPresentation.value.template
+              );
+            } else if (eventData.ctaUrl !== undefined) {
+              // Send CTA URL message (opens link in browser)
+              result = await messageSender.sendCtaUrlMessage(
+                resolvedPhoneNumber,
+                eventData.message,
+                eventData.ctaUrl
+              );
+            } else if (eventData.buttons !== undefined && eventData.buttons.length > 0) {
+              // Send interactive message with reply buttons
+              result = await messageSender.sendInteractiveMessage(
+                resolvedPhoneNumber,
+                eventData.message,
+                eventData.buttons
               );
             } else {
+              // Send plain text message
+              result = await messageSender.sendTextMessage(resolvedPhoneNumber, eventData.message);
+            }
+          } catch {
+            if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
               const ambiguous = await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
                 idempotencyKey,
                 payloadDigest: deliveryPayloadDigest,
@@ -1055,107 +1057,215 @@ export function createPubsubRoutes(): FastifyPluginCallback {
                 },
                 'Matrix WhatsApp delivery ended ambiguously'
               );
+              const released = await releaseDigestDeliveryAuthorization();
+              if (!released) void reply.status(503);
+              return await reply.ok({});
             }
-            const released = await releaseDigestDeliveryAuthorization();
-            if (!released) void reply.status(503);
-            return await reply.ok({});
+            throw new Error('WhatsApp message sender threw');
           }
 
-          if (isPermanentError) {
+          if (!result.ok) {
+            const isPermanentError =
+              result.error.httpStatus !== undefined &&
+              result.error.httpStatus >= 400 &&
+              result.error.httpStatus < 500 &&
+              result.error.httpStatus !== 429;
+
+            if (result.error.httpStatus === 429 && trackedIntent !== undefined) {
+              await deliveryTracker?.failed({
+                intentId: trackedIntent.id,
+                at: new Date().toISOString(),
+                failureCode: 'PROVIDER_REJECTED',
+                retryable: true,
+              });
+              if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+                const failed = await outboundMessageRepository.markIdempotentDeliveryFailed({
+                  idempotencyKey,
+                  payloadDigest: deliveryPayloadDigest,
+                  now: new Date().toISOString(),
+                  failureCode: 'PROVIDER_REJECTED',
+                });
+                if (!failed.ok)
+                  return await reply.fail('INTERNAL_ERROR', 'Failed to preserve rejected send');
+                const authorized = await outboundMessageRepository.authorizeIdempotentDeliveryRetry(
+                  {
+                    userId: eventData.userId,
+                    idempotencyKey,
+                    payloadDigest: deliveryPayloadDigest,
+                    now: new Date().toISOString(),
+                  }
+                );
+                if (!authorized.ok)
+                  return await reply.fail(
+                    'INTERNAL_ERROR',
+                    'Failed to authorize rejected send retry'
+                  );
+              }
+              await releaseDigestDeliveryAuthorization();
+              return await reply.fail(
+                'DOWNSTREAM_ERROR',
+                'WhatsApp provider rate limited the unsent message'
+              );
+            }
+            if (isPermanentError && trackedIntent !== undefined)
+              await deliveryTracker?.failed({
+                intentId: trackedIntent.id,
+                at: new Date().toISOString(),
+                failureCode: 'PROVIDER_REJECTED',
+              });
+            if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+              if (isPermanentError) {
+                const recorded = await recordTerminalFailure(
+                  idempotencyKey,
+                  deliveryPayloadDigest,
+                  'PROVIDER_REJECTED'
+                );
+                if (!recorded) void reply.status(503);
+                request.log.error(
+                  {
+                    lane: 'matrix_corpus',
+                    errorCode: 'PROVIDER_REJECTED',
+                    [SKIP_SENTRY_KEY]: true,
+                  },
+                  'Matrix WhatsApp delivery was rejected before an external effect'
+                );
+              } else {
+                const ambiguous = await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
+                  idempotencyKey,
+                  payloadDigest: deliveryPayloadDigest,
+                  now: new Date().toISOString(),
+                });
+                if (!ambiguous.ok) void reply.status(503);
+                request.log.error(
+                  {
+                    lane: 'matrix_corpus',
+                    errorCode: ambiguous.ok ? 'AMBIGUOUS_EXTERNAL_EFFECT' : ambiguous.code,
+                    [SKIP_SENTRY_KEY]: true,
+                  },
+                  'Matrix WhatsApp delivery ended ambiguously'
+                );
+              }
+              const released = await releaseDigestDeliveryAuthorization();
+              if (!released) void reply.status(503);
+              return await reply.ok({});
+            }
+
+            if (isPermanentError) {
+              request.log.error(
+                {
+                  messageId: body.message.messageId,
+                  userId: eventData.userId,
+                  correlationId: eventData.correlationId,
+                  error: result.error.message,
+                  permanent: true,
+                },
+                'Failed to send WhatsApp message (permanent, will not retry)'
+              );
+              return await reply.ok({});
+            }
+
             request.log.error(
               {
                 messageId: body.message.messageId,
                 userId: eventData.userId,
                 correlationId: eventData.correlationId,
                 error: result.error.message,
-                permanent: true,
               },
-              'Failed to send WhatsApp message (permanent, will not retry)'
+              'Failed to send WhatsApp message'
             );
+            return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
+          }
+
+          const { wamid } = result.value;
+          if (trackedIntent !== undefined) {
+            try {
+              await deliveryTracker?.accepted({
+                intentId: trackedIntent.id,
+                phoneNumberId: getServices().outboundPhoneNumberId as string,
+                wamid,
+                at: new Date().toISOString(),
+              });
+            } catch {
+              // The provider accepted the send. Keep the unresolved intent and close replay safely.
+              if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+                await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
+                  idempotencyKey,
+                  payloadDigest: deliveryPayloadDigest,
+                  now: new Date().toISOString(),
+                });
+              }
+              await releaseDigestDeliveryAuthorization();
+              return await reply.fail('INTERNAL_ERROR', 'Failed to persist provider acceptance');
+            }
+          }
+
+          request.log.info(
+            isMatrixDelivery
+              ? { lane: 'matrix_corpus' }
+              : {
+                  messageId: body.message.messageId,
+                  wamid,
+                  userId: eventData.userId,
+                  correlationId: eventData.correlationId,
+                },
+            'Successfully sent WhatsApp message'
+          );
+
+          // Store outbound message for reply correlation (best-effort, don't fail on error)
+          const now = new Date();
+          const TTL_DAYS = 7;
+          const expiresAt = Math.floor((now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000) / 1000);
+
+          const outboundMessage = {
+            wamid,
+            correlationId: eventData.correlationId,
+            userId: eventData.userId,
+            ...(eventData.retainMessageText === false ? {} : { messageText: eventData.message }),
+            sentAt: now.toISOString(),
+            expiresAt,
+          };
+          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+            const completed = await outboundMessageRepository.completeIdempotentDelivery({
+              idempotencyKey,
+              payloadDigest: deliveryPayloadDigest,
+              outboundMessage,
+            });
+            if (!completed.ok) {
+              request.log.error(
+                {
+                  lane: 'matrix_corpus',
+                  errorCode: completed.code,
+                  [SKIP_SENTRY_KEY]: true,
+                },
+                'Matrix WhatsApp delivery receipt completion failed'
+              );
+              void reply.status(503);
+            }
+            const released = await releaseDigestDeliveryAuthorization();
+            if (!released) void reply.status(503);
             return await reply.ok({});
           }
 
-          request.log.error(
-            {
-              messageId: body.message.messageId,
-              userId: eventData.userId,
-              correlationId: eventData.correlationId,
-              error: result.error.message,
-            },
-            'Failed to send WhatsApp message'
-          );
-          return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
-        }
+          const saveResult = await outboundMessageRepository.save(outboundMessage);
 
-        const { wamid } = result.value;
-
-        request.log.info(
-          isMatrixDelivery
-            ? { lane: 'matrix_corpus' }
-            : {
-                messageId: body.message.messageId,
-                wamid,
-                userId: eventData.userId,
-                correlationId: eventData.correlationId,
-              },
-          'Successfully sent WhatsApp message'
-        );
-
-        // Store outbound message for reply correlation (best-effort, don't fail on error)
-        const now = new Date();
-        const TTL_DAYS = 7;
-        const expiresAt = Math.floor((now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000) / 1000);
-
-        const outboundMessage = {
-          wamid,
-          correlationId: eventData.correlationId,
-          userId: eventData.userId,
-          ...(eventData.retainMessageText === false ? {} : { messageText: eventData.message }),
-          sentAt: now.toISOString(),
-          expiresAt,
-        };
-        if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
-          const completed = await outboundMessageRepository.completeIdempotentDelivery({
-            idempotencyKey,
-            payloadDigest: deliveryPayloadDigest,
-            outboundMessage,
-          });
-          if (!completed.ok) {
-            request.log.error(
+          if (!saveResult.ok) {
+            request.log.warn(
               {
-                lane: 'matrix_corpus',
-                errorCode: completed.code,
-                [SKIP_SENTRY_KEY]: true,
+                wamid,
+                correlationId: eventData.correlationId,
+                error: saveResult.error.message,
               },
-              'Matrix WhatsApp delivery receipt completion failed'
+
+              'Failed to save outbound message for reply correlation (non-fatal)'
             );
-            void reply.status(503);
+          } else {
+            request.log.info(
+              { wamid, correlationId: eventData.correlationId },
+              'Saved outbound message for reply correlation'
+            );
           }
-          const released = await releaseDigestDeliveryAuthorization();
-          if (!released) void reply.status(503);
+
           return await reply.ok({});
-        }
-
-        const saveResult = await outboundMessageRepository.save(outboundMessage);
-
-        if (!saveResult.ok) {
-          request.log.warn(
-            {
-              wamid,
-              correlationId: eventData.correlationId,
-              error: saveResult.error.message,
-            },
-
-            'Failed to save outbound message for reply correlation (non-fatal)'
-          );
-        } else {
-          request.log.info(
-            { wamid, correlationId: eventData.correlationId },
-            'Saved outbound message for reply correlation'
-          );
-        }
-
-        return await reply.ok({});
         } finally {
           const released = await releaseDigestDeliveryAuthorization();
           if (!released && !reply.sent) void reply.status(503);
@@ -2009,6 +2119,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             userMappingRepository: services.userMappingRepository,
             messageRepository: services.messageRepository,
             outboundMessageRepository: services.outboundMessageRepository,
+            ...(services.notificationDeliveryRepository === undefined
+              ? {}
+              : { notificationDeliveryRepository: services.notificationDeliveryRepository }),
             mediaStorage: services.mediaStorage,
             whatsappCloudApi: services.whatsappCloudApi,
             thumbnailGenerator: services.thumbnailGenerator,

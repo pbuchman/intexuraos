@@ -1,3 +1,4 @@
+import type { NotificationContext, NotificationRunState } from '@intexuraos/http-contracts';
 import type { Result } from '@intexuraos/common-core';
 
 export const CALENDAR_DAILY_LOOKAHEAD_TASK_TYPE = 'calendar_daily_lookahead';
@@ -22,6 +23,8 @@ export interface CalendarSchedule {
     target: 'intex_agent';
   };
   nextRunAt: string;
+  /** Runs before this operator-selected resume boundary remain history only. */
+  resumeCutoff?: string;
   lastRunAt?: string;
   lastRunLocalDate?: string;
   retryRun?: {
@@ -34,6 +37,7 @@ export interface CalendarSchedule {
   };
   createdAt?: string;
   updatedAt?: string;
+  latestRun?: CalendarScheduleRun;
   schemaVersion: 1;
 }
 
@@ -43,6 +47,9 @@ export interface CalendarScheduleRun {
   userId: string;
   taskType: CalendarScheduleTaskType;
   status: 'leased' | 'sent' | 'failed';
+  deliveryStatus?: 'pending' | 'delivered' | 'failed';
+  stage?: 'trigger_pending' | NonNullable<NotificationRunState['stage']>;
+  deliveredAt?: string;
   localDate: string;
   scheduledFor: string;
   startedAt: string;
@@ -70,6 +77,11 @@ export type OutboundMatrixMessageResult =
   | { status: 'error'; message: string };
 
 export interface WhatsAppScheduleClient {
+  getNotificationRunState?(input: {
+    userId: string;
+    source: string;
+    runId: string;
+  }): Promise<Result<NotificationRunState>>;
   getMatrixDeliveryStatus(userId: string): Promise<Result<MatrixDeliveryStatus>>;
   sendOutboundMatrixMessage(input: {
     userId: string;
@@ -77,5 +89,7 @@ export interface WhatsAppScheduleClient {
     text: string;
     startNewSession?: boolean;
     idempotencyKey?: string;
+    notificationContext?: NotificationContext;
+    scheduledFor?: string;
   }): Promise<Result<OutboundMatrixMessageResult>>;
 }

@@ -170,6 +170,43 @@ describe('scheduleRoutes', () => {
     expect(body.data.delivery).toEqual({ status: 'ready' });
   });
 
+  it.each(['delivered', undefined] as const)(
+    'reports the latest run with delivery status %s and defaults legacy runs to pending',
+    async (deliveryStatus) => {
+      const jwt = await createJwt('user-123');
+      const latestRun = {
+        id: 'run-1',
+        scheduleId: 'user-123_calendar_daily_lookahead',
+        userId: 'user-123',
+        taskType: 'calendar_daily_lookahead' as const,
+        status: 'sent' as const,
+        localDate: '2026-07-04',
+        scheduledFor: '2026-07-04T13:15:00.000Z',
+        startedAt: '2026-07-04T13:15:00.000Z',
+        ...(deliveryStatus === undefined ? {} : { deliveryStatus }),
+      };
+      scheduleRepository.seedSchedule({
+        id: latestRun.scheduleId,
+        userId: 'user-123',
+        taskType: 'calendar_daily_lookahead',
+        status: 'active',
+        cadence: { type: 'daily', localTime: '09:15', timeZone: 'America/New_York' },
+        payload: { prompt: 'look ahead', target: 'intex_agent' },
+        nextRunAt: '2026-07-05T13:15:00.000Z',
+        schemaVersion: 1,
+        latestRun,
+      });
+      const response = await app.inject({
+        method: 'GET',
+        url: '/schedules/calendar-daily-lookahead',
+        headers: { authorization: `Bearer ${jwt}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.latestRun).toEqual(latestRun);
+      expect(response.json().data.operationalState).toBe(deliveryStatus ?? 'pending');
+    }
+  );
+
   it('validates local time and timezone on PUT', async () => {
     const jwt = await createJwt('user-123');
 
@@ -263,12 +300,10 @@ describe('scheduleRoutes', () => {
 
   it('returns downstream errors from schedule and delivery dependencies', async () => {
     const jwt = await createJwt('user-123');
-    scheduleRepository.setGetByUserAndTaskTypeResult(
-      {
-        ok: false,
-        error: { code: 'INTERNAL_ERROR', message: 'schedule read failed' },
-      }
-    );
+    scheduleRepository.setGetByUserAndTaskTypeResult({
+      ok: false,
+      error: { code: 'INTERNAL_ERROR', message: 'schedule read failed' },
+    });
 
     const getResponse = await app.inject({
       method: 'GET',
@@ -278,9 +313,10 @@ describe('scheduleRoutes', () => {
     expect(getResponse.statusCode).toBe(502);
 
     scheduleRepository.setGetByUserAndTaskTypeResult(ok(null));
-    whatsAppScheduleClient.setMatrixDeliveryStatusResult(
-      { ok: false, error: new Error('delivery read failed') }
-    );
+    whatsAppScheduleClient.setMatrixDeliveryStatusResult({
+      ok: false,
+      error: new Error('delivery read failed'),
+    });
     const putResponse = await app.inject({
       method: 'PUT',
       url: '/schedules/calendar-daily-lookahead',
@@ -292,6 +328,10 @@ describe('scheduleRoutes', () => {
       },
     });
 
-    expect(putResponse.statusCode).toBe(502);
+    expect(putResponse.statusCode).toBe(200);
+    expect(putResponse.json().data.delivery).toEqual({
+      status: 'error',
+      message: 'delivery read failed',
+    });
   });
 });

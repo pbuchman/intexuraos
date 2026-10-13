@@ -1,13 +1,113 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Logger } from 'pino';
 import {
   buildTaskDispatcherWorkerSecrets,
+  createWorkerAuthImageResolver,
   CREDENTIAL_REFRESH_BUFFER_MS,
   runCredentialRefreshTick,
   resolveSettingsLocalTemplatePath,
 } from '../../bootstrap/service-wiring.js';
 import { loadEnvConfig, type BootstrapEnvConfig } from '../../bootstrap/env-config.js';
 import type { WorkerAuthRegistry } from '../../services/worker-auth/index.js';
+import type { IsolationProvider } from '../../services/isolation/types.js';
+import { IMAGE_PULL_TIMEOUT_MS } from '../../services/task-dispatcher/retry-logic.js';
+
+describe('createWorkerAuthImageResolver', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('uses the provider registry pull and resolves the immutable worker image', async () => {
+    const provider = {
+      image: 'registry/code-worker@sha256:resolved',
+      pullImage(_taskId: string): Promise<string> {
+        return Promise.resolve(this.image);
+      },
+    };
+
+    const resolveImage = createWorkerAuthImageResolver(provider as unknown as IsolationProvider);
+
+    expect(await resolveImage()).toBe('registry/code-worker@sha256:resolved');
+  });
+
+  it('fails closed when the provider cannot pull worker images', async () => {
+    const resolveImage = createWorkerAuthImageResolver({} as IsolationProvider);
+
+    await expect(resolveImage()).rejects.toThrow(
+      'Worker auth refresh requires worker image pulling'
+    );
+  });
+
+  it('shares a pending registry pull between concurrent refresh callers', async () => {
+    let finishPull: ((image: string) => void) | undefined;
+    const pullImage = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          finishPull = resolve;
+        })
+    );
+    const resolveImage = createWorkerAuthImageResolver({
+      pullImage,
+    } as unknown as IsolationProvider);
+
+    const first = resolveImage();
+    const second = resolveImage();
+    expect(pullImage).toHaveBeenCalledOnce();
+    finishPull?.('registry/code-worker@sha256:resolved');
+
+    expect(await Promise.all([first, second])).toEqual([
+      'registry/code-worker@sha256:resolved',
+      'registry/code-worker@sha256:resolved',
+    ]);
+  });
+
+  it('times out a caller without duplicating the underlying pull and retries after late completion', async () => {
+    vi.useFakeTimers();
+    let finishPull: ((image: string) => void) | undefined;
+    const pendingPull = new Promise<string>((resolve) => {
+      finishPull = resolve;
+    });
+    const pullImage = vi
+      .fn<() => Promise<string>>()
+      .mockReturnValueOnce(pendingPull)
+      .mockResolvedValue('registry/code-worker@sha256:next');
+    const resolveImage = createWorkerAuthImageResolver({
+      pullImage,
+    } as unknown as IsolationProvider);
+
+    let callerRejected = false;
+    const caller = resolveImage().catch((error: unknown) => {
+      callerRejected = true;
+      throw error;
+    });
+    const timedOut = expect(caller).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(IMAGE_PULL_TIMEOUT_MS);
+    expect(callerRejected).toBe(true);
+    await timedOut;
+
+    const nextCaller = resolveImage();
+    expect(pullImage).toHaveBeenCalledOnce();
+    finishPull?.('registry/code-worker@sha256:resolved');
+    expect(await nextCaller).toBe('registry/code-worker@sha256:resolved');
+
+    expect(await resolveImage()).toBe('registry/code-worker@sha256:next');
+    expect(pullImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases a rejected registry pull so the next refresh can retry', async () => {
+    const pullImage = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error('registry unavailable'))
+      .mockResolvedValue('registry/code-worker@sha256:resolved');
+    const resolveImage = createWorkerAuthImageResolver({
+      pullImage,
+    } as unknown as IsolationProvider);
+
+    await expect(resolveImage()).rejects.toThrow('registry unavailable');
+    expect(await resolveImage()).toBe('registry/code-worker@sha256:resolved');
+    expect(pullImage).toHaveBeenCalledTimes(2);
+  });
+});
 
 type LogEntry = [level: 'info' | 'warn' | 'error' | 'debug', ...args: unknown[]];
 

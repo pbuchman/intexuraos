@@ -1434,7 +1434,7 @@ production with migrated continuity and verified real UI/WhatsApp behavior.
   assets, scheduler no-op, Pub/Sub rejection, and zero outbound side effects. Public Message Digest,
   legacy, and Fishing ingress still serves the previous release;
 - clear all emulator environment variables on the production host and authenticate Terraform with
-  `/home/deploy/provisioner-sa-key.json`. Apply `terraform/environments/dev` first to create the
+  `/home/deploy/provisioner-sa-key.json`. Apply `terraform/shared-gcp` first to create the
   topic/identity/IAM, then `terraform/hetzner-prod` to create subscription/DLQ/five-minute scheduler
   and remove only the legacy scheduler. Once forward state exists, generate/review inverse plans from
   the previous immutable release's Terraform configuration against current state; never rely on a

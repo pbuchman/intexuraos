@@ -403,7 +403,7 @@ export const config = {
 
 Add the env var in the three required locations:
 1. `apps/web/src/index.ts` (or wherever the web app validates required env) — add `'INTEXURAOS_LLM_USAGE_SERVICE_URL'` to the list.
-2. `terraform/environments/dev/main.tf` — add to the web app container's env block. Value: the Cloud Run URL of `llm-usage-service` (already exists as a Terraform output from Phase 1).
+2. `terraform/shared-gcp/main.tf` — add to the web app container's env block. Value: the Cloud Run URL of `llm-usage-service` (already exists as a Terraform output from Phase 1).
 3. `ecosystem.config.cjs` — add to the web app PM2 entry's `env` section with the local dev URL (e.g. `http://localhost:8130` or whatever port llm-usage-service listens on in home-dev).
 
 **Vite proxy (`apps/web/vite.config.ts`):** Add a new proxy entry for `/api/llm-usage`:
@@ -989,5 +989,5 @@ All `⚠ DECISION NEEDED` markers have been resolved by the decisions doc (`INT-
 - `apps/web/src/components/Sidebar.tsx`
 - `apps/web/src/pages/index.ts`
 - `apps/web/vite.config.ts` (add `/api/llm-usage` proxy)
-- `terraform/environments/dev/main.tf` (add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to web app env)
+- `terraform/shared-gcp/main.tf` (add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to web app env)
 - `ecosystem.config.cjs` (add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to web app PM2 entry)

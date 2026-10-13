@@ -95,7 +95,7 @@
 - `apps/web/src/services/index.ts`
 - `ecosystem.config.cjs`
 - `ecosystem.config.prod.cjs`
-- `terraform/environments/dev/main.tf`
+- `terraform/shared-gcp/main.tf`
 - `scripts/__tests__/ecosystem.config.test.ts`
 - `scripts/__tests__/ecosystem.prod.config.test.ts`
 - `pnpm-lock.yaml`

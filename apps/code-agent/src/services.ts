@@ -8,7 +8,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import type { Result } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { createJobHeartbeatStore, getFirestore } from '@intexuraos/infra-firestore';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createCodeTaskDispatchStatusService } from './domain/services/codeTaskDispatchStatusService.js';
@@ -168,6 +168,15 @@ export function initServices(config: ServiceConfig): void {
   });
 
   container = {
+    jobHeartbeatStore: createJobHeartbeatStore({ collectionName: 'code_job_heartbeats', firestore }),
+    getResumeCutoff: async (): Promise<string | null> => {
+      const snapshot = await firestore.collection('home_prod_resume_policy').doc('active').get();
+      const cutoff = snapshot.data()?.['cutoff'] as unknown;
+      if (cutoff === undefined) return null;
+      const status = snapshot.data()?.['status'] as unknown;
+      if (typeof cutoff !== 'string' || !Number.isFinite(Date.parse(cutoff)) || (status !== 'preparing' && status !== 'applied')) throw new Error('Invalid resume policy');
+      return cutoff;
+    },
     firestore, logger, serviceUrl: config.serviceUrl, codeTaskCallbackBaseUrl: config.codeTaskCallbackBaseUrl,
     codeTaskRepo: repos.codeTaskRepo, logChunkRepo: repos.logChunkRepo, logLineRepo: repos.logLineRepo,
     taskDispatcher, whatsappNotifier, codeTaskDispatchStatusService, linearAgentClient, linearIssueService,

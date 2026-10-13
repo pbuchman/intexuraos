@@ -1,4 +1,5 @@
 import type { MessageDigestRun } from '../models/messageDigestRun.js';
+import { failedConfirmationDeadline } from '../messageDigestReceiptObservation.js';
 import type {
   MessageDigestOutboundDeliveryState,
   MessageDigestWhatsAppClient,
@@ -14,10 +15,7 @@ export interface ReconcileMessageDigestDeliveryInput {
 export interface ReconcileMessageDigestDeliveryDependencies {
   store: Pick<
     MessageDigestStore,
-    | 'getOwnedDefinition'
-    | 'getOwnedRun'
-    | 'recordRunDeliveryState'
-    | 'recordRunDeliveryObservation'
+    'getOwnedDefinition' | 'getOwnedRun' | 'recordRunDeliveryState' | 'recordRunDeliveryObservation'
   >;
   whatsappClient: Pick<MessageDigestWhatsAppClient, 'getOutboundDeliveryState'>;
   now?: (() => string) | undefined;
@@ -31,7 +29,7 @@ const PENDING_RECEIPT_DEADLINE_MS = 24 * 60 * 60 * 1_000;
 export type ReconcileMessageDigestDeliveryResult =
   | {
       ok: true;
-      disposition: 'pending' | 'sent' | 'ambiguous' | 'failed';
+      disposition: 'pending' | 'sent' | 'delivered' | 'ambiguous' | 'failed';
       run: MessageDigestRun;
     }
   | { ok: true; disposition: 'deferred' }
@@ -59,7 +57,30 @@ export async function reconcileMessageDigestDelivery(
   if (run.generationStatus !== 'completed') {
     return { ok: false, code: 'NOT_RECONCILABLE' };
   }
-  if (run.delivery.status !== 'pending') return projectTerminal(run);
+  if (
+    run.delivery.status !== 'pending' &&
+    (run.delivery.status !== 'sent' || hasFinalConfirmation(run))
+  )
+    return projectTerminal(run);
+
+  const failedDeadline = failedConfirmationDeadline(run.delivery);
+  if (failedDeadline !== null && Date.parse(observedAt) >= failedDeadline.at) {
+    const expired = await dependencies.store.recordRunDeliveryState({
+      ...normalized,
+      expectedErasureEpoch: definition.erasureEpoch,
+      observedAt,
+      delivery: {
+        status: 'sent',
+        acceptedAt: failedDeadline.acceptedAt,
+        transportConfirmation: failedDeadline.confirmation,
+      },
+    });
+    if (!expired.ok)
+      return expired.code === 'NOT_FOUND'
+        ? { ok: false, code: 'NOT_FOUND' }
+        : { ok: true, disposition: 'deferred' };
+    return projectTerminal(expired.run);
+  }
 
   const receipt = await dependencies.whatsappClient.getOutboundDeliveryState({
     userId: normalized.userId,
@@ -130,17 +151,16 @@ async function persistNonTerminalObservation(
     expectedErasureEpoch,
     expectedReconciliationAttempts: run.delivery.reconciliationAttempts,
     observedAt,
-    nextCheckAt: nextReconciliationCheckAt(
-      observedAt,
-      run.delivery.reconciliationAttempts
-    ),
+    nextCheckAt: nextReconciliationCheckAt(observedAt, run.delivery.reconciliationAttempts),
     observation,
   });
   if (!recorded.ok) {
     if (recorded.code === 'NOT_FOUND') return { ok: false, code: 'NOT_FOUND' };
     return { ok: true, disposition: 'deferred' };
   }
-  return { ok: true, disposition: 'pending', run: recorded.run };
+  return recorded.run.delivery.transportConfirmation?.status === 'failed'
+    ? projectTerminal(recorded.run)
+    : { ok: true, disposition: 'pending', run: recorded.run };
 }
 
 function overdueDeliveryForObservation(
@@ -148,6 +168,8 @@ function overdueDeliveryForObservation(
   receipt: Extract<MessageDigestOutboundDeliveryState, { status: 'pending' | 'missing' }>,
   observedAt: string
 ): Exclude<MessageDigestOutboundDeliveryState, { status: 'pending' | 'missing' }> | null {
+  // Acceptance remains accepted even if provider confirmation never arrives. Do not authorize a resend.
+  if (run.delivery.status === 'sent') return null;
   if (
     receipt.status === 'missing' &&
     run.delivery.missingSince !== null &&
@@ -185,12 +207,18 @@ function nextReconciliationCheckAt(observedAt: string, completedAttempts: number
 function isTerminalReceipt(
   receipt: MessageDigestOutboundDeliveryState
 ): receipt is Exclude<MessageDigestOutboundDeliveryState, { status: 'pending' | 'missing' }> {
-  return (
-    receipt.status === 'sent' || receipt.status === 'ambiguous' || receipt.status === 'failed'
-  );
+  return receipt.status === 'sent' || receipt.status === 'ambiguous' || receipt.status === 'failed';
 }
 
 function projectTerminal(run: MessageDigestRun): ReconcileMessageDigestDeliveryResult {
+  const confirmation = run.delivery.transportConfirmation;
+  if (
+    run.delivery.status === 'sent' &&
+    (confirmation?.status === 'delivered' || confirmation?.status === 'read')
+  )
+    return { ok: true, disposition: 'delivered', run };
+  if (run.delivery.status === 'sent' && confirmation?.status === 'failed')
+    return { ok: true, disposition: 'failed', run };
   if (
     run.delivery.status === 'sent' ||
     run.delivery.status === 'ambiguous' ||
@@ -199,6 +227,11 @@ function projectTerminal(run: MessageDigestRun): ReconcileMessageDigestDeliveryR
     return { ok: true, disposition: run.delivery.status, run };
   }
   return { ok: true, disposition: 'pending', run };
+}
+
+function hasFinalConfirmation(run: MessageDigestRun): boolean {
+  const status = run.delivery.transportConfirmation?.status;
+  return status === 'delivered' || status === 'read';
 }
 
 function normalizeInput(

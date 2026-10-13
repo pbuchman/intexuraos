@@ -21,6 +21,7 @@ export interface DefinitionUpdatePatch {
   resetCheckpointAt?: string | undefined;
   nextRunAt?: string | undefined;
   releaseFailedPendingWindow?: true | undefined;
+  skipObsoleteWindows?: { expectedStateRevision: number; windowStart: string; windowEnd: string };
 }
 
 export interface ReserveRunInput {
@@ -219,7 +220,7 @@ export interface MessageDigestStore {
     expectedErasureEpoch: number;
     observedAt: string;
     delivery:
-      | { status: 'sent'; acceptedAt: string }
+      | { status: 'sent'; acceptedAt: string; transportConfirmation?: import('@intexuraos/http-contracts').TransportConfirmation }
       | { status: 'ambiguous'; acceptedAt?: string | undefined }
       | { status: 'failed'; failedAt: string; failureCode: string };
   }): Promise<

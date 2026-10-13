@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -37,6 +37,11 @@ const EXPECTED_SERVICES = [
   ['web-agent', '8127'],
   ['api-docs-hub', '8133'],
 ] as const;
+
+const BASIC_EXCLUDED_SERVICES = new Set(['research-agent', 'message-digest-service']);
+const OPENAPI_SERVICES = EXPECTED_SERVICES.map(([name]) => name).filter(
+  (name) => name !== 'llm-usage-service' && name !== 'api-docs-hub'
+);
 
 const REMOVED_AGENT_NAMES = ['todos', 'chat', 'cron'].map((name) => `${name}-agent`);
 const REMOVED_AGENT_ENV_KEYS = [
@@ -187,6 +192,79 @@ describe('ecosystem.config.prod.cjs', () => {
     }
   });
 
+  it('applies one validated port offset to app ports and every internal dependency URL', () => {
+    const offset = 10_000;
+    const config = loadProdConfig({
+      ...PROD_ENV,
+      HOME: '/home/intexuraos-prod',
+      INTEXURAOS_PROD_PORT_OFFSET: String(offset),
+    });
+    const byName = new Map(config.apps.map((app) => [app.name, app]));
+
+    expect(config.apps.map((app) => [app.name, app.env.PORT])).toEqual(
+      EXPECTED_SERVICES.map(([name, port]) => [name, String(Number(port) + offset)])
+    );
+    expect(new Set(config.apps.map((app) => app.env.PORT)).size).toBe(config.apps.length);
+    expect(byName.get('linear-agent')?.env.INTEXURAOS_CODE_AGENT_URL).toBe(
+      'http://127.0.0.1:18128'
+    );
+    expect(byName.get('intex-agent')?.env.INTEXURAOS_CALENDAR_AGENT_URL).toBe(
+      'http://127.0.0.1:18125'
+    );
+    expect(byName.get('user-service')?.env.WAIT_FOR_SERVICE).toBe('http://127.0.0.1:18122/health');
+    expect(byName.get('api-docs-hub')?.env.INTEXURAOS_CODE_AGENT_OPENAPI_URL).toBe(
+      'http://127.0.0.1:18128/openapi.json'
+    );
+  });
+
+  it.each(['-1', '1.5', '57401', 'not-a-number'])(
+    'rejects invalid production port offset %s',
+    (offset) => {
+      expect(
+        loadProdConfigFailureMessage({
+          ...PROD_ENV,
+          INTEXURAOS_PROD_PORT_OFFSET: offset,
+        })
+      ).toBe('INTEXURAOS_PROD_PORT_OFFSET must be an integer between 0 and 57400');
+    }
+  );
+
+  it('runs the 17-app basic profile and exposes only active OpenAPI dependencies', () => {
+    const config = loadProdConfig({
+      ...PROD_ENV,
+      INTEXURAOS_PROD_PROFILE: 'basic',
+      INTEXURAOS_PROD_PORT_OFFSET: '10000',
+    });
+    const names = config.apps.map((app) => app.name);
+    const apiDocs = config.apps.find((app) => app.name === 'api-docs-hub');
+    const codeAgent = config.apps.find((app) => app.name === 'code-agent');
+
+    expect(config.apps).toHaveLength(17);
+    expect(names).not.toEqual(expect.arrayContaining([...BASIC_EXCLUDED_SERVICES]));
+    expect(apiDocs?.env.INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL).toBeUndefined();
+    expect(apiDocs?.env.INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL).toBeUndefined();
+    expect(codeAgent?.env.INTEXURAOS_PR_TRIAGE_ENABLED).toBe('false');
+    expect(apiDocs?.env.INTEXURAOS_API_DOCS_EXPECTED_SERVICES).toBe(
+      OPENAPI_SERVICES.filter((name) => !BASIC_EXCLUDED_SERVICES.has(name)).join(',')
+    );
+  });
+
+  it('keeps PR triage enabled by default outside the basic profile', () => {
+    const config = loadProdConfig(PROD_ENV);
+    expect(
+      config.apps.find((app) => app.name === 'code-agent')?.env.INTEXURAOS_PR_TRIAGE_ENABLED
+    ).toBe('true');
+  });
+
+  it('rejects unknown production profiles', () => {
+    expect(
+      loadProdConfigFailureMessage({
+        ...PROD_ENV,
+        INTEXURAOS_PROD_PROFILE: 'minimal',
+      })
+    ).toBe('INTEXURAOS_PROD_PROFILE must be one of: full, basic');
+  });
+
   it('does not export runtime env for removed agents', () => {
     const config = loadProdConfig({
       ...PROD_ENV,
@@ -215,6 +293,7 @@ describe('ecosystem.config.prod.cjs', () => {
       expect(app.env.INTEXURAOS_ENVIRONMENT, app.name).toBe('prod');
       expect(app.env.INTEXURAOS_RUNTIME, app.name).toBe('prod');
       expect(app.env.NODE_ENV, app.name).toBe('production');
+      expect(app.env.HOST, app.name).toBe('127.0.0.1');
       expect(app.env.GOOGLE_APPLICATION_CREDENTIALS, app.name).toBe(
         '/home/deploy/runtime-sa-key.json'
       );
@@ -235,6 +314,34 @@ describe('ecosystem.config.prod.cjs', () => {
       expect(app.env[`${REMOVED_OBSERVABILITY_PREFIX}_AUTH_TOKEN`], app.name).toBeUndefined();
       expect(app.env[`${REMOVED_OBSERVABILITY_PREFIX}_OTLP_ENDPOINT`], app.name).toBeUndefined();
       expect(app.env.NODE_OPTIONS, app.name).toBeUndefined();
+    }
+  });
+
+  it('uses the runtime home for the credential fallback and honors an explicit override', () => {
+    const fallback = loadProdConfig({
+      ...PROD_ENV,
+      HOME: '/home/intexuraos-prod',
+    });
+    const overridden = loadProdConfig({
+      ...PROD_ENV,
+      HOME: '/home/intexuraos-prod',
+      GOOGLE_APPLICATION_CREDENTIALS: '/run/credentials/production.json',
+    });
+
+    expect(fallback.apps[0]?.env.GOOGLE_APPLICATION_CREDENTIALS).toBe(
+      '/home/intexuraos-prod/runtime-sa-key.json'
+    );
+    expect(overridden.apps[0]?.env.GOOGLE_APPLICATION_CREDENTIALS).toBe(
+      '/run/credentials/production.json'
+    );
+  });
+
+  it('has no production entrypoint that hardcodes the listen host', () => {
+    for (const [name] of EXPECTED_SERVICES) {
+      const source = readFileSync(resolve(process.cwd(), 'apps', name, 'src/index.ts'), 'utf8');
+      expect(source, name).not.toMatch(
+        /(?:listen\(\{[^}]*host:\s*|const host\s*=\s*)['"]0\.0\.0\.0['"]/su
+      );
     }
   });
 

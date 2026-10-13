@@ -1,4 +1,5 @@
 import { Firestore } from '@google-cloud/firestore';
+import { createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
 import { PubSub, type PublishOptions } from '@google-cloud/pubsub';
 import type { Logger } from '@intexuraos/common-core';
 import { createAppLogger } from '@intexuraos/infra-sentry';
@@ -81,6 +82,7 @@ export interface ServiceFactories {
 }
 
 export interface ServiceContainer {
+  jobHeartbeatStore?: JobHeartbeatStore;
   config: Config;
   logger: Logger;
   firestore: Firestore;
@@ -167,6 +169,7 @@ export function createServiceContainer(
   );
   const runPreparationTokens = factories.createRunPreparationTokens(config.internalAuthToken);
   return {
+    jobHeartbeatStore: createJobHeartbeatStore({ collectionName: 'message_digest_job_heartbeats', firestore }),
     config,
     logger,
     firestore,

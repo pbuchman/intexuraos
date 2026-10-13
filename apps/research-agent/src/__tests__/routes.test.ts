@@ -4153,6 +4153,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 200 with error for non-existent research', async () => {
+      const errorSpy = vi.spyOn(app.log, 'error');
       const response = await app.inject({
         method: 'POST',
         url: '/internal/llm/pubsub/process-research',
@@ -4174,7 +4175,40 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
-      // Error is logged internally for PubSub ack pattern - not returned in response
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ researchId: 'non-existent-id', [SKIP_SENTRY_KEY]: true }),
+        'Research not found'
+      );
+    });
+
+    it('keeps repository lookup failures Sentry-visible while preserving the research ACK', async () => {
+      const errorSpy = vi.spyOn(app.log, 'error');
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: 'repository-error-id',
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-repository-error',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().success).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        { researchId: 'repository-error-id', error: 'Test find failure' },
+        'Failed to load research'
+      );
     });
   });
 
@@ -4503,6 +4537,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns error when research not found', async () => {
+      const errorSpy = vi.spyOn(app.log, 'error');
       const response = await app.inject({
         method: 'POST',
         url: '/internal/llm/pubsub/process-llm-call',
@@ -4519,7 +4554,35 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
-      // Error is logged internally for PubSub ack pattern - not returned in response
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ researchId: 'research-123', [SKIP_SENTRY_KEY]: true }),
+        '[3.1.1] Research not found'
+      );
+    });
+
+    it('keeps repository lookup failures Sentry-visible while preserving the LLM call ACK', async () => {
+      const errorSpy = vi.spyOn(app.log, 'error');
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-repository-error',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().success).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        { researchId: 'research-123', error: 'Test find failure' },
+        '[3.1.1] Failed to load research'
+      );
     });
 
     it('skips already completed LLM calls (idempotency)', async () => {

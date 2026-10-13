@@ -5,6 +5,111 @@ import { describe, expect, it } from 'vitest';
 import { createWhatsAppReplyPublisher } from '../../../infra/pubsub/whatsappReplyPublisher.js';
 
 describe('createWhatsAppReplyPublisher', () => {
+  it('splits a long final response and numbers every part without changing session correlation', async () => {
+    const sendPublisher = new FakeWhatsAppSendPublisher();
+    const publisher = createWhatsAppReplyPublisher({ sendPublisher });
+    await publisher.publishReply({
+      userId: 'u',
+      message: 'a'.repeat(6000),
+      replyToMessageId: 'incoming',
+      correlationId: 'session',
+      idempotencyKey: 'notification:calendar:run:final:0',
+      notificationContext: {
+        source: 'calendar',
+        runId: 'run',
+        phase: 'final',
+        outcome: 'succeeded',
+        partIndex: 0,
+        partCount: 1,
+      },
+    });
+    expect(sendPublisher.calls).toHaveLength(2);
+    expect(sendPublisher.calls.map((call) => call.message).join('')).toBe('a'.repeat(6000));
+    expect(sendPublisher.calls[0]).toMatchObject({
+      correlationId: 'session',
+      notificationContext: { partIndex: 0, partCount: 2 },
+      idempotencyKey: expect.stringMatching(/^notification:[a-f0-9]{64}:final:0$/u),
+    });
+    expect(sendPublisher.calls[1]).toMatchObject({
+      correlationId: 'session',
+      notificationContext: { partIndex: 1, partCount: 2 },
+      idempotencyKey: expect.stringMatching(/^notification:[a-f0-9]{64}:final:1$/u),
+    });
+  });
+
+  it('forwards acknowledgment context and derives a stable key without a part suffix', async () => {
+    const sendPublisher = new FakeWhatsAppSendPublisher();
+    const publisher = createWhatsAppReplyPublisher({ sendPublisher });
+    const notificationContext = {
+      source: 'calendar' as const,
+      runId: 'run',
+      phase: 'ack' as const,
+    };
+    await publisher.publishReply({
+      userId: 'u',
+      message: 'Working',
+      replyToMessageId: 'incoming',
+      correlationId: 'session',
+      idempotencyKey: 'caller-key',
+      notificationContext,
+    });
+    expect(sendPublisher.calls).toEqual([
+      expect.objectContaining({
+        notificationContext,
+        idempotencyKey: expect.stringMatching(/^notification:[a-f0-9]{64}:ack$/u),
+      }),
+    ]);
+  });
+
+  it('preserves caller idempotency for replies without notification context', async () => {
+    const sendPublisher = new FakeWhatsAppSendPublisher();
+    await createWhatsAppReplyPublisher({ sendPublisher }).publishReply({
+      userId: 'u',
+      message: 'Reply',
+      replyToMessageId: 'incoming',
+      correlationId: 'session',
+      idempotencyKey: 'caller-key',
+    });
+    expect(sendPublisher.calls[0]).toMatchObject({ idempotencyKey: 'caller-key' });
+    expect(sendPublisher.calls[0]).not.toHaveProperty('notificationContext');
+  });
+
+  it.each([
+    '',
+    'a'.repeat(1023) + '😀' + 'z',
+    'a'.repeat(1022) + '😀' + 'z',
+    'a'.repeat(1023) + 'é' + 'z',
+  ])(
+    'splits final interactive replies without corrupting Unicode or dropping empty messages',
+    async (message) => {
+      const sendPublisher = new FakeWhatsAppSendPublisher();
+      const buttons = [{ type: 'reply' as const, reply: { id: 'yes', title: 'Yes' } }];
+      await createWhatsAppReplyPublisher({ sendPublisher }).publishReply({
+        userId: 'u',
+        message,
+        replyToMessageId: 'incoming',
+        correlationId: 'session',
+        buttons,
+        notificationContext: {
+          source: 'calendar',
+          runId: 'run',
+          phase: 'final',
+          outcome: 'succeeded',
+          partIndex: 0,
+          partCount: 1,
+        },
+      });
+      expect(sendPublisher.calls.map((call) => call.message).join('')).toBe(message);
+      expect(sendPublisher.calls).toHaveLength(message === '' ? 1 : 2);
+      expect(sendPublisher.calls.at(-1)?.buttons).toEqual(buttons);
+      expect(sendPublisher.calls.every((call) => call.message.length <= 1024)).toBe(true);
+      if (message.startsWith('a'.repeat(1023)) && message.includes('😀')) {
+        expect(sendPublisher.calls[0]?.message).toBe('a'.repeat(1023));
+        expect(sendPublisher.calls[1]?.message).toBe('😀z');
+      }
+    }
+  );
+
   it('publishes WhatsApp replies through the shared send-message publisher', async () => {
     const sendPublisher = new FakeWhatsAppSendPublisher();
     const publisher = createWhatsAppReplyPublisher({ sendPublisher });

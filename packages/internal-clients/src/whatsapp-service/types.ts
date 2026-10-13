@@ -1,6 +1,9 @@
 import type { Result } from '@intexuraos/common-core';
 import type {
   MatrixCorpusExpectedToolScheduleV1,
+  NotificationContext,
+  NotificationRunState,
+  TransportConfirmation,
   MatrixCorpusSignedControlMutationV1,
   StrictToolMockProfileV1,
 } from '@intexuraos/http-contracts';
@@ -84,6 +87,7 @@ export interface AuthorizeOutboundDeliveryRetryResult {
 }
 
 export interface OutboundDeliveryState {
+  transportConfirmation?: TransportConfirmation | undefined;
   status: 'pending' | 'sent' | 'ambiguous' | 'failed' | 'missing';
   acceptedAt?: string | undefined;
   failedAt?: string | undefined;
@@ -115,6 +119,8 @@ export type PrivateMatrixDeliveryStatus =
   | { status: 'error'; deliverable: false; message: string };
 
 export interface SendPrivateOutboundMatrixMessageRequest {
+  notificationContext?: NotificationContext;
+  scheduledFor?: string;
   userId: string;
   text: string;
   startNewSession?: boolean;
@@ -127,6 +133,11 @@ export type SendPrivateOutboundMatrixMessageResult =
   | { status: 'error'; message: string };
 
 export interface WhatsAppServiceClient {
+  getNotificationRunState?(input: {
+    userId: string;
+    source: string;
+    runId: string;
+  }): Promise<Result<NotificationRunState>>;
   validatePrivateDigestSource(
     input: ValidatePrivateDigestSourceInput
   ): Promise<WhatsAppDigestClientResult<ValidatedPrivateDigestSource>>;

@@ -21,6 +21,8 @@ interface CalendarDailyLookaheadSettingsResponse {
     lastRunAt?: string;
   };
   delivery: MatrixDeliveryStatus;
+  latestRun?: CalendarSchedule['latestRun'];
+  operationalState?: 'never' | 'pending' | 'delivered' | 'failed';
 }
 
 function toSettingsResponse(input: {
@@ -46,6 +48,12 @@ function toSettingsResponse(input: {
       ...(input.schedule.lastRunAt !== undefined ? { lastRunAt: input.schedule.lastRunAt } : {}),
     },
     delivery: input.delivery,
+    ...(input.schedule.latestRun === undefined
+      ? { operationalState: 'never' as const }
+      : {
+          latestRun: input.schedule.latestRun,
+          operationalState: input.schedule.latestRun.deliveryStatus ?? 'pending',
+        }),
   };
 }
 
@@ -68,8 +76,8 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const services = getServices();
       if (
-        services.calendarScheduleRepository === undefined
-        || services.whatsAppScheduleClient === undefined
+        services.calendarScheduleRepository === undefined ||
+        services.whatsAppScheduleClient === undefined
       ) {
         return await reply.fail('MISCONFIGURED', 'Schedule services not configured');
       }
@@ -112,8 +120,8 @@ export const scheduleRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const services = getServices();
       if (
-        services.calendarScheduleRepository === undefined
-        || services.whatsAppScheduleClient === undefined
+        services.calendarScheduleRepository === undefined ||
+        services.whatsAppScheduleClient === undefined
       ) {
         return await reply.fail('MISCONFIGURED', 'Schedule services not configured');
       }

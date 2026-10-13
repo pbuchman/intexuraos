@@ -627,7 +627,7 @@ Add the new env var to the three required locations and wire it into the orchest
 **Files:**
 - Modify: `workers/orchestrator/src/start.ts:748-766`
 - Modify: `ecosystem.config.cjs`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Add env var to `ecosystem.config.cjs`**
 
@@ -639,7 +639,7 @@ INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY
 
 - [ ] **Step 2: Add env var to terraform**
 
-In `terraform/environments/dev/main.tf`, find the orchestrator module's `env_vars` block and add:
+In `terraform/shared-gcp/main.tf`, find the orchestrator module's `env_vars` block and add:
 
 ```hcl
 {
@@ -676,7 +676,7 @@ Pass `agentComplianceValidator` to `TaskDispatcher` instead of `executionDeepVal
 - [ ] **Step 4: Commit**
 
 ```bash
-git add workers/orchestrator/src/start.ts ecosystem.config.cjs terraform/environments/dev/main.tf
+git add workers/orchestrator/src/start.ts ecosystem.config.cjs terraform/shared-gcp/main.tf
 git commit -m "feat(orchestrator): add INTEXURAOS_OPENROUTER_APP_API_KEY env var and wire compliance validator"
 ```
 

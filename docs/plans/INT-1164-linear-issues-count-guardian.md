@@ -46,7 +46,7 @@
 | `apps/linear-agent/src/services.ts`                     | Add `issuePruningClassifier` to `ServiceContainer`                               |
 | `apps/linear-agent/src/routes/internalRoutes.ts`        | Add `POST /internal/linear/prune-issues` handler                                 |
 | `apps/linear-agent/src/index.ts`                        | No env var changes needed — `INTEXURAOS_GEMINI_APP_API_KEY` already available    |
-| `terraform/environments/dev/main.tf`                    | Add `linear_issues_prune_hourly` Cloud Scheduler job                             |
+| `terraform/shared-gcp/main.tf`                    | Add `linear_issues_prune_hourly` Cloud Scheduler job                             |
 
 ---
 
@@ -63,7 +63,7 @@
 - Response (500): Internal error
 
 ### Subtask 2: terraform (terraform/)
-**Owns:** Cloud Scheduler job configuration in `terraform/environments/dev/main.tf`.
+**Owns:** Cloud Scheduler job configuration in `terraform/shared-gcp/main.tf`.
 **Contract consumed from Subtask 1:**
 - Target URI: `https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/prune-issues`
 - HTTP method: POST
@@ -1451,11 +1451,11 @@ git commit -m "feat(linear-agent): add POST /internal/linear/prune-issues endpoi
 ## Task 7: Terraform Cloud Scheduler Job
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Add the Cloud Scheduler job**
 
-In `terraform/environments/dev/main.tf`, after the existing `linear_sync_hourly` block (around line 1576), add:
+In `terraform/shared-gcp/main.tf`, after the existing `linear_sync_hourly` block (around line 1576), add:
 
 ```hcl
 # -----------------------------------------------------------------------------
@@ -1499,13 +1499,13 @@ resource "google_cloud_scheduler_job" "linear_issues_prune_hourly" {
 
 - [ ] **Step 2: Validate Terraform syntax**
 
-Run: `cd /repo/terraform/environments/dev && terraform validate`
+Run: `cd /repo/terraform/shared-gcp && terraform validate`
 Expected: "Success! The configuration is valid."
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add terraform/environments/dev/main.tf
+git add terraform/shared-gcp/main.tf
 git commit -m "infra: add Cloud Scheduler job for hourly Linear issue pruning (INT-1164)"
 ```
 

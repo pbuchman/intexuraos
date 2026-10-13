@@ -127,7 +127,7 @@ describe('GitHub OAuth Connection Routes', () => {
         headers: {
           authorization: `Bearer ${token}`,
           'x-forwarded-proto': 'https',
-          'x-forwarded-host': 'api.example.com',
+          'x-forwarded-host': 'intexuraos.cloud',
         },
       });
 
@@ -135,6 +135,9 @@ describe('GitHub OAuth Connection Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
       expect(body.success).toBe(true);
       expect(body.data.authorizationUrl).toContain('https://github.com/login/oauth/authorize');
+      expect(fakeGitHubOAuthClient.getLastGeneratedRedirectUri()).toBe(
+        'https://intexuraos.cloud/oauth/connections/github/callback'
+      );
     });
 
     it('uses default protocol and host when forwarded headers are missing', { timeout: 20000 }, async () => {
@@ -146,7 +149,7 @@ describe('GitHub OAuth Connection Routes', () => {
         url: '/oauth/connections/github/initiate',
         headers: {
           authorization: `Bearer ${token}`,
-          host: 'api.example.com',
+          host: 'localhost:3000',
         },
       });
 
@@ -154,6 +157,9 @@ describe('GitHub OAuth Connection Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
       expect(body.success).toBe(true);
       expect(body.data.authorizationUrl).toContain('https://github.com/login/oauth/authorize');
+      expect(fakeGitHubOAuthClient.getLastGeneratedRedirectUri()).toBe(
+        'http://localhost:3000/oauth/connections/github/callback'
+      );
     });
 
     it('uses fallback localhost when both forwarded headers and host header are missing', { timeout: 20000 }, async () => {

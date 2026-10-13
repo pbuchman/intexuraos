@@ -165,17 +165,17 @@ describe('onReviewSkipped callback branches', () => {
     expect(mockWhatsAppNotifier.notifyTaskReadyForMerge).not.toHaveBeenCalled();
   });
 
-  it('warns and returns when validateIssue fails', async () => {
+  it.each([true, false])('logs and returns when validateIssue fails (already reported=%s)', async (alreadyReported) => {
     mockCodeTaskRepo.findOriginTaskByPR = vi.fn().mockResolvedValue(
       ok(createFakeCodeTask({ linearIssueId: 'INT-123' })),
     );
     mockLinearAgentClient.validateIssue = vi
       .fn()
-      .mockResolvedValue(err({ code: 'NOT_FOUND', message: 'Issue not found' }));
+      .mockResolvedValue(err({ code: 'UNAVAILABLE', message: 'Linear unavailable', alreadyReported }));
 
     await createCallback()({ repository: 'pbuchman/intexuraos', prNumber: 42 });
 
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger[alreadyReported ? 'info' : 'warn']).toHaveBeenCalledWith(
       expect.objectContaining({ linearIssueId: 'INT-123' }),
       expect.stringContaining('Failed to validate issue'),
     );
@@ -186,6 +186,8 @@ describe('onReviewSkipped callback branches', () => {
       },
     });
     expect(mockLinearAgentClient.updateIssueMetadata).not.toHaveBeenCalled();
+    if (alreadyReported) expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('warns and returns when ready-to-merge label is dropped', async () => {

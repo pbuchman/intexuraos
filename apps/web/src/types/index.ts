@@ -175,11 +175,7 @@ export type PrivateWhatsAppMessageType =
   | 'unknown';
 
 export type PrivateWhatsAppDeliveryMode = 'live' | 'backfill';
-export type PrivateWhatsAppTranscriptionStatus =
-  | 'pending'
-  | 'processing'
-  | 'completed'
-  | 'failed';
+export type PrivateWhatsAppTranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface PrivateWhatsAppMedia {
   mxcUri?: string;
@@ -837,6 +833,12 @@ export interface IntexAgentSessionEvent {
  * Application config from environment
  */
 export interface AppConfig {
+  featureAvailability: {
+    research: boolean;
+    messageDigests: boolean;
+    prTriage: boolean;
+    schedulers: boolean;
+  };
   auth0Domain: string;
   auth0ClientId: string;
   authAudience: string;
@@ -946,9 +948,7 @@ export interface UserSettings {
   createdAt: string;
   updatedAt: string;
   intexAgentCapabilities: {
-    testRuns:
-      | { status: 'available'; runtimeAudience: 'hetzner-prod' }
-      | { status: 'unavailable' };
+    testRuns: { status: 'available'; runtimeAudience: 'hetzner-prod' } | { status: 'unavailable' };
   };
 }
 
@@ -1126,6 +1126,21 @@ export interface CalendarDailyNotificationSchedule {
 }
 
 export interface CalendarDailyNotificationSettings {
+  operationalState?: 'never' | 'pending' | 'delivered' | 'failed';
+  latestRun?: {
+    id: string;
+    stage?:
+      | 'trigger_pending'
+      | 'awaiting_ingress'
+      | 'processing'
+      | 'awaiting_delivery'
+      | 'delivered'
+      | 'failed';
+    status: 'leased' | 'sent' | 'failed';
+    deliveryStatus?: 'pending' | 'delivered' | 'failed';
+    scheduledFor: string;
+    deliveredAt?: string;
+  };
   schedule: CalendarDailyNotificationSchedule;
   delivery: CalendarDailyNotificationDeliveryReadiness;
 }
@@ -1224,12 +1239,7 @@ export type LinearPriority = 0 | 1 | 2 | 3 | 4;
 /**
  * Linear issue state category
  */
-export type IssueStateCategory =
-  | 'backlog'
-  | 'unstarted'
-  | 'started'
-  | 'completed'
-  | 'cancelled';
+export type IssueStateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
 
 /**
  * Linear issue state
@@ -1408,7 +1418,11 @@ export interface CodeTaskResult {
     | { attempted: true; success: boolean; conflictFiles?: string[] };
   pull_request_outcome_label?: 'commits_pushed' | 'no_changes_needed';
   merge_ready?: '1';
-  merge_ready_reason?: 'review_no_remediation' | 'pull_request_no_changes_rebase_clean' | 'remediation_already_completed' | 'review_skipped';
+  merge_ready_reason?:
+    | 'review_no_remediation'
+    | 'pull_request_no_changes_rebase_clean'
+    | 'remediation_already_completed'
+    | 'review_skipped';
   review_comments_posted?: string;
   review_types?: string;
   requirements_tracker_updated?: string;
@@ -1465,7 +1479,11 @@ export interface CodeTaskDispatchStatus {
   workerNames: string[];
   firstSeenAt: string;
   lastSeenAt: string;
-  nextAction: 'will_retry_automatically' | 'retry_after_fix' | 'wait_until_scheduled' | 'wait_for_active_task';
+  nextAction:
+    | 'will_retry_automatically'
+    | 'retry_after_fix'
+    | 'wait_until_scheduled'
+    | 'wait_for_active_task';
   lastAttemptAt?: string;
   attemptCount?: number;
   expiresAt?: string;
@@ -1491,7 +1509,14 @@ export interface CodeTaskDispatchStatus {
 export interface CodeTaskExecutionMemoryMatch {
   memoryId: string;
   title: string;
-  memoryType: 'implementation_pattern' | 'verification_pattern' | 'pitfall_pattern' | 'single_artifact_planning' | 'decomposition_pattern' | 'planning_decision' | 'review_finding';
+  memoryType:
+    | 'implementation_pattern'
+    | 'verification_pattern'
+    | 'pitfall_pattern'
+    | 'single_artifact_planning'
+    | 'decomposition_pattern'
+    | 'planning_decision'
+    | 'review_finding';
   score: number;
   appliesWhen: string;
   action: string;
@@ -1590,7 +1615,12 @@ export interface CodeTask {
   implementationTaskId?: string;
   fanOutChildTaskIds?: string[];
   parentTaskId?: string;
-  followUpReason?: 'pr_comment' | 'user_feedback' | 'retry' | 'execution_implement' | 'merge_conflict';
+  followUpReason?:
+    | 'pr_comment'
+    | 'user_feedback'
+    | 'retry'
+    | 'execution_implement'
+    | 'merge_conflict';
   result?: CodeTaskResult;
   error?: CodeTaskError;
   dispatchStatus?: CodeTaskDispatchStatus;
@@ -1685,7 +1715,12 @@ export interface ListCodeTasksResponse {
 /**
  * Worker health status tag
  */
-export type WorkerStatusTag = 'healthy' | 'orchestrator-unreachable' | 'tunnel-down' | 'unknown' | 'disabled';
+export type WorkerStatusTag =
+  | 'healthy'
+  | 'orchestrator-unreachable'
+  | 'tunnel-down'
+  | 'unknown'
+  | 'disabled';
 
 /**
  * Worker status details
@@ -1821,7 +1856,12 @@ export type GitHubDecisionState = 'pending' | 'completed';
 export type GitHubDecisionOutcome = 'dispatch' | 'skip' | 'request_review';
 export type GitHubDecisionMaker = 'hard_rules' | 'github_agent' | 'webhook_route';
 export type GitHubDispatchAction = 'create_task' | 'send_message' | 'create_review_task';
-export type GitHubReviewType = 'code_quality' | 'test_quality' | 'plan_review' | 'security' | 'architecture';
+export type GitHubReviewType =
+  | 'code_quality'
+  | 'test_quality'
+  | 'plan_review'
+  | 'security'
+  | 'architecture';
 
 export interface GitHubEventLogRow {
   id: string;

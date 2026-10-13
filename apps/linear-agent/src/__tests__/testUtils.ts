@@ -5,6 +5,7 @@ import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import {
+  createFakeJobHeartbeatStore,
   FakeLinearConnectionRepository,
   FakeLinearApiClient,
   FakeLinearActionExtractionService,
@@ -215,6 +216,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.userServiceClient = new FakeUserServiceClient();
     context.pruneCandidateRepository = new FakePruneCandidateRepository();
     setServices({
+      jobHeartbeatStore: createFakeJobHeartbeatStore(),
       connectionRepository: context.connectionRepository,
       linearApiClient: context.linearApiClient,
       extractionService: context.extractionService,

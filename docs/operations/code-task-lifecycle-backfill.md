@@ -24,7 +24,7 @@ terminal evidence, not a later generic `updatedAt` write.
    40-character SHA as `RELEASE_SHA` and confirm that direct-origin and public
    `/deployment.json` return the identical three-field rollout proof
    (`commitSha`, numeric `workflowRunId`, `deployedAt`).
-2. Execute on the Hetzner production host as `deploy`, from `/opt/intexuraos`.
+2. Execute on Home PROD as `intexuraos-prod`, from `/home/intexuraos-prod/deploy/current`.
    The loopback URLs prove the origin and the HTTPS URLs independently prove
    the public edge.
 3. Use the retained-production service account for project

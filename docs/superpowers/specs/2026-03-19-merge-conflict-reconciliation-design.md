@@ -196,7 +196,7 @@ Cloud Scheduler job: `merge-conflict-reconcile`
 ## Infrastructure
 
 Cloud Scheduler job requires Terraform configuration:
-- Add to `terraform/environments/dev/main.tf` (same pattern as existing cron jobs like `drain-queue`)
+- Add to `terraform/shared-gcp/main.tf` (same pattern as existing cron jobs like `drain-queue`)
 - Add to `ecosystem.config.cjs` for dev environment cron simulation (if applicable — check existing cron patterns)
 
 ## Environment Variables

@@ -256,6 +256,10 @@ describe('WhatsAppDigestClient', () => {
       { status: 'sent' as const, acceptedAt: '2026-07-27T12:03:00.000Z' },
     ],
     [
+      { status: 'sent' as const, acceptedAt: '2026-07-27T12:03:00.000Z', transportConfirmation: { status: 'read' as const, deliveredAt: '2026-07-27T12:04:00.000Z', readAt: '2026-07-27T12:05:00.000Z' } },
+      { status: 'sent' as const, acceptedAt: '2026-07-27T12:03:00.000Z', transportConfirmation: { status: 'read' as const, deliveredAt: '2026-07-27T12:04:00.000Z', readAt: '2026-07-27T12:05:00.000Z' } },
+    ],
+    [
       { status: 'ambiguous' as const },
       { status: 'ambiguous' as const },
     ],

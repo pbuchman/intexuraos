@@ -974,12 +974,12 @@ describe('system-prompt', () => {
     );
 
     it.each(['planning', 'execution', 'pull_request', 'review'])(
-      '%s prompt contains code task debugging rejection section',
+      '%s prompt contains production code task debugging instructions',
       (label) => {
         const result = buildForLabel(label);
 
         expect(result).toContain('### Code Task Debugging (MANDATORY — NON-NEGOTIABLE)');
-        expect(result).toContain('dev.intexuraos.cloud');
+        expect(result).not.toContain('dev.intexuraos.cloud');
         expect(result).toContain('scripts/agent-tools/fetch-code-task.cjs');
         expect(result).not.toContain('skills/debug-code-task');
       }

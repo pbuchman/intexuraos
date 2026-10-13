@@ -66,7 +66,7 @@
   - Add delete cleanup policies and `cleanup_policy_dry_run`.
 - `terraform/modules/artifact-registry/variables.tf`
   - Add configurable retention and dry-run variables.
-- `terraform/environments/dev/main.tf`
+- `terraform/shared-gcp/main.tf`
   - Pass concrete cleanup variable values for this environment.
 - `scripts/README.md`
   - Document the new Artifact Registry cleanup tooling.
@@ -407,7 +407,7 @@ git commit -m "fix: stop monolith deploys from rebuilding code-worker"
 **Files:**
 - Modify: `terraform/modules/artifact-registry/main.tf`
 - Modify: `terraform/modules/artifact-registry/variables.tf`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Add failing config test or validation guard**
 
@@ -483,7 +483,7 @@ cleanup_policies {
 }
 ```
 
-Set environment values in `terraform/environments/dev/main.tf`:
+Set environment values in `terraform/shared-gcp/main.tf`:
 
 ```hcl
 cleanup_policy_dry_run                = false
@@ -507,7 +507,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform init
@@ -522,7 +522,7 @@ Expected: plan shows Artifact Registry cleanup policy changes only. If the expor
 - [ ] **Step 6: Commit**
 
 ```bash
-git add terraform/modules/artifact-registry/main.tf terraform/modules/artifact-registry/variables.tf terraform/environments/dev/main.tf scripts/__tests__/artifact-registry-cli.test.ts
+git add terraform/modules/artifact-registry/main.tf terraform/modules/artifact-registry/variables.tf terraform/shared-gcp/main.tf scripts/__tests__/artifact-registry-cli.test.ts
 git commit -m "feat: add dry-run artifact registry cleanup policies"
 ```
 
@@ -687,7 +687,7 @@ Expected: the live digest is one of the retained newest `3`.
 - [ ] **Step 1: Apply Terraform with dry-run still enabled**
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform apply
@@ -738,7 +738,7 @@ Run `export-live-images.mjs` again and confirm the orchestrator digest is still 
 ### Task 12: Flip cleanup policy from dry-run to active deletion
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 - [ ] **Step 1: Change the single environment value**
 
@@ -749,7 +749,7 @@ cleanup_policy_dry_run = false
 - [ ] **Step 2: Run verification before apply**
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform plan
@@ -760,7 +760,7 @@ Expected: only the dry-run flag flips from `true` to `false`.
 - [ ] **Step 3: Apply**
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform apply
@@ -769,7 +769,7 @@ terraform apply
 - [ ] **Step 4: Commit**
 
 ```bash
-git add terraform/environments/dev/main.tf
+git add terraform/shared-gcp/main.tf
 git commit -m "chore: enable artifact registry cleanup policy"
 ```
 
@@ -829,6 +829,6 @@ Google documents that cleanup-policy background processing can take about a day 
 ## Execution Notes For This Harness
 
 - GCP read/write access is available through the configured service account.
-- Terraform verification requires `terraform init` inside `terraform/environments/dev` before planning if modules are not installed locally.
+- Terraform verification requires `terraform init` inside `terraform/shared-gcp` before planning if modules are not installed locally.
 - If SSH to `home-dev` is unavailable from the current machine, run the orchestrator-inventory step directly on `home-dev` and copy the resulting JSON artifact back into `/tmp/artifact-registry/...`.
 - Do not rely on the Google Cloud Console for safety checks that can be performed from the generated JSON artifacts; the JSON artifacts are the durable audit trail for the deletion run.

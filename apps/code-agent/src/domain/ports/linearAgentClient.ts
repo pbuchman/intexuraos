@@ -110,6 +110,8 @@ export interface IssueContext {
 }
 
 export interface LinearAgentError {
+  /** The validation owner already reported this failure; callers must not report it again. */
+  alreadyReported?: boolean;
   code: 'UNAVAILABLE' | 'RATE_LIMITED' | 'INVALID_REQUEST' | 'NOT_FOUND' | 'UNKNOWN';
   message: string;
 }

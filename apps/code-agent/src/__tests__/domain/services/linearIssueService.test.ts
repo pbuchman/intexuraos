@@ -50,6 +50,20 @@ describe('linearIssueService', () => {
 
   const testUserId = 'test-user-123';
 
+  it.each([true, false])('keeps validation failures reportable only when not already reported: %s', async (alreadyReported) => {
+    const failure = { code: 'UNAVAILABLE', message: 'Validation unavailable', alreadyReported };
+    mockValidateIssue.mockResolvedValue(err(failure));
+    const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+    const result = await service.ensureIssueExists({ userId: testUserId, linearIssueId: 'INT-123', taskPrompt: 'Work on issue' });
+    expect(result.linearFallback).toBe(true);
+    expect(result.linearFallbackAlreadyReported === true).toBe(alreadyReported);
+    expect(mockLogger[alreadyReported ? 'info' : 'warn']).toHaveBeenCalledWith(expect.any(Object), 'Issue validation failed, using fallback mode');
+    if (alreadyReported) {
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    }
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
   describe('ensureIssueExists - link existing issue', () => {
     it('should validate and return existing issue when valid', async () => {
       mockValidateIssue = vi.fn().mockResolvedValue(

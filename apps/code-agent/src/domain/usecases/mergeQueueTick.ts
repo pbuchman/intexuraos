@@ -18,6 +18,7 @@ import type { MergeQueueWatchRepositoryError } from '../repositories/mergeQueueW
 export type TickAction = 'merged' | 'skipped_all' | 'drained' | 'error';
 
 export interface TickResult {
+  failedCount?: number;
   watchId: string;
   owner: string;
   repo: string;
@@ -87,15 +88,16 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     watchId: string,
     skippedPrs: SkippedPr[],
     extra?: { status?: 'drained'; drainedAt?: Date }
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date();
-    await mergeQueueWatchRepo.update(watchId, {
+    const updated = await mergeQueueWatchRepo.update(watchId, {
       lastTickAt: now,
       skippedPrs,
       lastError: null,
       lastErrorAt: null,
       ...extra,
     });
+    return updated.ok;
   }
 
   async function processWatch(
@@ -147,17 +149,19 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
     // Step 3g: Drain when zero selected (non-excluded) PRs remain
     if (prsToProcess.length === 0) {
       const now = new Date();
-      await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
-      return { watchId, owner, repo, baseBranch, action: 'drained', remainingPrs: 0, skipped: [] };
+      const persisted = await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
+      return { watchId, owner, repo, baseBranch, action: 'drained', remainingPrs: 0, skipped: [], ...(persisted ? {} : { failedCount: 1 }) };
     }
 
     // Step 3h: Iterate eligible PRs
     const skippedList: SkippedPr[] = [];
+    let failedCount = 0;
 
     for (const pr of prsToProcess) {
       // Get PR details
       const detailsResult = await gitHubPRClient.getPullRequestDetails(token, owner, repo, pr.number);
       if (!detailsResult.ok) {
+        failedCount += 1;
         const reason: SkipReason = 'checks_pending';
         skippedList.push({ prNumber: pr.number, reason });
         logger.warn({ watchId, prNumber: pr.number, error: detailsResult.error }, 'Failed to get PR details, skipping');
@@ -180,6 +184,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       // Get check status
       const checksResult = await gitHubPRClient.getCombinedCheckStatus(token, owner, repo, details.headSha);
       if (!checksResult.ok) {
+        failedCount += 1;
         skippedList.push({ prNumber: pr.number, reason: 'checks_pending' });
         logger.warn({ watchId, prNumber: pr.number, error: checksResult.error }, 'Failed to get check status, skipping');
         continue;
@@ -200,6 +205,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       // checkState === 'success' AND mergeable === true
       const mergeResult = await gitHubPRClient.mergePullRequest(token, owner, repo, pr.number, 'merge');
       if (!mergeResult.ok) {
+        failedCount += 1;
         // Merge failed — skip with merge_conflict
         skippedList.push({ prNumber: pr.number, reason: 'merge_conflict' });
         logger.warn({ watchId, prNumber: pr.number, error: mergeResult.error }, 'Merge failed, skipping');
@@ -214,13 +220,14 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       }
 
       // Successfully merged
-      await mergeQueueWatchRepo.appendMergedPr(watchId, {
+      const recorded = await mergeQueueWatchRepo.appendMergedPr(watchId, {
         prNumber: pr.number,
         title: details.title,
         author: details.authorLogin,
       });
+      if (!recorded.ok) failedCount += 1;
 
-      await recordSuccessfulTick(watchId, skippedList);
+      if (!await recordSuccessfulTick(watchId, skippedList)) failedCount += 1;
 
       return {
         watchId, owner, repo, baseBranch,
@@ -228,6 +235,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
         mergedPrNumber: pr.number,
         remainingPrs: prsToProcess.length - 1,
         skipped: skippedList,
+        ...(failedCount > 0 ? { failedCount } : {}),
       };
     }
 
@@ -236,9 +244,9 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
 
     if (action === 'drained') {
       const now = new Date();
-      await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now });
+      if (!await recordSuccessfulTick(watchId, [], { status: 'drained', drainedAt: now })) failedCount += 1;
     } else {
-      await recordSuccessfulTick(watchId, skippedList);
+      if (!await recordSuccessfulTick(watchId, skippedList)) failedCount += 1;
     }
 
     return {
@@ -246,6 +254,7 @@ export function createMergeQueueTick(deps: MergeQueueTickDeps): MergeQueueTickUs
       action,
       remainingPrs: action === 'drained' ? 0 : prsToProcess.length,
       skipped: skippedList,
+      ...(failedCount > 0 ? { failedCount } : {}),
     };
   }
 }

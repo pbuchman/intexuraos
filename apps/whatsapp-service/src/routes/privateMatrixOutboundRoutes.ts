@@ -1,3 +1,4 @@
+import { notificationContextSchema, type NotificationContext } from '@intexuraos/http-contracts';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
@@ -11,6 +12,8 @@ interface MatrixDeliveryStatusParams {
 
 interface OutboundMatrixMessageBody {
   userId: string;
+  notificationContext?: NotificationContext;
+  scheduledFor?: string;
   text: string;
   startNewSession?: boolean;
   idempotencyKey?: string;
@@ -23,7 +26,9 @@ function toMatrixOutboundText(body: OutboundMatrixMessageBody): string {
   return body.text;
 }
 
-function isActiveAccount(account: PrivateWhatsAppAccount | null): account is PrivateWhatsAppAccount {
+function isActiveAccount(
+  account: PrivateWhatsAppAccount | null
+): account is PrivateWhatsAppAccount {
   return account !== null && account.status === 'active';
 }
 
@@ -86,7 +91,10 @@ export const privateMatrixOutboundRoutes: FastifyPluginCallback = (fastify, _opt
         },
       },
     },
-    async (request: FastifyRequest<{ Params: MatrixDeliveryStatusParams }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Params: MatrixDeliveryStatusParams }>,
+      reply: FastifyReply
+    ) => {
       logIncomingRequest(request, {
         message: 'Received request to /internal/whatsapp/private/matrix-delivery-status/:userId',
         bodyPreviewLength: 0,
@@ -94,7 +102,10 @@ export const privateMatrixOutboundRoutes: FastifyPluginCallback = (fastify, _opt
 
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for matrix delivery status');
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for matrix delivery status'
+        );
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed for matrix delivery status');
       }
 
@@ -165,6 +176,17 @@ export const privateMatrixOutboundRoutes: FastifyPluginCallback = (fastify, _opt
             userId: { type: 'string', minLength: 1 },
             text: { type: 'string', minLength: 1 },
             startNewSession: { type: 'boolean' },
+            notificationContext: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                source: { type: 'string' },
+                runId: { type: 'string' },
+                phase: { type: 'string', const: 'ack' },
+              },
+              required: ['source', 'runId', 'phase'],
+            },
+            scheduledFor: { type: 'string', format: 'date-time' },
             idempotencyKey: { type: 'string', minLength: 1 },
           },
           required: ['userId', 'text'],
@@ -209,10 +231,7 @@ export const privateMatrixOutboundRoutes: FastifyPluginCallback = (fastify, _opt
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Body: OutboundMatrixMessageBody }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Body: OutboundMatrixMessageBody }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to /internal/whatsapp/private/outbound-matrix-messages',
         bodyPreviewLength: 0,
@@ -249,10 +268,32 @@ export const privateMatrixOutboundRoutes: FastifyPluginCallback = (fastify, _opt
       }
       const account = accountResult.value;
 
+      let outboundText = toMatrixOutboundText(request.body);
+      if (request.body.notificationContext !== undefined) {
+        const context = notificationContextSchema.safeParse(request.body.notificationContext);
+        if (
+          !context.success ||
+          context.data.source !== 'calendar' ||
+          context.data.phase !== 'ack' ||
+          request.body.idempotencyKey === undefined
+        )
+          return await reply.fail('INVALID_REQUEST', 'Invalid notification request');
+        if (services.notificationDeliveryRepository === undefined)
+          return await reply.fail('MISCONFIGURED', 'Notification correlation is unavailable');
+        const now = new Date().toISOString();
+        const registered = await services.notificationDeliveryRepository.register({
+          userId: request.body.userId,
+          source: context.data.source,
+          runId: context.data.runId,
+          scheduledFor: request.body.scheduledFor ?? now,
+          now,
+        });
+        outboundText += `\n[intex-notification:${registered.marker}]`;
+      }
       const sendResult = await services.matrixOutboundGateway.sendMessage({
         sourceAccountId: account.sourceAccountId,
         target: 'intex_agent',
-        text: toMatrixOutboundText(request.body),
+        text: outboundText,
         ...(request.body.idempotencyKey !== undefined
           ? { idempotencyKey: request.body.idempotencyKey }
           : {}),

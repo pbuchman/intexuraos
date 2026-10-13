@@ -1,7 +1,7 @@
 const INTERNAL_MARKER = '/internal/';
 const PUBLIC_CODE_AGENT_PREFIX = '/api/code';
 const PUBLIC_INTERNAL_PREFIX = `${PUBLIC_CODE_AGENT_PREFIX}/internal/`;
-const PUBLIC_CALLBACK_HOSTS = new Set(['intexuraos.cloud', 'dev.intexuraos.cloud']);
+const PUBLIC_CALLBACK_HOSTS = new Set(['intexuraos.cloud']);
 
 function canonicalizePublicCallbackHost(parsed: URL): boolean {
   const canonicalHostname = parsed.hostname.toLowerCase().replace(/\.$/, '');

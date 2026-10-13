@@ -268,10 +268,10 @@ render_tracked_config() {
   : > "${RUNTIME_CONFIG_FILE}"
   chmod 600 "${RUNTIME_CONFIG_FILE}"
   if ! node "${RUNTIME_CONFIG_RENDERER}" \
-    --environment dev \
+    --environment local \
     --format shell-export > "${RUNTIME_CONFIG_FILE}"
   then
-    fail "Unable to render tracked DEV runtime configuration"
+    fail "Unable to render tracked local runtime configuration"
   fi
 }
 

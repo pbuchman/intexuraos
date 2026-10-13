@@ -477,7 +477,7 @@ All 11 consumers:
 **Env var check for each consumer:**
 
 - `apps/<name>/src/index.ts` `REQUIRED_ENV` array — if the consumer previously required `INTEXURAOS_APP_SETTINGS_SERVICE_URL` **only for pricing** (not for anything else), remove it from `REQUIRED_ENV` and add `INTEXURAOS_LLM_USAGE_SERVICE_URL`. Run `rg "APP_SETTINGS_SERVICE_URL" apps/<name>` first — if it's still used elsewhere (e.g. retired-checklist-service uses it for saving model preferences), KEEP it.
-- `terraform/environments/dev/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL = module.llm_usage_service.service_url` to each consumer's env map IF NOT ALREADY PRESENT.
+- `terraform/shared-gcp/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL = module.llm_usage_service.service_url` to each consumer's env map IF NOT ALREADY PRESENT.
 - `ecosystem.config.cjs` — same check. `INTEXURAOS_LLM_USAGE_SERVICE_URL` is already defined globally at line 57, so it should flow to every PM2 app that imports the shared env.
 
 **Per-consumer test updates.** Each consumer that mocks pricing in its test suite needs its mock URL updated to point at `/internal/pricing` (new path) rather than `/internal/settings/pricing` (old path). Grep each consumer's `__tests__/` for `fetchAllPricing` and `settings/pricing` before editing the source.

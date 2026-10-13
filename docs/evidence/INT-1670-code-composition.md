@@ -31,7 +31,7 @@ Exclusion patterns:
 - `*.tsbuildinfo`, `*.log`
 - `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`
 - `apps/web/src/config.generated.ts`, `ecosystem.generated.cjs`,
-  `terraform/environments/dev/service-urls.auto.tfvars.json`,
+  `terraform/shared-gcp/service-urls.auto.tfvars.json`,
   `terraform/hetzner-prod/prod.auto.tfvars.json`, `packages/README.md`
 - Binary/asset/key extensions: `png`, `jpg`, `jpeg`, `gif`, `webp`, `ico`,
   `pdf`, `zip`, `gz`, `mp4`, `mov`, `woff`, `woff2`, `ttf`, `pem`, `crt`

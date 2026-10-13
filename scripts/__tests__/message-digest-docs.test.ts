@@ -68,39 +68,23 @@ describe('WhatsApp Message Digest active documentation', () => {
     );
   });
 
-  it('documents the verifiable one-shot migration and production cutover', () => {
+  it('documents the completed migration and current basic-stage limitation', () => {
     const runbookPath = 'docs/runbooks/whatsapp-message-digests.md';
     expect(existsSync(resolve(repoRoot, runbookPath))).toBe(true);
     const runbook = read(runbookPath);
 
     for (const contract of [
-      '--dry-run',
-      '--apply',
-      '--verify',
-      '--activate',
-      '--compensate',
-      'Tested-Tree:',
-      'cutover-message-digests.sh',
-      'candidate-zero-send-proof',
-      '/api/message-digests/health',
-      '/internal/notifications/digest/run-yesterday',
+      'historical migration is complete',
+      'Home PROD',
+      'basic',
+      '503',
+      'message_digest_runs',
+      'pull subscription',
+      'production_scheduler_jobs_enabled=false',
     ]) {
       expect(runbook, contract).toContain(contract);
     }
-    expect(runbook).toContain('production root first');
-    expect(runbook).toContain('development root second');
-    expect(runbook).toContain('intexuraos_message_digest_v4');
-    expect(runbook).toContain('Otwórz podsumowanie');
-    expect(runbook).toContain('APPROVED');
-    expect(runbook).toContain('before any production mutation');
-    expect(runbook).toContain('counts, hashes, and opaque evidence references only');
-    expect(runbook).toContain('earlier of two hours after cutover start');
-    expect(runbook).toContain('30 minutes before the next legacy run');
-    expect(runbook).toContain('Use only the already running system Google Chrome');
-    expect(runbook).toContain("user's existing profile");
-    expect(runbook).toContain('WhatsApp Web receipt verification');
-    expect(runbook).not.toContain('durable 90-minute window');
-    expect(runbook).not.toContain('local WhatsApp application');
-    expect(runbook).not.toMatch(/wa_[A-Za-z0-9_-]{8,}/u);
+    expect(runbook).not.toContain('cutover-message-digests.sh');
+    expect(runbook).not.toMatch(/terraform\s+(?:plan|apply)|--activate|--compensate/u);
   });
 });

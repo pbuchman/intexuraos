@@ -22,6 +22,50 @@ export async function runDueSchedules(
   request: RunDueSchedulesRequest,
   deps: RunDueSchedulesDeps
 ): Promise<Result<{ claimed: number; sent: number; failed: number }, CalendarError>> {
+  if (
+    deps.scheduleRepository.listPendingRuns !== undefined &&
+    deps.scheduleRepository.markRunDelivery !== undefined &&
+    deps.whatsAppScheduleClient.getNotificationRunState !== undefined
+  ) {
+    const pending = await deps.scheduleRepository.listPendingRuns(request.now);
+    if (!pending.ok) return pending;
+    for (const run of pending.value) {
+      const receipt = await deps.whatsAppScheduleClient.getNotificationRunState({
+        userId: run.userId,
+        source: 'calendar',
+        runId: run.id,
+      });
+      if (!receipt.ok)
+        return {
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Failed to observe notification delivery' },
+        };
+      const expired =
+        receipt.value.status === 'pending' &&
+        Date.parse(request.now) - Date.parse(run.startedAt) >= 6 * 3600000;
+      const status =
+        receipt.value.status === 'delivered'
+          ? 'delivered'
+          : expired
+            ? 'failed'
+            : receipt.value.status;
+      const stage = expired ? 'failed' : receipt.value.stage;
+      if (status !== run.deliveryStatus || stage !== run.stage) {
+        const recorded = await deps.scheduleRepository.markRunDelivery({
+          run,
+          status,
+          ...(stage === undefined ? {} : { stage }),
+          at: receipt.value.deliveredAt ?? request.now,
+          ...(expired
+            ? { failureCode: 'DELIVERY_EXPIRED' }
+            : receipt.value.failureCode === undefined
+              ? {}
+              : { failureCode: receipt.value.failureCode }),
+        });
+        if (!recorded.ok) return recorded;
+      }
+    }
+  }
   const claimResult = await deps.scheduleRepository.claimDueSchedules({
     now: request.now,
     limit: request.batchSize,
@@ -39,7 +83,13 @@ export async function runDueSchedules(
     const sendResult = await deps.whatsAppScheduleClient.sendOutboundMatrixMessage({
       userId: claimed.schedule.userId,
       target: claimed.schedule.payload.target,
-      text: claimed.schedule.payload.prompt,
+      text: `${claimed.schedule.payload.prompt} Look ahead from the current time when processing this request, for the next 24 hours.`,
+      notificationContext: {
+        source: 'calendar',
+        runId: `${claimed.schedule.id}_${claimed.localDate}`,
+        phase: 'ack',
+      },
+      scheduledFor: claimed.scheduledFor,
       startNewSession: true,
       idempotencyKey: `calendar:${claimed.schedule.id}:${claimed.localDate}`,
     });
@@ -52,9 +102,7 @@ export async function runDueSchedules(
 
     if (!sendResult.ok) {
       failed += 1;
-      const retryAt = new Date(
-        new Date(request.now).getTime() + RETRY_INTERVAL_MS
-      ).toISOString();
+      const retryAt = new Date(new Date(request.now).getTime() + RETRY_INTERVAL_MS).toISOString();
       const markFailed = await deps.scheduleRepository.markRunFailed({
         scheduleId: claimed.schedule.id,
         userId: claimed.schedule.userId,
@@ -95,9 +143,7 @@ export async function runDueSchedules(
 
     if (sendResult.value.status === 'error') {
       failed += 1;
-      const retryAt = new Date(
-        new Date(request.now).getTime() + RETRY_INTERVAL_MS
-      ).toISOString();
+      const retryAt = new Date(new Date(request.now).getTime() + RETRY_INTERVAL_MS).toISOString();
       const markFailed = await deps.scheduleRepository.markRunFailed({
         scheduleId: claimed.schedule.id,
         userId: claimed.schedule.userId,

@@ -1,5 +1,6 @@
 import nock from 'nock';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as transport from '../../shared/request.js';
 import { createWhatsAppServiceClient } from '../client.js';
 import type { WhatsAppServiceClientConfig } from '../types.js';
 
@@ -653,6 +654,48 @@ describe('createWhatsAppServiceClient', () => {
     expect(nock.isDone()).toBe(true);
   });
 
+  it('sets bounded observation and outbound timeouts independently of the client default', async () => {
+    nock(BASE_URL)
+      .get('/internal/whatsapp/private/matrix-delivery-status/user-123')
+      .reply(200, { success: true, data: { status: 'ready', deliverable: true } })
+      .post('/internal/whatsapp/private/outbound-matrix-messages')
+      .reply(200, { success: true, data: { status: 'sent', matrixEventId: '$event' } })
+      .post('/internal/whatsapp/notification-runs/get')
+      .reply(200, { success: true, data: { status: 'pending', stage: 'processing' } });
+    const sendRequest = vi.spyOn(transport, 'sendInternalRequest');
+    const now = vi.spyOn(Date, 'now').mockReturnValue(0);
+    try {
+      const client = createWhatsAppServiceClient({
+        baseUrl: BASE_URL,
+        internalAuthToken: 'secret',
+        logger,
+        defaultTimeoutMs: 1,
+      });
+      expect((await client.getPrivateMatrixDeliveryStatus('user-123')).ok).toBe(true);
+      expect(
+        (await client.sendPrivateOutboundMatrixMessage({ userId: 'user-123', text: 'hello' })).ok
+      ).toBe(true);
+      if (client.getNotificationRunState === undefined)
+        throw new Error('Missing notification state client');
+      expect(
+        (
+          await client.getNotificationRunState({
+            userId: 'user-123',
+            source: 'calendar',
+            runId: 'run',
+          })
+        ).ok
+      ).toBe(true);
+      expect(sendRequest.mock.calls.map(([request]) => request.timeoutMs)).toEqual([
+        5000, 30000, 5000,
+      ]);
+      expect(nock.isDone()).toBe(true);
+    } finally {
+      sendRequest.mockRestore();
+      now.mockRestore();
+    }
+  });
+
   it('calls the matrix delivery-status endpoint with internal auth', async () => {
     const scope = nock(BASE_URL)
       .get('/internal/whatsapp/private/matrix-delivery-status/user-123')
@@ -1198,5 +1241,31 @@ describe('createWhatsAppServiceClient', () => {
 
     expect(result).toEqual({ ok: false, error: { code: 'rejected', httpStatus: 503 } });
     expect(JSON.stringify(result)).not.toContain('private-api-sentinel');
+  });
+  it('queries user-bound notification stages and rejects invalid observation responses', async () => {
+    const input = { userId: 'user', source: 'calendar', runId: 'run' };
+    nock(BASE_URL)
+      .post('/internal/whatsapp/notification-runs/get', input)
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true, data: { status: 'pending', stage: 'processing' } });
+    nock(BASE_URL)
+      .post('/internal/whatsapp/notification-runs/get', input)
+      .reply(200, { success: true, data: { status: 'sent' } });
+    nock(BASE_URL)
+      .post('/internal/whatsapp/notification-runs/get', input)
+      .replyWithError('Unavailable');
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    if (client.getNotificationRunState === undefined)
+      throw new Error('Missing notification state client');
+    expect(await client.getNotificationRunState(input)).toEqual({
+      ok: true,
+      value: { status: 'pending', stage: 'processing' },
+    });
+    expect((await client.getNotificationRunState(input)).ok).toBe(false);
+    expect((await client.getNotificationRunState(input)).ok).toBe(false);
   });
 });

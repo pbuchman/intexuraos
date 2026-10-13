@@ -33,6 +33,7 @@ export interface Config {
   whatsappServiceUrl: string;
   whatsappSendTopic: string;
   prTriageTopic: string;
+  prTriageEnabled: boolean;
   linearAgentUrl: string;
   tokenEncryptionKey: string;
   orchestratorSecret: string;
@@ -68,6 +69,8 @@ export function loadConfig(): Config {
   const whatsappServiceUrl = process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] ?? '';
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '';
   const prTriageTopic = process.env['INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC'] ?? '';
+  const prTriageEnabled =
+    (process.env['INTEXURAOS_PR_TRIAGE_ENABLED'] ?? 'true').toLowerCase() === 'true';
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
   const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? ''; // validated in REQUIRED_ENV
@@ -98,6 +101,7 @@ export function loadConfig(): Config {
     whatsappServiceUrl,
     whatsappSendTopic,
     prTriageTopic,
+    prTriageEnabled,
     linearAgentUrl,
     orchestratorSecret,
     serviceUrl,

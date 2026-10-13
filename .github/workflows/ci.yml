@@ -228,12 +228,6 @@ jobs:
       - name: Reject Credential Files
         run: node scripts/verify-credential-files.mjs
 
-      - name: Validate DEV Edge Profiles
-        run: node scripts/validate-dev-caddy-profiles.mjs
-
-      - name: Validate Production-to-DEV Dependencies
-        run: node scripts/verify-production-dev-dependencies.mjs
-
       - name: Validate PubSub
         run: node scripts/verify-pubsub.mjs
 
@@ -321,12 +315,41 @@ jobs:
         run: terraform validate
 
       - name: Initialize (dev)
-        working-directory: terraform/environments/dev
+        working-directory: terraform/shared-gcp
         run: terraform init -backend=false
 
       - name: Validate (dev)
-        working-directory: terraform/environments/dev
+        working-directory: terraform/shared-gcp
         run: terraform validate
+
+      - name: Initialize (production runtime)
+        working-directory: terraform/prod-runtime
+        run: terraform init -backend=false
+
+      - name: Validate (production runtime)
+        working-directory: terraform/prod-runtime
+        run: terraform validate
+
+  home-prod-edge:
+    name: Home PROD edge policy
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build the pinned edge test image
+        run: docker build -t intexuraos-home-prod-edge-test scripts/home-prod/tests
+
+      - name: Verify rendered policy and real nginx/JWT behavior
+        run: node --test scripts/home-prod/tests/edge-render.test.mjs scripts/home-prod/tests/edge-integration.test.mjs
 
   # =============================================================================
   # E2E Isolation Tests - Docker container isolation testing

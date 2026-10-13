@@ -86,7 +86,7 @@
 
 - Modify: `ecosystem.config.cjs`
 - Modify: `ecosystem.config.prod.cjs`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 ## Endpoint Changes
 
@@ -537,7 +537,7 @@ Expected: PASS.
 - Modify: `apps/whatsapp-service/src/__tests__/pubsubRoutes.test.ts`
 - Modify: `ecosystem.config.cjs`
 - Modify: `ecosystem.config.prod.cjs`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 
 **Interfaces:**
 - Produce: `ServiceConfig.userServiceUrl: string`.
@@ -637,7 +637,7 @@ In `ecosystem.config.prod.cjs`:
 - remove `INTEXURAOS_OPENROUTER_APP_API_KEY` only from the WhatsApp service secret/env injection;
 - keep `INTEXURAOS_OPENROUTER_APP_API_KEY` for services that still use the app key outside Conversation Assistant.
 
-In `terraform/environments/dev/main.tf`, set:
+In `terraform/shared-gcp/main.tf`, set:
 
 ```hcl
 INTEXURAOS_CONVERSATION_ASSISTANT_MODEL = "or:minimax/minimax-m2.7"

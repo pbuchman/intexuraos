@@ -16,7 +16,8 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
-    "pino": "^10.1.0"
+    "pino": "^10.1.0",
+    "@intexuraos/http-contracts": "workspace:*"
   },
   "devDependencies": {
     "@google-cloud/pubsub": "^4.9.0",

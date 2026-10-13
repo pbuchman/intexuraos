@@ -6,6 +6,18 @@ const repoRoot = resolve(__dirname, '..', '..');
 const firestoreTtlPath = resolve(repoRoot, 'terraform/modules/firestore/ttl.tf');
 
 describe('Firestore TTL policies', () => {
+  it('uses a separate native Timestamp TTL field for durable notification records', () => {
+    const terraform = readFileSync(firestoreTtlPath, 'utf8');
+    const block = terraform.split('resource "google_firestore_field" "notification_ttl"')[1] ?? '';
+    for (const name of [
+      'whatsapp_notification_intents',
+      'whatsapp_transport_receipts',
+      'whatsapp_notification_markers',
+    ])
+      expect(block).toContain(name);
+    expect(block).toContain('field      = "ttlExpiresAt"');
+    expect(block).toContain('ttl_config {}');
+  });
   it('configures the exact retained TTL collection groups, including Assistant snapshots', () => {
     const terraform = readFileSync(firestoreTtlPath, 'utf8');
     const localsBlock = terraform.slice(

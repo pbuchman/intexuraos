@@ -57,6 +57,12 @@ describe('loadConfig', () => {
       expect(config.webAppUrl).toBe('');
       expect(config.userServiceUrl).toBe('');
       expect(config.openRouterAppApiKey).toBe('');
+      expect(config.prTriageEnabled).toBe(true);
+    });
+
+    it('disables PR triage only when explicitly set to false', () => {
+      process.env['INTEXURAOS_PR_TRIAGE_ENABLED'] = 'false';
+      expect(loadConfig().prTriageEnabled).toBe(false);
     });
 
     it('loads all env vars when set', () => {
