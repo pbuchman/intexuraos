@@ -155,7 +155,7 @@ function deploymentFixture(
   mkdirSync(bin);
   executable(
     join(bin, 'pnpm'),
-    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "pnpm:%s\\n" "$*" >> "$HOME_PROD_TEST_LOG"\n'
+    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "pnpm:%s\\n" "$*" >> "$HOME_PROD_TEST_LOG"\nif [[ "${1:-}" == install ]]; then mkdir -p node_modules; ln -s "$HOME_PROD_TEST_DOTENV" node_modules/dotenv; fi\n'
   );
   executable(
     join(bin, 'pm2'),
@@ -187,16 +187,18 @@ function deploymentFixture(
 
 function runDeployment(
   input: DeploymentFixture,
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
+  cwd: string = repoRoot
 ): SpawnSyncReturns<string> {
   return spawnSync('bash', [deployScript, input.sha, '4', input.candidate], {
-    cwd: repoRoot,
+    cwd,
     encoding: 'utf8',
     env: {
       ...process.env,
       DEPLOY_HOME: input.deployHome,
       DEPLOY_USER: process.env.USER ?? 'pbuchman',
       HOME: input.deployHome,
+      HOME_PROD_TEST_DOTENV: join(repoRoot, 'node_modules', 'dotenv'),
       HOME_PROD_TEST_LOG: input.log,
       PATH: `${join(input.root, 'bin')}:${dirname(process.execPath)}:/usr/bin:/bin`,
       PM2_HOME: input.expectedPm2Home,
@@ -236,6 +238,31 @@ describe('Home PROD privileged launcher input boundary', () => {
 });
 
 describe('Home PROD release deployment', () => {
+  it.each(['missing', 'incompatible'])(
+    'uses installed candidate dependencies when the caller has %s dotenv',
+    (callerDependency) => {
+      const input = deploymentFixture({ profile: 'full' });
+      const caller = join(input.root, 'caller');
+      mkdirSync(caller);
+      if (callerDependency === 'incompatible') {
+        const dotenv = join(caller, 'node_modules', 'dotenv');
+        mkdirSync(dotenv, { recursive: true });
+        writeFileSync(
+          join(dotenv, 'index.js'),
+          "throw new Error('Caller dotenv must not load');\n"
+        );
+      }
+
+      const result = runDeployment(input, {}, caller);
+
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      const release = readlinkSync(join(input.deployHome, 'deploy', 'current'));
+      expect(readFileSync(join(release, '.intexuraos-prod-profile'), 'utf8')).toBe('full\n');
+      expect(readFileSync(input.log, 'utf8')).toMatch(/web:.*:full/);
+      expect(readlinkSync(input.webCurrent)).toBe(join(input.root, 'web', 'releases', input.sha));
+    }
+  );
+
   it('propagates the pinned full profile to all nineteen runtime apps and frontend capabilities', () => {
     const input = deploymentFixture({ profile: 'full' });
     const result = runDeployment(input, { INTEXURAOS_PROD_PROFILE: 'basic' });

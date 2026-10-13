@@ -165,7 +165,10 @@ install_and_build() {
 
 validate_runtime_candidate() {
   local rendered="${CANDIDATE_OUTPUT}/pm2-ecosystem.json"
-  PROD_PROFILE="$(node - "${CANDIDATE_OUTPUT}/.env.prod" <<'NODE'
+  # Node stdin modules resolve dependencies from cwd, so use the built candidate.
+  PROD_PROFILE="$(
+    cd "${STAGING_RELEASE}" || exit 1
+    node - "${CANDIDATE_OUTPUT}/.env.prod" <<'NODE'
 const fs = require('node:fs');
 const { parse } = require('dotenv');
 const profile = parse(fs.readFileSync(process.argv[2], 'utf8')).INTEXURAOS_PROD_PROFILE;
