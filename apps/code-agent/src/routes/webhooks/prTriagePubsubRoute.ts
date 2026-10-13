@@ -20,6 +20,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getErrorMessage } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { PRTriageEvent } from '@intexuraos/pr-triage-pubsub-client';
 import { getServices } from '../../services.js';
 import { authenticatePubSub, decodePubSubMessage } from './pubsubHelpers.js';
@@ -67,7 +68,10 @@ export const prTriagePubsubRoute: FastifyPluginCallback = (fastify, _opts, done)
 
     const acquisition = acquireResult.value; // @allow-result-access -- narrowed by !acquireResult.ok
     if (acquisition.kind === 'not_found') {
-      requestLogger.warn('github-pr-events doc not found — acking to drop message');
+      requestLogger.warn(
+        { [SKIP_SENTRY_KEY]: true },
+        'github-pr-events doc not found — acking to drop message'
+      );
       return await reply.ok({});
     }
     if (acquisition.kind === 'completed') {

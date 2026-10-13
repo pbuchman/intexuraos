@@ -145,8 +145,9 @@ sudo /usr/local/sbin/intexuraos-home-prod-deploy <40hex-sha> <numeric-version>
 
 The unprivileged driver is `scripts/home-prod/deploy-release.sh`. It admits an isolated
 secret projection, performs a frozen install, builds non-web workspaces, builds the SPA
-against that isolated candidate, and validates the basic PM2 profile on loopback `181xx`
-ports before stopping the dedicated PM2 home or switching code and web pointers.
+against that isolated candidate, and validates the selected PM2 profile (`basic`: 17
+applications; `full`: 19) on loopback `181xx` ports before stopping the dedicated
+PM2 home or switching code and web pointers.
 
 `load-secrets.sh --user-projection` is reserved for this driver. It confines all active
 outputs to `/home/intexuraos-prod`, keeps them mode `0600`, requires a private offline
