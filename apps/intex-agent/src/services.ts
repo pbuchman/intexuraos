@@ -117,7 +117,9 @@ export function composeIntexMatrixCorpusFeature<T>(
   return config.enabled ? createEnabled(config) : null;
 }
 
-const RUNTIME_SETTINGS_LOOKUP_TIMEOUT_MS = 2_000;
+// Match the User Service HTTP deadline so valid catalog/settings reads can finish.
+// Keep the outer bound for a client that never settles.
+const RUNTIME_SETTINGS_LOOKUP_TIMEOUT_MS = 30_000;
 export const MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS = 45_000;
 export const MATRIX_CORPUS_MODEL_MAX_ATTEMPTS = 3;
 export { MATRIX_CORPUS_MODEL_TURN_BUDGET_MS };
