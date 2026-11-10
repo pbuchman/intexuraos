@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { createFirestoreSnapshotCache, getFirestore } from '@intexuraos/infra-firestore';
 import {
   notificationContextSchema,
   type NotificationContext,
@@ -96,6 +96,16 @@ export function summarizeNotificationParts(parts: IntentDoc[]): NotificationRunS
 
 export function createNotificationDeliveryRepository(): NotificationDeliveryRepository {
   const db = getFirestore();
+  const monitoringIntents = createFirestoreSnapshotCache({
+    query: (anchor) => db.collection(INTENTS_COLLECTION).where('expiresAt', '>', Math.floor(anchor.getTime() / 1000)),
+    map: (doc) => doc.data() as IntentDoc,
+    rebaseAfterMs: 86400000,
+  });
+  const monitoringMarkers = createFirestoreSnapshotCache({
+    query: (anchor) => db.collection(MARKERS_COLLECTION).where('expiresAt', '>', Math.floor(anchor.getTime() / 1000)),
+    map: (doc) => doc.data() as MarkerDoc,
+    rebaseAfterMs: 86400000,
+  });
   const loadOwnedIntent = async (input: {
     userId: string;
     idempotencyKey: string;
@@ -307,27 +317,21 @@ export function createNotificationDeliveryRepository(): NotificationDeliveryRepo
     },
     async monitoring(now): ReturnType<NotificationDeliveryRepository['monitoring']> {
       const [intents, markers] = await Promise.all([
-        db
-          .collection(INTENTS_COLLECTION)
-          .where('expiresAt', '>', Math.floor(Date.parse(now) / 1000))
-          .get(),
-        db
-          .collection(MARKERS_COLLECTION)
-          .where('expiresAt', '>', Math.floor(Date.parse(now) / 1000))
-          .get(),
+        monitoringIntents.read(new Date(now)),
+        monitoringMarkers.read(new Date(now)),
       ]);
-      const all = intents.docs.map((doc) => doc.data() as IntentDoc);
+      const cutoff = Math.floor(Date.parse(now) / 1000);
+      const all = intents.filter((intent) => intent.expiresAt > cutoff);
+      const retainedMarkers = markers.filter((marker) => marker.expiresAt > cutoff);
       let pendingCount = 0;
       let failedCount = 0;
       let oldestPendingScheduledFor: string | null = null;
       let lastDeliveredAt: string | null = null;
-      for (const doc of markers.docs) {
-        const marker = doc.data() as MarkerDoc;
+      for (const marker of retainedMarkers) {
         const state = summarizeNotificationParts(
           all.filter((part) => part.runKey === marker.runKey)
         );
-        const superseded = markers.docs.some((other) => {
-          const next = other.data() as MarkerDoc;
+        const superseded = retainedMarkers.some((next) => {
           return (
             next.userId === marker.userId &&
             next.source === marker.source &&

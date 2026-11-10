@@ -83,6 +83,37 @@ describe('FirestoreMessageDigestStore', () => {
     expect(domainStore).toBe(store);
   });
 
+  it('atomically mirrors reserved runs into content-free monitoring projections', async () => {
+    await createDefinition(store);
+    const result = await store.reserveRun(reservationInput());
+    expect(result.ok).toBe(true);
+    expect(fake.getAllData().get('message_digest_monitoring_runs')?.get('mdr_run_001')).toMatchObject({
+      runId: 'mdr_run_001', outcome: 'pending', deliveredAt: null,
+    });
+    expect(fake.getAllData().get('message_digest_monitoring_runs')?.get('mdr_run_001')).not.toHaveProperty('summaryMarkdown');
+  });
+
+  it('does not write monitoring again when generation stages and lease renewal remain pending', async () => {
+    const transact = fake.runTransaction.bind(fake);
+    const outcomes: unknown[] = [];
+    vi.spyOn(fake, 'runTransaction').mockImplementation(async (callback) => await transact(async (transaction) => {
+      const set = transaction.set.bind(transaction);
+      vi.spyOn(transaction, 'set').mockImplementation((ref, data, options) => {
+        if (data['outcome'] !== undefined) outcomes.push(data['outcome']);
+        set(ref, data, options);
+      });
+      return await callback(transaction);
+    }));
+    await createDefinition(store);
+    await reserveRun(store);
+    const ownerDigest = 'e'.repeat(64);
+    expect(await store.claimRunLease({ userId: 'synthetic-user-001', runId: 'mdr_run_001', ownerDigest, now: '2026-07-27T02:00:00.000Z', expiresAt: '2026-07-27T02:05:00.000Z' })).toMatchObject({ ok: true });
+    expect(await store.renewRunLease({ userId: 'synthetic-user-001', runId: 'mdr_run_001', ownerDigest, fence: 1, now: '2026-07-27T02:01:00.000Z', expiresAt: '2026-07-27T02:06:00.000Z' })).toMatchObject({ ok: true });
+    expect(await store.markRunProcessingStage({ userId: 'synthetic-user-001', runId: 'mdr_run_001', ownerDigest, fence: 1, now: '2026-07-27T02:02:00.000Z', processingStage: 'aggregating' })).toEqual({ ok: true });
+    expect(outcomes).toEqual(['pending']);
+    expect(readDocument(fake, MESSAGE_DIGEST_RUNS_COLLECTION, 'mdr_run_001')).toMatchObject({ generationStatus: 'processing', processingStage: 'aggregating' });
+  });
+
   it('atomically advances obsolete windows and records a content-free skip audit under both revisions', async () => {
     await store.createDefinition({ definition: makeDefinition(), state: makeState() });
     const patch = {

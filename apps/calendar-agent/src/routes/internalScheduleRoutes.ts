@@ -1,3 +1,4 @@
+import { getFirestoreSnapshotCacheDiagnostics } from '@intexuraos/infra-firestore';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import {
   authenticateInternalScheduler,
@@ -104,6 +105,7 @@ export const internalScheduleRoutes: FastifyPluginCallback = (fastify, _opts, do
         observedAt,
         jobs: await services.jobHeartbeatStore.list(['calendar_schedule_tick']),
         notifications: await services.calendarScheduleRepository.monitoring(observedAt),
+        firestoreMonitoring: getFirestoreSnapshotCacheDiagnostics(),
       });
     }
   );

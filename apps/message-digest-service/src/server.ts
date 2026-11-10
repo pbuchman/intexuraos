@@ -15,6 +15,7 @@ import { internalMessageDigestRoutes } from './routes/internalMessageDigestRoute
 import { internalLegacyDigestRoutes } from './routes/internalLegacyDigestRoutes.js';
 import { legacyAliasRoutes } from './routes/legacyAliasRoutes.js';
 import { registerDigestJobMonitoring, getDigestNotificationSummary } from './routes/jobMonitoring.js';
+import { createDigestNotificationMonitoring } from './infra/firestore/digestNotificationMonitoring.js';
 import { getServices } from './services.js';
 
 const SERVICE_NAME = 'message-digest-service';
@@ -58,7 +59,19 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   await app.register(fastifySwagger, openApiOptions());
   await app.register(fastifySwaggerUi, { routePrefix: '/docs' });
-  registerDigestJobMonitoring(app, () => getServices().jobHeartbeatStore, async () => await getDigestNotificationSummary(getServices().firestore));
+  let monitoring: ReturnType<typeof createDigestNotificationMonitoring> | undefined;
+  let heartbeat: ReturnType<typeof getServices>['jobHeartbeatStore'];
+  registerDigestJobMonitoring(app, () => {
+    heartbeat = getServices().jobHeartbeatStore;
+    return heartbeat;
+  }, async () => {
+    monitoring ??= createDigestNotificationMonitoring(getServices().firestore, async (now) => await getDigestNotificationSummary(getServices().firestore, now));
+    return await monitoring.read(new Date().toISOString());
+  }, () => monitoring?.mode() ?? 'initializing');
+  app.addHook('onClose', async () => {
+    monitoring?.close();
+    await heartbeat?.close?.();
+  });
   await app.register(messageDigestRoutes);
   await app.register(legacyAliasRoutes);
   await app.register(internalMessageDigestRoutes);

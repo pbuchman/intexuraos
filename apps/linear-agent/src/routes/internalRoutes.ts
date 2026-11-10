@@ -1,3 +1,4 @@
+import { getFirestoreSnapshotCacheDiagnostics } from '@intexuraos/infra-firestore';
 /**
  * Internal API routes for service-to-service communication.
  */
@@ -75,7 +76,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     logIncomingRequest(request, { message: 'Received scheduler monitoring request', bodyPreviewLength: 0 });
     if (!validateInternalAuth(request).valid) return await reply.status(401).fail('UNAUTHORIZED', 'Unauthorized');
     return await reply.ok({ schemaVersion: 1, observedAt: new Date().toISOString(),
-      jobs: await getServices().jobHeartbeatStore.list(['linear_sync_hourly', 'linear_issues_prune_hourly']) });
+      jobs: await getServices().jobHeartbeatStore.list(['linear_sync_hourly', 'linear_issues_prune_hourly']),
+      firestoreMonitoring: getFirestoreSnapshotCacheDiagnostics() });
   });
 
   fastify.post<{ Body: ProcessActionBody }>(

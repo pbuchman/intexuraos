@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "indexes": {
+    "unresolved": {
+      "collectionGroup": "message_digest_monitoring_runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "definitionId", "order": "ASCENDING" },
+        { "fieldPath": "outcome", "order": "ASCENDING" },
+        { "fieldPath": "scheduledBoundary", "order": "ASCENDING" }
+      ]
+    },
+    "delivered_boundary": {
+      "collectionGroup": "message_digest_monitoring_runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "definitionId", "order": "ASCENDING" },
+        { "fieldPath": "outcome", "order": "ASCENDING" },
+        { "fieldPath": "scheduledBoundary", "order": "DESCENDING" }
+      ]
+    },
+    "delivered_at": {
+      "collectionGroup": "message_digest_monitoring_runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "definitionId", "order": "ASCENDING" },
+        { "fieldPath": "outcome", "order": "ASCENDING" },
+        { "fieldPath": "deliveredAt", "order": "DESCENDING" }
+      ]
+    },
+    "current_cursor": {
+      "collectionGroup": "message_digest_monitoring_runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "definitionId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledBoundary", "order": "ASCENDING" },
+        { "fieldPath": "windowEnd", "order": "ASCENDING" }
+      ]
+    }
+  }
+}

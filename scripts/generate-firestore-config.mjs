@@ -2,7 +2,7 @@
 /**
  * Firestore Config Generator
  *
- * Aggregates indexes and rules from all migrations and writes the committed
+ * Aggregates migration indexes/rules and the Terraform monitoring index catalog into committed
  * artifacts:
  * - firestore.indexes.json
  * - firestore.rules
@@ -20,7 +20,7 @@ const repoRoot = resolve(import.meta.dirname, '..');
 
 export async function generate(silent = false) {
   if (!silent) {
-    console.log('Generating Firestore artifacts from migrations...');
+    console.log('Generating Firestore artifacts from migrations and monitoring index catalog...');
   }
 
   return await writeAggregatedFirestoreArtifacts({ repoRoot, silent });

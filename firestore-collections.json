@@ -46,6 +46,10 @@
       "owner": "message-digest-service",
       "description": "Immutable lifecycle-fenced Message Digest history containing sanitized summaries and opaque evidence references, never raw source messages or phone numbers"
     },
+    "message_digest_monitoring_runs": {
+      "owner": "message-digest-service",
+      "description": "Content-free transactional run monitoring projections and projection initialization marker; bounded listeners avoid reading canonical history"
+    },
     "message_digest_states": {
       "owner": "message-digest-service",
       "description": "Per-definition durable checkpoint, bounded sanitized continuity memory, predecessor hash, and single pending-window reservation retained with its definition"

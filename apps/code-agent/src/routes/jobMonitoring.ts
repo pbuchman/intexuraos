@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { validateInternalAuth } from '@intexuraos/common-http';
+import { getFirestoreSnapshotCacheDiagnostics } from '@intexuraos/infra-firestore';
 import type { JobExecutionToken, JobHeartbeatStore } from '@intexuraos/infra-firestore';
 import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 
@@ -53,6 +54,7 @@ export function registerCodeJobMonitoring(
       schemaVersion: 1,
       observedAt: new Date().toISOString(),
       jobs: await store.list(Object.values(CODE_SCHEDULER_JOBS)),
+      firestoreMonitoring: getFirestoreSnapshotCacheDiagnostics(),
     });
   });
 }

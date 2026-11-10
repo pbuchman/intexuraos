@@ -14,7 +14,7 @@ import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { createWhatsappRoutes } from './routes/routes.js';
 import { type Config, validateConfigEnv } from './config.js';
-import { getServices, initServices } from './services.js';
+import { closeMonitoringServices, getServices, initServices } from './services.js';
 
 const SERVICE_NAME = 'whatsapp-service';
 const SERVICE_VERSION = '0.0.4';
@@ -229,6 +229,8 @@ export async function buildServer(
       done(null, body);
     }
   );
+
+  app.addHook('onClose', closeMonitoringServices);
 
   await app.register(intexuraFastifyPlugin);
 

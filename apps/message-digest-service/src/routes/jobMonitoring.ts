@@ -2,12 +2,14 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { authenticateInternalScheduler, validateInternalAuth } from '@intexuraos/common-http';
 import type { NotificationMonitoringSummary } from '@intexuraos/common-core';
 import type { JobExecutionToken, JobHeartbeatStore, Firestore } from '@intexuraos/infra-firestore';
+import { getFirestoreSnapshotCacheDiagnostics } from '@intexuraos/infra-firestore';
 import type { MessageDigestRun } from '../domain/models/messageDigestRun.js';
 
 export function registerDigestJobMonitoring(
   app: FastifyInstance,
   getStore: () => JobHeartbeatStore | undefined,
-  getSummary: () => Promise<NotificationMonitoringSummary>
+  getSummary: () => Promise<NotificationMonitoringSummary>,
+  getMonitoringMode: () => string = () => 'incremental'
 ): void {
   const executions = new WeakMap<
     FastifyRequest,
@@ -53,16 +55,21 @@ export function registerDigestJobMonitoring(
     const store = getStore();
     if (store === undefined)
       return await reply.fail('SERVICE_UNAVAILABLE', 'Monitoring unavailable');
-    const [jobs, notifications] = await Promise.all([
-      store.list(['message_digest_tick']),
-      getSummary(),
-    ]);
-    return await reply.ok({
-      schemaVersion: 1,
-      observedAt: new Date().toISOString(),
-      jobs,
-      notifications,
-    });
+    try {
+      const [jobs, notifications] = await Promise.all([
+        store.list(['message_digest_tick']),
+        getSummary(),
+      ]);
+      return await reply.ok({
+        schemaVersion: 1,
+        observedAt: new Date().toISOString(),
+        jobs,
+        notifications,
+        firestoreMonitoring: { ...getFirestoreSnapshotCacheDiagnostics(), mode: getMonitoringMode() },
+      });
+    } catch {
+      return await reply.fail('SERVICE_UNAVAILABLE', 'Monitoring unavailable');
+    }
   });
 }
 

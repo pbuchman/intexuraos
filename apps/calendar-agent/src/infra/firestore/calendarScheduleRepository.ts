@@ -1,5 +1,5 @@
 import { getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { createFirestoreSnapshotCache, getFirestore } from '@intexuraos/infra-firestore';
 import type { CalendarError } from '../../domain/errors.js';
 import {
   calculateNextDailyRunAfterLocalDate,
@@ -105,6 +105,16 @@ function isTerminalRunForLocalDate(data: Record<string, unknown>): boolean {
 }
 
 export function createCalendarScheduleRepository(): CalendarScheduleRepository {
+  const monitoringSchedules = createFirestoreSnapshotCache({
+    query: () => getFirestore().collection(SCHEDULES_COLLECTION).where('status', '==', 'active'),
+    map: (doc) => toSchedule(doc.id, doc.data() as Record<string, unknown>),
+  });
+  const monitoringRuns = createFirestoreSnapshotCache({
+    query: (anchor) => getFirestore().collection(RUNS_COLLECTION)
+      .where('scheduledFor', '>=', new Date(anchor.getTime() - 7 * 86400000).toISOString()),
+    map: (doc) => ({ ...doc.data(), id: doc.id }) as CalendarScheduleRun,
+    rebaseAfterMs: 86400000,
+  });
   return {
     async listPendingRuns(
       now
@@ -171,17 +181,12 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
       }
     },
     async monitoring(now): ReturnType<NonNullable<CalendarScheduleRepository['monitoring']>> {
-      const db = getFirestore();
       const [schedules, history] = await Promise.all([
-        db.collection(SCHEDULES_COLLECTION).where('status', '==', 'active').get(),
-        db
-          .collection(RUNS_COLLECTION)
-          .where('scheduledFor', '>=', new Date(Date.parse(now) - 7 * 86400000).toISOString())
-          .get(),
+        monitoringSchedules.read(new Date(now)),
+        monitoringRuns.read(new Date(now)),
       ]);
-      const runs = history.docs.map(
-        (doc) => ({ ...doc.data(), id: doc.id }) as CalendarScheduleRun
-      );
+      const cutoff = new Date(Date.parse(now) - 7 * 86400000).toISOString();
+      const runs = history.filter((run) => run.scheduledFor >= cutoff);
       let pendingCount = 0;
       let failedCount = 0;
       let oldestPendingScheduledFor: string | null = null;
@@ -191,8 +196,7 @@ export function createCalendarScheduleRepository(): CalendarScheduleRepository {
         if (oldestPendingScheduledFor === null || scheduledFor < oldestPendingScheduledFor)
           oldestPendingScheduledFor = scheduledFor;
       };
-      for (const doc of schedules.docs) {
-        const schedule = toSchedule(doc.id, doc.data() as Record<string, unknown>);
+      for (const schedule of schedules) {
         const history = runs.filter(
           (run) => run.scheduleId === schedule.id && run.userId === schedule.userId
         );

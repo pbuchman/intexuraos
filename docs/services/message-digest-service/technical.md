@@ -98,12 +98,21 @@ After generation, a transactional outbox publishes a frozen WhatsApp payload. Wh
 | --- | --- |
 | `message_digest_definitions` | User definitions, revisions, source fences, and next run. |
 | `message_digest_runs` | Frozen windows, generated summaries, processing, and delivery state. |
+| `message_digest_monitoring_runs` | Content-free transactional monitoring projections and initialization marker. |
 | `message_digest_states` | Cross-run summary continuity. |
 | `message_digest_dispatch_outbox` | Durable outbound dispatch records. |
 | `message_digest_erasure_requests` | Bounded physical erasure progress. |
 | `message_digest_migration_activations` | One-shot Fishing migration activation fence. |
 
 Legacy archive collections remain migration evidence only; no runtime writes depend on Mobile Notifications digest code.
+
+### Monitoring
+
+`GET /internal/monitoring/status` keeps the existing notification summary contract. After initialization, process-lifetime listeners read active definitions, unresolved compact runs, and three bounded delivery/cursor queries per definition. Completed canonical history is never scanned for a monitoring request or restart. Polling an unchanged service performs no additional monitoring query. Pending work and failures remain visible until confirmed delivery supersedes their scheduled boundary or a resume cutoff excludes their window. Skipped runs still cover a due cursor, and the latest delivery timestamp is independent of the latest delivered boundary.
+
+Canonical run mutations, Fishing migration visibility changes, and the resume operation mirror compact projections in the same transaction. Lease renewals and processing changes that leave the monitoring outcome unchanged do not rewrite projections. Definition erasure removes the corresponding compact rows. New writers must preserve this contract.
+
+Roll out the Terraform indexes and new writers before running `pnpm exec tsx scripts/message-digests/run-monitoring-backfill.mts --project PROJECT --writers-deployed`. The one-time backfill rereads each source transactionally, never changes canonical history, and marks initialization complete only after every page succeeds. Monitoring uses the existing query path with diagnostics mode `legacy-bootstrap` during this upgrade window; after initialization, listener failures return unavailable instead of falling back. Compact historical rows add storage, while runtime reads depend on active definitions and unresolved work. See the [Home production runbook](../../operations/home-prod-runbook.md) for deployment and measurement steps. Diagnostics count received document payloads in Firestore protobuf encoding; they exclude transport framing and billing minimums.
 
 ## Configuration
 

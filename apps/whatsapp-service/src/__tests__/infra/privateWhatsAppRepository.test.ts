@@ -6278,6 +6278,38 @@ describe('privateWhatsAppRepository', () => {
     }
   );
 
+  it.each(['applied', 'superseded'] as const)('preserves a reaction already %s when pending-operation resolution retries', async (applicationStatus) => {
+    const targetMatrixEventId = `$terminal-reaction-${applicationStatus}`;
+    const pending = seedPendingTargetOperations(fakeFirestore, {
+      targetMatrixEventId,
+      replacementCount: 0,
+      includeReaction: true,
+    });
+    instrumentTransactions(fakeFirestore, {
+      beforeTransaction: (transactionNumber) => {
+        if (transactionNumber !== 2) return;
+        const reaction = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)?.get(pending.reactionIds[0] ?? '');
+        if (reaction === undefined) throw new Error('Expected pending reaction');
+        reaction['reaction'] = {
+          ...(reaction['reaction'] as Record<string, unknown>),
+          applicationStatus,
+          appliedAt: '2026-06-22T10:30:00.000Z',
+        };
+      },
+    });
+    const result = await repository.storeIncomingMessage(createStoreInput({
+      message: { ...createStoreInput().message, matrixEventId: targetMatrixEventId },
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const data = fakeFirestore.getAllData();
+    const messages = data.get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION);
+    expect(messages?.get(pending.reactionIds[0] ?? '')).toMatchObject({ reaction: { applicationStatus, appliedAt: '2026-06-22T10:30:00.000Z' } });
+    expect(messages?.get(result.value.messageId)).toMatchObject({ contextRevision: 1, pendingOperationResolution: { status: 'completed' } });
+    expect(messages?.get(result.value.messageId)?.['reactions']).toBeUndefined();
+    expect([...data.get(PRIVATE_WHATSAPP_CONTEXT_CHANGES_COLLECTION)?.values() ?? []].map((change) => change['changeType'])).toEqual(['created']);
+  });
+
   it('supersedes terminal and foreign pending operations while accepting an identical edit', async () => {
     const targetMatrixEventId = '$mixed-pending-operation-target';
     const pending = seedPendingTargetOperations(fakeFirestore, {

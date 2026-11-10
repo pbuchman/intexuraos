@@ -560,17 +560,30 @@ describe('FakeFirestore', () => {
 
     describe('startAfter', () => {
       it('starts after specified value', async () => {
-        // startAfter finds the FIRST document with that value and starts after it
-        // When there are two users with age 25, it starts after the first one
         const snapshot = await db.collection('users').orderBy('age').startAfter(25).get();
         const ages = snapshot.docs.map((d) => d.data()?.['age']);
-        // After the first age=25, we get: second age=25, age=30, age=35
-        expect(ages).toEqual([25, 30, 35]);
+        expect(ages).toEqual([30, 35]);
       });
 
       it('returns empty when no matching start value', async () => {
         const snapshot = await db.collection('users').orderBy('age').startAfter(100).get();
-        expect(snapshot.size).toBe(4); // No match found, returns all
+        expect(snapshot.size).toBe(0);
+      });
+
+      it('keeps a value cursor valid after its document was deleted', async () => {
+        await db.collection('users').doc('user-2').delete();
+        const snapshot = await db
+          .collection('users')
+          .orderBy('__name__')
+          .startAfter('user-2')
+          .get();
+        expect(snapshot.docs.map((doc) => doc.id)).toEqual(['user-3', 'user-4']);
+        const descending = await db
+          .collection('users')
+          .orderBy('__name__', 'desc')
+          .startAfter('user-2')
+          .get();
+        expect(descending.docs.map((doc) => doc.id)).toEqual(['user-1']);
       });
 
       it('supports paging by document snapshot when ordered by documentId', async () => {

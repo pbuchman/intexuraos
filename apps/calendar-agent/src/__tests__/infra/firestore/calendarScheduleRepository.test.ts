@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { createFakeFirestore, resetFirestore, setFirestore, getFirestoreSnapshotCacheDiagnostics } from '@intexuraos/infra-firestore';
 import { createCalendarScheduleRepository } from '../../../infra/firestore/calendarScheduleRepository.js';
 import type { CalendarSchedule } from '../../../domain/index.js';
 
@@ -30,6 +30,20 @@ describe('calendarScheduleRepository', () => {
 
   afterEach(() => {
     resetFirestore();
+  });
+
+  it('watches monitoring once while due schedules and seven-day expiry advance without writes', async () => {
+    const repository = createCalendarScheduleRepository();
+    await repository.upsert(schedule({ nextRunAt: '2026-07-05T13:15:00.000Z' }));
+    fakeFirestore.seedCollection('calendar_schedule_runs', [{ id: 'old', data: {
+      scheduleId: schedule().id, userId: 'user-123', scheduledFor: '2026-06-28T14:00:00.000Z',
+      status: 'failed', deliveryStatus: 'failed',
+    } }]);
+    const before = getFirestoreSnapshotCacheDiagnostics();
+    expect(await repository.monitoring?.('2026-07-04T14:00:00.000Z')).toMatchObject({ failedCount: 1, pendingCount: 0 });
+    for (let poll = 0; poll < 500; poll++)
+      expect(await repository.monitoring?.('2026-07-06T14:00:00.000Z')).toMatchObject({ failedCount: 0, pendingCount: 1 });
+    expect(getFirestoreSnapshotCacheDiagnostics().queryStarts - before.queryStarts).toBe(2);
   });
 
   it('skips old local dates after a multi-day outage and claims today once', async () => {

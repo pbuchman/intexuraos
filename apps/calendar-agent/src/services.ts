@@ -1,4 +1,4 @@
-import { createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
+import { closeFirestoreSnapshotCaches, createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
 /**
  * Service container for calendar-agent.
  */
@@ -181,4 +181,10 @@ export function setServices(s: ServiceContainer): void {
 
 export function resetServices(): void {
   container = null;
+}
+
+/** Release process-owned monitoring watches and durable heartbeat ownership. */
+export async function closeMonitoringServices(): Promise<void> {
+  closeFirestoreSnapshotCaches();
+  await container?.jobHeartbeatStore?.close?.();
 }

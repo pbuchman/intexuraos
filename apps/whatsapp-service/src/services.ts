@@ -1,4 +1,4 @@
-import { createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
+import { closeFirestoreSnapshotCaches, createJobHeartbeatStore, type JobHeartbeatStore } from '@intexuraos/infra-firestore';
 import type { NotificationDeliveryRepository } from './domain/whatsapp/ports/notificationDeliveryRepository.js';
 import { createNotificationDeliveryRepository } from './infra/firestore/notificationDeliveryRepository.js';
 /**
@@ -626,4 +626,10 @@ export function setServices(services: ServiceContainer): void {
  */
 export function resetServices(): void {
   container = null;
+}
+
+/** Release process-owned monitoring watches and durable heartbeat ownership. */
+export async function closeMonitoringServices(): Promise<void> {
+  closeFirestoreSnapshotCaches();
+  await container?.jobHeartbeatStore?.close?.();
 }

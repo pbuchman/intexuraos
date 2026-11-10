@@ -24,6 +24,11 @@ import { IntexuraOSError } from '@intexuraos/common-core';
  */
 type DocumentStore = Map<string, Map<string, DocumentData>>;
 
+const storeListeners = new WeakMap<DocumentStore, Set<(error?: Error) => void>>();
+function notifyListeners(store: DocumentStore, error?: Error): void {
+  for (const listener of storeListeners.get(store) ?? []) listener(error);
+}
+
 function isDocumentIdField(field: unknown): field is FieldPath | '__name__' {
   return (
     field === '__name__' || (field instanceof FieldPath && field.isEqual(FieldPath.documentId()))
@@ -271,7 +276,17 @@ function getTimestampValue(value: unknown): number | undefined {
  * Fake QuerySnapshot implementation.
  */
 class FakeQuerySnapshot {
-  constructor(protected readonly _docs: FakeDocumentSnapshot[]) {}
+  constructor(
+    protected readonly _docs: FakeDocumentSnapshot[],
+    private readonly changes: { type: string; doc: FakeDocumentSnapshot }[] = _docs.map((doc) => ({
+      type: 'added',
+      doc,
+    }))
+  ) {}
+
+  docChanges(): { type: string; doc: FakeDocumentSnapshot }[] {
+    return this.changes;
+  }
 
   get docs(): FakeDocumentSnapshot[] {
     return this._docs;
@@ -320,7 +335,7 @@ class FakeQuerySnapshotWithCount extends FakeQuerySnapshot {
  * Fake Query implementation with chainable methods.
  */
 class FakeQuery {
-  private filters: { field: string; op: string; value: unknown }[] = [];
+  private filters: { field: string | FieldPath; op: string; value: unknown }[] = [];
   private ordering: { field: string | FieldPath; direction: 'asc' | 'desc' }[] = [];
   private limitCount: number | null = null;
   private startAfterValues: unknown[] | null = null;
@@ -332,7 +347,7 @@ class FakeQuery {
     protected readonly docCounterRef: { value: number } = { value: 0 }
   ) {}
 
-  where(field: string, op: string, value: unknown): FakeQuery {
+  where(field: string | FieldPath, op: string, value: unknown): FakeQuery {
     const query = this.clone();
     query.filters.push({ field, op, value });
     return query;
@@ -369,16 +384,59 @@ class FakeQuery {
    * Execute query against a specific store (used by FakeTransaction).
    */
   executeOnStore(store: DocumentStore): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
-    return this.executeGet(store);
+    return Promise.resolve(this.executeGet(store));
   }
 
   get(): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
-    return this.executeGet(this.store);
+    return Promise.resolve(this.executeGet(this.store));
   }
 
-  private executeGet(
-    store: DocumentStore
-  ): Promise<FakeQuerySnapshot | FakeQuerySnapshotWithCount> {
+  onSnapshot(
+    next: (snapshot: FakeQuerySnapshot) => void,
+    onError: (error: Error) => void
+  ): () => void {
+    let active = true;
+    let previous: Map<string, FakeDocumentSnapshot> | undefined;
+    const listener = (error?: Error): void => {
+      if (error !== undefined) {
+        active = false;
+        onError(error);
+        return;
+      }
+      try {
+        if (!active) return;
+        const snapshot = this.executeGet(this.store);
+        const current = new Map(snapshot.docs.map((doc) => [doc.id, doc]));
+        const changes: { type: string; doc: FakeDocumentSnapshot }[] = [];
+        for (const [id, doc] of current) {
+          const before = previous?.get(id);
+          if (before === undefined) changes.push({ type: 'added', doc });
+          else if (JSON.stringify(before.data()) !== JSON.stringify(doc.data()))
+            changes.push({ type: 'modified', doc });
+        }
+        for (const [id, doc] of previous ?? [])
+          if (!current.has(id)) changes.push({ type: 'removed', doc });
+        if (previous === undefined || changes.length > 0)
+          next(new FakeQuerySnapshot(snapshot.docs, changes));
+        previous = current;
+      } catch (cause) {
+        onError(cause as Error);
+      }
+    };
+    let listeners = storeListeners.get(this.store);
+    if (listeners === undefined) {
+      listeners = new Set();
+      storeListeners.set(this.store, listeners);
+    }
+    listeners.add(listener);
+    listener();
+    return (): void => {
+      active = false;
+      listeners.delete(listener);
+    };
+  }
+
+  private executeGet(store: DocumentStore): FakeQuerySnapshot | FakeQuerySnapshotWithCount {
     const collection = store.get(this.collectionName) ?? new Map<string, DocumentData>();
     let docs = Array.from(collection.entries()).map(
       ([id, data]: [string, DocumentData | undefined]) =>
@@ -390,7 +448,9 @@ class FakeQuery {
       docs = docs.filter((doc) => {
         const data = doc.data();
         if (data === undefined) return false;
-        const fieldValue: unknown = readFieldPath(data, filter.field);
+        const fieldValue: unknown = isDocumentIdField(filter.field)
+          ? doc.id
+          : readFieldPath(data, filter.field);
         // For ordinal comparisons, normalize Timestamp/Date to millis so the
         // fake matches real Firestore semantics for time-based queries.
         const fieldMillis = getTimestampValue(fieldValue);
@@ -476,17 +536,32 @@ class FakeQuery {
       const startValues = this.resolveStartAfterValues();
       if (startValues === undefined) {
         return this.countRequested
-          ? Promise.resolve(new FakeQuerySnapshotWithCount(docs))
-          : Promise.resolve(new FakeQuerySnapshot(docs));
+          ? new FakeQuerySnapshotWithCount(docs)
+          : new FakeQuerySnapshot(docs);
       }
-      const startIndex = docs.findIndex((doc) => {
-        return this.ordering.every((order, index) => {
-          return this.getOrderedValue(doc, order.field) === startValues[index];
-        });
+      // Cursors contain ordered values, not a reference to an existing matching
+      // row. They remain valid after deletion and exclude every equal prefix.
+      docs = docs.filter((doc) => {
+        for (let index = 0; index < startValues.length; index++) {
+          const order = this.ordering[index];
+          if (order === undefined) break;
+          const left = this.getOrderedValue(doc, order.field);
+          const right = startValues[index];
+          if (left === right) continue;
+          const ordinal = (value: unknown): string | number =>
+            getTimestampValue(value) ??
+            (typeof value === 'number' || typeof value === 'string'
+              ? value
+              : value === undefined
+                ? ''
+                : JSON.stringify(value));
+          const a = ordinal(left);
+          const b = ordinal(right);
+          if (a === b) continue;
+          return order.direction === 'desc' ? a < b : a > b;
+        }
+        return false;
       });
-      if (startIndex >= 0) {
-        docs = docs.slice(startIndex + 1);
-      }
     }
 
     // Apply limit
@@ -496,9 +571,9 @@ class FakeQuery {
 
     // Return appropriate snapshot type based on countRequested
     if (this.countRequested) {
-      return Promise.resolve(new FakeQuerySnapshotWithCount(docs));
+      return new FakeQuerySnapshotWithCount(docs);
     }
-    return Promise.resolve(new FakeQuerySnapshot(docs));
+    return new FakeQuerySnapshot(docs);
   }
 
   private clone(): FakeQuery {
@@ -657,6 +732,7 @@ class FakeDocumentReference {
       collection.set(this.docId, newData);
     }
 
+    notifyListeners(this.store);
     return Promise.resolve({ writeTime: { toDate: (): Date => new Date() } } as WriteResult);
   }
 
@@ -721,12 +797,14 @@ class FakeDocumentReference {
       }
     }
     collection?.set(this.docId, updated);
+    notifyListeners(this.store);
     return Promise.resolve({ writeTime: { toDate: (): Date => new Date() } } as WriteResult);
   }
 
   delete(): Promise<WriteResult> {
     const collection = this.store.get(this.collectionName);
     collection?.delete(this.docId);
+    notifyListeners(this.store);
     return Promise.resolve({ writeTime: { toDate: (): Date => new Date() } } as WriteResult);
   }
 }
@@ -965,6 +1043,7 @@ class FakeFirestoreImpl {
    */
   configure(config: FakeFirestoreConfig): void {
     this.config = config;
+    if (config.errorToThrow !== undefined) notifyListeners(this.store, config.errorToThrow);
   }
 
   /**
@@ -996,6 +1075,7 @@ class FakeFirestoreImpl {
     for (const doc of docs) {
       collection.set(doc.id, doc.data);
     }
+    notifyListeners(this.store);
   }
 
   /**
@@ -1049,6 +1129,7 @@ class FakeFirestoreImpl {
             collection.set(docId, value.data);
           }
         }
+        notifyListeners(this.store);
         return result;
       });
 

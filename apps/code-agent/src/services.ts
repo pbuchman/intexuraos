@@ -8,7 +8,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import type { Result } from '@intexuraos/common-core';
-import { createJobHeartbeatStore, getFirestore } from '@intexuraos/infra-firestore';
+import { closeFirestoreSnapshotCaches, createJobHeartbeatStore, getFirestore } from '@intexuraos/infra-firestore';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createCodeTaskDispatchStatusService } from './domain/services/codeTaskDispatchStatusService.js';
@@ -222,3 +222,9 @@ export function setServices(s: ServiceContainer): void { container = s; }
 
 /** Reset services. Call in afterEach() in tests. */
 export function resetServices(): void { container = null; }
+
+/** Release process-owned monitoring watches and durable heartbeat ownership. */
+export async function closeMonitoringServices(): Promise<void> {
+  closeFirestoreSnapshotCaches();
+  await container?.jobHeartbeatStore?.close?.();
+}

@@ -263,3 +263,58 @@ loader invocation, surviving child process, or competing queued deployment can
 still use it. Only then may the operator remove that exact empty guard directory
 with `rmdir`. Leave file locks, live guards, and nonempty guard directories intact.
 Resume deployment only after the recovery check is complete.
+
+## Firestore monitoring state
+
+The five monitored services use `INTEXURAOS_MONITORING_STATE_DIR` from the Home
+PROD PM2 configuration. It resolves beneath the runtime user's stable
+`.local/state/intexuraos-prod/monitoring` directory, outside immutable releases.
+Heartbeat records are written atomically, fsynced, and protected by an exclusive
+kernel lock. Each service runs as one forked instance. Initial creation imports
+its existing Firestore heartbeat records once; subsequent ticks and probes use
+local state. Preserve this directory across deployment and reboot. Corrupt
+state or lost ownership fails closed; do not delete the files to clear an alarm.
+Other environments retain Firestore-backed heartbeat storage.
+
+Notification monitors retain change-driven Firestore watches. Calendar and
+WhatsApp keep their existing seven-day/expiry semantics and recompute clock-only
+changes per probe. Message Digest reads compact `message_digest_monitoring_runs`
+records, latest delivery evidence, and unresolved work; it never rescans canonical
+history after initialization. Canonical writes, receipts, erasure, the resume
+operator, and legacy migration activation maintain the projection. New writers
+must maintain that same transaction boundary.
+
+For the first rollout:
+
+1. Apply the four reviewed, create-only Terraform indexes under
+   `module.firestore.google_firestore_index.digest_monitoring` in `shared-gcp`.
+   Inspect the saved plan; reject unrelated changes. The shared
+   `firestore.monitoring-indexes.json` catalog is also included in generated
+   Firebase index artifacts, so later migration deployment retains the indexes.
+2. Deploy the reviewed application SHA through the normal admission workflow.
+   All live canonical writers must include projection writes before backfill.
+   While the initialization marker is absent/incomplete, Message Digest reports
+   `legacy-bootstrap` and keeps the old monitoring query; this is temporary and
+   does not establish cost reduction.
+3. Run the reviewed CLI with existing runtime ADC, explicit project, no emulator,
+   and the deployed-writer acknowledgement:
+
+   ```bash
+   pnpm exec tsx scripts/message-digests/run-monitoring-backfill.mts \
+     --project intexuraos-dev-pbuchman --writers-deployed
+   ```
+
+   The backfill rereads each source transactionally and writes only compact
+   monitoring records. It preserves canonical history and publishes readiness
+   only after completion. Record aggregate counts. A failure leaves readiness
+   incomplete; diagnose the sanitized error before retrying.
+4. Verify the actual internal endpoint reports optimized monitoring, all host
+   probes remain available, and live `firestoreMonitoring` counters stop growing
+   during unchanged polling. Measure initialization, reconnects and events
+   separately; counters are not a billing export.
+
+The snapshot transport adapter is guarded against the installed Firestore SDK
+version. Its tests characterize transient disconnects and catch-up barriers.
+Upgrading that SDK requires reviewing the adapter and rerunning its transport
+compatibility tests. Do not disable the guard to make an upgrade pass. A lost or
+stale watch must report unavailable instead of serving a healthy stale snapshot.

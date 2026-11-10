@@ -366,6 +366,14 @@ const COMMON_SERVICE_ENV = {
   ...localServiceUrls(),
 };
 
+const MONITORED_SERVICES = new Set([
+  'calendar-agent',
+  'whatsapp-service',
+  'code-agent',
+  'linear-agent',
+  'message-digest-service',
+]);
+
 const SERVICE_ENV_MAPPINGS = {
   'user-service': {
     INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID: envValue(
@@ -500,8 +508,18 @@ function createServiceConfig(name) {
     script: TSX_CLI,
     args: waitForService === undefined ? ['src/index.ts'] : [WAIT_SCRIPT, 'src/index.ts'],
     interpreter: 'node',
+    instances: 1,
+    exec_mode: 'fork',
     env: {
       ...COMMON_SERVICE_ENV,
+      ...(MONITORED_SERVICES.has(name)
+        ? {
+            INTEXURAOS_MONITORING_STATE_DIR: path.join(
+              RUNTIME_HOME,
+              '.local/state/intexuraos-prod/monitoring'
+            ),
+          }
+        : {}),
       ...pickEnv(SERVICE_RUNTIME_ENV_KEYS[name] ?? []),
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       ...(waitForService === undefined ? {} : { WAIT_FOR_SERVICE: waitForService }),

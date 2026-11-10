@@ -1,3 +1,4 @@
+import { getFirestoreSnapshotCacheDiagnostics } from '@intexuraos/infra-firestore';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import {
   authenticateInternalScheduler,
@@ -177,6 +178,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         observedAt,
         jobs: await services.jobHeartbeatStore.list(['retry_pending_whatsapp_webhooks']),
         notifications: await services.notificationDeliveryRepository.monitoring(observedAt),
+        firestoreMonitoring: getFirestoreSnapshotCacheDiagnostics(),
       });
     }
   );
