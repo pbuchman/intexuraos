@@ -76,13 +76,58 @@ describe('resolveRuntimeSettingsWithDeadline', () => {
     expect(resolveIntexAgentRuntimeSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a closed timeout error and clears the outer timer', async () => {
+  it('retains a valid runtime response after the observed 2412ms lookup delay', async () => {
+    vi.useFakeTimers();
+    try {
+      const result = resolveRuntimeSettingsWithDeadline('user-123', {
+        resolveIntexAgentRuntimeSettings: async () =>
+          await new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(
+                ok({
+                  status: 'available',
+                  effectiveModel: DEFAULT_INTEX_AGENT_MODEL,
+                  explicitModel: null,
+                  source: 'default_absent',
+                  revision: 0,
+                  timeZone: 'Europe/Warsaw',
+                })
+              );
+            }, 2_412);
+          }),
+      });
+
+      await vi.advanceTimersByTimeAsync(2_412);
+
+      await expect(result).resolves.toEqual(
+        ok({
+          status: 'available',
+          effectiveModel: DEFAULT_INTEX_AGENT_MODEL,
+          explicitModel: null,
+          source: 'default_absent',
+          revision: 0,
+          timeZone: 'Europe/Warsaw',
+        })
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a hung runtime lookup at the 30s HTTP deadline and clears the outer timer', async () => {
     vi.useFakeTimers();
     try {
       const result = resolveRuntimeSettingsWithDeadline('user-123', {
         resolveIntexAgentRuntimeSettings: async () => await new Promise(() => undefined),
       });
-      await vi.advanceTimersByTimeAsync(2_000);
+      let settled = false;
+      void result.then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
       await expect(result).resolves.toEqual(
         err({ code: 'TIMEOUT', message: 'User Service runtime settings request timed out' })
       );
@@ -107,7 +152,7 @@ describe('resolveRuntimeSettingsWithDeadline', () => {
             rejectLate = reject;
           }),
       });
-      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       await expect(resultPromise).resolves.toMatchObject({
         ok: false,
         error: { code: 'TIMEOUT' },

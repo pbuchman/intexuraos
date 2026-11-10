@@ -22,6 +22,8 @@ Mutating tool calls produce a reviewable pending action and execute after the ma
 
 Prompt preferences use `GET /preferences/prompt`, `POST /preferences/prompt/items`, `PATCH` and `DELETE /preferences/prompt/items/:itemId`, plus `GET /preferences/prompt/versions` and `GET /preferences/prompt/versions/:version`. Mutations require `expectedVersion`; old versions remain immutable. Intex model selection is stored separately by user-service.
 
+Runtime settings resolution has a 30-second outer deadline, matching the User Service HTTP client's deadline. This allows catalog refreshes and settings reads to finish without prematurely rejecting a valid response. A hung lookup still returns the existing sanitized runtime-resolution failure; it does not retry or select another model.
+
 Gated bearer-authenticated `GET /test-runs`, `GET /test-runs/:runId`, and `GET /test-runs/:runId/scenarios/:scenarioId` expose sanitized evaluation evidence. Matrix corpus routes and strict mocks exercise the production transport boundary without real action-tool writes. See the evaluation runbook for operator setup.
 
 ## Tool Boundary
