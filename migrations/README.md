@@ -68,15 +68,19 @@ node scripts/migrate.mjs --project intexuraos-dev
 
 ## How Indexes & Rules Work
 
-Indexes and rules are **aggregated** from all migrations:
+Indexes and rules are **aggregated** from all migrations, with Terraform-managed
+monitoring indexes retained from `firestore.monitoring-indexes.json`:
 
 1. Migration runner loads all `migrations/*.mjs` files in order
-2. Aggregates all `indexes` arrays (deduplicates identical entries)
+2. Aggregates all `indexes` arrays and the monitoring catalog (deduplicates identical entries)
 3. Merges all `rules.functions` and `rules.collections` objects
 4. Generates `firestore.indexes.json` and `firestore.rules` files
 5. Deploys via Firebase CLI
 
-**Note:** The generated files are in `.gitignore` - source of truth is the migrations.
+The generated files are committed and checked by `pnpm run verify:firestore-artifacts`.
+Migrations remain immutable. Terraform creates monitoring indexes from the shared
+catalog; including them in the Firebase artifact prevents later index deployments
+from proposing their removal.
 
 ## Rules Structure
 

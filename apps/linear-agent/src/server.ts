@@ -1,3 +1,4 @@
+import { closeMonitoringServices } from './services.js';
 /**
  * Fastify server configuration for linear-agent.
  */
@@ -205,6 +206,8 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
       done(new Error('Invalid JSON'), null);
     }
   });
+
+  app.addHook('onClose', closeMonitoringServices);
 
   await app.register(fastifyCors, {
     origin: true,

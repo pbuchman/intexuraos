@@ -10,6 +10,8 @@ interface ProdAppSummary {
   args: string[];
   env: Record<string, string | undefined>;
   filter_env?: string[];
+  instances: number;
+  exec_mode: string;
 }
 
 interface ProdConfigSummary {
@@ -102,6 +104,8 @@ function loadProdConfig(env: Record<string, string | undefined> = PROD_ENV): Pro
             args: app.args,
             env: app.env,
             filter_env: app.filter_env,
+            instances: app.instances,
+            exec_mode: app.exec_mode,
           })),
         }));
       `,
@@ -139,6 +143,23 @@ function loadProdConfigFailureMessage(env: Record<string, string | undefined>): 
 }
 
 describe('ecosystem.config.prod.cjs', () => {
+  it('keeps monitoring heartbeat state outside releases with one fork owner per app', () => {
+    const config = loadProdConfig();
+    const monitored = new Set([
+      'calendar-agent',
+      'whatsapp-service',
+      'code-agent',
+      'linear-agent',
+      'message-digest-service',
+    ]);
+    for (const app of config.apps) {
+      expect(app.instances).toBe(1);
+      expect(app.exec_mode).toBe('fork');
+      expect(app.env.INTEXURAOS_MONITORING_STATE_DIR).toBe(
+        monitored.has(app.name) ? '/home/deploy/.local/state/intexuraos-prod/monitoring' : undefined
+      );
+    }
+  });
   it('enables the production Matrix corpus with exact per-service secret isolation', () => {
     const ambient = Object.fromEntries(
       MATRIX_CORPUS_ENV_NAMES.map((name, index) => [name, `ambient-${String(index)}`])

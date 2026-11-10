@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { JobExecutionRecord } from '@intexuraos/common-core';
-import { getFirestore, type Firestore } from './firestore.js';
+import { FieldPath, getFirestore, type Firestore } from './firestore.js';
+import {
+  createFirestoreSnapshotCache,
+  recordFirestoreMonitoringBootstrap,
+  type FirestoreSnapshotCache,
+} from './snapshotCache.js';
+import { createLocalJobHeartbeatStore } from './localJobHeartbeat.js';
 
 export interface JobExecutionToken {
   key: string;
@@ -12,9 +18,10 @@ export interface JobHeartbeatStore {
   start(key: string): Promise<JobExecutionToken>;
   finish(token: JobExecutionToken, outcome: 'succeeded' | 'failed'): Promise<void>;
   list(keys: readonly string[]): Promise<JobExecutionRecord[]>;
+  close?(): Promise<void> | void;
 }
 
-interface PersistedHeartbeat extends JobExecutionRecord {
+export interface PersistedHeartbeat extends JobExecutionRecord {
   latestRunId: string;
 }
 
@@ -40,6 +47,24 @@ export function createJobHeartbeatStore(options: {
 }): JobHeartbeatStore {
   const firestore = (): Firestore => options.firestore ?? getFirestore();
   const now = options.now ?? ((): Date => new Date());
+  const stateDirectory = process.env['INTEXURAOS_MONITORING_STATE_DIR'];
+  if (stateDirectory !== undefined && process.env['INTEXURAOS_ENVIRONMENT'] === 'prod') {
+    return createLocalJobHeartbeatStore({
+      directory: stateDirectory,
+      collectionName: options.collectionName,
+      now,
+      seed: async () => {
+        const snapshot = await firestore().collection(options.collectionName).limit(100).get();
+        recordFirestoreMonitoringBootstrap(snapshot.docs);
+        if (snapshot.size >= 100)
+          throw new Error('Heartbeat bootstrap exceeds the fixed job inventory');
+        return Object.fromEntries(
+          snapshot.docs.map((doc) => [doc.id, doc.data() as PersistedHeartbeat])
+        );
+      },
+    });
+  }
+  const watches = new Map<string, FirestoreSnapshotCache<JobExecutionRecord>>();
   return {
     async start(key): Promise<JobExecutionToken> {
       const runId = randomUUID();
@@ -80,11 +105,20 @@ export function createJobHeartbeatStore(options: {
       });
     },
     async list(keys): Promise<JobExecutionRecord[]> {
-      const db = firestore();
       return await Promise.all(
         keys.map(async (key) => {
-          const snapshot = await db.collection(options.collectionName).doc(key).get();
-          const data = snapshot.data() as PersistedHeartbeat | undefined;
+          let watch = watches.get(key);
+          if (watch === undefined) {
+            watch = createFirestoreSnapshotCache({
+              query: () =>
+                firestore()
+                  .collection(options.collectionName)
+                  .where(FieldPath.documentId(), '==', key),
+              map: (doc) => doc.data() as PersistedHeartbeat,
+            });
+            watches.set(key, watch);
+          }
+          const data = (await watch.read())[0];
           if (data === undefined) return emptyRecord(key);
           return {
             key,
@@ -95,6 +129,10 @@ export function createJobHeartbeatStore(options: {
           };
         })
       );
+    },
+    close(): void {
+      for (const watch of watches.values()) watch.close();
+      watches.clear();
     },
   };
 }

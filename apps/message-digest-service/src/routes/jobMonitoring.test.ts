@@ -13,6 +13,18 @@ import {
 } from './jobMonitoring.js';
 
 describe('digest scheduler monitoring', () => {
+  it('returns unavailable while monitoring snapshots recover without exposing the underlying error', async () => {
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'monitor-test';
+    const store = createJobHeartbeatStore({ collectionName: 'test_digest_monitor_failure', firestore: createFakeFirestore() as unknown as Firestore });
+    const app = Fastify();
+    await app.register(intexuraFastifyPlugin);
+    registerDigestJobMonitoring(app, () => store, async () => { throw new Error('private provider detail'); });
+    const response = await app.inject({ url: '/internal/monitoring/status', headers: { 'x-internal-auth': 'monitor-test' } });
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain('private provider detail');
+    await app.close();
+    await store.close?.();
+  });
   it('records HTTP failures even when the response has no logical failure body', async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'monitor-test';
     const store = createJobHeartbeatStore({

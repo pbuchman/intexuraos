@@ -44,6 +44,15 @@ export {
 // import the canonical types from `@intexuraos/http-server`.
 export { firestoreHealthCheck } from './health.js';
 
+export {
+  createFirestoreSnapshotCache,
+  closeFirestoreSnapshotCaches,
+  getFirestoreSnapshotCacheDiagnostics,
+  type FirestoreSnapshotCache,
+  type FirestoreSnapshotDiagnostics,
+  type FirestoreMonitoringDiagnostics,
+} from './snapshotCache.js';
+
 // Generic CRUD repository factory
 export {
   createFirestoreCrudRepository,

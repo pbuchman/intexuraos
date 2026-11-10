@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { DIGEST_MONITORING_COLLECTION } from '../../apps/message-digest-service/src/infra/firestore/digestMonitoringProjection.js';
 import { open } from 'node:fs/promises';
 import { getFirestore, FieldValue, Timestamp } from '@intexuraos/infra-firestore';
 import {
@@ -166,6 +167,11 @@ if (mode === 'dry-run') {
             }
             for (const field of document.remove) patch[field] = FieldValue.delete();
             transaction.update(firestore.doc(document.path), patch);
+            // Every resumed digest run is retired; its monitoring projection must disappear atomically.
+            if (document.path.startsWith('message_digest_runs/'))
+              transaction.delete(
+                firestore.collection(DIGEST_MONITORING_COLLECTION).doc(document.path.split('/')[1])
+              );
           }
           transaction.create(auditRef, {
             schemaVersion: 1,

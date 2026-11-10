@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { buildDigestMonitoringProjection, DIGEST_MONITORING_COLLECTION } from './digestMonitoringProjection.js';
 import { FieldPath, type Firestore } from '@intexuraos/infra-firestore';
 import { getMessageDigestDeliveryOutboxId } from '../../domain/messageDigestIds.js';
 import { boundFailedConfirmationCheck } from '../../domain/messageDigestReceiptObservation.js';
@@ -681,7 +682,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         },
         updatedAt: run.createdAt,
       });
-      transaction.set(refs.run, run);
+      this.writeRun(transaction, refs.run, run);
       transaction.set(refs.outbox, outbox);
       transaction.set(refs.state, nextState);
       transaction.set(refs.definition, nextDefinition);
@@ -759,7 +760,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         },
         updatedAt: input.now,
       });
-      transaction.set(ref, nextRun);
+      this.writeRun(transaction, ref, nextRun, run);
       transaction.set(
         definitionRef,
         withLatestRunProjection(definition, nextRun, { allowInitialize: true })
@@ -813,7 +814,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         lease: { ...run.lease, expiresAt: input.expiresAt, renewedAt: input.now },
         updatedAt: input.now,
       });
-      transaction.set(ref, nextRun);
+      this.writeRun(transaction, ref, nextRun, run);
       return { ok: true as const, expiresAt: input.expiresAt };
     });
   }
@@ -866,7 +867,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         processingStage: input.processingStage,
         updatedAt: input.now,
       });
-      transaction.set(runRef, nextRun);
+      this.writeRun(transaction, runRef, nextRun, run);
       transaction.set(
         definitionRef,
         withLatestRunProjection(definition, nextRun, { allowInitialize: true })
@@ -986,7 +987,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         latestRun: nextLatestRunProjection(definition, completedRun, true),
         updatedAt: input.completedAt,
       });
-      transaction.set(runRef, completedRun);
+      this.writeRun(transaction, runRef, completedRun, run);
       transaction.set(stateRef, nextState);
       transaction.set(definitionRef, nextDefinition);
       if (deliveryOutboxRef !== null && deliveryOutbox !== null) {
@@ -1047,7 +1048,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         updatedAt: input.failedAt,
         completedAt: input.failedAt,
       });
-      transaction.set(runRef, failedRun);
+      this.writeRun(transaction, runRef, failedRun, run);
       const definitionWithLatestRun = withLatestRunProjection(definition, failedRun, {
         allowInitialize: true,
       });
@@ -1179,7 +1180,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         updatedAt: input.retriedAt,
         completedAt: null,
       });
-      transaction.set(runRef, retriedRun);
+      this.writeRun(transaction, runRef, retriedRun, run);
       transaction.set(
         definitionRef,
         withLatestRunProjection(definition, retriedRun, { allowInitialize: true })
@@ -1281,7 +1282,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         },
         updatedAt: input.retriedAt,
       });
-      transaction.set(runRef, retriedRun);
+      this.writeRun(transaction, runRef, retriedRun, run);
       transaction.set(
         definitionRef,
         withLatestRunProjection(definition, retriedRun, { allowInitialize: true })
@@ -1436,7 +1437,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         delivery,
         updatedAt: input.observedAt,
       });
-      transaction.set(runRef, updatedRun);
+      this.writeRun(transaction, runRef, updatedRun, run);
       transaction.set(definitionRef, withLatestRunProjection(definition, updatedRun));
       return { ok: true as const, disposition: 'updated' as const, run: updatedRun };
     });
@@ -1529,7 +1530,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         },
         updatedAt: input.observedAt,
       });
-      transaction.set(runRef, updatedRun);
+      this.writeRun(transaction, runRef, updatedRun, run);
       return { ok: true as const, disposition: 'updated' as const, run: updatedRun };
     });
   }
@@ -1837,9 +1838,11 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       },
       updatedAt: now,
     });
-    transaction.set(
+    this.writeRun(
+      transaction,
       this.config.firestore.collection(MESSAGE_DIGEST_RUNS_COLLECTION).doc(run.runId),
-      nextRun
+      nextRun,
+      run
     );
     transaction.set(
       this.config.firestore
@@ -2069,7 +2072,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
           deliveryAuthorization: renewedAuthorization,
           updatedAt: input.now,
         });
-        transaction.set(runRef, renewed);
+        this.writeRun(transaction, runRef, renewed, run);
         return {
           ok: true as const,
           disposition: 'existing' as const,
@@ -2103,7 +2106,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         deliveryAuthorization: authorization,
         updatedAt: input.now,
       });
-      transaction.set(runRef, updated);
+      this.writeRun(transaction, runRef, updated, run);
       return {
         ok: true as const,
         disposition: 'acquired' as const,
@@ -2172,7 +2175,7 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
         },
         updatedAt: input.now,
       });
-      transaction.set(runRef, updated);
+      this.writeRun(transaction, runRef, updated, run);
       return { ok: true as const };
     });
   }
@@ -2301,6 +2304,8 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
       }
       for (const document of [...deletion.documents, ...deletion.cleanupDocuments]) {
         transaction.delete(document.ref);
+        if (request.stage === 'runs')
+          transaction.delete(this.config.firestore.collection(DIGEST_MONITORING_COLLECTION).doc(document.ref.id));
       }
       transaction.set(requestRef, nextRequest);
       return {
@@ -2452,6 +2457,22 @@ export class FirestoreMessageDigestStore implements MessageDigestStore {
           countKey: 'legacy',
           nextStage: 'completed',
         };
+  }
+
+  private writeRun(
+    transaction: StoreTransaction,
+    ref: FirebaseFirestore.DocumentReference,
+    next: MessageDigestRunDocument,
+    previous?: MessageDigestRunDocument
+  ): void {
+    transaction.set(ref, next);
+    const projection = buildDigestMonitoringProjection(next);
+    const before = previous === undefined ? null : buildDigestMonitoringProjection(previous);
+    // Lease renewal, generation stages and reconciliation observations do not change monitoring.
+    if (JSON.stringify(projection) === JSON.stringify(before)) return;
+    const monitoringRef = this.config.firestore.collection(DIGEST_MONITORING_COLLECTION).doc(ref.id);
+    if (projection === null) transaction.delete(monitoringRef);
+    else transaction.set(monitoringRef, projection);
   }
 
   private refs(

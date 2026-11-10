@@ -215,7 +215,11 @@ node scripts/migrate.mjs --write-artifacts-only
 ```
 
 `generate-firestore-config.mjs` regenerates tracked rules and indexes from the
-migration set.
+migration set. It also retains Terraform-managed monitoring indexes from
+`firestore.monitoring-indexes.json`, the same catalog consumed by
+`terraform/modules/firestore/monitoring.tf`. Terraform creates these indexes;
+Firebase index deployments retain them. A missing or invalid catalog blocks
+artifact generation and verification.
 
 ## Static Verification
 

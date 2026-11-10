@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/infra-firestore';
+import { createFakeFirestore, setFirestore, resetFirestore, getFirestoreSnapshotCacheDiagnostics } from '@intexuraos/infra-firestore';
 import { createNotificationDeliveryRepository } from '../../infra/firestore/notificationDeliveryRepository.js';
 
 const now = '2026-10-12T13:30:00.000Z';
@@ -22,6 +22,15 @@ describe('notification delivery correlation and receipts', () => {
   afterEach(() => {
     resetFirestore();
     vi.useRealTimers();
+  });
+  it('watches monitoring once and expires retained intents without a write or idle query', async () => {
+    const repo = createNotificationDeliveryRepository();
+    await repo.begin({ userId: 'u', correlationId: 's', idempotencyKey: 'expiry', now });
+    const before = getFirestoreSnapshotCacheDiagnostics();
+    expect(await repo.monitoring(now)).toMatchObject({ pendingCount: 1 });
+    for (let poll = 0; poll < 500; poll++)
+      expect(await repo.monitoring('2026-10-20T13:30:00.000Z')).toMatchObject({ pendingCount: 0 });
+    expect(getFirestoreSnapshotCacheDiagnostics().queryStarts - before.queryStarts).toBe(2);
   });
   it('registers a stable opaque marker, rejects foreign/expired senders and consumes one message idempotently', async () => {
     const repo = createNotificationDeliveryRepository();

@@ -4,6 +4,7 @@
  */
 import { FieldPath, FieldValue, Firestore, Timestamp } from '@google-cloud/firestore';
 import { IntexuraOSError } from '@intexuraos/common-core';
+import { closeFirestoreSnapshotCaches } from './snapshotCache.js';
 
 // Re-export Firestore primitives for use in repositories.
 export { FieldPath, FieldValue, Timestamp };
@@ -43,6 +44,7 @@ export function getFirestore(): Firestore {
  * Reset the Firestore instance (for testing).
  */
 export function resetFirestore(): void {
+  closeFirestoreSnapshotCaches();
   firestoreInstance = null;
 }
 
