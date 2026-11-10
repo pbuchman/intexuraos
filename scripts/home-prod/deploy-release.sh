@@ -14,6 +14,7 @@ PROD_CONFIG_ROOT="${PROD_CONFIG_ROOT:-${DEPLOY_HOME}/.config/intexuraos/prod}"
 PROD_ENV_FILE="${PROD_ENV_FILE:-${PROD_CONFIG_ROOT}/.env.prod}"
 EXPECTED_PM2_HOME="${DEPLOY_HOME}/.pm2-intexuraos-prod"
 DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-${DEPLOY_HOME}/.local/state/intexuraos-prod/deploy.lock}"
+DEPLOY_LOCK_TIMEOUT_SECONDS="${DEPLOY_LOCK_TIMEOUT_SECONDS:-30}"
 SECRET_PACKAGE_VERSION=""
 TARGET_SHA=""
 SECRET_PACKAGE_PAYLOAD_FILE=""
@@ -25,8 +26,11 @@ PRIVATE_PAYLOAD=""
 TEMP_WEB_RELEASE=""
 WEB_RELEASE_EXISTS="0"
 LOCK_FD=""
+PORTABLE_LOCK_DIR=""
 ACTIVATION_STARTED="0"
 ACTIVATION_SUCCEEDED="0"
+FINALIZING_ACTIVATION="0"
+PENDING_SIGNAL_STATUS=""
 PREVIOUS_CODE_LINK_EXISTS="0"
 PREVIOUS_CODE_TARGET=""
 PREVIOUS_WEB_LINK_EXISTS="0"
@@ -49,7 +53,8 @@ cleanup() {
     restore_current_link "${WEB_CURRENT_LINK}" \
       "${PREVIOUS_WEB_LINK_EXISTS}" "${PREVIOUS_WEB_TARGET}"
   fi
-  if [[ -n "${TEMP_RELEASE}" && -d "${TEMP_RELEASE}" ]]; then
+  if [[ "${ACTIVATION_SUCCEEDED}" != "1" \
+    && -n "${TEMP_RELEASE}" && -d "${TEMP_RELEASE}" ]]; then
     rm -rf -- "${TEMP_RELEASE}"
   fi
   if [[ -n "${CANDIDATE_WORK_DIR}" && -d "${CANDIDATE_WORK_DIR}" ]]; then
@@ -58,9 +63,33 @@ cleanup() {
   if [[ -n "${TEMP_WEB_RELEASE}" && -d "${TEMP_WEB_RELEASE}" ]]; then
     rm -rf -- "${TEMP_WEB_RELEASE}"
   fi
+  if [[ -n "${PORTABLE_LOCK_DIR}" ]]; then
+    rmdir -- "${PORTABLE_LOCK_DIR}"
+  fi
   exit "${status}"
 }
 trap cleanup EXIT
+
+handle_signal() {
+  if [[ "${FINALIZING_ACTIVATION}" == "1" ]]; then
+    PENDING_SIGNAL_STATUS="${PENDING_SIGNAL_STATUS:-$1}"
+  else
+    exit "$1"
+  fi
+}
+
+# Bash defers these traps until the foreground command completes. Keep the
+# guard held while any foreground deployment child can still mutate state,
+# then settle the final reload before honoring a cancellation.
+trap 'handle_signal 143' TERM
+trap 'handle_signal 130' INT
+trap 'handle_signal 129' HUP
+
+atomic_rename() {
+  # rename(2) replaces the directory entry itself, including symlinks to
+  # directories. Both paths must share a filesystem; never copy/delete instead.
+  node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$1" "$2"
+}
 
 restore_current_link() {
   local link_path="$1"
@@ -71,7 +100,7 @@ restore_current_link() {
     next_link="$(mktemp "${link_path}.rollback.XXXXXX")"
     rm -f -- "${next_link}"
     ln -s "${target}" "${next_link}"
-    mv -Tf "${next_link}" "${link_path}"
+    atomic_rename "${next_link}" "${link_path}"
   else
     rm -f -- "${link_path}"
   fi
@@ -100,19 +129,41 @@ require_preconditions() {
     || fail 'Secret package candidate is missing or is a symlink'
   [[ -r "${SECRET_PACKAGE_PAYLOAD_FILE}" && ! -w "${SECRET_PACKAGE_PAYLOAD_FILE}" ]] \
     || fail 'Secret package candidate must be readable and non-writable'
-  for command_name in flock git install node pm2 pnpm rsync tar; do
+  [[ "${DEPLOY_LOCK_TIMEOUT_SECONDS}" =~ ^(0|[1-9][0-9]*)$ ]] \
+    || fail 'Deployment lock timeout must be a nonnegative integer'
+  for command_name in git install node pm2 pnpm tar; do
     command -v "${command_name}" >/dev/null 2>&1 || fail "${command_name} is required"
   done
+  if [[ "$(node -p 'process.platform')" == 'linux' ]]; then
+    # Production must still coordinate with any older flock-only driver.
+    command -v flock >/dev/null 2>&1 || fail 'flock is required on Linux'
+  fi
   [[ -z "$(git -C "${REPO_DIR}" status --porcelain=v1 --untracked-files=all)" ]] \
     || fail 'Deployment clone is not clean'
 }
 
 acquire_lock() {
+  local guard="${DEPLOY_LOCK_FILE}.portable"
+  local deadline=$((SECONDS + DEPLOY_LOCK_TIMEOUT_SECONDS))
+  local remaining="0"
   install -d -m 700 "$(dirname "${DEPLOY_LOCK_FILE}")"
+  # All invocations share this guard, even when flock is available. Never
+  # reclaim a stale guard automatically or remove one acquired by a waiter.
+  while ! mkdir -m 700 "${guard}" 2>/dev/null; do
+    (( SECONDS < deadline )) || fail 'Timed out waiting for the Home PROD deployment lock'
+    sleep 0.05
+  done
+  PORTABLE_LOCK_DIR="${guard}"
+  # Retain the Linux file lock to serialize with older installed drivers.
+  if ! command -v flock >/dev/null 2>&1; then
+    return
+  fi
   : > "${DEPLOY_LOCK_FILE}"
   chmod 600 "${DEPLOY_LOCK_FILE}"
   exec {LOCK_FD}<>"${DEPLOY_LOCK_FILE}"
-  flock --exclusive --wait 30 "${LOCK_FD}" || fail 'Timed out waiting for the Home PROD deployment lock'
+  (( SECONDS >= deadline )) || remaining=$((deadline - SECONDS))
+  flock --exclusive --wait "${remaining}" "${LOCK_FD}" \
+    || fail 'Timed out waiting for the Home PROD deployment lock'
 }
 
 resolve_release() {
@@ -264,8 +315,10 @@ stage_web_candidate() {
       --web-root "${TEMP_WEB_RELEASE}" >/dev/null
   [[ -f "${TEMP_WEB_RELEASE}/index.html" ]] || fail 'Candidate web release is incomplete'
   if [[ "${WEB_RELEASE_EXISTS}" == '1' ]]; then
-    [[ -z "$(rsync -rcln --delete --itemize-changes \
-      "${TEMP_WEB_RELEASE}/" "${final_web_release}/")" ]] \
+    # Compare bytes, entry types and link targets, independent of rsync's
+    # platform-specific timestamp-only itemization.
+    node "${STAGING_RELEASE}/scripts/home-prod/compare-web-releases.mjs" \
+      "${TEMP_WEB_RELEASE}" "${final_web_release}" \
       || fail 'Existing web release differs from the verified candidate'
   fi
 }
@@ -297,7 +350,7 @@ finalize_web_release() {
     rm -rf -- "${TEMP_WEB_RELEASE}"
     TEMP_WEB_RELEASE=""
   else
-    mv -T "${TEMP_WEB_RELEASE}" "${final_web_release}"
+    atomic_rename "${TEMP_WEB_RELEASE}" "${final_web_release}"
     TEMP_WEB_RELEASE=""
   fi
 }
@@ -355,16 +408,19 @@ publish_staged_release() {
   next_link="$(mktemp "${CODE_CURRENT_LINK}.next.XXXXXX")"
   rm -f -- "${next_link}"
   ln -s "${release_dir}" "${next_link}"
-  mv -Tf "${next_link}" "${CODE_CURRENT_LINK}"
+  atomic_rename "${next_link}" "${CODE_CURRENT_LINK}"
 
   install -d -m 755 "$(dirname "${WEB_CURRENT_LINK}")"
   next_link="$(mktemp "${WEB_CURRENT_LINK}.next.XXXXXX")"
   rm -f -- "${next_link}"
   ln -s "${WEB_RELEASES_ROOT}/${TARGET_SHA}" "${next_link}"
-  mv -Tf "${next_link}" "${WEB_CURRENT_LINK}"
+  atomic_rename "${next_link}" "${WEB_CURRENT_LINK}"
 
-  (
-    cd "${release_dir}"
+  # A successful reload leaves live apps using this immutable release. Signals
+  # must not interrupt recording that success and cause cleanup to delete it.
+  FINALIZING_ACTIVATION="1"
+  if (
+    cd "${release_dir}" || exit 1
     INTEXURAOS_COMMIT_SHA="${TARGET_SHA}" \
       INTEXURAOS_ENVIRONMENT=prod \
       INTEXURAOS_PROD_ENV_FILE="${PROD_ENV_FILE}" \
@@ -374,12 +430,20 @@ publish_staged_release() {
       bash scripts/home-prod/reload-pm2.sh \
         --config ecosystem.config.prod.cjs \
         --rendered-config "${PROD_CONFIG_ROOT}/pm2-ecosystem.json"
-  )
-
-  ACTIVATION_SUCCEEDED="1"
-  # The installed dependency tree contains absolute paths. Its unique attempt
-  # directory is therefore already final and becomes immutable at activation.
-  TEMP_RELEASE=""
+  ); then
+    ACTIVATION_SUCCEEDED="1"
+    # The installed dependency tree contains absolute paths. Its unique attempt
+    # directory is therefore already final and becomes immutable at activation.
+    TEMP_RELEASE=""
+  else
+    # The reload helper has finished its failure cleanup. Preserve its status
+    # and keep signal deferral active while EXIT restores the previous links.
+    exit "$?"
+  fi
+  FINALIZING_ACTIVATION="0"
+  if [[ -n "${PENDING_SIGNAL_STATUS}" ]]; then
+    exit "${PENDING_SIGNAL_STATUS}"
+  fi
 }
 
 main() {

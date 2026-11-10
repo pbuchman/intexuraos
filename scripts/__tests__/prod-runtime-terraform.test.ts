@@ -1,9 +1,20 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
 const runtimeRoot = resolve(repoRoot, 'terraform/prod-runtime');
+
+function retiredTrackedConfiguration(root: string): string[] {
+  return execFileSync('git', ['ls-files', '-z', '--', 'terraform/hetzner-prod/'], {
+    cwd: root,
+    encoding: 'utf8',
+  })
+    .split('\0')
+    .filter(Boolean);
+}
 
 function read(name: string): string {
   return readFileSync(resolve(runtimeRoot, name), 'utf8');
@@ -30,6 +41,25 @@ function topLevelBlocks(source: string, localName: string): Map<string, string> 
 }
 
 describe('production runtime Terraform ownership', () => {
+  it('tolerates ignored retired-root caches while rejecting tracked retired configuration', () => {
+    const root = mkdtempSync(join(tmpdir(), 'retired-terraform-'));
+    try {
+      execFileSync('git', ['init', '--quiet', root]);
+      writeFileSync(join(root, '.gitignore'), '**/.terraform/\n');
+      const retiredRoot = join(root, 'terraform/hetzner-prod');
+      mkdirSync(join(retiredRoot, '.terraform/providers'), { recursive: true });
+      writeFileSync(join(retiredRoot, '.terraform/providers/cache'), 'local provider cache');
+      expect(existsSync(retiredRoot)).toBe(true);
+      expect(retiredTrackedConfiguration(root)).toEqual([]);
+
+      writeFileSync(join(retiredRoot, 'main.tf'), 'resource "hcloud_server" "retired" {}\n');
+      execFileSync('git', ['add', 'terraform/hetzner-prod/main.tf'], { cwd: root });
+      expect(retiredTrackedConfiguration(root)).toEqual(['terraform/hetzner-prod/main.tf']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('grants only Scheduler and metrics reads to a dedicated keyless monitor identity', () => {
     const monitor = read('monitoring.tf');
     expect(monitor).toContain('cloudscheduler.jobs.get');
@@ -44,7 +74,7 @@ describe('production runtime Terraform ownership', () => {
   });
   it('uses the renamed Google-only root while retaining the production backend identity', () => {
     expect(existsSync(runtimeRoot)).toBe(true);
-    expect(existsSync(resolve(repoRoot, 'terraform/hetzner-prod'))).toBe(false);
+    expect(retiredTrackedConfiguration(repoRoot)).toEqual([]);
     expect(read('backend.tf')).toContain('prefix = "terraform/state/prod-hetzner"');
 
     const root = ['providers.tf', 'versions.tf', 'variables.tf', 'outputs.tf'].map(read).join('\n');
