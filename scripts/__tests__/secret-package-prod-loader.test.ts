@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import {
   chmodSync,
@@ -8,6 +8,7 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  renameSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -164,9 +165,12 @@ function runLoader(
 }
 
 describe('irreversible PROD secret-package loader', () => {
-  it('publishes a mode-600 projection only inside the validated dedicated user home', () => {
+  it.each([
+    { label: '0400', payloadMode: 0o400 },
+    { label: '0600', payloadMode: 0o600 },
+  ])('publishes a private user projection from a mode-$label payload', ({ payloadMode }) => {
     const input = fixture('home-prod');
-    chmodSync(input.payloadPath, 0o400);
+    chmodSync(input.payloadPath, payloadMode);
 
     const result = runLoader(input, ['--user-projection', '--version', '7'], {
       DEPLOY_HOME: input.root,
@@ -184,6 +188,186 @@ describe('irreversible PROD secret-package loader', () => {
     expect(env.HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
     expect(env.GOOGLE_APPLICATION_CREDENTIALS).toBe(join(projection, 'runtime-sa-key.json'));
   });
+
+  it.each([
+    { label: '0640', payloadMode: 0o640 },
+    { label: '0604', payloadMode: 0o604 },
+    { label: '0700', payloadMode: 0o700 },
+  ])('rejects a mode-$label user payload before publication', ({ payloadMode }) => {
+    const input = fixture();
+    chmodSync(input.payloadPath, payloadMode);
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      SKIP_OWNERSHIP: '0',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      'Offline payload permissions must be mode 0600 or more restrictive'
+    );
+    expect(existsSync(join(input.root, '.config'))).toBe(false);
+    expect(readFileSync(input.outputPath, 'utf8')).toBe('PREVIOUS_ENV=complete\n');
+  });
+
+  it.each(['symlink', 'directory'])(
+    'rejects a %s user payload before publication',
+    (payloadType) => {
+      const input = fixture();
+      const originalPayload = join(input.root, 'original-payload.json');
+      renameSync(input.payloadPath, originalPayload);
+      if (payloadType === 'symlink') {
+        symlinkSync(originalPayload, input.payloadPath);
+      } else {
+        mkdirSync(input.payloadPath, { mode: 0o700 });
+      }
+
+      const result = runLoader(input, ['--user-projection', '--version', '7'], {
+        DEPLOY_HOME: input.root,
+        DEPLOY_USER: userInfo().username,
+        SKIP_OWNERSHIP: '0',
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('Offline payload must be a regular file, not a symlink');
+      expect(existsSync(join(input.root, '.config'))).toBe(false);
+      expect(readFileSync(input.outputPath, 'utf8')).toBe('PREVIOUS_ENV=complete\n');
+    }
+  );
+
+  it('times out without removing a user projection lock owned by another invocation', () => {
+    const input = fixture();
+    const lockDirectory = join(
+      input.root,
+      '.local/state/intexuraos-prod/secret-package.lock.portable'
+    );
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS: '1',
+      SKIP_OWNERSHIP: '0',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Timed out waiting for production package lock');
+    expect(statSync(lockDirectory).isDirectory()).toBe(true);
+    expect(existsSync(join(input.root, '.config'))).toBe(false);
+  });
+
+  it('requires flock for Linux user projection before attempting the directory guard', () => {
+    const input = fixture();
+    const lockDirectory = join(
+      input.root,
+      '.local/state/intexuraos-prod/secret-package.lock.portable'
+    );
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
+    const bin = join(input.root, 'bin');
+    mkdirSync(bin, { mode: 0o700 });
+    for (const tool of ['bash', 'chmod', 'dirname', 'id', 'install', 'mkdir', 'rmdir', 'sleep']) {
+      const lookup = spawnSync('bash', ['-c', 'command -v "$1"', 'fixture', tool], {
+        encoding: 'utf8',
+      });
+      expect(lookup.status, lookup.stderr).toBe(0);
+      symlinkSync(lookup.stdout.trim(), join(bin, tool));
+    }
+    symlinkSync(process.execPath, join(bin, 'node'));
+    writeFileSync(join(bin, 'uname'), '#!/usr/bin/env bash\nprintf "Linux\\n"\n', { mode: 0o700 });
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      PATH: bin,
+      SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS: '1',
+      SKIP_OWNERSHIP: '0',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('flock is required');
+    expect(result.stderr).not.toContain('Timed out waiting for production package lock');
+    expect(statSync(lockDirectory).isDirectory()).toBe(true);
+    expect(existsSync(join(input.root, '.config'))).toBe(false);
+  });
+
+  it.each([false, true])(
+    'holds the user lock while a validator is active (interrupted=%s)',
+    async (interrupt) => {
+      const input = fixture();
+      const started = join(input.root, 'validator-started');
+      const release = join(input.root, 'validator-release');
+      const validator = join(input.root, 'gated-validator.sh');
+      const lockDirectory = join(
+        input.root,
+        '.local/state/intexuraos-prod/secret-package.lock.portable'
+      );
+      writeFileSync(
+        validator,
+        '#!/usr/bin/env bash\nset -euo pipefail\nprintf started > "$VALIDATOR_STARTED"\nwhile [[ ! -f "$VALIDATOR_RELEASE" ]]; do sleep 0.05; done\n',
+        { mode: 0o700 }
+      );
+      const userEnvironment = {
+        DEPLOY_HOME: input.root,
+        DEPLOY_USER: userInfo().username,
+        INTEXURAOS_ENVIRONMENT: 'prod',
+        SKIP_CLOUDFLARE_CREDENTIAL_SMOKE: '1',
+        SKIP_OWNERSHIP: '0',
+        SKIP_RUNTIME_CREDENTIAL_SMOKE: '1',
+        TMPDIR: input.root,
+      };
+      const child = spawn(
+        'bash',
+        [loaderPath, '--user-projection', '--version', '7', '--payload-file', input.payloadPath],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            ...userEnvironment,
+            PROD_CANDIDATE_VALIDATOR: validator,
+            VALIDATOR_STARTED: started,
+            VALIDATOR_RELEASE: release,
+          },
+        }
+      );
+      let output = '';
+      child.stdout.on('data', (value: Buffer) => {
+        output += value.toString();
+      });
+      child.stderr.on('data', (value: Buffer) => {
+        output += value.toString();
+      });
+      const completed = new Promise<number | null>((resolve) => {
+        child.once('close', (status) => {
+          resolve(status);
+        });
+      });
+      try {
+        await expect.poll(() => existsSync(started), { timeout: 5000 }).toBe(true);
+        expect(mode(lockDirectory)).toBe(0o700);
+        if (interrupt) child.kill('SIGTERM');
+        const contender = runLoader(input, ['--user-projection', '--version', '7'], {
+          ...userEnvironment,
+          SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS: '1',
+        });
+        expect(contender.status).not.toBe(0);
+        expect(contender.stderr).toContain('Timed out waiting for production package lock');
+        expect(existsSync(lockDirectory)).toBe(true);
+        expect(existsSync(join(input.root, '.config/intexuraos/prod/.env.prod'))).toBe(false);
+        writeFileSync(release, 'continue');
+        expect(await completed, output).toBe(interrupt ? 143 : 0);
+        expect(existsSync(lockDirectory)).toBe(false);
+        expect(
+          runLoader(input, ['--user-projection', '--version', '7'], userEnvironment).status
+        ).toBe(0);
+      } finally {
+        writeFileSync(release, 'continue');
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+        await completed;
+      }
+    },
+    15000
+  );
 
   it('keeps a validated candidate projection private and leaves active user files untouched', () => {
     const input = fixture('candidate-output');

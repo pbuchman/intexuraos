@@ -16,6 +16,21 @@ pnpm's absolute bin links and metadata. The web build uses the exact commit time
 `SOURCE_DATE_EPOCH` and a sanitized public capability value, so rebuilding the same SHA is
 stable while a changed public configuration is rejected before activation.
 
+Deployment and secret publication hold private `mkdir` guards named
+`deploy.lock.portable` and `secret-package.lock.portable`. Linux also retains
+the required `flock` locks. Code and web pointers use atomic filesystem renames.
+SIGKILL or power loss can leave a guard behind; a timeout alone does not prove
+it is stale. There is no automatic stale-guard cleanup. An operator must confirm
+that no invocation, surviving child, or competing queued deployment remains
+before removing only the exact empty guard with `rmdir`. Never remove a live
+guard or its file lock. See the [lock recovery procedure](../../docs/operations/home-prod-runbook.md#lock-guard-recovery).
+
+TERM, INT, and HUP cancel earlier deployment stages after their foreground child
+finishes. During the final PM2 reload, cancellation waits for activation to settle:
+a successful reload retains the new links, immutable release, and saved PM2 dump
+before returning the signal status. A failed reload completes its failure cleanup
+and returns the reload failure status. Verify the active release after cancellation.
+
 `render-edge.mjs` derives the dedicated configuration from the canonical
 `scripts/home-prod/nginx/intexuraos.conf` and `jwt-verify.lua`; those files remain
 active dependencies. Render the three reviewed artifacts with:

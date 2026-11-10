@@ -1,4 +1,9 @@
-import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import {
+  spawn,
+  spawnSync,
+  type ChildProcessWithoutNullStreams,
+  type SpawnSyncReturns,
+} from 'node:child_process';
 import {
   chmodSync,
   copyFileSync,
@@ -7,6 +12,8 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  readdirSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -95,6 +102,10 @@ function deploymentFixture(
     join(repoRoot, 'scripts', 'home-prod', 'validate-port-ownership.mjs'),
     join(source, 'scripts', 'home-prod', 'validate-port-ownership.mjs')
   );
+  copyFileSync(
+    join(repoRoot, 'scripts', 'home-prod', 'compare-web-releases.mjs'),
+    join(source, 'scripts', 'home-prod', 'compare-web-releases.mjs')
+  );
   const serviceNames =
     options.profile === 'full'
       ? [...BASIC_SERVICE_NAMES, 'research-agent', 'message-digest-service']
@@ -117,7 +128,7 @@ function deploymentFixture(
   writeFileSync(join(source, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
   executable(
     join(source, 'scripts', 'home-prod', 'load-secrets.sh'),
-    `#!/usr/bin/env bash\nset -euo pipefail\nprintf 'loader:%s\\n' "$*" >> "$HOME_PROD_TEST_LOG"\nprintf 'loader-cwd:%s\\n' "$PWD" >> "$HOME_PROD_TEST_LOG"\nif [[ "$*" == *--validate-only* && ( "${options.candidateFails === true ? '1' : '0'}" == 1 || "\${CANDIDATE_FAIL:-0}" == 1 ) ]]; then exit 23; fi\noutput=''; payload=''\nwhile (($#)); do case "$1" in --candidate-output) output="$2"; shift 2;; --payload-file) payload="$2"; shift 2;; *) shift;; esac; done\n[[ -f "$payload" ]] || exit 45\nprintf 'payload-mode:%s\\n' "$(stat -c '%a' "$payload")" >> "$HOME_PROD_TEST_LOG"\nif [[ -n "$output" ]]; then printf 'INTEXURAOS_AUTH0_DOMAIN="fixture.example"\\nINTEXURAOS_PROD_PROFILE="${options.profile ?? 'basic'}"\\n' > "$output/.env.prod"; chmod 600 "$output/.env.prod"; fi\n`
+    `#!/usr/bin/env bash\nset -euo pipefail\nprintf 'loader:%s\\n' "$*" >> "$HOME_PROD_TEST_LOG"\nprintf 'loader-cwd:%s\\n' "$PWD" >> "$HOME_PROD_TEST_LOG"\nif [[ "$*" == *--validate-only* && ( "${options.candidateFails === true ? '1' : '0'}" == 1 || "\${CANDIDATE_FAIL:-0}" == 1 ) ]]; then exit 23; fi\noutput=''; payload=''\nwhile (($#)); do case "$1" in --candidate-output) output="$2"; shift 2;; --payload-file) payload="$2"; shift 2;; *) shift;; esac; done\n[[ -f "$payload" ]] || exit 45\nprintf 'payload-mode:%s\\n' "$(node -e 'process.stdout.write((require("node:fs").statSync(process.argv[1]).mode & 0o777).toString(8))' "$payload")" >> "$HOME_PROD_TEST_LOG"\nif [[ -n "$output" ]]; then printf 'INTEXURAOS_AUTH0_DOMAIN="fixture.example"\\nINTEXURAOS_PROD_PROFILE="${options.profile ?? 'basic'}"\\n' > "$output/.env.prod"; chmod 600 "$output/.env.prod"; fi\n`
   );
   executable(
     join(source, 'scripts', 'home-prod', 'deploy-web.sh'),
@@ -125,7 +136,7 @@ function deploymentFixture(
   );
   executable(
     join(source, 'scripts', 'home-prod', 'reload-pm2.sh'),
-    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "reload:%s\\n" "$PM2_HOME" >> "$HOME_PROD_TEST_LOG"\nif [[ "${RELOAD_FAIL:-0}" == 1 ]]; then exit 71; fi\nprintf "verified-new-release\\n" > "$PM2_HOME/dump.pm2"\n'
+    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "reload:%s\\n" "$PM2_HOME" >> "$HOME_PROD_TEST_LOG"\nprintf "%s\\n" "$PWD" > "$PM2_HOME/fixture-candidate-running"\nif [[ -n "${HOME_PROD_TEST_RELOAD_GATE:-}" ]]; then while [[ ! -f "$HOME_PROD_TEST_RELOAD_GATE" ]]; do sleep 0.05; done; fi\nif [[ "${RELOAD_FAIL:-0}" == 1 ]]; then rm -f "$PM2_HOME/fixture-candidate-running" "$PM2_HOME/dump.pm2"; exit 71; fi\nprintf "verified-new-release\\n" > "$PM2_HOME/dump.pm2"\n'
   );
 
   git(root, 'init', '--bare', origin);
@@ -155,7 +166,7 @@ function deploymentFixture(
   mkdirSync(bin);
   executable(
     join(bin, 'pnpm'),
-    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "pnpm:%s\\n" "$*" >> "$HOME_PROD_TEST_LOG"\nif [[ "${1:-}" == install ]]; then mkdir -p node_modules; ln -s "$HOME_PROD_TEST_DOTENV" node_modules/dotenv; fi\n'
+    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "pnpm:%s\\n" "$*" >> "$HOME_PROD_TEST_LOG"\nif [[ "${1:-}" == install ]]; then if [[ -n "${HOME_PROD_TEST_INSTALL_GATE:-}" ]]; then while [[ ! -f "$HOME_PROD_TEST_INSTALL_GATE" ]]; do sleep 0.05; done; fi; mkdir -p node_modules; ln -s "$HOME_PROD_TEST_DOTENV" node_modules/dotenv; fi\n'
   );
   executable(
     join(bin, 'pm2'),
@@ -185,6 +196,26 @@ function deploymentFixture(
   };
 }
 
+function deploymentEnvironment(
+  input: DeploymentFixture,
+  env: Record<string, string> = {}
+): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    DEPLOY_HOME: input.deployHome,
+    DEPLOY_USER: process.env.USER ?? 'pbuchman',
+    HOME: input.deployHome,
+    HOME_PROD_TEST_DOTENV: join(repoRoot, 'node_modules', 'dotenv'),
+    HOME_PROD_TEST_LOG: input.log,
+    PATH: `${join(input.root, 'bin')}:${dirname(process.execPath)}:/usr/bin:/bin`,
+    PM2_HOME: input.expectedPm2Home,
+    REPO_DIR: input.clone,
+    WEB_CURRENT_LINK: input.webCurrent,
+    WEB_RELEASES_ROOT: join(input.root, 'web', 'releases'),
+    ...env,
+  };
+}
+
 function runDeployment(
   input: DeploymentFixture,
   env: Record<string, string> = {},
@@ -193,21 +224,35 @@ function runDeployment(
   return spawnSync('bash', [deployScript, input.sha, '4', input.candidate], {
     cwd,
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      DEPLOY_HOME: input.deployHome,
-      DEPLOY_USER: process.env.USER ?? 'pbuchman',
-      HOME: input.deployHome,
-      HOME_PROD_TEST_DOTENV: join(repoRoot, 'node_modules', 'dotenv'),
-      HOME_PROD_TEST_LOG: input.log,
-      PATH: `${join(input.root, 'bin')}:${dirname(process.execPath)}:/usr/bin:/bin`,
-      PM2_HOME: input.expectedPm2Home,
-      REPO_DIR: input.clone,
-      WEB_CURRENT_LINK: input.webCurrent,
-      WEB_RELEASES_ROOT: join(input.root, 'web', 'releases'),
-      ...env,
-    },
+    env: deploymentEnvironment(input, env),
   });
+}
+
+function startDeployment(
+  input: DeploymentFixture,
+  env: Record<string, string>
+): {
+  child: ChildProcessWithoutNullStreams;
+  completed: Promise<number | null>;
+  output: () => string;
+} {
+  const child = spawn('bash', [deployScript, input.sha, '4', input.candidate], {
+    cwd: repoRoot,
+    env: deploymentEnvironment(input, env),
+  });
+  let output = '';
+  child.stdout.on('data', (value: Buffer) => {
+    output += value.toString();
+  });
+  child.stderr.on('data', (value: Buffer) => {
+    output += value.toString();
+  });
+  const completed = new Promise<number | null>((resolvePromise) => {
+    child.once('close', (status) => {
+      resolvePromise(status);
+    });
+  });
+  return { child, completed, output: (): string => output };
 }
 
 describe('Home PROD privileged launcher input boundary', () => {
@@ -238,6 +283,175 @@ describe('Home PROD privileged launcher input boundary', () => {
 });
 
 describe('Home PROD release deployment', () => {
+  it('times out without removing a deployment lock owned by another invocation', () => {
+    const input = deploymentFixture();
+    const lockDirectory = join(
+      input.deployHome,
+      '.local/state/intexuraos-prod/deploy.lock.portable'
+    );
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
+
+    const result = runDeployment(input, { DEPLOY_LOCK_TIMEOUT_SECONDS: '0' });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Timed out waiting for the Home PROD deployment lock');
+    expect(statSync(lockDirectory).isDirectory()).toBe(true);
+    expect(existsSync(input.log)).toBe(false);
+    expect(readlinkSync(join(input.deployHome, 'deploy/current'))).toBe(input.oldCodeRelease);
+  });
+
+  it.each(['activation', 'termination'] as const)(
+    'holds the lock while deployment children run and releases it after %s',
+    async (outcome) => {
+      const input = deploymentFixture();
+      const gate = join(input.root, 'install.gate');
+      const lockDirectory = join(
+        input.deployHome,
+        '.local/state/intexuraos-prod/deploy.lock.portable'
+      );
+      const child = spawn('bash', [deployScript, input.sha, '4', input.candidate], {
+        cwd: repoRoot,
+        env: deploymentEnvironment(input, { HOME_PROD_TEST_INSTALL_GATE: gate }),
+      });
+      let output = '';
+      child.stdout.on('data', (value: Buffer) => {
+        output += value.toString();
+      });
+      child.stderr.on('data', (value: Buffer) => {
+        output += value.toString();
+      });
+      const completed = new Promise<number | null>((resolve) => {
+        child.once('close', (status) => {
+          resolve(status);
+        });
+      });
+      try {
+        await expect
+          .poll(
+            () => existsSync(input.log) && readFileSync(input.log, 'utf8').includes('pnpm:install'),
+            { timeout: 5000 }
+          )
+          .toBe(true);
+        expect(statSync(lockDirectory).mode & 0o777).toBe(0o700);
+        if (outcome === 'termination') expect(child.kill('SIGTERM')).toBe(true);
+        const contender = runDeployment(input, { DEPLOY_LOCK_TIMEOUT_SECONDS: '0' });
+        expect(contender.status).not.toBe(0);
+        expect(contender.stderr).toContain('Timed out waiting for the Home PROD deployment lock');
+        expect(existsSync(lockDirectory)).toBe(true);
+        writeFileSync(gate, 'continue');
+        expect(await completed, output).toBe(outcome === 'activation' ? 0 : 143);
+        if (outcome === 'termination') {
+          expect(readlinkSync(join(input.deployHome, 'deploy/current'))).toBe(input.oldCodeRelease);
+          expect(readlinkSync(input.webCurrent)).toBe(input.oldWebRelease);
+        }
+        expect(existsSync(lockDirectory)).toBe(false);
+        const next = runDeployment(input);
+        expect(next.status, `${next.stdout}\n${next.stderr}`).toBe(0);
+      } finally {
+        writeFileSync(gate, 'continue');
+        if (child.exitCode === null) child.kill('SIGTERM');
+        await completed;
+      }
+    }
+  );
+
+  it.each([
+    ['SIGTERM', 143],
+    ['SIGINT', 130],
+    ['SIGHUP', 129],
+  ] as const)(
+    'settles successful activation before honoring %s during final reload',
+    async (signal, status) => {
+      const input = deploymentFixture();
+      const gate = join(input.root, 'reload.gate');
+      const running = join(input.expectedPm2Home, 'fixture-candidate-running');
+      const lock = join(input.deployHome, '.local/state/intexuraos-prod/deploy.lock.portable');
+      const deployment = startDeployment(input, { HOME_PROD_TEST_RELOAD_GATE: gate });
+      try {
+        await expect
+          .poll(() => existsSync(running) && readFileSync(running, 'utf8').trim() !== '', {
+            timeout: 5000,
+          })
+          .toBe(true);
+        const candidateRelease = readFileSync(running, 'utf8').trim();
+        expect(deployment.child.kill(signal)).toBe(true);
+        const contender = runDeployment(input, { DEPLOY_LOCK_TIMEOUT_SECONDS: '0' });
+        expect(contender.status).not.toBe(0);
+        expect(contender.stderr).toContain('Timed out waiting for the Home PROD deployment lock');
+        expect(existsSync(candidateRelease)).toBe(true);
+        expect(existsSync(lock)).toBe(true);
+        writeFileSync(gate, 'continue');
+
+        expect(await deployment.completed, deployment.output()).toBe(status);
+        expect(readlinkSync(join(input.deployHome, 'deploy/current'))).toBe(candidateRelease);
+        expect(readlinkSync(input.webCurrent)).toBe(join(input.root, 'web/releases', input.sha));
+        expect(existsSync(candidateRelease)).toBe(true);
+        expect(readFileSync(running, 'utf8').trim()).toBe(candidateRelease);
+        expect(readFileSync(join(input.expectedPm2Home, 'dump.pm2'), 'utf8')).toBe(
+          'verified-new-release\n'
+        );
+        expect(existsSync(lock)).toBe(false);
+      } finally {
+        writeFileSync(gate, 'continue');
+        if (deployment.child.exitCode === null) deployment.child.kill('SIGTERM');
+        await deployment.completed;
+      }
+    }
+  );
+
+  it.each(['SIGTERM', 'SIGINT', 'SIGHUP'] as const)(
+    'settles failed reload and removes stopped candidate before honoring %s',
+    async (signal) => {
+      const input = deploymentFixture();
+      const gate = join(input.root, 'reload.gate');
+      const running = join(input.expectedPm2Home, 'fixture-candidate-running');
+      const lock = join(input.deployHome, '.local/state/intexuraos-prod/deploy.lock.portable');
+      const deployment = startDeployment(input, {
+        HOME_PROD_TEST_RELOAD_GATE: gate,
+        RELOAD_FAIL: '1',
+      });
+      try {
+        await expect
+          .poll(() => existsSync(running) && readFileSync(running, 'utf8').trim() !== '', {
+            timeout: 5000,
+          })
+          .toBe(true);
+        const candidateRelease = readFileSync(running, 'utf8').trim();
+        expect(deployment.child.kill(signal)).toBe(true);
+        const contender = runDeployment(input, { DEPLOY_LOCK_TIMEOUT_SECONDS: '0' });
+        expect(contender.status).not.toBe(0);
+        expect(contender.stderr).toContain('Timed out waiting for the Home PROD deployment lock');
+        expect(existsSync(candidateRelease)).toBe(true);
+        expect(existsSync(running)).toBe(true);
+        writeFileSync(gate, 'continue');
+
+        expect(await deployment.completed, deployment.output()).toBe(71);
+        expect(readlinkSync(join(input.deployHome, 'deploy/current'))).toBe(input.oldCodeRelease);
+        expect(readlinkSync(input.webCurrent)).toBe(input.oldWebRelease);
+        expect(existsSync(candidateRelease)).toBe(false);
+        expect(existsSync(running)).toBe(false);
+        expect(existsSync(join(input.expectedPm2Home, 'dump.pm2'))).toBe(false);
+        expect(existsSync(lock)).toBe(false);
+      } finally {
+        writeFileSync(gate, 'continue');
+        if (deployment.child.exitCode === null) deployment.child.kill('SIGTERM');
+        await deployment.completed;
+      }
+    }
+  );
+
+  it('replaces symlink pointers without moving links into the previous release directories', () => {
+    const input = deploymentFixture();
+
+    const result = runDeployment(input);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(readlinkSync(join(input.deployHome, 'deploy/current'))).not.toBe(input.oldCodeRelease);
+    expect(readlinkSync(input.webCurrent)).toBe(join(input.root, 'web/releases', input.sha));
+    expect(readdirSync(input.oldCodeRelease)).toEqual(['marker']);
+    expect(readdirSync(input.oldWebRelease)).toEqual(['index.html']);
+  });
+
   it.each(['missing', 'incompatible'])(
     'uses installed candidate dependencies when the caller has %s dotenv',
     (callerDependency) => {

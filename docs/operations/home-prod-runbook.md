@@ -239,5 +239,27 @@ fresh live evidence. Do not infer operational restoration from source tests.
   operator must not run `pm2 resurrect` manually.
 - After partial projection publication: rerun the complete loader with the same
   reviewed numeric version; never repair individual fields.
+- Cancellation during final PM2 reload: TERM, INT, and HUP are deferred until
+  the reload and activation state settle. A successful reload retains the new
+  links, immutable release, and saved dump, then returns signal status 143, 130,
+  or 129 respectively. A failed reload completes normal failure cleanup and
+  returns its failure status. Use release verification to establish which
+  release is active after cancellation.
 - Never prune release artifacts during deployment. Storage cleanup is a
   separate reviewed operation.
+
+### Lock guard recovery
+
+The deployment driver and secret loader acquire private `mkdir` guards as well
+as the required Linux `flock` locks. Code and web pointer replacement and rollback
+use atomic renames within the same filesystem. For the dedicated user deployment,
+the guards are `deploy.lock.portable` and `secret-package.lock.portable` under
+`/home/intexuraos-prod/.local/state/intexuraos-prod/`.
+
+SIGKILL or power loss may leave either guard behind. A lock timeout alone never
+proves that a guard is stale, and the scripts never reclaim guards automatically.
+Before removing a guard, the operator must confirm that no active deployment or
+loader invocation, surviving child process, or competing queued deployment can
+still use it. Only then may the operator remove that exact empty guard directory
+with `rmdir`. Leave file locks, live guards, and nonempty guard directories intact.
+Resume deployment only after the recovery check is complete.

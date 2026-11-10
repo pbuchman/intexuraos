@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 function fail(message) {
@@ -15,11 +16,38 @@ if (!Number.isInteger(daemonPid) || daemonPid <= 0 || expectedUid === undefined)
 }
 
 function processIdentity(pid) {
-  const status = readFileSync(`/proc/${pid}/status`, 'utf8');
-  const parent = /^PPid:\s+(\d+)$/mu.exec(status);
-  const uid = /^Uid:\s+(\d+)\s+/mu.exec(status);
-  if (parent === null || uid === null) fail(`Process identity is unavailable for pid ${pid}`);
-  return { parentPid: Number(parent[1]), uid: Number(uid[1]) };
+  let parent;
+  let uid;
+  try {
+    if (process.platform === 'linux') {
+      const status = readFileSync(`/proc/${pid}/status`, 'utf8');
+      parent = /^PPid:\s+(\d+)$/mu.exec(status)?.[1];
+      uid = /^Uid:\s+(\d+)\s+/mu.exec(status)?.[1];
+    } else if (process.platform === 'darwin') {
+      // Use the real uid, matching the first Uid field in Linux /proc/status.
+      // Invoke the system binary directly and admit exactly one numeric row.
+      const result = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'ppid=', '-o', 'ruid='], {
+        encoding: 'utf8',
+        timeout: 5000,
+      });
+      if (result.status === 0) {
+        const identity = /^\s*(\d+)[ \t]+(\d+)\s*$/u.exec(result.stdout);
+        parent = identity?.[1];
+        uid = identity?.[2];
+      }
+    }
+  } catch {
+    fail(`Process identity is unavailable for pid ${pid}`);
+  }
+  if (parent === undefined || uid === undefined) {
+    fail(`Process identity is unavailable for pid ${pid}`);
+  }
+  const parentPid = Number(parent);
+  const realUid = Number(uid);
+  if (!Number.isSafeInteger(parentPid) || !Number.isSafeInteger(realUid)) {
+    fail(`Process identity is unavailable for pid ${pid}`);
+  }
+  return { parentPid, uid: realUid };
 }
 
 function isDescendantOf(pid, ancestorPid) {

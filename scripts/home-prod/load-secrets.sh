@@ -79,6 +79,8 @@ cleanup() {
   exit "${status}"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -161,10 +163,16 @@ validate_user_projection_boundary() {
     || fail 'User projection requires a root-fetched offline payload'
   [[ -f "${SECRET_PACKAGE_PAYLOAD_FILE}" && ! -L "${SECRET_PACKAGE_PAYLOAD_FILE}" ]] \
     || fail 'Offline payload must be a regular file, not a symlink'
-  local payload_mode=""
-  payload_mode="$(stat -c '%a' "${SECRET_PACKAGE_PAYLOAD_FILE}")"
-  (( (8#${payload_mode} & 8#177) == 0 )) \
+  node --input-type=module - "${SECRET_PACKAGE_PAYLOAD_FILE}" <<'NODE' \
     || fail 'Offline payload permissions must be mode 0600 or more restrictive'
+import { lstatSync } from 'node:fs';
+try {
+  const status = lstatSync(process.argv[2]);
+  if (!status.isFile() || (status.mode & 0o177) !== 0) process.exit(1);
+} catch {
+  process.exit(1);
+}
+NODE
 
   node --input-type=module - \
     "${DEPLOY_HOME}" \
@@ -224,6 +232,9 @@ require_preconditions() {
   command -v install >/dev/null 2>&1 || fail 'install is required'
   if [[ "${PROJECTION_MODE}" == 'user' ]]; then
     validate_user_projection_boundary
+    if [[ "$(uname -s)" != 'Darwin' ]]; then
+      command -v flock >/dev/null 2>&1 || fail 'flock is required'
+    fi
   elif [[ "${SKIP_OWNERSHIP}" != '1' ]]; then
     [[ "${EUID}" -eq 0 ]] || fail 'Production secret publication must run as root'
     command -v flock >/dev/null 2>&1 || fail 'flock is required'
@@ -251,18 +262,20 @@ acquire_lock() {
   install -d -m 700 "$(dirname "${SECRET_PACKAGE_LOCK_FILE}")"
   : > "${SECRET_PACKAGE_LOCK_FILE}"
   chmod 600 "${SECRET_PACKAGE_LOCK_FILE}"
+  local lock_directory="${SECRET_PACKAGE_LOCK_FILE}.portable"
+  local deadline=$((SECONDS + SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS))
+  while ! mkdir -m 700 "${lock_directory}" 2>/dev/null; do
+    (( SECONDS < deadline )) || fail 'Timed out waiting for production package lock'
+    sleep 0.05
+  done
+  PORTABLE_LOCK_DIR="${lock_directory}"
   if command -v flock >/dev/null 2>&1; then
     exec {HOST_LOCK_FD}<>"${SECRET_PACKAGE_LOCK_FILE}"
     flock --exclusive --wait "${SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS}" "${HOST_LOCK_FD}" || fail 'Timed out waiting for production package lock'
     return
   fi
-  [[ "${SKIP_OWNERSHIP}" == '1' ]] || fail 'flock is required'
-  PORTABLE_LOCK_DIR="${SECRET_PACKAGE_LOCK_FILE}.portable"
-  local deadline=$((SECONDS + SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS))
-  while ! mkdir -m 700 "${PORTABLE_LOCK_DIR}" 2>/dev/null; do
-    (( SECONDS < deadline )) || fail 'Timed out waiting for production package lock'
-    sleep 0.05
-  done
+  [[ ( "${PROJECTION_MODE}" == 'user' && "$(uname -s)" == 'Darwin' ) \
+    || "${SKIP_OWNERSHIP}" == '1' ]] || fail 'flock is required'
 }
 
 render_package() {
