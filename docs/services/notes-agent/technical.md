@@ -2,7 +2,7 @@
 
 ## Overview
 
-Notes-agent provides user-scoped CRUD operations for text notes with tag-based organization and source tracking. Deployed as a Cloud Run service using Fastify. Persists data in Firestore. Runs on port 8121 locally.
+Notes-agent provides user-scoped CRUD operations for text notes with tag-based organization and source tracking. Runs as a Fastify HTTP service. Persists data in Firestore. Runs on port 8121 locally.
 
 ## Architecture
 

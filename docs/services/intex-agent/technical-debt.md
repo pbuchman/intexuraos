@@ -13,6 +13,8 @@
 - Keep confirmation replay, stale calendar snapshots, duration defaults, and partially successful multi-event updates covered.
 - Keep preference optimistic concurrency and immutable versions separate from External Save configuration.
 - Preserve strict mocked action execution and sanitized evidence in Test Runs and Matrix corpus evaluations.
+- Preserve the 30-second runtime-settings deadline and sanitized timeout failure without adding implicit retries or model fallback.
+- Keep preparation acknowledgments separate from final notification outcomes, including multipart reply correlation and the calendar-query success requirement.
 
 ## Watch Points
 

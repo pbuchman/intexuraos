@@ -20,6 +20,8 @@ To configure daily lookahead, call `PUT /schedules/calendar-daily-lookahead` wit
 
 Inspect `GET /schedules/calendar-daily-lookahead` for delivery readiness and the next run. This needs the connected private WhatsApp/Matrix outbound path. The schedule starts a fresh Intex conversation requesting events in the next 24 hours. Set `enabled` to `false` to pause it.
 
+After a scheduled run, inspect `latestRun.stage`, `latestRun.deliveryStatus`, and `latestRun.deliveredAt` in the same response. `operationalState` summarizes that run, while `delivery` describes connection readiness. Matrix acceptance (`latestRun.status: sent`) and the preparation acknowledgment are intermediate steps. Confirm the final summary is `delivered` and has a delivery timestamp; a pending run can expire after six hours.
+
 
 ## Part 1: Hello World — List Events
 

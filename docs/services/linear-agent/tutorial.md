@@ -575,6 +575,10 @@ curl -X DELETE http://localhost:3000/failed-issues/FAILED_ID \
 
 ---
 
+## Investigate a Transient Sync Failure
+
+Before repeating a failed sync, inspect the owning error report for `linear.operation`, `linear.attempt_count`, and `linear.attempt_N`. Each attempt records its outcome, duration, and retry delay without copying SDK query/response contents. Relationship reads retry independently up to three attempts; successful reads are retained. A terminal upstream error still needs investigation and does not confirm later recovery.
+
 ## Troubleshooting
 
 | Symptom                         | Likely Cause                 | Solution                                                            |

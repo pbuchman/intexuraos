@@ -494,6 +494,12 @@ All time-aware features across the platform now use your local timezone.
 
 Connect a Google account for calendar integration.
 
+### Local Browser Setup (Google and GitHub)
+
+For localhost use, start the web app and user-service. Initiate the connection through the web app's `/api/user/oauth/connections/{provider}/initiate` path so the callback retains the browser host. Vite dev and preview forward `/oauth/connections/{provider}/callback` to user-service without changing its path or Host; the service worker excludes it from its navigation fallback.
+
+Register the exact callback URI with the provider, such as `http://localhost:5173/oauth/connections/google/callback` or `http://localhost:5173/oauth/connections/github/callback`. Use the actual browser port. Calling user-service directly instead creates a callback for that service origin. Set `INTEXURAOS_WEB_APP_URL` to the intended local web origin for the settings-page redirect after token exchange.
+
 ### Step 9.1: Initiate OAuth flow
 
 ```bash

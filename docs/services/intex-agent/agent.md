@@ -32,6 +32,8 @@ Every internal route must log incoming requests before auth validation.
 - `update_calendar_event` acts on an exact queried event and preserves unspecified fields. Multi-event confirmations contain independent updates.
 - Use `/preferences/prompt` and its item/version routes for versioned instructions; `/preferences` owns External Save configuration.
 - Model selection belongs to user-service. Gated `/test-runs` views expose sanitized operator evidence and never authorize real tools in evaluations.
+- Runtime-settings resolution has a 30-second deadline. Failure keeps the existing sanitized response; it does not retry or choose a fallback model.
+- Preserve scheduled notification source/run context through the acknowledgment and every final reply part. Only a completed `query_calendar_events` outcome satisfies a calendar-summary run; WhatsApp delivery confirmation remains separate.
 
 ## Implementation Notes
 

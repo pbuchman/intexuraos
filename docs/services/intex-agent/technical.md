@@ -206,3 +206,5 @@ Sessions are stored in `intex_agent_sessions`; timeline events are stored in `in
 The message handler finds the newest open session for the user, starts a new one when none exists, supersedes an open session on explicit new-session commands, and expires stale sessions according to `INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS`.
 
 After completed, clarification, no-action, or unsupported outcomes, the session remains `waiting_for_user`. Replies are published with the original WhatsApp message ID as `replyToMessageId` and the session ID as `correlationId`.
+
+Scheduled calendar ingests additionally carry `notificationContext` with the source and run ID. Intex publishes a separate preparation acknowledgment before runtime-settings resolution, then a final reply with an explicit outcome. A calendar run succeeds only when the completed tool is `query_calendar_events`; an unrelated completed action cannot satisfy it. Final replies split into bounded parts with stable per-part idempotency keys and `partIndex`/`partCount` metadata. WhatsApp Service correlates their delivery/read receipts; neither publishing the acknowledgment nor finishing the tool proves final delivery.

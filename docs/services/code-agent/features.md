@@ -142,6 +142,10 @@ When CI checks fail on a bot-authored PR, the system detects the failure through
 
 **Example:** The agent opens a PR and CI fails because a snapshot test needs updating. The system detects the failure, creates a follow-up task to update the snapshot, and the fix is pushed to the same branch - all before you check the dashboard.
 
+### Clearer Failure Explanations
+
+Task failures retain the available SentryBox or Linear diagnostic evidence. Provider usage-limit failures preserve reset details when the worker supplies them. An investigation that lacks the evidence needed for a justified change stops with a specific explanation instead of blindly repeating the same investigation. When automatic retries run out, the notification path avoids publishing a second generic failure notice after a successful exhaustion notice.
+
 ### Self-Healing Failure Triage
 
 When a task fails, the system classifies the failure and determines whether to auto-retry on a different worker, retry on the same worker, or escalate to the dashboard. Tasks that fail with exit code overrides - indicating transient infrastructure issues - are automatically retried up to three times, each attempt excluding the worker location that failed. The triage records which worker failed and routes the retry elsewhere, maximizing the chance of success without human intervention.
@@ -152,7 +156,7 @@ When a task fails, the system classifies the failure and determines whether to a
 
 A dedicated status endpoint (`PATCH /internal/code-tasks/:id/status`) ensures task completion is committed to Firestore reliably, separate from the side-effect-heavy webhook. The orchestrator writes the terminal status first via this lightweight, idempotent endpoint, then fires the full completion webhook for notifications, Linear updates, and PR labeling. If the webhook fails, the task is already in the correct terminal state - no more stalled tasks from webhook timeouts.
 
-Callback routing is owned by the task, not by the worker machine that happens to run it. Code Agent records callback owner state (`dev`, `prod`, or `custom`) from the task webhook URL, normalizes public dev/prod callbacks through `/api/code/internal/...`, and exposes callback success or failure diagnostics on the task.
+Callback routing is owned by the task, not by the worker machine that happens to run it. Code Agent records callback owner state (`prod` or `custom`) from the task webhook URL. Only `intexuraos.cloud` receives public `/api/code` normalization; former DEV and other custom hosts retain their supplied callback bases. The task exposes callback success or failure diagnostics.
 
 **Example:** The orchestrator finishes a task and the completion webhook times out due to a transient network issue. Because the status was already committed via the dedicated endpoint, the task shows the correct final state in the dashboard immediately. The webhook retries and handles the side effects later.
 

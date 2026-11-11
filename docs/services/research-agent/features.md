@@ -12,7 +12,7 @@ Research Agent automates that entire workflow: send one prompt, receive one synt
 
 ### Parallel Multi-Model Research
 
-Submit a single research prompt and Research Agent dispatches it simultaneously to up to six selected OpenRouter models — Gemini, Claude, GPT, Grok, Qwen, and others. Each model runs concurrently in its own Cloud Run instance, so a multi-model research takes roughly the same wall-clock time as a single call.
+Submit a single research prompt and Research Agent dispatches it simultaneously to up to six selected OpenRouter models — Gemini, Claude, GPT, Grok, Qwen, and others. Model calls are processed independently through Pub/Sub; completion time depends on the selected models and available processing capacity.
 
 **Example:** A user asks "What are the risks of adopting a microservices architecture for a 10-person startup?" All five configured models research the question in parallel. Within minutes, the user has five expert perspectives ready for synthesis.
 

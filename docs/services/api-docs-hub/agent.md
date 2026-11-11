@@ -7,9 +7,9 @@
 | Attribute   | Value                                                                   |
 | ----------- | ----------------------------------------------------------------------- |
 | **Name**    | api-docs-hub                                                            |
-| **Role**    | Aggregates OpenAPI specs from 17 services into a single Swagger UI      |
+| **Role**    | Aggregates a selected catalog of up to 17 service specs into Swagger UI |
 | **Goal**    | Provide a unified documentation portal for all IntexuraOS service APIs  |
-| **Version** | 3.5.0 (package) / 0.0.5 (OpenAPI spec)                                  |
+| **Version** | See package.json for package version; 0.0.5 OpenAPI spec |
 
 ---
 
@@ -23,7 +23,7 @@
 
 **Note:** This endpoint serves an HTML page (Swagger UI). It is browser-only and not useful for programmatic access by agents.
 
-**Output:** Interactive Swagger UI HTML page with a service selector dropdown listing all 17 configured services.
+**Output:** Interactive Swagger UI HTML page with a service selector dropdown listing the selected services (17 by default).
 
 ### Check Health
 
@@ -85,7 +85,8 @@ interface HealthCheck {
 
 **Requires:**
 
-- All 17 `INTEXURAOS_*_OPENAPI_URL` environment variables set at startup
+- All 17 `INTEXURAOS_*_OPENAPI_URL` variables by default, or only the selected catalog's URLs when `INTEXURAOS_API_DOCS_EXPECTED_SERVICES` is set
+- If set, a selector containing comma-separated known service IDs, with no empty entries or duplicates
 - Target services must be running and CORS-enabled for the browser to fetch their specs
 
 ---
@@ -143,7 +144,7 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 | 200    | Success                              | None needed                                          |
 | 404    | Unknown path                         | Use `/docs` or `/health` only                        |
 | 500    | Server error                         | Check logs for startup misconfiguration              |
-| N/A    | Service fails to start               | Verify all 17 env vars are set; check `direnv allow` |
+| N/A    | Service fails to start               | Verify the selected catalog and all required URLs |
 
 ---
 
@@ -159,10 +160,10 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 
 ## Architecture
 
-The hub serves Swagger UI HTML to the browser. The browser then fetches OpenAPI specs directly from each of the 17 target services. The hub does not proxy or cache any specs.
+The hub serves Swagger UI HTML to the browser. The browser then fetches OpenAPI specs directly from the configured target services. The hub does not proxy or cache any specs.
 
 1. Browser sends `GET /docs` to API Docs Hub
-2. Hub returns Swagger UI HTML with `urls` config listing all 17 services
+2. Hub returns Swagger UI HTML with `urls` config listing the selected services
 3. Browser fetches `GET /openapi.json` from the selected target service
 4. Browser renders the interactive API documentation
 

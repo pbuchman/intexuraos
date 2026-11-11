@@ -41,9 +41,12 @@ cat >> .envrc.local << 'EOF'
 export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
 export INTEXURAOS_REPOSITORY_PATH=$HOME/.code-orchestrator/repo
 export INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman
-export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
 EOF
 ```
+
+Do not set a Code Agent URL override for the production-owned Home Dev worker. The host generator pins its fallback to `https://intexuraos.cloud/api/code` and usage events to the corresponding production endpoint. A task's `webhookUrl` remains authoritative for its callbacks; follow the [README callback-ownership contract](../../../workers/orchestrator/README.md#environment-variables) when configuring a developer host.
+
+Source: `scripts/generate-orchestrator-env.mjs:127-139`; `workers/orchestrator/README.md:87-95`.
 
 Reload environment:
 
@@ -495,7 +498,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `401 Invalid signature`                           | HMAC secret mismatch                  | Match `INTEXURAOS_ORCHESTRATOR_SECRET` with UI setting                                                                                            |
 | Docker `name already in use`                      | Orphaned container from previous run  | Periodic stale cleanup handles this; manual: `docker rm -f $(docker ps -aq --filter name=code-worker-)`                                           |
 | `Network not found`                               | Missing Docker network                | `./scripts/setup-worker-network.sh`                                                                                                               |
-| `Image not found`                                 | Code worker image not pulled/built    | `docker pull europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest`                                            |
+| Credential refresh image resolution failed | Worker image pull or registry access failed | Inspect the image-resolution error and registry access. Refresh containers start only after resolution; concurrent refreshes share the pending pull. |
 | Tests skipped (E2E)                               | Docker network or test image missing  | See Part 3 prerequisites                                                                                                                          |
 | `Cannot find module '@intexuraos'`                | Packages not built                    | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |

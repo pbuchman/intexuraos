@@ -75,12 +75,23 @@ Account responses expose `sourceAccountId` so the authenticated user can identif
 | `POST` | `/internal/whatsapp/delivery-readiness/get` | Resolve delivery readiness for the user's first mapped phone number |
 | `POST` | `/internal/whatsapp/outbound-deliveries/get` | Read a user-bound idempotent delivery receipt |
 | `POST` | `/internal/whatsapp/outbound-deliveries/retry` | Authorize one byte-identical retry after a definitive failure |
+| `POST` | `/internal/whatsapp/notification-runs/get` | Observe a user-bound notification run's stage and final delivery |
 | `POST` | `/internal/whatsapp/private/accounts/:sourceAccountId/erasure` | Start an idempotent, generation-fenced physical privacy cascade |
 | `GET` | `/internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId` | Read content-free physical erasure progress |
 | `POST` | `/internal/whatsapp/pubsub/conversation-assistant-prepare` | Prepare an initial Conversation Assistant snapshot |
 | `POST` | `/internal/whatsapp/pubsub/conversation-assistant-context-attachment-prepare` | Prepare one frozen continuation update |
 
 Every internal route must call `logIncomingRequest()` before auth validation.
+
+## Notification Delivery Evidence
+
+Provider acceptance and transport confirmation are separate. Outbound observations include `acceptedAt` when known and `transportConfirmation` with `pending`, `delivered`, `read`, or `failed` plus applicable timestamps and a safe failure code. A provider `sent` callback alone does not prove delivery.
+
+The webhook validates the signature and configured WhatsApp account/phone before persisting status callbacks, including status-only and mixed batches. Receipts are keyed by phone-number ID and provider message ID, so a callback received before acceptance persistence can be linked later. Delivered/read evidence cannot be downgraded by a later failure callback.
+
+Tracked calendar triggers carry a registered marker through Matrix ingress into Intex. `/internal/whatsapp/notification-runs/get` accepts `userId`, `source`, and `runId` under internal auth. It reports `awaiting_ingress`, `processing`, `awaiting_delivery`, `delivered`, or `failed`. Acknowledgments do not complete a run: every expected final reply part must be delivered or read. A failed final outcome is reported as failed even when its explanatory reply reaches the phone.
+
+`GET /internal/monitoring/status` requires internal auth and returns the webhook retry job heartbeat, pending/failed notification counts, latest delivery time, and Firestore monitoring diagnostics. Process-lifetime snapshot caches watch unexpired intents and markers; durable heartbeat state survives process restarts.
 
 ## Message Digest Source and Delivery
 
@@ -173,6 +184,8 @@ Private image, audio, video, and file media synchronized from Matrix can be copi
 Stored private media uses `whatsapp/private/{userId}/{messageId}/{mediaId}.{ext}` and `whatsapp/private/{userId}/{messageId}/{mediaId}_thumb.jpg`. Browser reads use owner-checked signed URL routes. Internal processors use the internal signed URL route with `sourceAccountId` validation.
 
 Messages without stored media remain placeholders until media recovery or backfill supplies valid metadata. Backfill and signed access preserve account-generation and ownership checks.
+
+The Matrix adapter has an independent deployment and progress-based health check. Policy-skipped relation repairs require explicit review; generic-file media recovery updates stored media without replaying message ingest. Valid unstable poll responses are retained as raw-backed `unknown` messages, without inventing message text or reactions. See the [Matrix setup and recovery guide](../../setup/16-private-whatsapp-matrix-sync.md).
 
 ## Voice Boundary
 

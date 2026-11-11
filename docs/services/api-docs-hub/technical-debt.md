@@ -24,7 +24,6 @@
 3. **Authentication helper** — Built-in token management in the Swagger UI to reduce friction during API testing
 4. **API version selector** — Support displaying multiple versions of each service's API
 5. **Cross-spec search** — Global endpoint search across all aggregated services
-6. **ecosystem.config.cjs integration** — Add api-docs-hub to the PM2 ecosystem config for local development parity
 
 ---
 
@@ -44,11 +43,10 @@ The `@intexuraos/common-core` package is still listed as a dependency in `packag
 
 ## Test Coverage Gaps
 
-Tests cover both source files:
+Existing tests cover server behavior, configuration, and startup:
 - `server.test.ts` — Health endpoint response shape and status, Swagger UI serving and OpenAPI spec generation
-- `config.test.ts` — Environment variable validation (missing vars throw), URL trimming behavior
-
-Coverage is adequate for this service's scope. There are no untested code paths in the current source.
+- `config.test.ts` — Required URLs, selected catalogs, and URL trimming
+- `startup.test.ts` — Basic-profile startup without excluded URLs, missing enabled URLs, and default full-profile failure on a missing URL
 
 ---
 

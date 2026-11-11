@@ -210,6 +210,10 @@ The following items improved quality and capability since v3.5.0:
 
 ---
 
+## Current Refresh and Investigation Corrections
+
+Claude/Codex refresh containers now wait for authenticated worker-image resolution. The shared pull survives individual caller deadlines until Docker settles, preventing duplicate watchdog pulls. Existing tests cover concurrent callers, deadline expiry, late completion, pull failure, and provider-specific refresh mounts. Sentry evidence failures receive a dedicated terminal code instead of a generic retryable runtime error when no runtime failure is present.
+
 ## Resolved Issues
 
 | Date       | Issue                                     | Resolution                                                                        |

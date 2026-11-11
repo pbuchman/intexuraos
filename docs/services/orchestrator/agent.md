@@ -642,6 +642,13 @@ Planning accepts the SIMPLE or PLAN-DOC artifact shape, requires one evidence/pl
 
 Before a guarded restart, inspect the versioned health and persistent admission-freeze evidence documented in [the health and admission-freeze contract](technical.md#hmac-authentication); do not infer drain completion from the running-task count alone.
 
+## Refresh and Evidence Contracts
+
+- Credential refresh resolves the worker image before creating Claude or Codex refresh containers. Concurrent callers share the pending pull; each has a 15-minute deadline that does not cancel the underlying Docker operation.
+- Sentry investigations use only issue details and issue-scoped events through the selected private `error_hub` MCP. Unsupported evidence calls are not a fallback.
+- A Sentry failed outcome prefixed `SENTRY_EVIDENCE_UNAVAILABLE:` with no runtime error maps to `SENTRY_EVIDENCE_UNAVAILABLE`; the code-agent retry classifier treats that code as terminal. Preserve the concrete missing evidence in the explanation.
+- The Sentry prompt requires independent internal review before a PR.
+
 ## Constraints
 
 - Maximum concurrent tasks: configurable (default 2, via `INTEXURAOS_WORKER_CAPACITY`)

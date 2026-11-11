@@ -2,7 +2,7 @@
 
 ## Overview
 
-Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables real-time webhook synchronization with multi-user fan-out, full issue sync, issue validation, AI title generation, cross-service context proxying, programmatic issue management for code agents, assignment-triggered code tasks, and AI-powered issue pruning with user-reviewed deletion. The service runs on Cloud Run with auto-scaling and uses the `@linear/sdk` for GraphQL API communication. The dashboard reads from local Firestore (populated by webhook sync) for fast, offline-capable issue listing.
+Linear Agent provides bidirectional integration between IntexuraOS and Linear project management. It enables real-time webhook synchronization with multi-user fan-out, full issue sync, issue validation, AI title generation, cross-service context proxying, programmatic issue management for code agents, assignment-triggered code tasks, and AI-powered issue pruning with user-reviewed deletion. The Fastify service uses the `@linear/sdk` for GraphQL API communication. The dashboard reads from local Firestore (populated by webhook sync) for fast, offline-capable issue listing.
 
 ## Architecture
 
@@ -235,6 +235,22 @@ sequenceDiagram
     LA-->>User: PruneDeleteStats
 ```
 
+## Scheduled-Job Monitoring
+
+`GET /internal/monitoring/status` requires `x-internal-auth`; OIDC scheduler authentication does not authorize this read. It logs the incoming request before auth and returns `401 UNAUTHORIZED` for invalid internal authentication. A successful standard response envelope contains `data.schemaVersion: 1`, `data.observedAt` (ISO timestamp), `data.jobs`, and aggregate `data.firestoreMonitoring` cache/listener diagnostics.
+
+The two records are `linear_sync_hourly` for `POST /internal/linear/sync-all` and `linear_issues_prune_hourly` for `POST /internal/linear/prune-issues`. Each has `key`, nullable ISO timestamps `lastStartedAt`, `lastFinishedAt`, `lastSucceededAt`, and `lastOutcome: 'never' | 'running' | 'succeeded' | 'failed'`. Both scheduled handlers start their record after their existing scheduler/internal auth check and finish it in `finally`, defaulting to failed until the successful path sets the outcome. These are execution records, separate from notification delivery.
+
+The owned store is `linear_job_heartbeats`. With `INTEXURAOS_ENVIRONMENT=prod` and `INTEXURAOS_MONITORING_STATE_DIR` set, it uses durable local state after a bounded initial Firestore seed; otherwise the shared store reads fixed job records through change-driven Firestore snapshot caches. Status does not scan execution history on every request. Persistence/watch failures remain failures rather than fabricated healthy state.
+
+Source: `apps/linear-agent/src/routes/internalRoutes.ts:73-80,505-544,720-807`; `apps/linear-agent/src/services.ts:33,87`; `packages/common-core/src/monitoring.ts:2-8`; `packages/infra-firestore/src/jobHeartbeat.ts:43-66,107-134`; `packages/infra-firestore/src/snapshotCache.ts:24-38,62-72`.
+
+## Current Code: Linear Read Recovery
+
+Issue-list state, children, parent, labels, and assignee reads each retry transient failures independently, with at most three attempts per failed read. Successful relationship reads are retained. Page reads use the same three-attempt limit; permanent errors do not retry. Exhaustion retains sanitized operation/status diagnostics and bounded per-attempt outcome, duration, and retry delay evidence. `fullSync` owns the final error report, with `linear.operation`, `linear.attempt_count`, and `linear.attempt_N` tags; relationship failures preserve the existing mapping-operation grouping. Handled attempts remain in logs without duplicate Sentry reports.
+
+Identifier validation also retries transient upstream failures up to three attempts and propagates `UPSTREAM_UNAVAILABLE`; its owning use case reports the final failure. This recovery does not establish that Linear is available or that a later sync succeeded.
+
 ## Changes Since v3.8.0
 
 - `POST /internal/issues` accepts optional `idempotencyKey` (1–1024 characters). The user ID and key determine a stable Linear issue ID. The route returns an existing issue before creation and rechecks after a failed create to recover a race; reuse the key only for the same logical issue.
@@ -312,6 +328,7 @@ Issue display endpoints (`display-batch`, `GET /internal/linear/issues/:identifi
 
 | Method | Path                                               | Purpose                                | Auth              |
 | ------ | -------------------------------------------------- | -------------------------------------- | ----------------- |
+| GET | `/internal/monitoring/status` | Aggregate scheduler execution and Firestore monitoring diagnostics | X-Internal |
 | POST   | `/internal/linear/process-action`                  | Process action via AI extraction       | X-Internal        |
 | GET    | `/internal/linear/issues/:identifier/validate`     | Validate issue identifier              | X-Internal        |
 | POST   | `/internal/linear/issues/generate-title`           | Generate title from description        | X-Internal        |

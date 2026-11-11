@@ -102,8 +102,8 @@ Flattened Review Agent `result` fields:
 
 ```mermaid
 graph TB
-    subgraph "Cloud (GCP)"
-        CA[code-agent<br/>Cloud Run]
+    subgraph "Platform and integrations"
+        CA[code-agent]
         SM[Host-rendered package<br/>GitHub PEM, configuration]
         GH[GitHub API<br/>Installation tokens]
     end
@@ -178,6 +178,12 @@ graph TB
     ACV -->|gh pr comment| GH
     ORCH --> SM
 ```
+
+## Current Code: Refresh Images and Investigation Evidence
+
+Claude and Codex credential refreshers resolve the worker image through the isolation provider before creating a refresh container. The resolver shares an in-flight authenticated image pull and applies a 15-minute deadline to each caller. A caller timeout does not cancel Docker or release the shared pull; later callers reuse it until it settles. Pull failure prevents refresh-container creation. Existing provider-specific credential mounts and container isolation remain in place.
+
+Sentry investigations use only the selected private `error_hub` MCP. The prompt limits evidence gathering to issue details and issue-scoped events, requires available operation/status/attempt evidence in failure explanations, and requires independent internal review before a PR. Insufficient evidence uses the `SENTRY_EVIDENCE_UNAVAILABLE:` prefix. For a Sentry failed outcome with that prefix and no runtime error, completion emits the terminal `SENTRY_EVIDENCE_UNAVAILABLE` code; actual runtime failures retain their retry classification. Provider-limit/reset text remains in the final failure explanation when available.
 
 ## Changes Since v3.8.0
 
