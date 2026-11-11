@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/whatsapp-pubsub-client",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -16,7 +16,8 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
-    "pino": "^10.1.0"
+    "pino": "^10.1.0",
+    "@intexuraos/http-contracts": "workspace:*"
   },
   "devDependencies": {
     "@google-cloud/pubsub": "^4.9.0",

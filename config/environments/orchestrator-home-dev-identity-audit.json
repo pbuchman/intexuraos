@@ -166,7 +166,7 @@
     },
     "serviceWiring": {
       "file": "workers/orchestrator/src/bootstrap/service-wiring.ts",
-      "reviewedSha256": "1bf8fc11281724e4802bdfe77043fc57e4476b087f6dce06decdb528de5f4163"
+      "reviewedSha256": "4da733575ae05b88ac7cf8ae4cf87181f54a3b2d568d865863170f44dd820511"
     },
     "sink": {
       "module": "@intexuraos/infra-sentry",

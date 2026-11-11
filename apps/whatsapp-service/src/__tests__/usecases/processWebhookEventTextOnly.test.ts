@@ -22,6 +22,7 @@ import type { MatrixCorpusIngressPort } from '../../domain/matrixCorpus/ports/ma
 import type { WhatsAppWebhookEvent } from '../../domain/whatsapp/ports/repositories.js';
 import type { WebhookPayload } from '../../routes/schemas.js';
 import type { OutboundMessage } from '../../domain/whatsapp/index.js';
+import type { NotificationDeliveryRepository } from '../../domain/whatsapp/ports/notificationDeliveryRepository.js';
 
 interface MutablePhoneMetadataPayload {
   object: 'whatsapp_business_account';
@@ -69,7 +70,10 @@ function logger(): Logger {
   } as unknown as Logger;
 }
 
-async function createHarness(matrixCorpusIngress?: MatrixCorpusIngressPort): Promise<Harness> {
+async function createHarness(
+  matrixCorpusIngress?: MatrixCorpusIngressPort,
+  notificationDeliveryRepository?: NotificationDeliveryRepository
+): Promise<Harness> {
   const webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
   const userMappingRepository = new FakeWhatsAppUserMappingRepository();
   const messageRepository = new FakeWhatsAppMessageRepository();
@@ -99,6 +103,7 @@ async function createHarness(matrixCorpusIngress?: MatrixCorpusIngressPort): Pro
     thumbnailGenerator: new FakeThumbnailGeneratorPort(),
     eventPublisher,
     ...(matrixCorpusIngress === undefined ? {} : { matrixCorpusIngress }),
+    ...(notificationDeliveryRepository === undefined ? {} : { notificationDeliveryRepository }),
   });
 
   return {
@@ -139,17 +144,116 @@ function prepareVideoMedia(whatsappCloudApi: FakeWhatsAppCloudApiPort, mediaId: 
 }
 
 describe('ProcessWebhookEventUseCase text-only branches', () => {
+  it('processes every message in a multi-entry webhook batch', async () => {
+    const current = await createHarness();
+    current.userMappingRepository.setMappingForPhone('15551234567', 'user-1');
+    const first = createTextPayload('first');
+    const next = createTextPayload('second');
+    const message = next.entry[0]?.changes[0]?.value.messages?.[0];
+    if (message === undefined) throw new Error('missing message');
+    message.id = 'second-message';
+    first.entry.push(...next.entry);
+    await current.useCase.execute(first, current.savedEvent, logger());
+    expect(current.eventPublisher.getIntexMessageIngestEvents().map((event) => event.text)).toEqual(
+      ['first', 'second']
+    );
+    expect(current.messageRepository.getAll()).toHaveLength(2);
+  });
+  it('normalizes a single message from a later webhook entry', async () => {
+    const current = await createHarness();
+    current.userMappingRepository.setMappingForPhone('15551234567', 'user-1');
+    const payload = createTextPayload('later entry');
+    payload.entry.unshift({ id: 'empty-entry', changes: [] });
+    await current.useCase.execute(payload, current.savedEvent, logger());
+    expect(current.eventPublisher.getIntexMessageIngestEvents().map((event) => event.text)).toEqual(
+      ['later entry']
+    );
+  });
+  it('stops a batch on a retryable reserved-ingress failure before processing later messages', async () => {
+    const current = await createHarness({ consumeReservedMessage: vi.fn() });
+    current.userMappingRepository.setFailFindUserByPhoneNumber(true);
+    const payload = createTextPayload(matrixCorpusText());
+    const next = createTextPayload('must wait for retry');
+    payload.entry.push(...next.entry);
+    expect(await current.useCase.execute(payload, current.savedEvent, logger())).toMatchObject({
+      ok: false,
+      retryable: true,
+    });
+    expect(current.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    expect(current.messageRepository.getAll()).toHaveLength(0);
+  });
+  it('completes statuses-only batches with earlier empty changes without parsing a missing message', async () => {
+    const current = await createHarness();
+    const payload = createTextPayload('unused');
+    const change = payload.entry[0]?.changes[0];
+    if (change === undefined) throw new Error('missing change');
+    delete change.value.messages;
+    const later = structuredClone(change);
+    later.value.statuses = [
+      { id: 'w', status: 'delivered', timestamp: '1', recipient_id: '15551234567' },
+    ];
+    payload.entry[0]?.changes.push(later);
+    await current.useCase.execute(payload, current.savedEvent, logger());
+    expect(await current.webhookEventRepository.getEvent(current.savedEvent.id)).toMatchObject({
+      ok: true,
+      value: { status: 'completed' },
+    });
+    expect(current.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+  });
+  it.each(['summary [intex-notification:bad]', `summary\n[intex-notification:${'a'.repeat(64)}]`])(
+    'rejects malformed or unconfigured notification markers: %s',
+    async (body) => {
+      const current = await createHarness();
+      current.userMappingRepository.setMappingForPhone('15551234567', 'user-1');
+      await current.useCase.execute(createTextPayload(body), current.savedEvent, logger());
+      expect(await current.webhookEventRepository.getEvent(current.savedEvent.id)).toMatchObject({
+        ok: true,
+        value: { status: 'ignored', ignoredReason: { code: 'INVALID_NOTIFICATION_MARKER' } },
+      });
+      expect(current.messageRepository.getAll()).toHaveLength(0);
+      expect(current.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    }
+  );
+  it('rejects a notification marker that is not owned by authenticated ingress', async () => {
+    const consume = vi.fn().mockResolvedValue(null);
+    const current = await createHarness(undefined, {
+      consume,
+    } as unknown as NotificationDeliveryRepository);
+    current.userMappingRepository.setMappingForPhone('15551234567', 'user-1');
+    await current.useCase.execute(
+      createTextPayload(`summary\n[intex-notification:${'a'.repeat(64)}]`),
+      current.savedEvent,
+      logger()
+    );
+    expect(consume).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
+    expect(await current.webhookEventRepository.getEvent(current.savedEvent.id)).toMatchObject({
+      ok: true,
+      value: { status: 'ignored', ignoredReason: { code: 'INVALID_NOTIFICATION_MARKER' } },
+    });
+    expect(current.messageRepository.getAll()).toHaveLength(0);
+    expect(current.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+  });
   it('consumes a mapped valid Matrix corpus header before ordinary side effects', async () => {
     const matrixCorpusIngress = {
       consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
     };
-    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness(matrixCorpusIngress);
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      messageRepository,
+      eventPublisher,
+      whatsappCloudApi,
+    } = await createHarness(matrixCorpusIngress);
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     const capability = `imc1_${'A'.repeat(43)}`;
     const capturedLogger = logger();
 
     await useCase.execute(
-      createTextPayload(`new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · ${capability}\n\nbody`),
+      createTextPayload(
+        `new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · ${capability}\n\nbody`
+      ),
       savedEvent,
       capturedLogger
     );
@@ -393,7 +497,15 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
   });
 
   it('rejects a mapped malformed reserved Matrix corpus header before ordinary side effects', async () => {
-    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      messageRepository,
+      eventPublisher,
+      whatsappCloudApi,
+    } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     const capturedLogger = logger();
 
@@ -405,7 +517,8 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
 
     const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
     expect(eventResult.ok && eventResult.value?.ignoredReason).toEqual({
-      code: 'MATRIX_CORPUS_RESERVED_HEADER_REJECTED', message: 'Reserved Matrix corpus header rejected',
+      code: 'MATRIX_CORPUS_RESERVED_HEADER_REJECTED',
+      message: 'Reserved Matrix corpus header rejected',
     });
     expect(messageRepository.getAll()).toHaveLength(0);
     expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
@@ -422,7 +535,15 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
   });
 
   it('returns a retryable static failure when recording a valid reserved terminal state fails', async () => {
-    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      messageRepository,
+      eventPublisher,
+      whatsappCloudApi,
+    } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     const capability = `imc1_${'A'.repeat(43)}`;
     vi.spyOn(webhookEventRepository, 'updateEventStatus').mockResolvedValueOnce(
@@ -430,7 +551,9 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     );
 
     const result = await useCase.execute(
-      createTextPayload(`new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · ${capability}\n\nbody`),
+      createTextPayload(
+        `new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · ${capability}\n\nbody`
+      ),
       savedEvent,
       logger()
     );
@@ -447,7 +570,15 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
   });
 
   it('returns a retryable static failure when recording a malformed reserved terminal state fails', async () => {
-    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      messageRepository,
+      eventPublisher,
+      whatsappCloudApi,
+    } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     vi.spyOn(webhookEventRepository, 'updateEventStatus').mockResolvedValueOnce(
       err({ code: 'INTERNAL_ERROR', message: 'storage failure' })
@@ -471,7 +602,15 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
   });
 
   it('keeps an ordinary new-session text message byte-compatible', async () => {
-    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      messageRepository,
+      eventPublisher,
+      whatsappCloudApi,
+    } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     const privacyLogger = logger();
 
@@ -482,7 +621,10 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     );
 
     expect(messageRepository.getAll()[0]?.text).toBe('new session: normal message');
-    expect(eventPublisher.getIntexMessageIngestEvents()[0]).toMatchObject({ text: 'new session: normal message', sourceType: 'whatsapp_text' });
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]).toMatchObject({
+      text: 'new session: normal message',
+      sourceType: 'whatsapp_text',
+    });
     expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(1);
     expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
     expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
@@ -512,7 +654,9 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     prepareAudioMedia(whatsappCloudApi, 'media-audio-1');
 
-    const payload = createAudioWebhookPayload({ mediaId: 'media-audio-1' }) as MutablePhoneMetadataPayload;
+    const payload = createAudioWebhookPayload({
+      mediaId: 'media-audio-1',
+    }) as MutablePhoneMetadataPayload;
     delete payload.entry[0]?.changes[0]?.value.metadata.phone_number_id;
 
     await useCase.execute(payload as unknown as WebhookPayload, savedEvent, logger());
@@ -571,7 +715,9 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     prepareVideoMedia(whatsappCloudApi, 'media-video-1');
 
-    const payload = createVideoWebhookPayload({ mediaId: 'media-video-1' }) as MutablePhoneMetadataPayload;
+    const payload = createVideoWebhookPayload({
+      mediaId: 'media-video-1',
+    }) as MutablePhoneMetadataPayload;
     delete payload.entry[0]?.changes[0]?.value.metadata.phone_number_id;
 
     await useCase.execute(payload as unknown as WebhookPayload, savedEvent, logger());

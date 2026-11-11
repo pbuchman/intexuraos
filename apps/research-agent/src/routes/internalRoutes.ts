@@ -414,8 +414,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       try {
         const researchResult = await researchRepo.findById(event.researchId);
-        if (!researchResult.ok || researchResult.value === null) {
-          request.log.error({ researchId: event.researchId }, 'Research not found');
+        if (!researchResult.ok) {
+          request.log.error(
+            { researchId: event.researchId, error: researchResult.error.message },
+            'Failed to load research'
+          );
+          // Preserve the existing Pub/Sub acknowledgment contract for repository errors.
+          return await reply.ok({});
+        }
+        if (researchResult.value === null) {
+          request.log.error(
+            { researchId: event.researchId, [SKIP_SENTRY_KEY]: true },
+            'Research not found'
+          );
           // PubSub ack pattern: always return 200 OK, errors logged separately
           return await reply.ok({});
         }
@@ -872,8 +883,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           '[3.1.1] Loading research from database'
         );
         const researchResult = await researchRepo.findById(event.researchId);
-        if (!researchResult.ok || researchResult.value === null) {
-          request.log.error({ researchId: event.researchId }, '[3.1.1] Research not found');
+        if (!researchResult.ok) {
+          request.log.error(
+            { researchId: event.researchId, error: researchResult.error.message },
+            '[3.1.1] Failed to load research'
+          );
+          return await reply.ok({});
+        }
+        if (researchResult.value === null) {
+          request.log.error(
+            { researchId: event.researchId, [SKIP_SENTRY_KEY]: true },
+            '[3.1.1] Research not found'
+          );
           return await reply.ok({});
         }
         const research = researchResult.value;

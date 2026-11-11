@@ -1,10 +1,10 @@
 /**
- * Pure mapping functions for Linear API responses.
- * These functions transform Linear SDK types to our internal domain types.
+ * Mapping functions for Linear API responses.
+ * Resolve SDK relationships and transform them to our internal domain types.
  */
 
 import { setTimeout as sleep } from 'node:timers/promises';
-import { type Issue, type Team } from '@linear/sdk';
+import { type Issue, type Team, LinearErrorType } from '@linear/sdk';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type {
   LinearIssue,
@@ -40,31 +40,44 @@ interface IssueState {
 }
 
 /* istanbul ignore next -- @preserve Maps Linear SDK Issue objects that require real API response */
-export async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[]> {
+export async function mapIssuesWithBatchedStates(
+  issues: Issue[],
+  retryOptions: RetryOnTransientOptions
+): Promise<LinearIssue[]> {
+  // Retry each relationship independently so a transient failure does not
+  // repeat successful reads. Access lazy SDK getters inside each attempt
+  // to create a fresh request instead of awaiting a rejected promise again.
+  const fetchRelation = async <T>(name: string, fetch: () => Promise<T>): Promise<T> =>
+    await retryOnTransient(fetch, `listIssues.${name}`, Date.now(), {
+      ...retryOptions, evidenceGroupingOperation: 'listIssues.mapIssuesWithBatchedStates',
+    });
+
   // Batch fetch all states
   const statePromises = issues.map(async (issue) => {
-    const state = issue.state;
-    return state !== undefined ? await state : null;
+    return await fetchRelation('state', async () => {
+      const state = issue.state;
+      return state !== undefined ? await state : null;
+    });
   });
   const states = await Promise.all(statePromises);
 
   // Batch fetch all child counts
   const childrenPromises = issues.map(async (issue) => {
-    const children = await issue.children();
+    const children = await fetchRelation('children', async () => await issue.children());
     return children.nodes.length;
   });
   const childCounts = await Promise.all(childrenPromises);
 
   // Batch fetch all parents
   const parentPromises = issues.map(async (issue) => {
-    const parent = await issue.parent;
+    const parent = await fetchRelation('parent', async () => await issue.parent);
     return parent?.id ?? null;
   });
   const parentIds = await Promise.all(parentPromises);
 
   // Batch fetch all labels
   const labelsPromises = issues.map(async (issue) => {
-    const labelsConnection = await issue.labels();
+    const labelsConnection = await fetchRelation('labels', async () => await issue.labels());
     return labelsConnection.nodes.map((l) => ({
       id: l.id,
       name: l.name,
@@ -75,7 +88,7 @@ export async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<Linea
 
   // Batch fetch all assignees
   const assigneePromises = issues.map(async (issue) => {
-    const assignee = await issue.assignee;
+    const assignee = await fetchRelation('assignee', async () => await issue.assignee);
     return assignee ? { id: assignee.id, name: assignee.name } : null;
   });
   const allAssignees = await Promise.all(assigneePromises);
@@ -237,6 +250,33 @@ export function mapLinearError(error: unknown): LinearError {
   return { code: 'API_ERROR', message };
 }
 
+/** Keep evidence without copying SDK messages containing queries, variables or response bodies. */
+export function linearFailureDiagnostics(error: unknown, operation: string): NonNullable<LinearError['diagnostics']> {
+  if (error instanceof LinearReadFailure) {
+    return {
+      ...linearFailureDiagnostics(error.cause, error.groupingOperation),
+      operation: error.operation,
+      attemptCount: error.attemptCount,
+      attempts: error.attempts,
+    };
+  }
+  const details = typeof error === 'object' && error !== null
+    ? error as { status?: unknown; type?: unknown }
+    : {};
+  const message = getErrorMessage(error, '');
+  const status = details.status ?? Number((/(?:\(Code:\s*|^)([1-5]\d{2})(?:\)|\s)/.exec(message))?.[1]);
+  const statusCode = typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+    ? status : undefined;
+  const type = Object.values(LinearErrorType).find((value) => value === details.type);
+  const networkCause = (/\b(ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|network request failed)\b/i.exec(message))?.[0];
+  const cause = type ?? networkCause ?? mapLinearError(error).code;
+  return {
+    operation,
+    message: `Linear ${operation} failed: ${cause}${statusCode === undefined ? '' : ` (HTTP ${String(statusCode)})`}`,
+    ...(statusCode === undefined ? {} : { statusCode }),
+  };
+}
+
 /**
  * Identifies transient Linear API failures (5xx server errors and transport-level
  * network errors) that should be retried with backoff before being reported to
@@ -271,7 +311,24 @@ export function isTransientLinearError(error: unknown): boolean {
   return transientNetworkPatterns.some((pattern) => message.includes(pattern));
 }
 
+type AttemptEvidence = NonNullable<NonNullable<LinearError['diagnostics']>['attempts']>[number];
+
+/** A per-read envelope; never attach mutable history to an SDK error shared by other reads. */
+class LinearReadFailure extends Error {
+  constructor(
+    cause: unknown,
+    readonly operation: string,
+    readonly groupingOperation: string,
+    readonly attemptCount: number,
+    readonly attempts: AttemptEvidence[]
+  ) {
+    super(getErrorMessage(cause, 'Unknown Linear API error'), { cause });
+  }
+}
+
 export interface RetryOnTransientOptions {
+  /** Opt-in bounded evidence for listIssues; retains the existing exception grouping. */
+  evidenceGroupingOperation?: string;
   /** Maximum number of retries (default: 3 = total of 4 attempts). */
   maxRetries?: number;
   /** Initial delay in ms; doubled each attempt (default: 500). */
@@ -305,19 +362,38 @@ export async function retryOnTransient<T>(
   // Bounded additive jitter derived from the seed; deterministic per call.
   const seedFraction = (Math.abs(jitterSeed) % 1000) / 1000;
 
+  const attempts: AttemptEvidence[] = [];
   let attempt = 0;
   let lastError: unknown;
   while (attempt <= maxRetries) {
+    const startedAt = performance.now();
     try {
       return await op();
     } catch (error) {
       lastError = error;
-      if (!isTransientLinearError(error) || attempt >= maxRetries) {
-        throw error;
-      }
+      const terminal = !isTransientLinearError(error) || attempt >= maxRetries;
       const exponentialDelay = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
       const jitter = Math.floor(exponentialDelay * seedFraction * 0.25);
-      const delayMs = Math.min(maxDelayMs, exponentialDelay + jitter);
+      const delayMs = terminal ? 0 : Math.min(maxDelayMs, exponentialDelay + jitter);
+      if (options.evidenceGroupingOperation !== undefined) {
+        const diagnostic = linearFailureDiagnostics(error, operationName);
+        attempts.push({
+          attempt: attempt + 1,
+          outcome: diagnostic.statusCode === undefined
+            ? diagnostic.message.slice(diagnostic.message.indexOf(' failed: ') + ' failed: '.length)
+            : `HTTP_${String(diagnostic.statusCode)}`,
+          durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+          delayMs,
+        });
+        // listIssues uses three attempts. Keep the envelope bounded even for other callers.
+        if (attempts.length > 3) attempts.shift();
+      }
+      if (terminal) {
+        if (options.evidenceGroupingOperation !== undefined) {
+          throw new LinearReadFailure(error, operationName, options.evidenceGroupingOperation, attempt + 1, attempts);
+        }
+        throw error;
+      }
       options.onRetry?.({ operationName, attempt: attempt + 1, delayMs, error });
       await sleep(delayMs);
       attempt += 1;

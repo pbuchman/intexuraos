@@ -22,12 +22,13 @@
 
 ---
 
-## What's New in v4.0.0
+## What's New in v4.0.1
 
-| Feature                             | Description                                                                                                                                              |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Custom WhatsApp Message Digests** | Schedule summaries of a private group or direct chat with your own instructions, preview the result, and review past digests delivered through WhatsApp. |
-| **WhatsApp Conversation Assistant** | Ask questions about private chats using a chosen date range, inspect the captured context, and follow streamed responses.                                |
+| Feature                              | Description                                                                                                                                              |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Custom WhatsApp Message Digests**  | Schedule summaries of a private group or direct chat with your own instructions, preview the result, and review past digests delivered through WhatsApp. |
+| **WhatsApp Conversation Assistant**  | Ask questions about private chats using a chosen date range, inspect the captured context, and follow streamed responses.                                |
+| **Calendar Summary Delivery Status** | See the latest scheduled calendar summary stage, its final WhatsApp delivery status, and the time delivery was confirmed.                                |
 
 See [CHANGELOG.md](CHANGELOG.md) for all release changes.
 
@@ -234,7 +235,7 @@ The system can only delegate work safely because the engineering discipline is s
 | ------------------ | ---------------------------------------------------------------------------- |
 | **Runtime**        | Node.js, TypeScript strict mode                                              |
 | **Web**            | React, Vite, TailwindCSS                                                     |
-| **Services**       | Fastify apps on Cloud Run / Hetzner PM2                                      |
+| **Services**       | Fastify apps on the dedicated Home PROD PM2 runtime                          |
 | **Workers**        | Cloud Functions and VM-hosted orchestrator                                   |
 | **Data**           | Firestore, Google Cloud Storage                                              |
 | **Messaging**      | Cloud Pub/Sub                                                                |
@@ -276,10 +277,20 @@ The platform provides fallback OpenRouter access, so you can run research and ge
 
 ### For Developers
 
+Full repository CI runs natively on macOS and Linux with Bash 4.1+ on `PATH`,
+Node.js 22+ and the `pnpm@10.29.3` version pinned in `package.json`. On macOS, put
+the directory containing a current Bash ahead of `/bin` on `PATH`. CI requires
+no Docker or cloud credentials:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run ci:tracked
+```
+
 > **Note:** Full setup requires Google Cloud credentials and external service accounts such as Auth0, WhatsApp Business, Linear, and provider API keys.
 
 ```bash
-# Prerequisites: Node.js 22+, pnpm 9+, Docker
+# Runtime prerequisites: Node.js 22+, pnpm 10.29.3, Docker
 pnpm install
 cp .envrc.local.example .envrc.local
 direnv allow

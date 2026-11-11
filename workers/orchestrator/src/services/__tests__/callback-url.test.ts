@@ -40,9 +40,9 @@ describe('task callback URLs', () => {
     );
   });
 
-  it('normalizes legacy dev root-internal callback URLs to public API callback URLs', () => {
+  it('does not apply production routing to the retired hostname', () => {
     expect(normalizeInternalCallbackUrl('https://dev.intexuraos.cloud/internal/logs')).toBe(
-      'https://dev.intexuraos.cloud/api/code/internal/logs'
+      'https://dev.intexuraos.cloud/internal/logs'
     );
   });
 
@@ -66,7 +66,7 @@ describe('task callback URLs', () => {
     );
   });
 
-  it('preserves dev callback URLs that already include /api/code/internal', () => {
+  it('preserves arbitrary callback URLs that already include /api/code/internal', () => {
     expect(
       normalizeInternalCallbackUrl(
         'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete'

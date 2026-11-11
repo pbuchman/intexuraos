@@ -40,6 +40,14 @@ Use whatsapp-service for WhatsApp Business webhook intake, user phone verificati
 - `POST /internal/whatsapp/private/digest-source/messages/query` reads one bounded window only when account generation and source revision still match.
 - `POST /internal/whatsapp/delivery-readiness/get` reports whether the first mapped phone can receive a message; it does not expose a destination selector.
 - `POST /internal/whatsapp/outbound-deliveries/get` reconciles idempotent provider state.
+- Provider acceptance (`sent`) is separate from `transportConfirmation`. Require delivered/read confirmation before claiming delivery; missing confirmation never authorizes another send.
 - `POST /internal/whatsapp/outbound-deliveries/retry` permits only a byte-identical retry of a definitively failed send.
+
+## Scheduled Notification Evidence
+
+- `POST /internal/whatsapp/notification-runs/get` requires internal auth and the owning `userId`, `source`, and `runId`. It returns execution stage and final delivery outcome.
+- A preparation acknowledgment cannot complete a run. All expected final response parts must be confirmed delivered/read; failed final outcomes remain failures.
+- `GET /internal/monitoring/status` exposes durable retry-job heartbeats and notification summaries under internal auth. It does not authorize replay or recovery mutations.
+- Private Matrix recovery must use reviewed relation-repair evidence and media-only file recovery. Preserve raw-backed unknown poll messages without fabricating content.
 
 Never log source request bodies, message projections, phone numbers, prompts, or summary text. Never retry an ambiguous provider outcome. Message Digest delivery must use the frozen template and acquire run authorization from message-digest-service before the provider call.

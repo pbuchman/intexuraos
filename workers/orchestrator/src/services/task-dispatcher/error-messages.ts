@@ -1,3 +1,5 @@
+import type { Task, TaskError } from '../../types/task.js';
+
 /**
  * Builds the "Non-zero exit code: N; {runtime} error: {msg}" message used by
  * runtime hard-error paths — the normal completion path (`handleTaskCompletion`)
@@ -17,6 +19,17 @@ export function buildRuntimeHardErrorMessage(args: {
   runtimeName: string;
 }): string {
   const parts: string[] = [];
+  if (
+    args.claudeError !== undefined &&
+    /hit your (?:usage )?limit|usage limit/i.test(args.claudeError)
+  ) {
+    // Keep the provider's reset time intact and put it before generic exit/verifier details.
+    const exit =
+      args.exitCode === undefined || args.exitCode === 0
+        ? ''
+        : `; Non-zero exit code: ${String(args.exitCode)}`;
+    return `${args.runtimeName} usage limit exceeded: ${args.claudeError}${exit}`;
+  }
   if (typeof args.exitCode === 'number' && args.exitCode !== 0) {
     parts.push(`Non-zero exit code: ${String(args.exitCode)}`);
   }
@@ -24,4 +37,21 @@ export function buildRuntimeHardErrorMessage(args: {
     parts.push(`${args.runtimeName} error: ${args.claudeError}`);
   }
   return parts.join('; ');
+}
+
+/** Missing Sentry evidence is terminal; actual runtime failures retain their existing retry policy. */
+export function buildAgentFailureError(
+  agentType: Task['agentType'],
+  failureReason: string,
+  message: string,
+  runtimeError?: string
+): TaskError {
+  if (
+    agentType === 'sentry' &&
+    failureReason.startsWith('SENTRY_EVIDENCE_UNAVAILABLE:') &&
+    !runtimeError
+  ) {
+    return { code: 'SENTRY_EVIDENCE_UNAVAILABLE', message: failureReason };
+  }
+  return { code: 'TASK_RUNTIME_HARD_ERROR', message, remediation: { action: 'retry' } };
 }

@@ -107,6 +107,20 @@ describe('prepareSubmission', () => {
     mockUserServiceClient = { getOAuthToken: vi.fn() };
   });
 
+  it.each([true, false])('keeps validation failures reportable only when not already reported: %s', async (alreadyReported) => {
+    const failure = { code: 'UNAVAILABLE', message: 'Validation unavailable', alreadyReported };
+    mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(createMockTask()));
+    mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [{ name: 'home-dev', url: 'x', enabled: true, cfAccessClientId: 'a', cfAccessClientSecret: 'b', dispatchSigningSecret: 'c' }] }));
+    mockLinearAgentClient.validateIssue.mockResolvedValue(err(failure));
+    const result = await prepareSubmission(createDeps(), { originalTaskId, userId });
+    expect(result).toEqual(err({ code: 'label_not_ready', message: 'Failed to fetch Linear issue labels. Please try again.', ...(alreadyReported ? { alreadyReported: true } : {}) }));
+    expect(mockLogger[alreadyReported ? 'info' : 'warn']).toHaveBeenCalledWith(expect.any(Object), 'Failed to fetch Linear issue labels for Execution Agent submission');
+    if (alreadyReported) {
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    }
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
   it('builds a prepared submission when context is complete', async () => {
     const task = createMockTask();
     mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));

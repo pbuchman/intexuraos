@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { writeDigestMonitoringProjection } from './monitoring-projection.mjs';
 
 const LEGACY_COLLECTIONS = Object.freeze({
   digests: 'notification_daily_digests',
@@ -1210,6 +1211,7 @@ function createMigrationStore(firestore) {
         }
         if (!isNextRunAndState(state, input)) throw safeError('MIGRATION_CHAIN_CONFLICT');
         transaction.set(runRef, input.run);
+        writeDigestMonitoringProjection(firestore, transaction, input.run);
         transaction.set(refs.state, input.state);
         transaction.set(refs.definition, {
           ...definition,
@@ -1311,8 +1313,11 @@ function createMigrationStore(firestore) {
         }
         const lastRun = runs.find((run) => run.data.runId === state.precedingRunId)?.data;
         if (lastRun === undefined) throw safeError('MIGRATION_ACTIVATION_CONFLICT');
-        for (const run of runs)
-          transaction.set(run.ref, { ...run.data, visibilityMigrationId: null });
+        for (const run of runs) {
+          const visible = { ...run.data, visibilityMigrationId: null };
+          transaction.set(run.ref, visible);
+          writeDigestMonitoringProjection(firestore, transaction, visible, run.data);
+        }
         transaction.set(refs.definition, {
           ...definition,
           status: 'active',
@@ -1383,7 +1388,9 @@ function createMigrationStore(firestore) {
           throw safeError('MIGRATION_COMPENSATION_CONFLICT');
         }
         for (const run of runs) {
-          transaction.set(run.ref, { ...run.data, visibilityMigrationId: input.migrationId });
+          const hidden = { ...run.data, visibilityMigrationId: input.migrationId };
+          transaction.set(run.ref, hidden);
+          writeDigestMonitoringProjection(firestore, transaction, hidden, run.data);
         }
         transaction.set(refs.definition, {
           ...definition,

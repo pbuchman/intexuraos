@@ -10,6 +10,7 @@
 # Retention policy (set at write time, not here):
 # - GitHub event collections: 24 hours
 # - code_tasks log subcollections: 7 days
+# - Notification intents, provider receipts, and delivery markers: 7 days
 # - Completed private WhatsApp erasure status records: 30 days
 # - Uncommitted Conversation Assistant context updates and their chunks: 30 minutes
 #   (committing an update removes expireAt atomically)
@@ -42,5 +43,23 @@ resource "google_firestore_field" "ttl" {
 
   # Use a no-op index_config to satisfy the resource schema; we are not
   # adding/removing custom indexes here, just enabling TTL.
+  index_config {}
+}
+
+# Durable notification repositories keep numeric expiresAt for bounded lookups;
+# this separate Date/Timestamp field is the native Firestore TTL field.
+resource "google_firestore_field" "notification_ttl" {
+  for_each = toset([
+    "whatsapp_notification_intents",
+    "whatsapp_transport_receipts",
+    "whatsapp_notification_markers",
+  ])
+
+  project    = var.project_id
+  database   = google_firestore_database.database.name
+  collection = each.key
+  field      = "ttlExpiresAt"
+
+  ttl_config {}
   index_config {}
 }

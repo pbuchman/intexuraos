@@ -75,7 +75,7 @@ export function createOnReviewSkippedCallback(deps: OnReviewSkippedDeps): (args:
         identifier: origin.linearIssueId,
       });
       if (!issueValidation.ok) {
-        logger.warn({ linearIssueId: origin.linearIssueId, error: issueValidation.error },
+        logger[issueValidation.error.alreadyReported === true ? 'info' : 'warn']({ linearIssueId: origin.linearIssueId, code: issueValidation.error.code },
           'Failed to validate issue for skipped-review label');
         return;
       }

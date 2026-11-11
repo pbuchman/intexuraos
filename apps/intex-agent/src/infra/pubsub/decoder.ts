@@ -5,6 +5,7 @@ import type {
 } from '../../domain/ports/incomingMessageHandler.js';
 import {
   matrixCorpusSignedIngestV1Schema,
+  notificationContextSchema,
   type MatrixCorpusSignedIngestV1,
 } from '@intexuraos/http-contracts';
 
@@ -25,9 +26,7 @@ export type DecodedIntexMessageIngestPush =
   | Readonly<{ kind: 'ordinary'; message: IntexIncomingMessage }>
   | Readonly<{ kind: 'matrix_corpus'; envelope: MatrixCorpusSignedIngestV1 }>;
 
-export function decodeIntexMessageIngestPushEnvelope(
-  body: unknown
-): DecodedIntexMessageIngestPush {
+export function decodeIntexMessageIngestPushEnvelope(body: unknown): DecodedIntexMessageIngestPush {
   const data = extractData(body);
   const decoded = decodeJson(data);
   const matrix = matrixCorpusSignedIngestV1Schema.safeParse(decoded);
@@ -97,6 +96,9 @@ function toIntexIncomingMessage(value: unknown): IntexIncomingMessage {
     ...(whatsappSender !== undefined ? { whatsappSender } : {}),
     ...(replyContext !== undefined ? { replyContext } : {}),
     ...(buttonResponse !== undefined ? { buttonResponse } : {}),
+    ...(event['notificationContext'] === undefined
+      ? {}
+      : { notificationContext: notificationContextSchema.parse(event['notificationContext']) }),
   };
 }
 
@@ -180,9 +182,7 @@ function optionalButtonResponse(
   };
 }
 
-function requiredReplyContextSource(
-  value: unknown
-): IntexIncomingMessageReplyContext['source'] {
+function requiredReplyContextSource(value: unknown): IntexIncomingMessageReplyContext['source'] {
   if (value === 'inbound_user_message' || value === 'outbound_assistant_message') {
     return value;
   }

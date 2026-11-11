@@ -3,10 +3,7 @@ import { err } from '@intexuraos/common-core';
 import { getDailyLookaheadSchedule } from '../../../domain/schedules/getDailyLookaheadSchedule.js';
 import { upsertDailyLookaheadSchedule } from '../../../domain/schedules/upsertDailyLookaheadSchedule.js';
 import type { CalendarSchedule } from '../../../domain/index.js';
-import {
-  FakeCalendarScheduleRepository,
-  FakeWhatsAppScheduleClient,
-} from '../../fakes.js';
+import { FakeCalendarScheduleRepository, FakeWhatsAppScheduleClient } from '../../fakes.js';
 
 function schedule(overrides: Partial<CalendarSchedule> = {}): CalendarSchedule {
   return {
@@ -28,7 +25,26 @@ function schedule(overrides: Partial<CalendarSchedule> = {}): CalendarSchedule {
 }
 
 describe('daily lookahead schedule use cases', () => {
-  it('maps delivery status lookup failures while reading a schedule', async () => {
+  it('reports successful persistence even when readiness fails after saving', async () => {
+    const repository = new FakeCalendarScheduleRepository();
+    const client = new FakeWhatsAppScheduleClient();
+    client.setMatrixDeliveryStatusResult(err(new Error('timeout')));
+    const result = await upsertDailyLookaheadSchedule(
+      {
+        userId: 'user-123',
+        enabled: true,
+        localTime: '15:30',
+        timeZone: 'Europe/Warsaw',
+        now: '2026-10-12T10:00:00.000Z',
+      },
+      { scheduleRepository: repository, whatsAppScheduleClient: client }
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.delivery).toEqual({ status: 'error', message: 'timeout' });
+    const saved = await repository.getByUserAndTaskType('user-123', 'calendar_daily_lookahead');
+    expect(saved.ok && saved.value?.cadence.localTime).toBe('15:30');
+  });
+  it('returns saved settings when Matrix readiness is unavailable', async () => {
     const repository = new FakeCalendarScheduleRepository();
     const whatsappClient = new FakeWhatsAppScheduleClient();
 
@@ -40,10 +56,13 @@ describe('daily lookahead schedule use cases', () => {
       whatsAppScheduleClient: whatsappClient,
     });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.message).toBe('delivery unavailable');
-    }
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        schedule: schedule(),
+        delivery: { status: 'error', message: 'delivery unavailable' },
+      },
+    });
   });
 
   it('returns repository read failures before upserting', async () => {
@@ -75,9 +94,7 @@ describe('daily lookahead schedule use cases', () => {
     const repository = new FakeCalendarScheduleRepository();
     const whatsappClient = new FakeWhatsAppScheduleClient();
 
-    repository.setUpsertResult(
-      err({ code: 'INTERNAL_ERROR', message: 'schedule write failed' })
-    );
+    repository.setUpsertResult(err({ code: 'INTERNAL_ERROR', message: 'schedule write failed' }));
 
     const result = await upsertDailyLookaheadSchedule(
       {
@@ -104,6 +121,18 @@ describe('daily lookahead schedule use cases', () => {
       schedule({
         lastRunAt: '2026-07-04T13:15:10.000Z',
         lastRunLocalDate: '2026-07-04',
+        resumeCutoff: '2026-07-04T13:00:00.000Z',
+        latestRun: {
+          id: 'run-1',
+          scheduleId: schedule().id,
+          userId: 'user-123',
+          taskType: 'calendar_daily_lookahead',
+          status: 'sent',
+          localDate: '2026-07-04',
+          scheduledFor: '2026-07-04T13:15:00.000Z',
+          startedAt: '2026-07-04T13:15:00.000Z',
+          deliveryStatus: 'pending',
+        },
       })
     );
 
@@ -126,6 +155,11 @@ describe('daily lookahead schedule use cases', () => {
       expect(result.value.schedule.status).toBe('paused');
       expect(result.value.schedule.lastRunAt).toBe('2026-07-04T13:15:10.000Z');
       expect(result.value.schedule.lastRunLocalDate).toBe('2026-07-04');
+      expect(result.value.schedule.latestRun).toMatchObject({
+        id: 'run-1',
+        deliveryStatus: 'pending',
+      });
+      expect(result.value.schedule.resumeCutoff).toBe('2026-07-04T13:00:00.000Z');
       expect(result.value.schedule.nextRunAt).toBe('2026-07-05T13:15:00.000Z');
     }
   });

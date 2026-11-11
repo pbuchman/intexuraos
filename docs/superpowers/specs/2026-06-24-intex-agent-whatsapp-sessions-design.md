@@ -273,7 +273,7 @@ Required wiring:
 - New service package under `apps/intex-agent`.
 - Service entrypoint required env vars in `apps/intex-agent/src/index.ts`.
 - PM2 service entry and URL wiring in `ecosystem.config.cjs`.
-- Dev Terraform service wiring in `terraform/environments/dev/main.tf`.
+- Dev Terraform service wiring in `terraform/shared-gcp/main.tf`.
 - Production Hetzner/nginx/PM2 route wiring in `terraform/hetzner-prod`.
 - New Pub/Sub topic/subscription for assistant ingest if the final implementation uses a new topic name.
 - Pub/Sub emulator tooling updates for any new topic.

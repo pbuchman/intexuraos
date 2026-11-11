@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import {
   buildAggregatedFirestoreArtifacts,
   loadFirestoreMigrations,
+  loadFirestoreMonitoringIndexes,
 } from './lib/firestore-artifacts.mjs';
 
 const defaultRepoRoot = resolve(import.meta.dirname, '..');
@@ -16,7 +17,11 @@ export async function verifyFirestoreArtifacts({ repoRoot = defaultRepoRoot } = 
   const rulesPath = resolve(repoRoot, 'firestore.rules');
 
   const migrations = await loadFirestoreMigrations({ repoRoot });
-  const { indexesData, rulesText } = buildAggregatedFirestoreArtifacts(migrations);
+  const monitoringIndexes = loadFirestoreMonitoringIndexes({ repoRoot });
+  const { indexesData, rulesText } = buildAggregatedFirestoreArtifacts(
+    migrations,
+    monitoringIndexes
+  );
 
   const expectedIndexes = JSON.stringify(indexesData, null, 2) + '\n';
 
@@ -24,7 +29,7 @@ export async function verifyFirestoreArtifacts({ repoRoot = defaultRepoRoot } = 
     errors.push('Missing committed artifact: firestore.indexes.json');
   } else if (readFileSync(indexesPath, 'utf8') !== expectedIndexes) {
     errors.push(
-      'firestore.indexes.json differs from the migration aggregation. Run: node scripts/migrate.mjs --write-artifacts-only'
+      'firestore.indexes.json differs from the migration and monitoring catalog aggregation. Run: node scripts/migrate.mjs --write-artifacts-only'
     );
   }
 
@@ -55,7 +60,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('✅ Firestore artifacts match the migration aggregation\n');
+  console.log('✅ Firestore artifacts match the migration and monitoring catalog aggregation\n');
 }
 
 const isMain = import.meta.url === `file://${process.argv[1]}`;

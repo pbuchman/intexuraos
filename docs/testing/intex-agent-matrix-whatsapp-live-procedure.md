@@ -11,14 +11,14 @@ mocks, evaluate every correlated reply, and verify the same run in the authentic
 production UI.
 
 **Architecture:** The runner and protected Matrix credentials stay on Home Dev, while the
-system under test is exclusively `https://intexuraos.cloud` on Hetzner. Matrix is the only
+system under test is exclusively `https://intexuraos.cloud` on Home PROD. Matrix is the only
 injection and observation transport for the 60 agent turns. The production WhatsApp
 bridge mirrors those user-authored Matrix events into the operator's Intex Agent WhatsApp
 conversation and mirrors production assistant replies back to Matrix. Google OIDC opens
 only the corpus control endpoints. Durable production evidence, not visual observation
 alone, binds each event to its run, scenario, turn, and isolated session.
 
-**Tech Stack:** Home Dev runner, Hetzner production, Google OIDC, Matrix Client-Server
+**Tech Stack:** Home Dev runner, Home PROD, Google OIDC, Matrix Client-Server
 API, WhatsApp bridge, Intex Agent, DeepSeek V4 Flash, MiniMax M3, strict tool mocks,
 Firestore-backed production Test Runs, authenticated production web UI.
 
@@ -92,7 +92,7 @@ The fixed execution environment is:
 | --- | --- |
 | Runner host | SSH alias `home-dev` |
 | Runner repository | `$HOME/deploy/intexuraos` |
-| System under test | `https://intexuraos.cloud` on Hetzner |
+| System under test | `https://intexuraos.cloud` on Home PROD |
 | Runtime audience | `hetzner-prod` |
 | Intex control plane | `/internal/evals/intex-agent/matrix-corpus/*` with Google OIDC |
 | WhatsApp control plane | `/internal/evals/whatsapp/matrix-corpus/*` with Google OIDC |
@@ -195,7 +195,7 @@ scripts/run-intex-agent-evals-prod.sh matrix-corpus
 ```
 
 The wrapper must prove that the local requested revision equals both the Home Dev runner
-revision and the Hetzner production `deployment.json` revision. It must not pull, deploy,
+revision and the Home PROD `deployment.json` revision. It must not pull, deploy,
 copy files, switch revisions, or restart services.
 
 ### 3. Let the embedded preflight decide admission
@@ -203,7 +203,7 @@ copy files, switch revisions, or restart services.
 Do not run a separate preflight command. Before any write, message, or LLM call, the
 embedded preflight verifies:
 
-- the reviewed revision, Home Dev runner, and Hetzner production deployment are identical;
+- the reviewed revision, Home Dev runner, and Home PROD deployment are identical;
 - guarded implementation paths are clean;
 - the runtime audience is exactly `hetzner-prod` and production corpus execution is enabled;
 - Intex Agent, WhatsApp Service, Matrix adapter, and web backend are healthy;

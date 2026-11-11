@@ -1,4 +1,6 @@
-import { describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { err, ok } from '@intexuraos/common-core';
+import * as scheduleHelpers from '../schedules/messageDigestSchedule.js';
 import type {
   MessageDigestDefinition,
   MessageDigestState,
@@ -16,11 +18,134 @@ const RUN_ID = 'mdr_d71653c73231eddbdd0a29813283a7d3ac5fcf3398e7b595';
 const RUN_OUTBOX_ID = 'mdo_8e96444f9735c3e15389eec2737afc68c7697607b5935fb3';
 
 describe('tickMessageDigestScheduler', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reports a newly reserved outbox publisher failure without another reservation', async () => {
+    const harness = createHarness();
+    harness.dispatchOutbox.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false });
+    expect(
+      await tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
+    ).toMatchObject({ ok: true, reservedRuns: 1, failures: 1 });
+    expect(harness.reserveRun).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a checkpoint already advanced within the current window while skipping a stale due cursor', async () => {
+    const context = runContext();
+    context.definition.nextRunAt = '2026-07-26T23:00:00.000Z';
+    context.definition.checkpointAt = '2026-07-26T12:00:00.000Z';
+    context.state.checkpointAt = context.definition.checkpointAt;
+    const harness = createHarness({ context });
+    expect(
+      await tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
+    ).toMatchObject({ reservedRuns: 1 });
+    expect(harness.reserveRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        run: expect.objectContaining({ windowStart: context.state.checkpointAt }),
+      })
+    );
+  });
+
+  it('defers an obsolete-window reset that loses its definition revision without dispatching new work', async () => {
+    const context = runContext();
+    context.definition.nextRunAt = '2026-07-25T07:00:00.000Z';
+    context.definition.checkpointAt = '2026-07-24T07:00:00.000Z';
+    context.state.checkpointAt = context.definition.checkpointAt;
+    const harness = createHarness({ context });
+    harness.updateDefinition.mockResolvedValueOnce({ ok: false, code: 'REVISION_CONFLICT' });
+    expect(
+      await tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
+    ).toMatchObject({ reservedRuns: 0, deferredDefinitions: 1 });
+    expect(harness.reserveRun).not.toHaveBeenCalled();
+  });
+
+  it('fails safely if the preceding civil-date boundary is unsupported', async () => {
+    const context = runContext();
+    context.definition.nextRunAt = '2026-07-25T07:00:00.000Z';
+    context.definition.checkpointAt = '2026-07-24T07:00:00.000Z';
+    context.state.checkpointAt = context.definition.checkpointAt;
+    const harness = createHarness({ context });
+    vi.spyOn(scheduleHelpers, 'getMessageDigestBoundaryAtOrBefore')
+      .mockReturnValueOnce(ok('2026-07-27T07:00:00.000Z'))
+      .mockReturnValueOnce(
+        err({ code: 'INVALID_LOCAL_DATE', message: 'preceding civil date unsupported' })
+      );
+    expect(
+      await tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
+    ).toMatchObject({ reservedRuns: 0, deferredDefinitions: 1, failures: 1 });
+    expect(harness.updateDefinition).not.toHaveBeenCalled();
+    expect(harness.reserveRun).not.toHaveBeenCalled();
+  });
+
+  it('fails safely if the following civil-date boundary is unsupported', async () => {
+    const harness = createHarness();
+    vi.spyOn(scheduleHelpers, 'getNextMessageDigestBoundary').mockReturnValueOnce(
+      err({ code: 'INVALID_LOCAL_DATE', message: 'following civil date unsupported' })
+    );
+    expect(
+      await tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
+    ).toMatchObject({ reservedRuns: 0, deferredDefinitions: 1, failures: 1 });
+    expect(harness.validateSource).not.toHaveBeenCalled();
+    expect(harness.reserveRun).not.toHaveBeenCalled();
+  });
+  it('skips obsolete cadence windows with an audit and reserves only the current window', async () => {
+    const context = runContext();
+    context.definition.nextRunAt = '2026-06-01T07:00:00.000Z';
+    context.definition.checkpointAt = '2026-05-31T07:00:00.000Z';
+    context.state.checkpointAt = context.definition.checkpointAt;
+    const harness = createHarness({ context });
+    await tickMessageDigestScheduler(
+      { workerId: 'scheduler-worker-001', limit: 25 },
+      harness.dependencies
+    );
+    expect(harness.dependencies.store.updateDefinition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        patch: expect.objectContaining({
+          resetCheckpointAt: '2026-07-26T07:00:00.000Z',
+          nextRunAt: '2026-07-27T07:00:00.000Z',
+          skipObsoleteWindows: {
+            expectedStateRevision: 5,
+            windowStart: '2026-05-31T07:00:00.000Z',
+            windowEnd: '2026-07-26T07:00:00.000Z',
+          },
+        }),
+      })
+    );
+    expect(harness.reserveRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedDefinitionRevision: 4,
+        expectedStateRevision: 6,
+        run: expect.objectContaining({
+          windowStart: '2026-07-26T07:00:00.000Z',
+          windowEnd: '2026-07-27T07:00:00.000Z',
+        }),
+      })
+    );
+  });
   it('recovers due outbox and receipts before reserving and dispatching one scheduled window', async () => {
     const harness = createHarness();
 
     await expect(
-      tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 25 }, harness.dependencies)
+      tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
     ).resolves.toEqual({
       ok: true,
       recoveredDispatches: 1,
@@ -52,8 +177,7 @@ describe('tickMessageDigestScheduler', () => {
           runId: RUN_ID,
           definitionNameSnapshot: 'Synthetic daily',
           trigger: 'scheduled',
-          requestIdDigest:
-            '77eabebafceee04c3caecb5d8f84bbd094b671d10b8b66b81e95c5db2fe82f30',
+          requestIdDigest: '77eabebafceee04c3caecb5d8f84bbd094b671d10b8b66b81e95c5db2fe82f30',
           windowStart: '2026-07-26T07:00:00.000Z',
           windowEnd: '2026-07-27T07:00:00.000Z',
           scheduledBoundary: '2026-07-27T07:00:00.000Z',
@@ -115,7 +239,10 @@ describe('tickMessageDigestScheduler', () => {
     }
 
     await expect(
-      tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 25 }, harness.dependencies)
+      tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
     ).resolves.toMatchObject({
       ok: true,
       recoveredDispatches: 3,
@@ -160,9 +287,7 @@ describe('tickMessageDigestScheduler', () => {
       const contexts = Array.from({ length: pageCount }, (_value, index) =>
         runContextForPage(index + 1)
       );
-      const listDueDefinitions = vi.mocked(
-        harness.dependencies.store.listDueDefinitions
-      );
+      const listDueDefinitions = vi.mocked(harness.dependencies.store.listDueDefinitions);
       listDueDefinitions.mockReset();
       for (const [index, context] of contexts.entries()) {
         listDueDefinitions.mockResolvedValueOnce({
@@ -170,10 +295,7 @@ describe('tickMessageDigestScheduler', () => {
             index === 1
               ? [context.definition, contexts[0]?.definition as MessageDigestDefinition]
               : [context.definition],
-          nextCursor:
-            index + 1 < pageCount
-              ? `due-page-${String(index + 2)}`
-              : expectedNextCursor,
+          nextCursor: index + 1 < pageCount ? `due-page-${String(index + 2)}` : expectedNextCursor,
         });
       }
       vi.mocked(harness.dependencies.store.getOwnedRunContext).mockImplementation(
@@ -259,7 +381,10 @@ describe('tickMessageDigestScheduler', () => {
     const harness = createHarness({ context });
 
     await expect(
-      tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 25 }, harness.dependencies)
+      tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
     ).resolves.toMatchObject({ ok: true, reservedRuns: 0, deferredDefinitions: 1 });
     expect(harness.getDeliveryReadiness).not.toHaveBeenCalled();
     expect(harness.reserveRun).not.toHaveBeenCalled();
@@ -269,7 +394,10 @@ describe('tickMessageDigestScheduler', () => {
     const harness = createHarness({ readinessStatus: 'disconnected' });
 
     await expect(
-      tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 25 }, harness.dependencies)
+      tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
     ).resolves.toMatchObject({ ok: true, reservedRuns: 0, deferredDefinitions: 1 });
     expect(harness.reserveRun).not.toHaveBeenCalled();
     expect(harness.updateDefinition).toHaveBeenCalledWith({
@@ -286,7 +414,7 @@ describe('tickMessageDigestScheduler', () => {
     expect(harness.dispatchOutbox).toHaveBeenCalledTimes(1);
   });
 
-  it('reserves only the earliest missed weekly boundary and advances one cadence', async () => {
+  it('reserves the latest due weekly window and advances to the next future cadence', async () => {
     const context = runContext();
     context.definition.schedule = {
       kind: 'weekly',
@@ -300,21 +428,24 @@ describe('tickMessageDigestScheduler', () => {
     const harness = createHarness({ context });
 
     await expect(
-      tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 25 }, harness.dependencies)
+      tickMessageDigestScheduler(
+        { workerId: 'scheduler-worker-001', limit: 25 },
+        harness.dependencies
+      )
     ).resolves.toMatchObject({ ok: true, reservedRuns: 1 });
     expect(harness.reserveRun).toHaveBeenCalledWith(
       expect.objectContaining({
-        nextRunAt: '2026-07-20T09:00:00.000Z',
+        nextRunAt: '2026-07-27T09:00:00.000Z',
         run: expect.objectContaining({
-          windowStart: '2026-07-06T09:00:00.000Z',
-          windowEnd: '2026-07-13T09:00:00.000Z',
-          scheduledBoundary: '2026-07-13T09:00:00.000Z',
+          windowStart: '2026-07-13T09:00:00.000Z',
+          windowEnd: '2026-07-20T09:00:00.000Z',
+          scheduledBoundary: '2026-07-20T09:00:00.000Z',
         }),
       })
     );
   });
 
-  it('creates contiguous non-overlapping catch-up windows across repeated completion ticks', async () => {
+  it('uses the same current cadence identity when repeated ticks see stale snapshots', async () => {
     const first = runContext();
     first.definition.checkpointAt = '2026-07-24T07:00:00.000Z';
     first.state.checkpointAt = '2026-07-24T07:00:00.000Z';
@@ -346,14 +477,14 @@ describe('tickMessageDigestScheduler', () => {
     }));
     expect(windows).toEqual([
       {
-        start: '2026-07-24T07:00:00.000Z',
-        end: '2026-07-25T07:00:00.000Z',
-        next: '2026-07-26T07:00:00.000Z',
+        start: '2026-07-26T07:00:00.000Z',
+        end: '2026-07-27T07:00:00.000Z',
+        next: '2026-07-28T07:00:00.000Z',
       },
       {
-        start: '2026-07-25T07:00:00.000Z',
-        end: '2026-07-26T07:00:00.000Z',
-        next: '2026-07-27T07:00:00.000Z',
+        start: '2026-07-26T07:00:00.000Z',
+        end: '2026-07-27T07:00:00.000Z',
+        next: '2026-07-28T07:00:00.000Z',
       },
     ]);
   });
@@ -418,37 +549,40 @@ describe('tickMessageDigestScheduler', () => {
     ['generation', { generationId: 'synthetic-generation-changed' }],
     ['chat', { chatId: 'synthetic-chat-changed' }],
     ['chat type', { chatType: 'direct' as const }],
-  ])('moves a due definition to attention when the validated %s identity changed', async (_label, changedSource) => {
-    const harness = createHarness();
-    harness.validateSource.mockResolvedValueOnce({
-      ok: true,
-      value: {
-        ...runContext().definition.source,
-        messageCount: 12,
-        ...changedSource,
-      },
-    });
+  ])(
+    'moves a due definition to attention when the validated %s identity changed',
+    async (_label, changedSource) => {
+      const harness = createHarness();
+      harness.validateSource.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          ...runContext().definition.source,
+          messageCount: 12,
+          ...changedSource,
+        },
+      });
 
-    await expect(
-      tickMessageDigestScheduler(
-        { workerId: 'scheduler-worker-001', limit: 25 },
-        harness.dependencies
-      )
-    ).resolves.toMatchObject({ ok: true, reservedRuns: 0, deferredDefinitions: 1 });
-    expect(harness.getDeliveryReadiness).not.toHaveBeenCalled();
-    expect(harness.reserveRun).not.toHaveBeenCalled();
-    expect(harness.updateDefinition).toHaveBeenCalledWith({
-      userId: 'synthetic-user-001',
-      definitionId: 'md_definition_001',
-      expectedRevision: 3,
-      updatedAt: NOW,
-      patch: {
-        status: 'paused',
-        listStatus: 'needs_attention',
-        attentionCode: 'SOURCE_CHANGED',
-      },
-    });
-  });
+      await expect(
+        tickMessageDigestScheduler(
+          { workerId: 'scheduler-worker-001', limit: 25 },
+          harness.dependencies
+        )
+      ).resolves.toMatchObject({ ok: true, reservedRuns: 0, deferredDefinitions: 1 });
+      expect(harness.getDeliveryReadiness).not.toHaveBeenCalled();
+      expect(harness.reserveRun).not.toHaveBeenCalled();
+      expect(harness.updateDefinition).toHaveBeenCalledWith({
+        userId: 'synthetic-user-001',
+        definitionId: 'md_definition_001',
+        expectedRevision: 3,
+        updatedAt: NOW,
+        patch: {
+          status: 'paused',
+          listStatus: 'needs_attention',
+          attentionCode: 'SOURCE_CHANGED',
+        },
+      });
+    }
+  );
 
   it('keeps a due definition due when source validation is transiently unavailable', async () => {
     const harness = createHarness();
@@ -459,7 +593,7 @@ describe('tickMessageDigestScheduler', () => {
         { workerId: 'scheduler-worker-001', limit: 25 },
         harness.dependencies
       )
-    ).resolves.toMatchObject({ ok: true, reservedRuns: 0, deferredDefinitions: 1 });
+    ).resolves.toMatchObject({ ok: true, reservedRuns: 0, deferredDefinitions: 1, failures: 1 });
     expect(harness.updateDefinition).not.toHaveBeenCalled();
     expect(harness.reserveRun).not.toHaveBeenCalled();
   });
@@ -467,13 +601,15 @@ describe('tickMessageDigestScheduler', () => {
   it('drains more than three pages of terminal blockers across fresh ticks and reaches healthy work', async () => {
     const contexts = Array.from({ length: 5 }, (_value, index) => runContextForPage(index + 1));
     const byId = new Map(contexts.map((context) => [context.definition.definitionId, context]));
-    const listDueDefinitions = vi.fn<MessageDigestStore['listDueDefinitions']>(async ({ limit }) => {
-      const active = contexts.filter((context) => context.definition.status === 'active');
-      return {
-        items: active.slice(0, limit).map((context) => context.definition),
-        nextCursor: active.length > limit ? 'more-due-work' : null,
-      };
-    });
+    const listDueDefinitions = vi.fn<MessageDigestStore['listDueDefinitions']>(
+      async ({ limit }) => {
+        const active = contexts.filter((context) => context.definition.status === 'active');
+        return {
+          items: active.slice(0, limit).map((context) => context.definition),
+          nextCursor: active.length > limit ? 'more-due-work' : null,
+        };
+      }
+    );
     const updateDefinition = vi.fn<MessageDigestStore['updateDefinition']>(async (input) => {
       const context = byId.get(input.definitionId);
       if (context === undefined || context.definition.revision !== input.expectedRevision) {
@@ -536,14 +672,8 @@ describe('tickMessageDigestScheduler', () => {
       now: (): string => NOW,
     };
 
-    await tickMessageDigestScheduler(
-      { workerId: 'scheduler-worker-001', limit: 1 },
-      dependencies
-    );
-    await tickMessageDigestScheduler(
-      { workerId: 'scheduler-worker-001', limit: 1 },
-      dependencies
-    );
+    await tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 1 }, dependencies);
+    await tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 1 }, dependencies);
 
     expect(updateDefinition).toHaveBeenCalledTimes(4);
     expect(reserveRun).toHaveBeenCalledOnce();
@@ -636,10 +766,7 @@ describe('tickMessageDigestScheduler', () => {
     const race = createHarness();
     race.reserveRun.mockResolvedValueOnce({ ok: false, code: 'RUN_IN_PROGRESS' });
     await expect(
-      tickMessageDigestScheduler(
-        { workerId: 'scheduler-worker-001', limit: 25 },
-        race.dependencies
-      )
+      tickMessageDigestScheduler({ workerId: 'scheduler-worker-001', limit: 25 }, race.dependencies)
     ).resolves.toMatchObject({ ok: true, reservedRuns: 0, deferredDefinitions: 1 });
   });
 });
@@ -669,10 +796,12 @@ function createHarness(options: HarnessOptions = {}): Harness {
     items: [recoveryOutbox],
     nextCursor: null,
   }));
-  const listPendingDeliveryRuns = vi.fn<MessageDigestStore['listPendingDeliveryRuns']>(async () => ({
-    items: [pendingDelivery],
-    nextCursor: null,
-  }));
+  const listPendingDeliveryRuns = vi.fn<MessageDigestStore['listPendingDeliveryRuns']>(
+    async () => ({
+      items: [pendingDelivery],
+      nextCursor: null,
+    })
+  );
   const listDueDefinitions = vi.fn<MessageDigestStore['listDueDefinitions']>(async () => ({
     items: [context.definition],
     nextCursor: null,
@@ -707,6 +836,8 @@ function createHarness(options: HarnessOptions = {}): Harness {
     ok: true,
     definition: {
       ...context.definition,
+      checkpointAt: input.patch.resetCheckpointAt ?? context.definition.checkpointAt,
+      nextRunAt: input.patch.nextRunAt ?? context.definition.nextRunAt,
       status: input.patch.status ?? context.definition.status,
       listStatus: input.patch.listStatus ?? context.definition.listStatus,
       attentionCode:

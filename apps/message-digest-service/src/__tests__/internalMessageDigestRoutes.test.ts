@@ -1,11 +1,13 @@
-import type { FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import {
   authenticateInternalPubSub,
   authenticateInternalScheduler,
   logIncomingRequest,
   validateInternalAuth,
+  intexuraFastifyPlugin,
 } from '@intexuraos/common-http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { dispatchMessageDigestOutbox } from '../domain/usecases/dispatchMessageDigestOutbox.js';
 import { processMessageDigestRun } from '../domain/usecases/processMessageDigestRun.js';
 import { reconcileMessageDigestDelivery } from '../domain/usecases/reconcileMessageDigestDelivery.js';
@@ -16,6 +18,7 @@ import {
 } from '../domain/usecases/authorizeMessageDigestDelivery.js';
 import { formatWhatsAppDigest } from '../infra/notification/formatWhatsAppDigest.js';
 import { buildServer } from '../server.js';
+import { internalMessageDigestRoutes } from '../routes/internalMessageDigestRoutes.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
 
 vi.mock('@intexuraos/common-http', async () => {
@@ -62,6 +65,25 @@ vi.mock('../domain/usecases/authorizeMessageDigestDelivery.js', () => ({
 
 describe('Message Digest internal routes', () => {
   let app: FastifyInstance;
+
+  it('protects the scheduler plugin independently of the application monitoring hook', async () => {
+    const standalone = Fastify();
+    registerCoreSchemas(standalone);
+    await standalone.register(intexuraFastifyPlugin);
+    await standalone.register(internalMessageDigestRoutes);
+    vi.mocked(authenticateInternalScheduler).mockReturnValueOnce({ authenticated: false });
+    expect(
+      (
+        await standalone.inject({
+          method: 'POST',
+          url: '/internal/message-digests/scheduler/tick',
+          payload: { limit: 25 },
+        })
+      ).statusCode
+    ).toBe(401);
+    expect(tickMessageDigestScheduler).not.toHaveBeenCalled();
+    await standalone.close();
+  });
 
   beforeEach(async () => {
     vi.mocked(authenticateInternalPubSub).mockReturnValue({

@@ -1,0 +1,61 @@
+name: intexuraos-matrix-sync
+services:
+  matrix-sync:
+    image: intexuraos-matrix-sync:${INTEXURAOS_SOURCE_SHA:?exact reviewed source revision required}
+    container_name: intexuraos-matrix-sync
+    user: '1000:1000'
+    restart: 'no'
+    init: true
+    env_file: .env
+    environment:
+      PORT: '8099'
+      MATRIX_HOMESERVER_URL: https://home-dev
+      MATRIX_ACCESS_TOKEN_FILE: /run/secrets/matrix-access-token
+      MATRIX_OUTBOUND_AUTH_TOKEN_FILE: /run/secrets/matrix-outbound-auth-token
+      MATRIX_OUTBOUND_TARGETS_FILE: /run/secrets/matrix-outbound-targets.json
+      INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE: /run/secrets/private-sync-service-account.json
+      WHATSAPP_SYNC_STATE_FILE: /data/state.json
+      WHATSAPP_SYNC_PENDING_MEDIA_FILE: /data/pending-media.json
+      WHATSAPP_SYNC_MAINTENANCE_FENCE_FILE: /data/recovery-required
+      NODE_EXTRA_CA_CERTS: /run/matrix-ca/root.crt
+      NODE_TLS_REJECT_UNAUTHORIZED: '1'
+    extra_hosts:
+      - home-dev:host-gateway
+    ports:
+      - 127.0.0.1:8099:8099
+    volumes:
+      - type: bind
+        source: ${MATRIX_SYNC_STATE_DIR:?explicit protected adapter state directory required}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MATRIX_SYNC_SECRETS_DIR:?explicit protected adapter secrets directory required}/matrix-access-token
+        target: /run/secrets/matrix-access-token
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MATRIX_SYNC_SECRETS_DIR:?explicit protected adapter secrets directory required}/matrix-outbound-auth-token
+        target: /run/secrets/matrix-outbound-auth-token
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MATRIX_SYNC_SECRETS_DIR:?explicit protected adapter secrets directory required}/private-sync-service-account.json
+        target: /run/secrets/private-sync-service-account.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MATRIX_SYNC_TARGETS_FILE:?explicit protected outbound targets file required}
+        target: /run/secrets/matrix-outbound-targets.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MATRIX_SYNC_CA_FILE:?active Caddy public root CA required}
+        target: /run/matrix-ca/root.crt
+        read_only: true
+        bind:
+          create_host_path: false

@@ -2,9 +2,9 @@
 
 ## Overview
 
-API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from all 17 configured IntexuraOS services into a single Swagger UI instance. It runs on Cloud Run with zero minimum instances and fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration — it exists solely to serve a configured Swagger UI.
+API Docs Hub is a lightweight Fastify server that aggregates OpenAPI specifications from the selected IntexuraOS service catalog (17 sources by default) into a single Swagger UI instance. It fetches specs client-side from each service's `/openapi.json` endpoint. The service has no database, no domain logic, and no Pub/Sub integration — it exists solely to serve a configured Swagger UI.
 
-**Versions:** Package `3.5.0` / OpenAPI spec `0.0.5`
+**OpenAPI spec version:** `0.0.5`. Package version follows `apps/api-docs-hub/package.json`.
 
 ## Architecture
 
@@ -40,9 +40,13 @@ sequenceDiagram
 
 ## Recent Changes
 
+### Current code: profile-aware startup
+
+`loadConfig()` validates the selected catalog at runtime. When `INTEXURAOS_API_DOCS_EXPECTED_SERVICES` is unset, all 17 catalog entries remain required. A comma-separated list of known service IDs selects a subset; empty entries, duplicates, and unknown IDs fail startup. Each selected service still needs its `*_OPENAPI_URL`. The Home PROD basic profile supplies its active service list, excluding research and message digest; the full profile uses the complete catalog. The static `REQUIRED_ENV` list remains the full catalog for repository validation.
+
 ### Changes since v3.8.0
 
-Message Digest Service is now a required source in `OPEN_API_SOURCE_CATALOG`. Configure `INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL` to expose the digest API in the same Swagger UI dropdown as the existing services. The current catalog contains 17 sources (`config.test.ts` verifies the new required entry).
+Message Digest Service is a source in the default full `OPEN_API_SOURCE_CATALOG`. Configure `INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL` to expose the digest API in the same Swagger UI dropdown as the existing services. The current catalog contains 17 sources (`config.test.ts` verifies the new required entry).
 
 | Commit      | Description                                                                        | Date       |
 | ----------- | ---------------------------------------------------------------------------------- | ---------- |
@@ -145,7 +149,9 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 ## Configuration
 
-### Required Environment Variables (17)
+### OpenAPI URL Environment Variables (17 in the default catalog)
+
+All entries are required when `INTEXURAOS_API_DOCS_EXPECTED_SERVICES` is unset; a selected catalog requires only its own entries.
 
 | Variable                                              | Description                        |
 | ----------------------------------------------------- | ---------------------------------- |
@@ -171,6 +177,7 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 | Variable                         | Default       | Description                          |
 | -------------------------------- | ------------- | ------------------------------------ |
+| `INTEXURAOS_API_DOCS_EXPECTED_SERVICES` | Full catalog | Comma-separated known service IDs to include |
 | `INTEXURAOS_SENTRY_DSN`          | -             | Sentry DSN for error tracking        |
 | `INTEXURAOS_ENVIRONMENT`         | `development` | Environment name for Sentry          |
 | `PORT`                           | `8080`        | Server listen port                   |
@@ -181,34 +188,15 @@ Health check routes are excluded from request logging via `registerQuietHealthCh
 
 - **Client-side spec fetching** — Swagger UI fetches specs in the browser, not on the server. Services must be accessible from the browser's network and must allow CORS from the hub's origin.
 - **Config validation scope** — The health check only validates that env vars were present at startup. It does not verify that the service URLs are reachable or returning valid OpenAPI specs.
-- **Empty sources = "down"** — If `openApiSources` array is empty (which cannot happen in practice due to fail-fast), the health check returns status `"down"`.
+- **Empty sources = "down"** — If `openApiSources` array is empty the health check returns status `"down"`.
 - **Static config** — OpenAPI source URLs are loaded once at startup. Adding or removing a service requires redeployment.
 - **Shared health contract** — `registerHealthCheck()` reports `status: "ok"` when the configured source list is non-empty; successful probe details are `null`. The response does not expose a source count or probe upstream URLs.
-- **Not in ecosystem.config.cjs** — This service is not listed in `ecosystem.config.cjs` for local PM2 development. It must be run manually via `pnpm --filter api-docs-hub start:local`.
-- **Max scale 1** — Terraform limits this service to a single Cloud Run instance (min_scale=0, max_scale=1), which is appropriate for a documentation-only service.
+- **Local startup** — `ecosystem.config.cjs` includes api-docs-hub on port 8133. Manual `pnpm --filter api-docs-hub start:local` uses port 8080 unless `PORT` is set.
 - **Unused common-core dependency** — `@intexuraos/common-core` remains in `package.json` but is no longer imported. It can be removed to clean up the dependency graph.
 
-## Terraform Configuration
+## Home PROD Configuration
 
-```hcl
-module "api_docs_hub" {
-  source       = "../../modules/cloud-run-service"
-  service_name = "intexuraos-api-docs-hub"
-  port         = 8080
-  min_scale    = 0
-  max_scale    = 1
-
-  # OpenAPI URLs reference other module outputs
-  env_vars = {
-    INTEXURAOS_USER_SERVICE_OPENAPI_URL = "${module.user_service.service_url}/openapi.json"
-    # ... 16 more service URLs
-  }
-
-  depends_on = [module.user_service, module.notion_service, ...]
-}
-```
-
-The Terraform module uses `depends_on` for configured upstream services to ensure their Cloud Run URLs are available before the hub deploys.
+`ecosystem.config.prod.cjs` configures the hub with loopback binding and profile-specific OpenAPI URLs. The basic profile passes `INTEXURAOS_API_DOCS_EXPECTED_SERVICES` for its active catalog; full leaves the selector unset. These are repository deployment contracts, not a statement about the active runtime.
 
 ## File Structure
 
@@ -219,7 +207,8 @@ apps/api-docs-hub/src/
   index.ts          # Entry point: Sentry init, loadConfig(), listen
   __tests__/
     server.test.ts  # Health check and Swagger UI integration tests
-    config.test.ts  # Environment validation and URL trimming tests
+    config.test.ts  # Selected catalog, environment validation, URL trimming
+    startup.test.ts # Basic/full entrypoint startup boundaries
 ```
 
-This is one of the simplest services in the monorepo — three source files with no domain logic, plus two test files.
+The service has no domain logic. Configuration, server behavior, and entrypoint startup have dedicated test suites.

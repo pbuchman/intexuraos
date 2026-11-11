@@ -2,7 +2,7 @@
 
 ## Overview
 
-Research-agent orchestrates parallel AI research across a curated OpenRouter model catalog. It infers structured research context from user prompts, fans out research via Pub/Sub so each model call runs in its own Cloud Run instance, flags low-quality responses, tracks token usage and cost per call via centralized LLM usage reporting, synthesizes results with source attribution, and auto-publishes shareable HTML to GCS. Google/Gemini execution is OpenRouter-only: executable IDs use `or:google/...`, raw `gemini-*` IDs are rejected, and no Google LLM API key is loaded. Runs on Cloud Run with auto-scaling.
+Research-agent orchestrates parallel AI research across a curated OpenRouter model catalog. It infers structured research context from user prompts, fans out research via Pub/Sub for independent model-call processing, flags low-quality responses, tracks token usage and cost per call via centralized LLM usage reporting, synthesizes results with source attribution, and auto-publishes shareable HTML to GCS. Google/Gemini execution is OpenRouter-only: executable IDs use `or:google/...`, raw `gemini-*` IDs are rejected, and no Google LLM API key is loaded.
 
 ## Architecture
 
@@ -400,7 +400,7 @@ Stored direct-provider model names remain readable for historical data compatibi
 - **OpenRouter `or:` prefix:** OpenRouter model IDs are prefixed with `or:` in the llm-contract registry (e.g., `or:qwen/qwen3.5-plus-02-15`). The `OpenRouterAdapter` strips this prefix before calling the OpenRouter API using `getOpenRouterRawId()`.
 - **No direct Google route:** Raw `gemini-*` IDs are not executable. Google model families must use an allowlisted `or:google/...` identifier and the OpenRouter credential.
 - **OpenRouter allowlist enforcement:** At execution time (not just at selection), the `process-llm-call` handler validates that OpenRouter models are on the curated allowlist. Unauthorized model IDs are rejected.
-- **OpenRouter model cache:** The `GET /openrouter/models` endpoint caches responses in-memory for 5 minutes. The cache is per-process, not shared across Cloud Run instances.
+- **OpenRouter model cache:** The `GET /openrouter/models` endpoint caches responses in-memory for 5 minutes. The cache is per-process, not shared across service processes.
 - **OpenRouter cover images:** `generateCoverImage` uses OpenRouter while preserving the `gpt-4.1` and `gpt-image-1` public aliases. If access is unavailable or either step fails, sharing continues without a cover image.
 - **ResearchSummary projection:** The `GET /` list endpoint uses `findSummariesByUserId` which returns `ResearchSummary` objects (no `synthesizedResult`, no `llmResults[].result`, no `inputContexts[].content`). The `toResearchSummary` mapper strips these fields server-side.
 - **Important WhatsApp notifications:** Both research completion and LLM failure notifications are published with `important: true`, bypassing quiet-hours suppression in the WhatsApp notification pipeline.

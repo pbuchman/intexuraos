@@ -4,9 +4,10 @@ Container configurations for local development.
 
 ## Overview
 
-Local development uses a **Pub/Sub emulator** for message isolation. Firestore
-and Google Cloud Storage use the retained GCP project through an explicitly
-selected least-privilege identity. Runtime configuration is rendered from an
+Local development uses a **Pub/Sub emulator** for message isolation. Most services
+use shared GCP Firestore and Storage through an explicitly selected least-privilege
+identity, with empty Firestore/Storage emulator variables. **Only Message Digest**
+uses Firestore at localhost:8101 with project `intexuraos-message-digest-mvp-local`. Runtime configuration is rendered from an
 exact numeric DEV secret-package version before containers start.
 
 This setup provides:
@@ -28,14 +29,30 @@ pnpm run emulators:stop
 pnpm run emulators:logs
 ```
 
-This leaves exactly **2 persistent Docker containers**. The lifecycle first starts the emulator,
+This leaves exactly **3 persistent Docker containers**. The lifecycle first waits for both emulators to be healthy,
 builds the UI image, runs one explicit idempotent `bootstrap.mjs` process in a disposable `--rm`
 container, and only then starts the non-mutating long-running server:
 
-| Service         | Image                                                     | Ports |
-| --------------- | --------------------------------------------------------- | ----- |
-| pubsub-emulator | gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators | 8102  |
-| pubsub-ui       | Built from tools/pubsub-ui                                | 8105  |
+| Service            | Image                                                     | Ports          |
+| ------------------ | --------------------------------------------------------- | -------------- |
+| firestore-emulator | gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators | 127.0.0.1:8101 |
+| pubsub-emulator    | gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators | 8102           |
+| pubsub-ui          | Built from tools/pubsub-ui                                | 8105           |
+
+## Message Digest Firestore persistence
+
+The `firestore-data` named volume stores exported snapshots in immutable snapshot directories selected by `/data/current`.
+The emulator imports an existing snapshot on startup. Its shutdown wrapper
+exports through the emulator API and switches the current snapshot only after
+success; previous snapshots remain available. `pnpm run emulators:stop` removes containers but retains the volume;
+ordinary restart and container recreation preserve data. Never use `down -v`,
+remove the volume, or clear snapshots during routine development. Allow up to
+60 seconds for shutdown/export; forced kills cannot guarantee the latest writes.
+An invalid existing export fails startup instead of starting an empty database.
+
+The Firestore port binds only to `127.0.0.1`. The emulator has no production
+credentials and receives no real messages. Other local services retain shared
+Firestore and Storage access; do not set emulator variables globally.
 
 ## Pub/Sub Architecture (Local)
 
@@ -115,11 +132,11 @@ read-only. DEV intentionally contains no GCP service-account JSON. Never mount
 
 ## Files
 
-| File                               | Purpose                                 |
-| ---------------------------------- | --------------------------------------- |
-| `docker/docker-compose.local.yaml` | Pub/Sub emulator + UI                   |
-| `tools/pubsub-ui/`                 | Message bridge source code              |
-| `tools/pubsub-ui/topology.mjs`     | Topic → endpoint/classification mapping |
+| File                               | Purpose                                    |
+| ---------------------------------- | ------------------------------------------ |
+| `docker/docker-compose.local.yaml` | Firestore emulator + Pub/Sub emulator + UI |
+| `tools/pubsub-ui/`                 | Message bridge source code                 |
+| `tools/pubsub-ui/topology.mjs`     | Topic → endpoint/classification mapping    |
 
 ## Troubleshooting
 

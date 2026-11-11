@@ -887,5 +887,5 @@ Expected: PASS.
 ## PR Handoff Notes
 
 - The implementation PR should mention that WhatsApp-service itself already supports `ctaUrl`; the implementation only needs to pass CTA metadata through Intex-agent.
-- If any subtask chooses to add `INTEXURAOS_WEB_APP_URL` as a required env var to notes-agent or bookmarks-agent, it must update `apps/<service>/src/index.ts`, `terraform/environments/dev/main.tf`, and `ecosystem.config.cjs` in the same subtask. The lower-risk path is using the shared helper default without adding a new required env var.
+- If any subtask chooses to add `INTEXURAOS_WEB_APP_URL` as a required env var to notes-agent or bookmarks-agent, it must update `apps/<service>/src/index.ts`, `terraform/shared-gcp/main.tf`, and `ecosystem.config.cjs` in the same subtask. The lower-risk path is using the shared helper default without adding a new required env var.
 - Calendar links are intentionally not IntexuraOS links. If Google Calendar does not return `htmlLink`, omit the CTA instead of fabricating a URL.

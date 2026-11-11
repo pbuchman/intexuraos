@@ -1,3 +1,4 @@
+import type { NotificationContext } from '@intexuraos/http-contracts';
 /**
  * Types for the WhatsApp send Pub/Sub client.
  */
@@ -76,6 +77,7 @@ export interface WhatsAppMessageDigestDeliveryAuthorization {
  * Phone number lookup is done internally by whatsapp-service using userId.
  */
 export interface SendMessageEvent {
+  notificationContext?: NotificationContext;
   /**
    * Event type identifier.
    */

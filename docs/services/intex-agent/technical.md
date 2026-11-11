@@ -22,6 +22,8 @@ Mutating tool calls produce a reviewable pending action and execute after the ma
 
 Prompt preferences use `GET /preferences/prompt`, `POST /preferences/prompt/items`, `PATCH` and `DELETE /preferences/prompt/items/:itemId`, plus `GET /preferences/prompt/versions` and `GET /preferences/prompt/versions/:version`. Mutations require `expectedVersion`; old versions remain immutable. Intex model selection is stored separately by user-service.
 
+Runtime settings resolution has a 30-second outer deadline, matching the User Service HTTP client's deadline. This allows catalog refreshes and settings reads to finish without prematurely rejecting a valid response. A hung lookup still returns the existing sanitized runtime-resolution failure; it does not retry or select another model.
+
 Gated bearer-authenticated `GET /test-runs`, `GET /test-runs/:runId`, and `GET /test-runs/:runId/scenarios/:scenarioId` expose sanitized evaluation evidence. Matrix corpus routes and strict mocks exercise the production transport boundary without real action-tool writes. See the evaluation runbook for operator setup.
 
 ## Tool Boundary
@@ -204,3 +206,5 @@ Sessions are stored in `intex_agent_sessions`; timeline events are stored in `in
 The message handler finds the newest open session for the user, starts a new one when none exists, supersedes an open session on explicit new-session commands, and expires stale sessions according to `INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS`.
 
 After completed, clarification, no-action, or unsupported outcomes, the session remains `waiting_for_user`. Replies are published with the original WhatsApp message ID as `replyToMessageId` and the session ID as `correlationId`.
+
+Scheduled calendar ingests additionally carry `notificationContext` with the source and run ID. Intex publishes a separate preparation acknowledgment before runtime-settings resolution, then a final reply with an explicit outcome. A calendar run succeeds only when the completed tool is `query_calendar_events`; an unrelated completed action cannot satisfy it. Final replies split into bounded parts with stable per-part idempotency keys and `partIndex`/`partCount` metadata. WhatsApp Service correlates their delivery/read receipts; neither publishing the acknowledgment nor finishing the tool proves final delivery.

@@ -316,29 +316,37 @@ describe('validateIssue', () => {
       }
     });
 
-    it('logs warning when API fails', async () => {
+    it('reports safe source evidence once and preserves upstream unavailability', async () => {
       fakeLinearClient.setFailure(true, {
-        code: 'API_ERROR',
-        message: 'Rate limit exceeded',
+        code: 'UPSTREAM_UNAVAILABLE',
+        message: 'Linear API temporarily unavailable',
+        diagnostics: {
+          message: 'Linear getIssueByIdentifier.mapIssue failed: NetworkError (HTTP 503)',
+          operation: 'getIssueByIdentifier.mapIssue',
+          statusCode: 503,
+        },
       });
 
-      await validateIssue(defaultRequest, {
+      const result = await validateIssue(defaultRequest, {
         linearApiClient: fakeLinearClient,
         connectionRepository: fakeConnectionRepo,
         logger: fakeLogger,
       });
 
-      expect(fakeLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          identifier: 'INT-123',
-          error: expect.objectContaining({
-            code: 'API_ERROR',
-            message: 'Rate limit exceeded',
-          }),
-          _skipSentry: true,
-        }),
-        'Failed to fetch issue'
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'UPSTREAM_UNAVAILABLE', message: 'Linear API temporarily unavailable' },
+      });
+      expect(fakeLogger.error).toHaveBeenCalledExactlyOnceWith(
+        {
+          err: new Error('Linear getIssueByIdentifier.mapIssue failed: NetworkError (HTTP 503)'),
+          code: 'UPSTREAM_UNAVAILABLE',
+          operation: 'getIssueByIdentifier.mapIssue',
+          statusCode: 503,
+        },
+        'Failed to validate Linear issue'
       );
+      expect(fakeLogger.warn).not.toHaveBeenCalled();
     });
   });
 });

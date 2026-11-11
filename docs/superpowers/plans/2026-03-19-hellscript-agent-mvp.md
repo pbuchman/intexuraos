@@ -148,7 +148,7 @@ This remains one plan because the MVP only works when all of these ship together
 | `firestore-collections.json`                            | Register `hellscript_buffers` owner + subcollections |
 | `migrations/064_hellscript-agent-composite-indexes.mjs` | Composite index for `userId + updatedAt`             |
 | `terraform/modules/iam/{main,outputs}.tf`               | Service account and outputs                          |
-| `terraform/environments/dev/main.tf`                    | Cloud Run service, env vars, URL wiring              |
+| `terraform/shared-gcp/main.tf`                    | Cloud Run service, env vars, URL wiring              |
 | `terraform/modules/cloud-build/main.tf`                 | Include `hellscript-agent` build target              |
 | `cloudbuild/cloudbuild.yaml`                            | Root build/deploy wiring                             |
 | `apps/hellscript-agent/cloudbuild.yaml`                 | Per-service build pipeline                           |
@@ -377,7 +377,7 @@ This remains one plan because the MVP only works when all of these ship together
 - Modify: `firestore-collections.json`
 - Create: `migrations/064_hellscript-agent-composite-indexes.mjs`
 - Modify: `terraform/modules/iam/{main,outputs}.tf`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `terraform/modules/cloud-build/main.tf`
 - Create: `apps/hellscript-agent/cloudbuild.yaml`
 - Create: `cloudbuild/scripts/deploy-hellscript-agent.sh`
@@ -392,7 +392,7 @@ This remains one plan because the MVP only works when all of these ship together
 - [ ] Register `hellscript_buffers` in `firestore-collections.json` with `events` and `draft_versions` subcollections.
 - [ ] Add the composite index migration for `userId` ascending + `updatedAt` descending.
 - [ ] Add the `hellscript-agent` service account and outputs in the IAM module.
-- [ ] Add `local.services.hellscript_agent`, Cloud Run module wiring, and `INTEXURAOS_HELLSCRIPT_AGENT_URL` to `terraform/environments/dev/main.tf`.
+- [ ] Add `local.services.hellscript_agent`, Cloud Run module wiring, and `INTEXURAOS_HELLSCRIPT_AGENT_URL` to `terraform/shared-gcp/main.tf`.
 - [ ] Add local dev wiring:
   - `ecosystem.config.cjs` on port `8131`
   - `.envrc.local.example`
@@ -406,8 +406,8 @@ This remains one plan because the MVP only works when all of these ship together
   - `apps/web/cloudbuild.yaml`
 - [ ] Add the new project reference to `tsconfig.json`.
 - [ ] Verify:
-  - `terraform -chdir=terraform/environments/dev fmt -check -recursive`
-  - `terraform -chdir=terraform/environments/dev validate`
+  - `terraform -chdir=terraform/shared-gcp fmt -check -recursive`
+  - `terraform -chdir=terraform/shared-gcp validate`
 - [ ] Commit: `feat(hellscript-agent): register service in infra`
 
 ### Task 9: Docs registration and full verification

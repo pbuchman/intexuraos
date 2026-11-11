@@ -170,7 +170,23 @@ export const outboundDeliveryRoutes: FastifyPluginCallback = (fastify, _opts, do
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', 'WhatsApp delivery receipt lookup failed');
       }
-      return await reply.ok(result.value);
+      const tracker = getServices().notificationDeliveryRepository;
+      const tracked =
+        tracker === undefined ? undefined : await tracker.getDeliveryObservation(body);
+      // Durable provider acceptance and receipt proof survive a failed legacy completion write.
+      if (tracked?.acceptedAt !== undefined) {
+        return await reply.ok({
+          status: 'sent',
+          acceptedAt: tracked.acceptedAt,
+          transportConfirmation: tracked.transportConfirmation,
+        });
+      }
+      return await reply.ok({
+        ...result.value,
+        ...(result.value.status === 'sent' && tracked !== undefined
+          ? { transportConfirmation: tracked.transportConfirmation }
+          : {}),
+      });
     }
   );
 
@@ -258,6 +274,67 @@ export const outboundDeliveryRoutes: FastifyPluginCallback = (fastify, _opts, do
     }
   );
 
+  fastify.post<{ Body: { userId: string; source: string; runId: string } }>(
+    '/internal/whatsapp/notification-runs/get',
+    {
+      schema: {
+        tags: ['internal'],
+        operationId: 'getNotificationRunState',
+        response: {
+          200: {
+            description: 'Final notification delivery state',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', enum: ['pending', 'delivered', 'failed'] },
+                  deliveredAt: { type: 'string' },
+                  failureCode: { type: 'string' },
+                  stage: {
+                    type: 'string',
+                    enum: [
+                      'awaiting_ingress',
+                      'processing',
+                      'awaiting_delivery',
+                      'delivered',
+                      'failed',
+                    ],
+                  },
+                },
+              },
+            },
+            required: ['success', 'data'],
+          },
+        },
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['userId', 'source', 'runId'],
+          properties: {
+            userId: { type: 'string', minLength: 1 },
+            source: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,63}$' },
+            runId: { type: 'string', minLength: 1, maxLength: 256 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received notification run-state request',
+        bodyPreviewLength: 0,
+      });
+      if (!validateInternalAuth(request).valid)
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed');
+      const repository = getServices().notificationDeliveryRepository;
+      if (repository === undefined)
+        return await reply.fail('MISCONFIGURED', 'Notification correlation unavailable');
+      return await reply.ok(await repository.getRun(request.body));
+    }
+  );
   done();
 };
 
@@ -286,6 +363,17 @@ function terminalStatusSchema(status: string, timestampField: string): Record<st
     properties: {
       status: { type: 'string', const: status },
       [timestampField]: { type: 'string' },
+      transportConfirmation: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['pending', 'delivered', 'read', 'failed'] },
+          deliveredAt: { type: 'string' },
+          readAt: { type: 'string' },
+          failedAt: { type: 'string' },
+          failureCode: { type: 'string' },
+        },
+        required: ['status'],
+      },
     },
     required: ['status', timestampField],
   };

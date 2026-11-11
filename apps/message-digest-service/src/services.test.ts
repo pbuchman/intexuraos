@@ -53,6 +53,7 @@ describe('message-digest-service composition', () => {
     const container = createServiceContainer(config(), factories);
 
     expect(container).toEqual({
+      jobHeartbeatStore: expect.objectContaining({ start: expect.any(Function), finish: expect.any(Function), list: expect.any(Function) }),
       config: config(),
       logger,
       firestore,

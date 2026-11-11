@@ -135,9 +135,23 @@ function sendLogToSentry(logEntry: LogDescriptor): void {
     return;
   }
 
-  const { level, msg, ...rest } = logEntry;
+  const { level, msg, _sentryTags, ...rest } = logEntry;
 
+  const tags: unknown = _sentryTags;
   Sentry.withScope((scope) => {
+    // Explicit, bounded tag context survives SentryBox's extra-data allowlist.
+    // Callers must supply payload-free values; never promote arbitrary log fields.
+    if (typeof tags === 'object' && tags !== null && !Array.isArray(tags)) {
+      for (const [key, value] of Object.entries(tags).slice(0, 16)) {
+        if (
+          /^[a-z][a-z0-9_.-]{0,63}$/.test(key) &&
+          typeof value === 'string' &&
+          value.length <= 200
+        ) {
+          scope.setTag(key, value);
+        }
+      }
+    }
     // Add structured context as extra data
     if (Object.keys(rest).length > 0) {
       scope.setExtras(rest);

@@ -1,3 +1,4 @@
+import type { NotificationContext } from '@intexuraos/http-contracts';
 /**
  * Event definitions for Pub/Sub messaging.
  */
@@ -201,6 +202,7 @@ export interface TranscriptionCompletedEvent {
  * The phone number is looked up internally using userId.
  */
 export interface SendMessageEvent {
+  notificationContext?: NotificationContext;
   /**
    * Event type identifier.
    */
@@ -291,9 +293,7 @@ export interface WhatsAppInteractiveButton {
   };
 }
 
-export type IntexMessageReplyContextSource =
-  | 'inbound_user_message'
-  | 'outbound_assistant_message';
+export type IntexMessageReplyContextSource = 'inbound_user_message' | 'outbound_assistant_message';
 
 export interface IntexMessageReplyContext {
   replyToWamid: string;
@@ -314,6 +314,7 @@ export type IntexMessageSourceType =
  * Triggers realtime session handling and tool execution.
  */
 export interface IntexMessageIngestEvent {
+  notificationContext?: NotificationContext;
   /**
    * Event type identifier.
    */

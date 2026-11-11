@@ -15,6 +15,7 @@ const PUBLIC_ENV_KEYS = [
   'INTEXURAOS_FIREBASE_AUTH_DOMAIN',
   'INTEXURAOS_SENTRY_DSN_WEB',
   'INTEXURAOS_USE_FIREBASE_EMULATORS',
+  'INTEXURAOS_PUBLIC_DEPLOYMENT_PROFILE',
 ] as const;
 
 function readRequired(path: string): string {
@@ -88,6 +89,7 @@ describe('web public environment boundary', () => {
           INTEXURAOS_FIREBASE_AUTH_DOMAIN: 'public.firebaseapp.com',
           INTEXURAOS_SENTRY_DSN_WEB: 'https://public@sentry.example/1',
           INTEXURAOS_USE_FIREBASE_EMULATORS: 'false',
+          INTEXURAOS_PUBLIC_DEPLOYMENT_PROFILE: 'basic',
         },
       }
     );
@@ -95,6 +97,7 @@ describe('web public environment boundary', () => {
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
     const built = readTree(output);
     expect(built).toContain('public-restricted-firebase-browser-key');
+    expect(built).toContain('This feature is temporarily unavailable.');
     expect(built.includes(PRIVATE_SENTINEL)).toBe(false);
     for (const name of policy.secretManagerNames) expect(built.includes(name)).toBe(false);
   }, 30_000);

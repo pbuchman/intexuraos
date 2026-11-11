@@ -14,7 +14,11 @@ describe('loadConfig', () => {
   beforeEach(() => {
     process.env = Object.fromEntries(
       Object.entries(originalEnv).filter(
-        ([key]) => key !== 'PORT' && key !== 'HOST' && !openApiEnvVarKeys.has(key)
+        ([key]) =>
+          key !== 'PORT' &&
+          key !== 'HOST' &&
+          key !== 'INTEXURAOS_API_DOCS_EXPECTED_SERVICES' &&
+          !openApiEnvVarKeys.has(key)
       )
     );
   });
@@ -33,6 +37,7 @@ describe('loadConfig', () => {
 
   it('registers Message Digest as a required OpenAPI source', () => {
     expect(OPEN_API_SOURCE_CATALOG).toContainEqual({
+      service: 'message-digest-service',
       name: 'Message Digest Service API',
       openApiUrlEnvVar: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL',
     });
@@ -42,6 +47,35 @@ describe('loadConfig', () => {
     expect(() => {
       loadConfig();
     }).toThrow('Missing required environment variables');
+  });
+
+  it('requires and exposes only the OpenAPI sources selected by the runtime profile', () => {
+    process.env['INTEXURAOS_API_DOCS_EXPECTED_SERVICES'] =
+      'user-service,app-settings-service';
+    process.env['INTEXURAOS_USER_SERVICE_OPENAPI_URL'] =
+      'http://127.0.0.1:18110/openapi.json';
+    process.env['INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL'] =
+      'http://127.0.0.1:18122/openapi.json';
+
+    expect(loadConfig().openApiSources).toEqual([
+      { name: 'User Service API', url: 'http://127.0.0.1:18110/openapi.json' },
+      {
+        name: 'Application Settings API',
+        url: 'http://127.0.0.1:18122/openapi.json',
+      },
+    ]);
+  });
+
+  it.each([
+    ['', 'must contain at least one service'],
+    ['user-service,user-service', 'contains duplicate service: user-service'],
+    ['user-service,unknown-service', 'contains unknown service: unknown-service'],
+  ])('rejects an invalid runtime OpenAPI allowlist %j', (allowlist, message) => {
+    process.env['INTEXURAOS_API_DOCS_EXPECTED_SERVICES'] = allowlist;
+
+    expect(() => loadConfig()).toThrow(
+      `INTEXURAOS_API_DOCS_EXPECTED_SERVICES ${message}`
+    );
   });
 
   it('trims configured OpenAPI URLs into the generated source list', () => {

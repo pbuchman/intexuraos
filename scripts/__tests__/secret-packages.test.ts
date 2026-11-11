@@ -118,6 +118,18 @@ afterEach(() => {
   }
 });
 
+describe('pinned production profile', () => {
+  it('requires a package-owned full or basic profile', () => {
+    const manifest = loadSecretPackageManifest();
+    expect(manifest.packages.prod.envNames).toContain('INTEXURAOS_PROD_PROFILE');
+    const payload = makePayload('prod', manifest);
+    payload.env['INTEXURAOS_PROD_PROFILE'] = 'unknown';
+    expect(() => validateSecretPackagePayload({ environment: 'prod', payload, manifest })).toThrow(
+      'production profile must be full or basic'
+    );
+  });
+});
+
 describe('secret package manifest', () => {
   it('declares exactly the dev/prod packages and native Secret Manager exceptions', () => {
     const manifest = loadSecretPackageManifest({ manifestPath });
@@ -143,7 +155,7 @@ describe('secret package manifest', () => {
         'secretId',
         'stableVersion',
       ]);
-      expect(definition.stableVersion).toBe(environment === 'dev' ? 3 : 4);
+      expect(definition.stableVersion).toBe(environment === 'dev' ? 3 : 5);
       expect(definition.envNames).toEqual([...definition.envNames].sort());
       expect(new Set(definition.envNames).size).toBe(definition.envNames.length);
       expect(definition.envNames).toContain('INTEXURAOS_FIREBASE_API_KEY');
@@ -1672,7 +1684,11 @@ function makePayload(
   const env = Object.fromEntries(
     definition.envNames.map((name) => [
       name,
-      name === 'INTEXURAOS_FIREBASE_API_KEY' ? `AIza${'a'.repeat(35)}` : `fake-secret-for-${name}`,
+      name === 'INTEXURAOS_PROD_PROFILE'
+        ? 'basic'
+        : name === 'INTEXURAOS_FIREBASE_API_KEY'
+          ? `AIza${'a'.repeat(35)}`
+          : `fake-secret-for-${name}`,
     ])
   ) as Record<string, string>;
   const serviceAccount = {

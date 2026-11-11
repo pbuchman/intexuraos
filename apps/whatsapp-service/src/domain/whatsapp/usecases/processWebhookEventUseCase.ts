@@ -1,3 +1,4 @@
+import type { NotificationDeliveryRepository } from '../ports/notificationDeliveryRepository.js';
 /**
  * Use case for processing WhatsApp webhook events asynchronously.
  *
@@ -63,6 +64,7 @@ export interface ProcessWebhookEventDeps {
   thumbnailGenerator: ThumbnailGeneratorPort;
   eventPublisher: EventPublisherPort;
   matrixCorpusIngress?: MatrixCorpusIngressPort;
+  notificationDeliveryRepository?: NotificationDeliveryRepository;
 }
 
 export interface ProcessWebhookEventFailure {
@@ -96,6 +98,49 @@ export class ProcessWebhookEventUseCase {
     logger: Logger
   ): Promise<ProcessWebhookEventResult> {
     const { webhookEventRepository, userMappingRepository } = this.deps;
+    const entries = Array.isArray(payload.entry) ? payload.entry : [];
+    const messages = entries.flatMap((entry) =>
+      entry.changes.flatMap((change) =>
+        (change.value.messages ?? []).map((message) => ({ entry, change, message }))
+      )
+    );
+    if (
+      messages.length > 1 ||
+      (messages.length === 1 &&
+        payload.entry[0]?.changes[0]?.value.messages?.[0] !== messages[0]?.message)
+    ) {
+      for (const item of messages) {
+        const result = await this.execute(
+          {
+            ...payload,
+            entry: [
+              {
+                ...item.entry,
+                changes: [
+                  {
+                    ...item.change,
+                    value: { ...item.change.value, messages: [item.message], statuses: [] },
+                  },
+                ],
+              },
+            ],
+          },
+          savedEvent,
+          logger
+        );
+        if (result?.ok === false) return result;
+      }
+      return;
+    }
+    if (
+      messages.length === 0 &&
+      entries.some((entry) =>
+        entry.changes.some((change) => (change.value.statuses?.length ?? 0) > 0)
+      )
+    ) {
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
+      return;
+    }
     let isMatrixCorpusReserved = false;
 
     logger.info({ eventId: savedEvent.id }, 'Starting asynchronous webhook processing');
@@ -148,12 +193,17 @@ export class ProcessWebhookEventUseCase {
       );
 
       // Validate message type
-      const supportedTypes = ['text', 'image', 'audio', 'video', 'reaction', 'button', 'interactive'];
+      const supportedTypes = [
+        'text',
+        'image',
+        'audio',
+        'video',
+        'reaction',
+        'button',
+        'interactive',
+      ];
       if (messageType === null || !supportedTypes.includes(messageType)) {
-        logger.info(
-          { eventId: savedEvent.id, messageType },
-          'Ignoring unsupported message type'
-        );
+        logger.info({ eventId: savedEvent.id, messageType }, 'Ignoring unsupported message type');
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
           ignoredReason: {
             code: 'UNSUPPORTED_MESSAGE_TYPE',
@@ -378,9 +428,7 @@ export class ProcessWebhookEventUseCase {
         {
           eventId: savedEvent.id,
           messageType,
-          ...(isMatrixCorpusReserved
-            ? { matrixCorpusReserved: true }
-            : { userId, waMessageId }),
+          ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { userId, waMessageId }),
         },
         'Routing message to handler'
       );
@@ -808,7 +856,8 @@ export class ProcessWebhookEventUseCase {
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
       ignoredReason: {
         code: 'BUTTON_NOT_SUPPORTED',
-        message: 'Interactive button replies are not supported by Intex yet. Please send text for now.',
+        message:
+          'Interactive button replies are not supported by Intex yet. Please send text for now.',
         details: { userId, buttonId: buttonResponse.buttonId },
       },
     });
@@ -832,14 +881,47 @@ export class ProcessWebhookEventUseCase {
   ): Promise<void> {
     const { webhookEventRepository, messageRepository, eventPublisher } = this.deps;
 
+    let notificationContext;
+    if (messageText.includes('[intex-notification:')) {
+      const match = /\n\[intex-notification:([a-f0-9]{64})\]$/u.exec(messageText);
+      if (match === null || this.deps.notificationDeliveryRepository === undefined) {
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+          ignoredReason: {
+            code: 'INVALID_NOTIFICATION_MARKER',
+            message: 'Invalid notification correlation',
+          },
+        });
+        return;
+      }
+      notificationContext = await this.deps.notificationDeliveryRepository.consume({
+        marker: match[1] as string,
+        userId,
+        messageId: waMessageId,
+        now: new Date().toISOString(),
+      });
+      if (notificationContext === null) {
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+          ignoredReason: {
+            code: 'INVALID_NOTIFICATION_MARKER',
+            message: 'Invalid notification correlation',
+          },
+        });
+        return;
+      }
+      messageText = messageText.slice(0, match.index);
+    }
     const matrixCorpusMessage = parseMatrixCorpusVisibleMessage(messageText);
     if (matrixCorpusMessage.kind === 'reserved_malformed') {
-      const statusResult = await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
-        ignoredReason: {
-          code: 'MATRIX_CORPUS_RESERVED_HEADER_REJECTED',
-          message: 'Reserved Matrix corpus header rejected',
-        },
-      });
+      const statusResult = await webhookEventRepository.updateEventStatus(
+        savedEvent.id,
+        'ignored',
+        {
+          ignoredReason: {
+            code: 'MATRIX_CORPUS_RESERVED_HEADER_REJECTED',
+            message: 'Reserved Matrix corpus header rejected',
+          },
+        }
+      );
       if (!statusResult.ok) {
         throw new RetryableWebhookProcessingError('Failed to record Matrix corpus terminal status');
       }
@@ -937,10 +1019,7 @@ export class ProcessWebhookEventUseCase {
       const saveResult = await messageRepository.saveMessage(messageToSave);
 
       if (!saveResult.ok) {
-        logger.error(
-          { error: saveResult.error, eventId: savedEvent.id },
-          'Failed to save message'
-        );
+        logger.error({ error: saveResult.error, eventId: savedEvent.id }, 'Failed to save message');
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
           failureDetails: `Failed to save message: ${saveResult.error.message}`,
           retryable: true,
@@ -975,6 +1054,7 @@ export class ProcessWebhookEventUseCase {
       messageId: waMessageId,
       sourceType: 'whatsapp_text',
       text: messageText,
+      ...(notificationContext === undefined ? {} : { notificationContext }),
       whatsappSender: fromNumber,
       ...(replyContext !== undefined ? { replyContext } : {}),
       timestamp,
@@ -1035,11 +1115,7 @@ export class ProcessWebhookEventUseCase {
       const inboundContextText =
         inboundResult.value === null ? undefined : getInboundReplyContextText(inboundResult.value);
       if (inboundContextText !== undefined) {
-        return buildReplyContext(
-          context.replyToWamid,
-          'inbound_user_message',
-          inboundContextText
-        );
+        return buildReplyContext(context.replyToWamid, 'inbound_user_message', inboundContextText);
       }
     } else {
       logger.info(

@@ -2,9 +2,9 @@
  * Required environment variables for api-docs-hub.
  *
  * Each variable is the OpenAPI JSON URL of an upstream service whose docs
- * are aggregated by this hub. The list is the single source of truth used by
- * `validateRequiredEnv()` at module load — keep it in sync with
- * `OPEN_API_SOURCE_CATALOG` in `config.ts`.
+ * are aggregated by the full-profile hub. Static repository validation uses
+ * this complete list; runtime startup validates the selected catalog through
+ * `loadConfig()` so reduced profiles can omit unavailable services.
  */
 import { OPEN_API_SOURCE_CATALOG } from './config.js';
 

@@ -629,7 +629,7 @@ describe('intex-agent routes', () => {
         const deadlineHandle = { id: 'runtime-deadline' };
         const scheduler = {
           setTimeout(callback: () => void, delayMs: number): unknown {
-            expect(delayMs).toBe(2_000);
+            expect(delayMs).toBe(30_000);
             fireDeadline = callback;
             return deadlineHandle;
           },

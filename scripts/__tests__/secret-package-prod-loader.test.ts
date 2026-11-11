@@ -1,21 +1,25 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
+  renameSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parse } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
-const loaderPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
+const loaderPath = resolve(repoRoot, 'scripts/home-prod/load-secrets.sh');
 const manifest = JSON.parse(
   readFileSync(resolve(repoRoot, 'config/environments/secret-packages.json'), 'utf8')
 ) as { packages: { prod: { envNames: string[] } } };
@@ -41,7 +45,7 @@ function mode(path: string): number {
 
 function runtimeServiceAccount(
   email = 'ixos-hetzner-runtime-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
-) {
+): Record<string, string> {
   return {
     auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
     auth_uri: 'https://accounts.google.com/o/oauth2/auth',
@@ -57,16 +61,26 @@ function runtimeServiceAccount(
   };
 }
 
-function packagePayload(marker: string, serviceAccount = runtimeServiceAccount()) {
+function packagePayload(
+  marker: string,
+  serviceAccount = runtimeServiceAccount()
+): {
+  schemaVersion: number;
+  environment: string;
+  env: Record<string, string>;
+  files: Record<string, string>;
+} {
   return {
     schemaVersion: 1,
     environment: 'prod',
     env: Object.fromEntries(
       manifest.packages.prod.envNames.map((name) => [
         name,
-        name === 'INTEXURAOS_FIREBASE_API_KEY'
-          ? `AIza${marker.padEnd(35, 'a').slice(0, 35)}`
-          : `${marker}-${name}`,
+        name === 'INTEXURAOS_PROD_PROFILE'
+          ? 'basic'
+          : name === 'INTEXURAOS_FIREBASE_API_KEY'
+            ? `AIza${marker.padEnd(35, 'a').slice(0, 35)}`
+            : `${marker}-${name}`,
       ])
     ),
     files: {
@@ -108,7 +122,11 @@ function fixture(marker = 'candidate'): Fixture {
   return result;
 }
 
-function runLoader(input: Fixture, args: string[]) {
+function runLoader(
+  input: Fixture,
+  args: string[],
+  env: Record<string, string> = {}
+): ReturnType<typeof spawnSync> {
   return spawnSync(
     'bash',
     [
@@ -140,12 +158,247 @@ function runLoader(input: Fixture, args: string[]) {
         SKIP_RUNTIME_CREDENTIAL_SMOKE: '1',
         TLS_PRIVATE_KEY_FILE: input.tlsPath,
         TMPDIR: input.root,
+        ...env,
       },
     }
   );
 }
 
 describe('irreversible PROD secret-package loader', () => {
+  it.each([
+    { label: '0400', payloadMode: 0o400 },
+    { label: '0600', payloadMode: 0o600 },
+  ])('publishes a private user projection from a mode-$label payload', ({ payloadMode }) => {
+    const input = fixture('home-prod');
+    chmodSync(input.payloadPath, payloadMode);
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      SKIP_OWNERSHIP: '0',
+    });
+
+    const projection = join(input.root, '.config', 'intexuraos', 'prod');
+    const envPath = join(projection, '.env.prod');
+    expect(result.status, result.stderr).toBe(0);
+    expect(mode(envPath)).toBe(0o600);
+    expect(mode(join(projection, 'runtime-sa-key.json'))).toBe(0o600);
+    expect(mode(join(projection, 'internal-auth-token'))).toBe(0o600);
+    const env = parse(readFileSync(envPath, 'utf8'));
+    expect(env.HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
+    expect(env.GOOGLE_APPLICATION_CREDENTIALS).toBe(join(projection, 'runtime-sa-key.json'));
+  });
+
+  it.each([
+    { label: '0640', payloadMode: 0o640 },
+    { label: '0604', payloadMode: 0o604 },
+    { label: '0700', payloadMode: 0o700 },
+  ])('rejects a mode-$label user payload before publication', ({ payloadMode }) => {
+    const input = fixture();
+    chmodSync(input.payloadPath, payloadMode);
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      SKIP_OWNERSHIP: '0',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      'Offline payload permissions must be mode 0600 or more restrictive'
+    );
+    expect(existsSync(join(input.root, '.config'))).toBe(false);
+    expect(readFileSync(input.outputPath, 'utf8')).toBe('PREVIOUS_ENV=complete\n');
+  });
+
+  it.each(['symlink', 'directory'])(
+    'rejects a %s user payload before publication',
+    (payloadType) => {
+      const input = fixture();
+      const originalPayload = join(input.root, 'original-payload.json');
+      renameSync(input.payloadPath, originalPayload);
+      if (payloadType === 'symlink') {
+        symlinkSync(originalPayload, input.payloadPath);
+      } else {
+        mkdirSync(input.payloadPath, { mode: 0o700 });
+      }
+
+      const result = runLoader(input, ['--user-projection', '--version', '7'], {
+        DEPLOY_HOME: input.root,
+        DEPLOY_USER: userInfo().username,
+        SKIP_OWNERSHIP: '0',
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('Offline payload must be a regular file, not a symlink');
+      expect(existsSync(join(input.root, '.config'))).toBe(false);
+      expect(readFileSync(input.outputPath, 'utf8')).toBe('PREVIOUS_ENV=complete\n');
+    }
+  );
+
+  it('times out without removing a user projection lock owned by another invocation', () => {
+    const input = fixture();
+    const lockDirectory = join(
+      input.root,
+      '.local/state/intexuraos-prod/secret-package.lock.portable'
+    );
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS: '1',
+      SKIP_OWNERSHIP: '0',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Timed out waiting for production package lock');
+    expect(statSync(lockDirectory).isDirectory()).toBe(true);
+    expect(existsSync(join(input.root, '.config'))).toBe(false);
+  });
+
+  it('requires flock for Linux user projection before attempting the directory guard', () => {
+    const input = fixture();
+    const lockDirectory = join(
+      input.root,
+      '.local/state/intexuraos-prod/secret-package.lock.portable'
+    );
+    mkdirSync(lockDirectory, { recursive: true, mode: 0o700 });
+    const bin = join(input.root, 'bin');
+    mkdirSync(bin, { mode: 0o700 });
+    for (const tool of ['bash', 'chmod', 'dirname', 'id', 'install', 'mkdir', 'rmdir', 'sleep']) {
+      const lookup = spawnSync('bash', ['-c', 'command -v "$1"', 'fixture', tool], {
+        encoding: 'utf8',
+      });
+      expect(lookup.status, lookup.stderr).toBe(0);
+      symlinkSync(lookup.stdout.trim(), join(bin, tool));
+    }
+    symlinkSync(process.execPath, join(bin, 'node'));
+    writeFileSync(join(bin, 'uname'), '#!/usr/bin/env bash\nprintf "Linux\\n"\n', { mode: 0o700 });
+
+    const result = runLoader(input, ['--user-projection', '--version', '7'], {
+      DEPLOY_HOME: input.root,
+      DEPLOY_USER: userInfo().username,
+      PATH: bin,
+      SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS: '1',
+      SKIP_OWNERSHIP: '0',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('flock is required');
+    expect(result.stderr).not.toContain('Timed out waiting for production package lock');
+    expect(statSync(lockDirectory).isDirectory()).toBe(true);
+    expect(existsSync(join(input.root, '.config'))).toBe(false);
+  });
+
+  it.each([false, true])(
+    'holds the user lock while a validator is active (interrupted=%s)',
+    async (interrupt) => {
+      const input = fixture();
+      const started = join(input.root, 'validator-started');
+      const release = join(input.root, 'validator-release');
+      const validator = join(input.root, 'gated-validator.sh');
+      const lockDirectory = join(
+        input.root,
+        '.local/state/intexuraos-prod/secret-package.lock.portable'
+      );
+      writeFileSync(
+        validator,
+        '#!/usr/bin/env bash\nset -euo pipefail\nprintf started > "$VALIDATOR_STARTED"\nwhile [[ ! -f "$VALIDATOR_RELEASE" ]]; do sleep 0.05; done\n',
+        { mode: 0o700 }
+      );
+      const userEnvironment = {
+        DEPLOY_HOME: input.root,
+        DEPLOY_USER: userInfo().username,
+        INTEXURAOS_ENVIRONMENT: 'prod',
+        SKIP_CLOUDFLARE_CREDENTIAL_SMOKE: '1',
+        SKIP_OWNERSHIP: '0',
+        SKIP_RUNTIME_CREDENTIAL_SMOKE: '1',
+        TMPDIR: input.root,
+      };
+      const child = spawn(
+        'bash',
+        [loaderPath, '--user-projection', '--version', '7', '--payload-file', input.payloadPath],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            ...userEnvironment,
+            PROD_CANDIDATE_VALIDATOR: validator,
+            VALIDATOR_STARTED: started,
+            VALIDATOR_RELEASE: release,
+          },
+        }
+      );
+      let output = '';
+      child.stdout.on('data', (value: Buffer) => {
+        output += value.toString();
+      });
+      child.stderr.on('data', (value: Buffer) => {
+        output += value.toString();
+      });
+      const completed = new Promise<number | null>((resolve) => {
+        child.once('close', (status) => {
+          resolve(status);
+        });
+      });
+      try {
+        await expect.poll(() => existsSync(started), { timeout: 5000 }).toBe(true);
+        expect(mode(lockDirectory)).toBe(0o700);
+        if (interrupt) child.kill('SIGTERM');
+        const contender = runLoader(input, ['--user-projection', '--version', '7'], {
+          ...userEnvironment,
+          SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS: '1',
+        });
+        expect(contender.status).not.toBe(0);
+        expect(contender.stderr).toContain('Timed out waiting for production package lock');
+        expect(existsSync(lockDirectory)).toBe(true);
+        expect(existsSync(join(input.root, '.config/intexuraos/prod/.env.prod'))).toBe(false);
+        writeFileSync(release, 'continue');
+        expect(await completed, output).toBe(interrupt ? 143 : 0);
+        expect(existsSync(lockDirectory)).toBe(false);
+        expect(
+          runLoader(input, ['--user-projection', '--version', '7'], userEnvironment).status
+        ).toBe(0);
+      } finally {
+        writeFileSync(release, 'continue');
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+        await completed;
+      }
+    },
+    15000
+  );
+
+  it('keeps a validated candidate projection private and leaves active user files untouched', () => {
+    const input = fixture('candidate-output');
+    const candidateOutput = join(input.root, 'candidate-output');
+    mkdirSync(candidateOutput, { mode: 0o700 });
+    chmodSync(input.payloadPath, 0o400);
+
+    const result = runLoader(
+      input,
+      [
+        '--user-projection',
+        '--validate-only',
+        '--candidate-output',
+        candidateOutput,
+        '--version',
+        '7',
+      ],
+      {
+        DEPLOY_HOME: input.root,
+        DEPLOY_USER: userInfo().username,
+        SKIP_OWNERSHIP: '0',
+      }
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(mode(candidateOutput)).toBe(0o700);
+    expect(mode(join(candidateOutput, '.env.prod'))).toBe(0o600);
+    expect(existsSync(join(input.root, '.config', 'intexuraos', 'prod', '.env.prod'))).toBe(false);
+    expect(result.stdout).toContain('Validated PROD secret package version 7 without publication');
+  });
+
   it('publishes exactly one complete package and destroys local rollback state', () => {
     const input = fixture();
     const result = runLoader(input, ['--version', '7']);
@@ -163,9 +416,11 @@ describe('irreversible PROD secret-package loader', () => {
     expect(env.INTEXURAOS_SECRET_PACKAGE_VERSION).toBe('7');
     for (const name of manifest.packages.prod.envNames) {
       expect(env[name], name).toBe(
-        name === 'INTEXURAOS_FIREBASE_API_KEY'
-          ? `AIza${'candidate'.padEnd(35, 'a').slice(0, 35)}`
-          : `candidate-${name}`
+        name === 'INTEXURAOS_PROD_PROFILE'
+          ? 'basic'
+          : name === 'INTEXURAOS_FIREBASE_API_KEY'
+            ? `AIza${'candidate'.padEnd(35, 'a').slice(0, 35)}`
+            : `candidate-${name}`
       );
     }
     expect(env.PREVIOUS_ENV).toBeUndefined();
@@ -217,8 +472,90 @@ describe('irreversible PROD secret-package loader', () => {
     expect(existsSync(input.projectionRoot)).toBe(true);
   });
 
+  it('rejects a validation-only candidate without changing active secrets or package state', () => {
+    const input = fixture();
+    const activeRelease = join(input.renderRoot, 'prod-v6-active000');
+    mkdirSync(activeRelease, { recursive: true, mode: 0o700 });
+    symlinkSync('prod-v6-active000', join(input.renderRoot, 'current'));
+    const validator = join(input.root, 'reject-candidate.sh');
+    writeFileSync(validator, '#!/usr/bin/env bash\nexit 23\n', { mode: 0o700 });
+
+    const before = {
+      cloudflare: readFileSync(input.cloudflarePath, 'utf8'),
+      current: readlinkSync(join(input.renderRoot, 'current')),
+      env: readFileSync(input.outputPath, 'utf8'),
+      internal: readFileSync(input.internalPath, 'utf8'),
+      metadata: readFileSync(input.metadataPath, 'utf8'),
+      releases: readdirSync(input.renderRoot).sort(),
+      runtime: readFileSync(input.runtimePath, 'utf8'),
+      tls: readFileSync(input.tlsPath, 'utf8'),
+    };
+
+    const result = runLoader(input, ['--validate-only', '--version', '7'], {
+      PROD_CANDIDATE_VALIDATOR: validator,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('PROD candidate credential validation failed');
+    expect(readFileSync(input.cloudflarePath, 'utf8')).toBe(before.cloudflare);
+    expect(readlinkSync(join(input.renderRoot, 'current'))).toBe(before.current);
+    expect(readFileSync(input.outputPath, 'utf8')).toBe(before.env);
+    expect(readFileSync(input.internalPath, 'utf8')).toBe(before.internal);
+    expect(readFileSync(input.metadataPath, 'utf8')).toBe(before.metadata);
+    expect(readdirSync(input.renderRoot).sort()).toEqual(before.releases);
+    expect(readFileSync(input.runtimePath, 'utf8')).toBe(before.runtime);
+    expect(readFileSync(input.tlsPath, 'utf8')).toBe(before.tls);
+    expect(
+      readdirSync(input.root).some((name) => name.startsWith('intexuraos-prod-validation.'))
+    ).toBe(false);
+  });
+
+  it('validates a successful candidate without publication and removes temporary secrets', () => {
+    const input = fixture();
+    const activeRelease = join(input.renderRoot, 'prod-v6-active000');
+    mkdirSync(activeRelease, { recursive: true, mode: 0o700 });
+    symlinkSync('prod-v6-active000', join(input.renderRoot, 'current'));
+    const activeMarker = join(activeRelease, 'environment.env');
+    const projectionMarker = join(input.projectionRoot, 'obsolete-release', 'environment.env');
+    writeFileSync(activeMarker, 'ACTIVE_RELEASE=previous\n', { mode: 0o600 });
+    writeFileSync(projectionMarker, 'PROJECTED_RELEASE=previous\n', { mode: 0o600 });
+    const activePaths = [
+      input.cloudflarePath,
+      input.outputPath,
+      input.internalPath,
+      input.metadataPath,
+      input.runtimePath,
+      input.tlsPath,
+      activeMarker,
+      projectionMarker,
+    ];
+    const snapshot = (): Record<string, unknown> => ({
+      files: activePaths.map((path) => ({ contents: readFileSync(path), mode: mode(path) })),
+      current: readlinkSync(join(input.renderRoot, 'current')),
+      releases: readdirSync(input.renderRoot).sort(),
+      activeRelease: readdirSync(activeRelease).sort(),
+      projections: readdirSync(input.projectionRoot, { recursive: true }).sort(),
+    });
+    const before = snapshot();
+
+    const result = runLoader(input, ['--validate-only', '--version', '7']);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(snapshot()).toEqual(before);
+    expect(result.stdout).toContain('Validated PROD secret package version 7 without publication');
+    expect(result.stdout).not.toContain('Activated PROD secret package');
+    expect(
+      readdirSync(input.root).filter(
+        (name) =>
+          name.startsWith('intexuraos-prod-validation.') ||
+          name.startsWith('intexuraos-prod-secrets.')
+      )
+    ).toEqual([]);
+  });
+
   it('contains no rollback, compatibility, or partial publication mode', () => {
     const script = readFileSync(loaderPath, 'utf8');
+    expect(script).toContain('--validate-only');
     expect(script).not.toContain('--stage-only');
     expect(script).not.toContain('--activate');
     expect(script).not.toContain('--rollback');

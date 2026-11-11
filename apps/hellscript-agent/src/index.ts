@@ -63,7 +63,7 @@ async function main(): Promise<void> {
   // batching window doesn't lose events when Cloud Run scales down.
   installUsageSinkShutdownHandler({ app, logger });
 
-  await app.listen({ port, host: '0.0.0.0' });
+  await app.listen({ port, host: process.env['HOST'] ?? '0.0.0.0' });
 }
 
 main().catch((error: unknown) => {

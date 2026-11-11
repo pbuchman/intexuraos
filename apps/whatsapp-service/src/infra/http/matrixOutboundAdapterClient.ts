@@ -94,6 +94,7 @@ export function createMatrixOutboundAdapterClient(
           ),
           {
             method: 'GET',
+            signal: AbortSignal.timeout(5000),
             headers: buildHeaders(config),
           }
         );
@@ -142,6 +143,7 @@ export function createMatrixOutboundAdapterClient(
           joinPath(config.baseUrl, '/internal/matrix/outbound/messages'),
           {
             method: 'POST',
+            signal: AbortSignal.timeout(30000),
             headers: buildHeaders(config, { 'content-type': 'application/json' }),
             body: JSON.stringify({
               sourceAccountId: input.sourceAccountId,

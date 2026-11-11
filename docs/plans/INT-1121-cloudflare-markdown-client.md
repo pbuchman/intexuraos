@@ -84,7 +84,7 @@ Key parameters:
 
 These must be updated in all three locations per CLAUDE.md rules:
 1. `apps/web-agent/src/index.ts` (`REQUIRED_ENV` array)
-2. `terraform/environments/dev/main.tf` (secret definitions + web-agent module)
+2. `terraform/shared-gcp/main.tf` (secret definitions + web-agent module)
 3. `ecosystem.config.cjs` (web-agent env block)
 
 ---
@@ -115,7 +115,7 @@ These must be updated in all three locations per CLAUDE.md rules:
 | `apps/web-agent/src/services.ts`                | Change `ServiceDependencies` and `initServices` to use Cloudflare config |
 | `apps/web-agent/src/index.ts`                   | Swap env vars in `REQUIRED_ENV` and `initServices()` call                |
 | `apps/web-agent/src/__tests__/services.test.ts` | Update env var stubs                                                     |
-| `terraform/environments/dev/main.tf`            | Remove Crawl4AI secret, add Cloudflare secrets                           |
+| `terraform/shared-gcp/main.tf`            | Remove Crawl4AI secret, add Cloudflare secrets                           |
 | `ecosystem.config.cjs`                          | Swap env vars in web-agent block                                         |
 | `docs/services/web-agent/technical.md`          | Update dependency references from Crawl4AI to Cloudflare                 |
 
@@ -162,7 +162,7 @@ const CLOUDFLARE_MARKDOWN_URL = 'https://api.cloudflare.com/client/v4/accounts/{
 - **Does NOT touch:** `terraform/`, `ecosystem.config.cjs`, `docs/guides/`, `docs/services/`
 
 ### Subtask 2 Contract (infrastructure & documentation)
-- **Owns:** `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`, `docs/guides/`, `docs/services/web-agent/technical.md`
+- **Owns:** `terraform/shared-gcp/main.tf`, `ecosystem.config.cjs`, `docs/guides/`, `docs/services/web-agent/technical.md`
 - **Adds secrets:** `INTEXURAOS_CLOUDFLARE_ACCOUNT_ID`, `INTEXURAOS_CLOUDFLARE_API_TOKEN`
 - **Removes secret:** `INTEXURAOS_CRAWL4AI_APP_API_KEY`
 - **Documents:** Full Cloudflare account setup from scratch (assume no existing account)
@@ -933,12 +933,12 @@ git commit -m "refactor(web-agent): remove legacy Crawl4AI client and tests"
 
 **Subtask:** infrastructure & documentation
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `ecosystem.config.cjs`
 
 ### Step 4.1: Update Terraform secrets
 
-- [ ] **In `terraform/environments/dev/main.tf`, update secret definitions**
+- [ ] **In `terraform/shared-gcp/main.tf`, update secret definitions**
 
 Find the Crawl4AI secret definition block (around line 509) and replace it:
 
@@ -971,7 +971,7 @@ Find the web-agent Cloud Run module (around line 1622-1624) and replace the secr
 - [ ] **Commit**
 
 ```bash
-git add terraform/environments/dev/main.tf
+git add terraform/shared-gcp/main.tf
 git commit -m "infra: replace Crawl4AI secrets with Cloudflare credentials in Terraform"
 ```
 

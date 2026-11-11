@@ -210,7 +210,7 @@ The function polls the health endpoint during the grace period. It stops waiting
 
 ## Changes Since v3.8.0
 
-The legacy per-worker `workers/vm-lifecycle/cloudbuild.yaml` deployment entry was removed as part of runtime-configuration migration. The `startVm` and `stopVm` source handlers are unchanged in this release window. This worker is separate from the guarded orchestrator restart and DEV hibernation procedures; those procedures must not be inferred from its running-task poll.
+The legacy per-worker `workers/vm-lifecycle/cloudbuild.yaml` deployment entry was removed as part of runtime-configuration migration. The `startVm` and `stopVm` source handlers are unchanged in this release window. This worker is separate from the host-owned orchestrator restart helper; its running-task poll does not replace the helper’s admission and callback checks.
 
 ## Recent Changes
 

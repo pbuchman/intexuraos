@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -184,8 +184,56 @@ export async function loadFirestoreMigrations({ repoRoot }) {
   return migrations;
 }
 
-export function buildAggregatedFirestoreArtifacts(migrations) {
-  const indexesData = aggregateIndexes(migrations);
+/** Terraform and Firebase share this catalog; missing/invalid input must block deployment. */
+export function loadFirestoreMonitoringIndexes({ repoRoot }) {
+  const catalog = JSON.parse(
+    readFileSync(join(repoRoot, 'firestore.monitoring-indexes.json'), 'utf8')
+  );
+  const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+  const hasOnlyKeys = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
+  if (
+    !isRecord(catalog) ||
+    !hasOnlyKeys(catalog, ['schemaVersion', 'indexes']) ||
+    catalog.schemaVersion !== 1 ||
+    !isRecord(catalog.indexes)
+  ) {
+    throw new Error('Invalid Firestore monitoring index catalog');
+  }
+  const definitions = Object.entries(catalog.indexes);
+  for (const [key, index] of definitions) {
+    if (
+      !/^[a-z][a-z0-9_]*$/.test(key) ||
+      !isRecord(index) ||
+      !hasOnlyKeys(index, ['collectionGroup', 'queryScope', 'fields']) ||
+      typeof index.collectionGroup !== 'string' ||
+      !/^[a-z][a-z0-9_]*$/.test(index.collectionGroup) ||
+      index.queryScope !== 'COLLECTION' ||
+      !Array.isArray(index.fields) ||
+      index.fields.length < 2 ||
+      index.fields.length > 100
+    ) {
+      throw new Error('Invalid Firestore monitoring index definition');
+    }
+    const paths = new Set();
+    for (const field of index.fields) {
+      if (
+        !isRecord(field) ||
+        !hasOnlyKeys(field, ['fieldPath', 'order']) ||
+        typeof field.fieldPath !== 'string' ||
+        !/^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(field.fieldPath) ||
+        !['ASCENDING', 'DESCENDING'].includes(field.order) ||
+        paths.has(field.fieldPath)
+      ) {
+        throw new Error('Invalid Firestore monitoring index field');
+      }
+      paths.add(field.fieldPath);
+    }
+  }
+  return definitions.map(([, index]) => index);
+}
+
+export function buildAggregatedFirestoreArtifacts(migrations, monitoringIndexes = []) {
+  const indexesData = aggregateIndexes([...migrations, { indexes: monitoringIndexes }]);
   const rulesData = aggregateRules(migrations);
   const rulesText = generateRulesFile(rulesData);
 
@@ -201,7 +249,11 @@ export function buildAggregatedFirestoreArtifacts(migrations) {
 
 export async function writeAggregatedFirestoreArtifacts({ repoRoot, silent = false }) {
   const migrations = await loadFirestoreMigrations({ repoRoot });
-  const { indexesData, rulesText, stats } = buildAggregatedFirestoreArtifacts(migrations);
+  const monitoringIndexes = loadFirestoreMonitoringIndexes({ repoRoot });
+  const { indexesData, rulesText, stats } = buildAggregatedFirestoreArtifacts(
+    migrations,
+    monitoringIndexes
+  );
 
   writeFileSync(
     join(repoRoot, 'firestore.indexes.json'),

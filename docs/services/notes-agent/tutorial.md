@@ -27,7 +27,7 @@ Before starting, ensure you have:
 - [ ] Internal auth token (`$INTERNAL_TOKEN`) for Part 5
 - [ ] `curl` and `jq` installed
 
-**Base URL:** `http://localhost:8121` (local) or `https://intexuraos-notes-agent-cj44trunra-lm.a.run.app` (Cloud Run)
+**Base URL:** `http://localhost:8121` for the local examples below. Use the configured service URL for another environment.
 
 ---
 

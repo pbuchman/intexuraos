@@ -1,6 +1,7 @@
 import type { AppConfig } from '@/types';
 import { WEB_SERVICE_URLS } from './config.generated';
 import { readPublicWebEnv, type PublicWebEnvKey } from './publicEnv';
+import { resolveFeatureAvailability } from './featureAvailability';
 
 type ServiceEnvVar = (typeof WEB_SERVICE_URLS)[number]['envVar'];
 
@@ -22,8 +23,10 @@ function getGeneratedServiceUrls(): Record<ServiceEnvVar, string> {
 
 export function getConfig(): AppConfig {
   const serviceUrls = getGeneratedServiceUrls();
-
   return {
+    featureAvailability: resolveFeatureAvailability(
+      publicEnv.INTEXURAOS_PUBLIC_DEPLOYMENT_PROFILE,
+    ),
     auth0Domain: getEnvVar('INTEXURAOS_AUTH0_DOMAIN'),
     auth0ClientId: getEnvVar('INTEXURAOS_AUTH0_SPA_CLIENT_ID'),
     authAudience: getEnvVar('INTEXURAOS_AUTH_AUDIENCE'),

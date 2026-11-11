@@ -183,6 +183,7 @@ export const SWEEP_ERRORED_EXECUTION_MEMORY_SCHEMA = {
           additionalProperties: false,
           properties: {
             requeued: { type: 'number' },
+            failedCount: { type: 'number' },
             skipped: { type: 'number' },
           },
           required: ['requeued', 'skipped'],
@@ -222,6 +223,7 @@ export const PRUNE_STALE_EXECUTION_MEMORY_SCHEMA = {
           additionalProperties: false,
           properties: {
             archived: { type: 'number' },
+            failedCount: { type: 'number' },
             skipped: { type: 'number' },
           },
           required: ['archived', 'skipped'],

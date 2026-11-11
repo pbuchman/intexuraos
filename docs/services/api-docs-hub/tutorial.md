@@ -1,7 +1,7 @@
 # API Docs Hub — Tutorial
 
 > **Time:** 10 minutes
-> **Prerequisites:** Running IntexuraOS services (local or dev environment)
+> **Prerequisites:** Running IntexuraOS services (local or configured environment)
 > **You will learn:** How to access and navigate unified API documentation for all IntexuraOS services
 
 ---
@@ -30,11 +30,7 @@ Before starting, ensure you have:
 
 ### Step 1.1: Open the Hub
 
-**Production:**
-
-```
-https://api-docs-hub.intexuraos.com/docs
-```
+**Configured environment:** Open `/docs` on the hub URL configured for that environment.
 
 **Local development:**
 
@@ -46,7 +42,7 @@ Then visit `http://localhost:8080/docs`.
 
 ### What You Should See
 
-Swagger UI loads with a dropdown in the top-left corner listing all 17 configured services. The first service in the list is selected by default.
+Swagger UI loads with a dropdown in the top-left corner listing the selected services (17 by default). The first service in the list is selected by default.
 
 ---
 
@@ -89,7 +85,7 @@ Switch to any service (or stay on the hub itself) and find the `GET /health` end
 Alternatively, test the hub's own health check directly:
 
 ```bash
-curl https://api-docs-hub.intexuraos.com/health
+curl http://localhost:8080/health
 ```
 
 **Expected response:**
@@ -127,13 +123,15 @@ curl https://api-docs-hub.intexuraos.com/health
 
 ### Step 4.1: Set Environment Variables
 
-All 17 `*_OPENAPI_URL` environment variables must be set. If using `direnv`, these are loaded from `.envrc`. Verify:
+By default, all 17 `*_OPENAPI_URL` environment variables must be set. To run a smaller catalog, set `INTEXURAOS_API_DOCS_EXPECTED_SERVICES` to a comma-separated list of known service IDs and provide each selected service's OpenAPI URL. For example, a user-service-only hub can be launched with:
 
 ```bash
-env | grep OPENAPI_URL | wc -l
+INTEXURAOS_API_DOCS_EXPECTED_SERVICES=user-service \
+INTEXURAOS_USER_SERVICE_OPENAPI_URL=http://localhost:8110/openapi.json \
+  pnpm --filter api-docs-hub start:local
 ```
 
-Expected output: `17`
+Empty entries, duplicate IDs, unknown services, or missing selected URLs fail startup. The Home PROD basic profile supplies its reduced selection automatically; full uses the complete catalog.
 
 ### Step 4.2: Start the Service
 
@@ -157,8 +155,8 @@ curl http://localhost:8080/health | jq .
 | --------------------- | ----------------------------- | --------------------------------------------------------- |
 | Spec not loading      | Target service is down        | Check target service status and network accessibility     |
 | CORS error            | Service blocks browser origin | Configure CORS headers on the target service              |
-| Health returns "down" | Missing env vars at startup   | Ensure all 17 `*_OPENAPI_URL` vars are set                |
-| Startup crash         | Any required env var missing  | Run `direnv allow` and verify with `env \                 | grep OPENAPI` |
+| Health returns "down" | No configured sources | Check the configured source list; health does not probe upstream URLs |
+| Startup crash | Invalid catalog or missing selected URL | Check `INTEXURAOS_API_DOCS_EXPECTED_SERVICES` and the URL variables for its selected services |
 | Blank Swagger UI      | All services unreachable      | Verify at least one service URL is reachable from browser |
 | Port conflict         | Port 8080 already in use      | Set `PORT=8081` or stop the conflicting process           |
 

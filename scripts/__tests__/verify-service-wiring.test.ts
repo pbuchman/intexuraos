@@ -74,7 +74,7 @@ function writeFixture(rootDir: string, relativePath: string, body: string): stri
   return fullPath;
 }
 
-function runScript(rootDir: string) {
+function runScript(rootDir: string): ReturnType<typeof spawnSync> {
   return spawnSync('node', [SCRIPT, '--root', rootDir], {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -191,22 +191,11 @@ const apiProxy = {
     expect(output).toMatch(/Generated service wiring artifacts/);
     const configPath = path.join(rootDir, 'apps/web/src/config.generated.ts');
     const ecosystemPath = path.join(rootDir, 'ecosystem.generated.cjs');
-    const terraformPath = path.join(
-      rootDir,
-      'terraform/environments/dev/service-urls.auto.tfvars.json'
-    );
 
     expect(existsSync(configPath)).toBe(true);
     expect(existsSync(ecosystemPath)).toBe(true);
-    expect(existsSync(terraformPath)).toBe(true);
     expect(readFileSync(configPath, 'utf8')).toContain('INTEXURAOS_CODE_AGENT_URL');
     expect(readFileSync(ecosystemPath, 'utf8')).toContain('INTEXURAOS_USER_SERVICE_URL');
-    expect(JSON.parse(readFileSync(terraformPath, 'utf8'))).toEqual({
-      service_urls: {
-        INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
-        INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
-      },
-    });
   });
 
   it('renders public service env values from manifest API paths', () => {

@@ -126,9 +126,9 @@ header "Deploy plumbing"
 warn  "GCP app/web Cloud Build deploy files are intentionally absent" 1 \
       "migrated app deployment belongs to the Hetzner path"
 
-header "Terraform (environments/dev/main.tf)"
+header "Terraform (shared-gcp/main.tf)"
 
-DEV_TF="terraform/environments/dev/main.tf"
+DEV_TF="terraform/shared-gcp/main.tf"
 # Checklist line 998: Added to local.services map
 check "local.services.${SERVICE_SNAKE} defined"          "$(grep_any "${SERVICE_SNAKE} = {" "$DEV_TF")"
 header "Terraform (modules/iam)"

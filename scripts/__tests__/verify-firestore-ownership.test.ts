@@ -59,6 +59,31 @@ describe('runOwnershipCheck', () => {
     return root;
   }
 
+  it('scans explicitly owned production files without broadening to unrelated sibling files', () => {
+    const root = setup();
+    writeRegistry(root, {
+      heartbeat: {
+        owner: 'svc-a',
+        description: 'heartbeat',
+        scanPaths: ['apps/svc-a/src/services.ts'],
+      },
+      foreign: { owner: 'svc-b', description: 'foreign' },
+    });
+    writeIndexes(root, { indexes: [], fieldOverrides: [] });
+    writeFile(
+      root,
+      'apps/svc-a/src/services.ts',
+      "const heartbeatStore = createJobHeartbeatStore({ collectionName: 'heartbeat' });\n"
+    );
+    writeFile(root, 'apps/svc-a/src/unrelated.ts', "const FOREIGN_COLLECTION = 'foreign';\n");
+    const result = runOwnershipCheck({ repoRoot: root });
+    expect(result.exitCode).toBe(0);
+    expect(result.stats.references).toBe(1);
+    expect(result.warnings).not.toContainEqual(
+      expect.objectContaining({ collection: 'heartbeat' })
+    );
+  });
+
   it('honors per-collection scanPaths', () => {
     const root = setup();
     writeRegistry(root, {

@@ -28,6 +28,10 @@ After a planning task finishes, send a follow-up message from its task page to r
 
 For actionable error alerts, open the associated SentryBox code task and inspect its logs and issue links. Repeated alerts may reuse existing remediation work. In Dispatch Queue, inspect the reported blocker and next action; a review may wait for queued implementation on the same issue. Ask Agent opens an interactive Codex task.
 
+## Inspect a Failed Investigation
+
+Read the task failure reason and linked SentryBox or Linear evidence before retrying. `SENTRY_EVIDENCE_UNAVAILABLE` means the investigation stopped because the supported evidence could not justify a change; repeating it does not supply the missing evidence. For provider usage limits, check the preserved reset information when present. Retry exhaustion attempts one exhaustion notification, with a generic failure publish as fallback if that publish fails.
+
 ## Internal Submission
 
 Trusted services should use the current internal task creation client from `@intexuraos/internal-clients`. Do not call removed compatibility endpoints.

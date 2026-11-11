@@ -88,6 +88,10 @@ Schedule calculation uses wall-clock time in the selected zone and explicitly ha
 
 A run moves through `queued`, `processing`, then `completed`, `failed`, or `skipped_no_activity`. Delivery is tracked independently as `not_sent`, `pending`, `sent`, `ambiguous`, or `failed`.
 
+`delivery.status: sent` means provider acceptance at `acceptedAt`; `delivery.transportConfirmation` independently records `pending`, `delivered`, `read`, or `failed` with applicable timestamps and a failure code. Reconciliation observes existing receipts without resending an accepted message. Only runs whose provider acceptance is still unresolved use the receipt timeouts: a missing receipt becomes `DELIVERY_RECEIPT_MISSING` after six hours of observed absence, and a still-pending receipt becomes ambiguous 24 hours after summary completion. Already accepted runs retain `delivery.status: sent` while transport evidence is observed; neither timeout applies to them or authorizes a resend.
+
+Scheduler recovery drains ready outbox work and reconciles due deliveries in at most three pages per category per tick. Failed transport confirmations on accepted sends remain observable for up to seven days after acceptance, allowing later delivered/read proof to supersede them without a blind replay.
+
 The scheduler reserves one deterministic run for a definition and schedule boundary. The worker leases it for 180 seconds and renews the lease every 60 seconds. Source reads use pages of at most 200 messages, 25 pages, 5,000 messages, and 2 MB. The prompt can include the previous three completed summaries for continuity.
 
 After generation, a transactional outbox publishes a frozen WhatsApp payload. WhatsApp Service must acquire a delivery authorization before calling the provider. An ambiguous provider result blocks blind retry until reconciliation proves whether a send happened.
@@ -98,12 +102,21 @@ After generation, a transactional outbox publishes a frozen WhatsApp payload. Wh
 | --- | --- |
 | `message_digest_definitions` | User definitions, revisions, source fences, and next run. |
 | `message_digest_runs` | Frozen windows, generated summaries, processing, and delivery state. |
+| `message_digest_monitoring_runs` | Content-free transactional monitoring projections and initialization marker. |
 | `message_digest_states` | Cross-run summary continuity. |
 | `message_digest_dispatch_outbox` | Durable outbound dispatch records. |
 | `message_digest_erasure_requests` | Bounded physical erasure progress. |
 | `message_digest_migration_activations` | One-shot Fishing migration activation fence. |
 
 Legacy archive collections remain migration evidence only; no runtime writes depend on Mobile Notifications digest code.
+
+### Monitoring
+
+`GET /internal/monitoring/status` keeps the existing notification summary contract. After initialization, process-lifetime listeners read active definitions, unresolved compact runs, and three bounded delivery/cursor queries per definition. Completed canonical history is never scanned for a monitoring request or restart. Polling an unchanged service performs no additional monitoring query. Pending work and failures remain visible until confirmed delivery supersedes their scheduled boundary or a resume cutoff excludes their window. Skipped runs still cover a due cursor, and the latest delivery timestamp is independent of the latest delivered boundary.
+
+Canonical run mutations, Fishing migration visibility changes, and the resume operation mirror compact projections in the same transaction. Lease renewals and processing changes that leave the monitoring outcome unchanged do not rewrite projections. Definition erasure removes the corresponding compact rows. New writers must preserve this contract.
+
+Roll out the Terraform indexes and new writers before running `pnpm exec tsx scripts/message-digests/run-monitoring-backfill.mts --project PROJECT --writers-deployed`. The one-time backfill rereads each source transactionally, never changes canonical history, and marks initialization complete only after every page succeeds. Monitoring uses the existing query path with diagnostics mode `legacy-bootstrap` during this upgrade window; after initialization, listener failures return unavailable instead of falling back. Compact historical rows add storage, while runtime reads depend on active definitions and unresolved work. See the [Home production runbook](../../operations/home-prod-runbook.md) for deployment and measurement steps. Diagnostics count received document payloads in Firestore protobuf encoding; they exclude transport framing and billing minimums.
 
 ## Configuration
 

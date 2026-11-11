@@ -56,6 +56,8 @@ import type { SentryIssueEventRepository } from '../domain/repositories/sentryIs
 import type { ExecutionMemoryEmbeddingClient } from '../domain/usecases/prepareExecutionMemoryContext.js';
 
 export interface ServiceContainer {
+  jobHeartbeatStore?: import('@intexuraos/infra-firestore').JobHeartbeatStore;
+  getResumeCutoff?: () => Promise<string | null>;
   firestore: Firestore;
   logger: Logger;
   serviceUrl?: string;

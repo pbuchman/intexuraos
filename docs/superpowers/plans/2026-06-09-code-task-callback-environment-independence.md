@@ -24,7 +24,7 @@ Observed evidence:
 Root cause:
 
 - Runtime config and tests encode the stale assumption that prod callbacks should use bare-root internal paths:
-  - `terraform/environments/dev/main.tf` sets `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = local.public_origin`.
+  - `terraform/shared-gcp/main.tf` sets `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL = local.public_origin`.
   - `scripts/hetzner/load-secrets.sh` writes `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL="${PUBLIC_ORIGIN}"`.
   - `apps/code-agent/src/domain/services/codeTaskCallbackUrls.ts` rejects prod `/api/code/internal/...` callback URLs.
   - `workers/orchestrator/src/services/callback-url.ts` rewrites prod `/api/code/internal/...` back to root `/internal/...`.
@@ -95,7 +95,7 @@ These Fastify route handlers stay unchanged. Only the externally routable URLs u
 - `workers/orchestrator/src/__tests__/turn-metrics-collector.test.ts`
   - Turn metrics callback URL tests.
 
-- `terraform/environments/dev/main.tf`
+- `terraform/shared-gcp/main.tf`
   - Hetzner runtime config source for `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL`.
 
 - `scripts/hetzner/load-secrets.sh`
@@ -538,7 +538,7 @@ Expected: files are staged or visible in `git diff --cached`; no commit is creat
 
 **Files:**
 - Modify: `ecosystem.config.prod.cjs`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `scripts/hetzner/load-secrets.sh`
 - Test: `scripts/__tests__/ecosystem.prod.config.test.ts`
 - Test: `scripts/__tests__/hetzner-runtime.test.ts`
@@ -574,7 +574,7 @@ Expected: FAIL because current config writes the bare public origin.
 
 - [ ] **Step 3: Update runtime config sources**
 
-In `terraform/environments/dev/main.tf`, change only the existing `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL` value inside `hetzner_runtime_env_vars` from `local.public_origin` to `"${local.public_origin}/api/code"`:
+In `terraform/shared-gcp/main.tf`, change only the existing `INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL` value inside `hetzner_runtime_env_vars` from `local.public_origin` to `"${local.public_origin}/api/code"`:
 
 ```hcl
 hetzner_runtime_env_vars = {
@@ -667,7 +667,7 @@ Expected: PASS.
 - [ ] **Step 5: Stage chunk 3 changes without committing**
 
 ```bash
-git add ecosystem.config.prod.cjs terraform/environments/dev/main.tf scripts/hetzner/load-secrets.sh \
+git add ecosystem.config.prod.cjs terraform/shared-gcp/main.tf scripts/hetzner/load-secrets.sh \
   scripts/__tests__/ecosystem.prod.config.test.ts scripts/__tests__/hetzner-runtime.test.ts \
   .claude/CLAUDE.md .claude/reference/environments.md .claude/reference/architecture.md
 ```

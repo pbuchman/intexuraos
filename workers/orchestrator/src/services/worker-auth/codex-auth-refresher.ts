@@ -11,7 +11,7 @@ function getHostUserString(): { uid: number; gid: number; userString: string } {
 
 export interface CodexAuthRefresherConfig {
   sharedAuthPath: string;
-  imageName: string;
+  resolveImage: () => Promise<string>;
   networkName: string;
 }
 
@@ -31,8 +31,9 @@ export class CodexAuthRefresher {
     const { uid, gid, userString } = getHostUserString();
 
     try {
+      const image = await this.config.resolveImage();
       container = await this.docker.createContainer({
-        Image: this.config.imageName,
+        Image: image,
         name: `codex-auth-refresh-${String(Date.now())}`,
         Entrypoint: ['/bin/sh', '-lc'],
         Cmd: [

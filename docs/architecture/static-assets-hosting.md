@@ -50,7 +50,7 @@ https://storage.googleapis.com/intexuraos-static-assets-dev/branding/exports/pri
 After deploying the infrastructure:
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform output static_assets_bucket_name    # intexuraos-static-assets-dev
 terraform output static_assets_public_url     # https://storage.googleapis.com/intexuraos-static-assets-dev
 ```
@@ -62,7 +62,7 @@ terraform output static_assets_public_url     # https://storage.googleapis.com/i
 1. Apply Terraform configuration:
 
 ```bash
-cd terraform/environments/dev
+cd terraform/shared-gcp
 terraform init
 terraform plan
 terraform apply

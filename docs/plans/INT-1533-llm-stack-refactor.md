@@ -57,7 +57,7 @@
 
 ### Infrastructure
 - `migrations/` — new migration adding Claude 4.7 models to pricing store (if applicable; confirm storage layer during Task 8).
-- `terraform/environments/dev/main.tf` — add Cloud Scheduler entry for nightly pricing diff job.
+- `terraform/shared-gcp/main.tf` — add Cloud Scheduler entry for nightly pricing diff job.
 
 ---
 
@@ -1145,7 +1145,7 @@ git commit -m "feat(llm-pricing): batch usage events with 500ms flush window (IN
 **Files:**
 - Create: `scripts/pricing-diff-nightly.mjs`
 - Create: `scripts/__tests__/pricing-diff-nightly.test.mjs`
-- Modify: `terraform/environments/dev/main.tf` (Cloud Scheduler entry)
+- Modify: `terraform/shared-gcp/main.tf` (Cloud Scheduler entry)
 - Modify: `ecosystem.config.cjs` (dev runner, optional)
 
 - [ ] **Step 1: Write the failing test**
@@ -1180,18 +1180,18 @@ Scheduler behavior: on drift, POST to an internal endpoint that opens a Linear i
 
 - [ ] **Step 4: Wire Terraform**
 
-Add a Cloud Scheduler job to `terraform/environments/dev/main.tf` hitting a new internal endpoint (or invoking the script via Cloud Run Job). Confirm the env-var-3-location rule for any new `INTEXURAOS_PRICING_DIFF_*` var.
+Add a Cloud Scheduler job to `terraform/shared-gcp/main.tf` hitting a new internal endpoint (or invoking the script via Cloud Run Job). Confirm the env-var-3-location rule for any new `INTEXURAOS_PRICING_DIFF_*` var.
 
 - [ ] **Step 5: Run verification**
 
 Run: `pnpm run ci:tracked`
-Run: `cd terraform/environments/dev && terraform validate`
+Run: `cd terraform/shared-gcp && terraform validate`
 Expected: both PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/pricing-diff-nightly.mjs scripts/__tests__/pricing-diff-nightly.test.mjs terraform/environments/dev/main.tf ecosystem.config.cjs
+git add scripts/pricing-diff-nightly.mjs scripts/__tests__/pricing-diff-nightly.test.mjs terraform/shared-gcp/main.tf ecosystem.config.cjs
 git commit -m "feat(pricing): nightly pricing-diff job opens Linear issue on drift (INT-1533)"
 ```
 

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
+import type Docker from 'dockerode';
 import { CodexAuthRefresher } from '../codex-auth-refresher.js';
 
 vi.mock('node:os', async (importOriginal) => {
@@ -42,6 +43,7 @@ describe('CodexAuthRefresher', () => {
   let mockLogger: Logger;
   let mockContainer: MockContainer;
   let mockDocker: MockDocker;
+  let resolveImage: Mock<() => Promise<string>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,12 +58,15 @@ describe('CodexAuthRefresher', () => {
     mockDocker = {
       createContainer: vi.fn().mockResolvedValue(mockContainer),
     };
+    resolveImage = vi
+      .fn<() => Promise<string>>()
+      .mockResolvedValue('registry/code-worker@sha256:resolved');
 
     refresher = new CodexAuthRefresher(
       {
         sharedAuthPath: '/home/user/.code-orchestrator/codex-auth',
-        imageName: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
         networkName: 'code-worker-net',
+        resolveImage,
       },
       mockDocker as never,
       mockLogger
@@ -72,23 +77,57 @@ describe('CodexAuthRefresher', () => {
     vi.restoreAllMocks();
   });
 
+  it('waits for the worker image pull before creating a refresh container', async () => {
+    let finishPull: ((image: string) => void) | undefined;
+    resolveImage.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          finishPull = resolve;
+        })
+    );
+
+    const result = refresher.refresh();
+    expect(mockDocker.createContainer).not.toHaveBeenCalled();
+    finishPull?.('registry/code-worker@sha256:resolved');
+
+    expect(await result).toBe(true);
+    expect(mockDocker.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ Image: 'registry/code-worker@sha256:resolved' })
+    );
+  });
+
+  it('does not create a refresh container when the registry pull fails', async () => {
+    resolveImage.mockRejectedValue(new Error('registry access denied'));
+
+    expect(await refresher.refresh()).toBe(false);
+    expect(mockDocker.createContainer).not.toHaveBeenCalled();
+    expect(mockContainer.remove).not.toHaveBeenCalled();
+  });
+
   it('creates a refresh container with the shared auth mounted into ~/.codex', async () => {
     await refresher.refresh();
 
     expect(mockDocker.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
-        Image: 'europe-central2-docker.pkg.dev/project/repo/code-worker:latest',
+        Image: 'registry/code-worker@sha256:resolved',
         Entrypoint: ['/bin/sh', '-lc'],
         Cmd: [expect.stringContaining('codex exec --json')],
         HostConfig: expect.objectContaining({
-          Binds: expect.arrayContaining([
-            '/home/user/.code-orchestrator/codex-auth:/home/claude/.codex:rw',
-          ]),
+          Binds: ['/home/user/.code-orchestrator/codex-auth:/home/claude/.codex:rw'],
           NetworkMode: 'code-worker-net',
           AutoRemove: false,
         }),
       })
     );
+    const spec = mockDocker.createContainer.mock.calls[0]?.[0] as Docker.ContainerCreateOptions;
+    expect(spec.User).toBe(
+      `${String(process.getuid?.() ?? 1000)}:${String(process.getgid?.() ?? 1000)}`
+    );
+    expect(spec.Env).toEqual([
+      'HOME=/home/claude',
+      'CODEX_HOME=/home/claude/.codex',
+      'CODEX_SQLITE_HOME=/home/claude/.codex',
+    ]);
   });
 
   it('returns true on exit code 0', async () => {

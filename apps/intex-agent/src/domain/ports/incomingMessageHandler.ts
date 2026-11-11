@@ -1,3 +1,4 @@
+import type { NotificationContext } from '@intexuraos/http-contracts';
 export type IntexIncomingMessageReplyContextSource =
   | 'inbound_user_message'
   | 'outbound_assistant_message';
@@ -16,6 +17,7 @@ export interface IntexIncomingMessageButtonResponse {
 }
 
 export interface IntexIncomingMessage {
+  notificationContext?: NotificationContext;
   type: 'intex.message.ingest';
   userId: string;
   messageId: string;

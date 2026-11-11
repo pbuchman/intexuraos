@@ -25,6 +25,12 @@ export { withSchemaVersion, type SchemaVersionedFields } from './schemaVersion.j
 // TTL helper for retention-driven deletion
 export { computeExpireAt, RETENTION_24H_MS, RETENTION_7D_MS } from './expireAt.js';
 
+export {
+  createJobHeartbeatStore,
+  type JobHeartbeatStore,
+  type JobExecutionToken,
+} from './jobHeartbeat.js';
+
 // Testing utilities
 export {
   createFakeFirestore,
@@ -37,6 +43,15 @@ export {
 // package does not depend on `@intexuraos/http-server`. Callers should
 // import the canonical types from `@intexuraos/http-server`.
 export { firestoreHealthCheck } from './health.js';
+
+export {
+  createFirestoreSnapshotCache,
+  closeFirestoreSnapshotCaches,
+  getFirestoreSnapshotCacheDiagnostics,
+  type FirestoreSnapshotCache,
+  type FirestoreSnapshotDiagnostics,
+  type FirestoreMonitoringDiagnostics,
+} from './snapshotCache.js';
 
 // Generic CRUD repository factory
 export {

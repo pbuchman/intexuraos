@@ -12,8 +12,9 @@ import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { registerRoutes } from './routes/index.js';
 import { loadConfig } from './config.js';
-import { getServices } from './services.js';
+import { closeMonitoringServices, getServices } from './services.js';
 import { createJwtValidator } from './infra/auth/jwtValidator.js';
+import { registerCodeJobMonitoring } from './routes/jobMonitoring.js';
 
 const SERVICE_NAME = 'code-agent';
 const SERVICE_VERSION = '0.0.1';
@@ -31,6 +32,8 @@ export async function buildServer(loggerStream?: NodeJS.WritableStream): Promise
 
   // Global error handler - logs to Pino, sends to Sentry, returns structured response
   setupSentryErrorHandler(app);
+
+  app.addHook('onClose', closeMonitoringServices);
 
   await app.register(cors, {
     origin: true,
@@ -63,6 +66,7 @@ export async function buildServer(loggerStream?: NodeJS.WritableStream): Promise
     logger
   );
 
+  registerCodeJobMonitoring(app, () => getServices().jobHeartbeatStore);
   await registerRoutes(app, { jwtValidator });
 
   // Required endpoints for CI verification

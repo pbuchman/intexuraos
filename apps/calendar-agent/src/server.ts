@@ -1,3 +1,4 @@
+import { closeMonitoringServices } from './services.js';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
@@ -152,6 +153,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   registerQuietHealthCheckLogging(app);
+
+  app.addHook('onClose', closeMonitoringServices);
 
   await app.register(fastifyCors, {
     origin: true,

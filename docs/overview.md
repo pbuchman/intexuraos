@@ -46,6 +46,8 @@ Every message you send enters through one front door and reaches the right speci
 
 **[Calendar Agent](services/calendar-agent/features.md)** puts events on your Google Calendar from dashboard flows and Intex tool calls. Send "Dentist next Tuesday at 3pm" to Intex and confirm the proposed event after its details are clear. You can also list or count events and confirm attendee, time, location, or other supported changes to one or multiple events. Relative dates, all-day events, locations, and multilingual input — including Polish — all work without a settings page. Vague messages that lack enough detail ask for clarification instead of being guessed.
 
+The calendar dashboard shows the latest scheduled summary's stage separately from its final WhatsApp delivery status, including the confirmation time when recorded.
+
 **[Notes Agent](services/notes-agent/features.md)** gives your quick thoughts a home inside the platform. Create a note with tags from the dashboard, or let Intex store one on your behalf from a WhatsApp text message. Tag-based organization, most-recent-first sorting, and zero friction.
 
 **[Bookmarks Agent](services/bookmarks-agent/features.md)** saves links with context. Share a URL, and the agent visits the page, extracts the title, cover image, and site information, then generates an AI summary delivered straight to your WhatsApp. When you come back next week, you remember exactly why you saved it. Duplicate URLs are caught automatically.

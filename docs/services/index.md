@@ -2,11 +2,17 @@
 
 Catalog for IntexuraOS services, workers, and packages.
 
-**Version 4.0.0** — September 10, 2026
+**Version 4.0.1** — November 11, 2026
 
 ---
 
-## v4.0.0 Highlights
+## v4.0.1 Highlights
+
+| Component | Key Changes |
+| --- | --- |
+| **calendar-agent / web** | Latest scheduled calendar summary stage, final WhatsApp delivery status, and delivery confirmation time |
+
+## v4.0.0 Highlights (Previous)
 
 | Component | Key Changes |
 | --- | --- |
@@ -251,7 +257,7 @@ Progressive Web App providing the unified dashboard for IntexuraOS.
 
 ## Workers
 
-Cloud Functions and local services that run outside Cloud Run.
+Cloud Functions, local services, and the code-worker Docker image run separately from the application PM2 runtime.
 
 | Worker                                     | Type            | Purpose                                                          | Trigger                     |
 | ------------------------------------------ | --------------- | ---------------------------------------------------------------- | --------------------------- |
@@ -485,6 +491,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-09-10
+**Last updated:** 2026-11-11
 
 **Components tracked:** Active app docs, three worker services under `workers/`, the `docker/code-worker` image, and shared packages

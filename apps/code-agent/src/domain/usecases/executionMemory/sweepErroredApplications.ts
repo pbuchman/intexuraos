@@ -8,6 +8,7 @@ export interface SweepErroredApplicationsDeps {
 }
 
 export interface SweepErroredApplicationsResult {
+  failedCount?: number;
   requeued: number;
   skipped: number;
 }
@@ -25,6 +26,7 @@ export async function sweepErroredApplications(
 
   let requeued = 0;
   let skipped = 0;
+  let failedCount = 0;
 
   for (const task of erroredResult.value) {
     const attempts = task.executionMemoryPostRun?.attempts ?? 0;
@@ -63,6 +65,7 @@ export async function sweepErroredApplications(
     });
 
     if (!updateResult.ok) {
+      failedCount += 1;
       deps.logger.warn(
         { taskId: task.id, error: updateResult.error.message },
         'Sweep: failed to requeue task'
@@ -75,5 +78,5 @@ export async function sweepErroredApplications(
     requeued += 1;
   }
 
-  return ok({ requeued, skipped });
+  return ok({ requeued, skipped, ...(failedCount > 0 ? { failedCount } : {}) });
 }

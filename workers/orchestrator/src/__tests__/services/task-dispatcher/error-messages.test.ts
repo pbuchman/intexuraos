@@ -1,7 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { buildRuntimeHardErrorMessage } from '../../../services/task-dispatcher/error-messages.js';
+import {
+  buildAgentFailureError,
+  buildRuntimeHardErrorMessage,
+} from '../../../services/task-dispatcher/error-messages.js';
 
 describe('buildRuntimeHardErrorMessage', () => {
+  it.each([1, 137, 0, undefined])(
+    'puts an exhausted Codex limit and its reset time first (exit %s)',
+    (exitCode) => {
+      const provider = "You've hit your usage limit. Try again at Sep 19th, 2026 8:09 AM.";
+      const exit =
+        exitCode === undefined || exitCode === 0 ? '' : `; Non-zero exit code: ${String(exitCode)}`;
+      expect(
+        buildRuntimeHardErrorMessage({ exitCode, claudeError: provider, runtimeName: 'Codex' })
+      ).toBe(`Codex usage limit exceeded: ${provider}${exit}`);
+    }
+  );
   it('includes exit code when non-zero', () => {
     const message = buildRuntimeHardErrorMessage({
       exitCode: 1,
@@ -90,5 +104,26 @@ describe('buildRuntimeHardErrorMessage', () => {
       runtimeName: 'Claude',
     });
     expect(message).toBe('');
+  });
+});
+
+describe('buildAgentFailureError', () => {
+  it('ends an investigation with missing evidence without retry', () => {
+    const reason = 'SENTRY_EVIDENCE_UNAVAILABLE: event contains no cause';
+    expect(buildAgentFailureError('sentry', reason, 'generic wrapper')).toEqual({
+      code: 'SENTRY_EVIDENCE_UNAVAILABLE',
+      message: reason,
+    });
+  });
+  it.each([
+    ['execution', 'SENTRY_EVIDENCE_UNAVAILABLE: unavailable', undefined],
+    ['sentry', 'different failure', undefined],
+    ['sentry', 'SENTRY_EVIDENCE_UNAVAILABLE: unavailable', 'usage limit exceeded'],
+  ] as const)('keeps runtime retry handling for %s', (agent, reason, runtimeError) => {
+    expect(buildAgentFailureError(agent, reason, 'actual failure', runtimeError)).toEqual({
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: 'actual failure',
+      remediation: { action: 'retry' },
+    });
   });
 });

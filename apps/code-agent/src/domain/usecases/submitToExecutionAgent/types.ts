@@ -59,6 +59,8 @@ export type SubmitToExecutionAgentErrorCode =
  * Error result from submitting to Execution Agent.
  */
 export interface SubmitToExecutionAgentError {
+  /** Suppresses duplicate reporting of an upstream validation failure. */
+  alreadyReported?: boolean;
   code: SubmitToExecutionAgentErrorCode;
   message: string;
   /** Only set for already_implemented */

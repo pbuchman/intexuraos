@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import * as recovery from './backfill-private-events.mjs';
+import { classifyMatrixEventForRecovery, drainPendingMedia } from './server.mjs';
 
 import {
   applyRecoverySegment,
@@ -682,6 +684,9 @@ test('reviewed policy-skipped relation targets are hashed, applied as terminal r
   const targetHash = createHash('sha256').update(targetEventId).digest('hex');
   const segment = {
     name: 's0-s1',
+    applied: true,
+    fromToken: 's0',
+    toToken: 's1',
     events: [
       {
         matrixRoomId: '!room:home-dev',
@@ -710,7 +715,7 @@ test('reviewed policy-skipped relation targets are hashed, applied as terminal r
           },
         ],
       ]),
-    fetchMatrixEvent: async () => ({ type: 'm.room.message' }),
+    fetchMatrixEvent: async () => ({ event_id: targetEventId, type: 'm.room.message' }),
     classifyTarget: () => ({ classification: 'policy_skip', reason: 'matrix_notice' }),
   });
 
@@ -728,6 +733,7 @@ test('reviewed policy-skipped relation targets are hashed, applied as terminal r
 
   let posted;
   await applyRecoverySegment(segment, {
+    sourceAccountId: 'private-source',
     postBatch: async (events) => {
       posted = events;
       return { accepted: 0, duplicates: events.length, rejected: 0 };
@@ -741,6 +747,7 @@ test('reviewed policy-skipped relation targets are hashed, applied as terminal r
 
 test('relation target review fails closed for mapped, unavailable, and unapproved skip targets', async () => {
   const segment = {
+    applied: true,
     events: [
       {
         matrixRoomId: '!room:home-dev',
@@ -753,8 +760,9 @@ test('relation target review fails closed for mapped, unavailable, and unapprove
     ],
   };
   const base = {
-    fetchDocuments: async (messageIds) => new Map([[messageIds[0], {}]]),
-    fetchMatrixEvent: async () => ({}),
+    fetchDocuments: async (messageIds) =>
+      new Map([[messageIds[0], { matrixEventId: '$reaction', sourceAccountId: 'private-source' }]]),
+    fetchMatrixEvent: async () => ({ event_id: '$target' }),
   };
   for (const classified of [
     { classification: 'mapped', event: {} },
@@ -768,6 +776,815 @@ test('relation target review fails closed for mapped, unavailable, and unapprove
       }),
       /recovery_relation_target_review_blocked_1/
     );
+  }
+});
+
+function policyRepairFixture() {
+  const segment = {
+    name: 's0-s1',
+    fromToken: 's0',
+    toToken: 's1',
+    applied: true,
+    verified: true,
+    verification: { messageCount: 4 },
+    lastApply: { accepted: 4, duplicates: 0, mediaStored: 1, mediaPending: 0 },
+    mediaUnavailableEvents: [],
+    mediaUnavailableEventHashes: [],
+    events: [
+      { matrixEventId: '$unrelated', message: { type: 'text' } },
+      {
+        matrixEventId: '$media',
+        message: { type: 'image', media: { mxcUri: 'mxc://fixture/media' } },
+      },
+      {
+        matrixRoomId: '!fixture:home-dev',
+        matrixEventId: '$replacement',
+        message: {
+          type: 'text',
+          relation: { kind: 'replacement', targetMatrixEventId: '$notice' },
+        },
+      },
+      {
+        matrixRoomId: '!fixture:home-dev',
+        matrixEventId: '$reaction',
+        message: { type: 'reaction', reaction: { emoji: 'x', targetMatrixEventId: '$tombstone' } },
+      },
+    ],
+  };
+  const documents = new Map(
+    segment.events.map((event) => [
+      createHashForTest(`private-source\0${event.matrixEventId}`),
+      { matrixEventId: event.matrixEventId, sourceAccountId: 'private-source', userId: 'user-1' },
+    ])
+  );
+  const requested = [];
+  const classifiedTargets = [];
+  const deps = {
+    userId: 'user-1',
+    fetchDocuments: async (messageIds) => {
+      requested.push(...messageIds);
+      return documents;
+    },
+    fetchMatrixEvent: async (roomId, eventId) => ({
+      event_id: eventId,
+      room_id: roomId,
+      type: eventId === '$notice' ? 'm.room.message' : 'm.reaction',
+      content: eventId === '$notice' ? { msgtype: 'm.notice' } : {},
+      ...(eventId === '$notice'
+        ? {}
+        : {
+            unsigned: {
+              redacted_by: '$fixture-redaction',
+              redacted_because: { type: 'm.room.redaction', event_id: '$fixture-redaction' },
+            },
+          }),
+    }),
+    classifyTarget: (roomId, event) => {
+      classifiedTargets.push([roomId, event.event_id]);
+      return classifyMatrixEventForRecovery(
+        roomId,
+        event,
+        { memberDisplayNames: {} },
+        recoveryConfig
+      );
+    },
+  };
+  return { segment, documents, requested, classifiedTargets, deps };
+}
+
+test('policy review stages only new operations after a complete apply and preserves full provenance', async () => {
+  const fixture = policyRepairFixture();
+  const { segment } = fixture;
+  const originalEvents = structuredClone(segment.events);
+  const originalApply = structuredClone(segment.lastApply);
+  mergeRelationTargetPolicySkipEvidence(segment, [
+    {
+      eventHash: createHashForTest('$replacement'),
+      targetHash: createHashForTest('$notice'),
+      reason: 'matrix_notice',
+    },
+  ]);
+  const review = await reviewPolicySkippedRelationTargets(segment, 'private-source', fixture.deps);
+
+  assert.deepEqual(review, { reviewedTargetCount: 2, repairedEventCount: 1 });
+  assert.equal(segment.policyRelationRepairPending, true);
+  assert.deepEqual(segment.policyRelationRepairProof.eventHashes, [createHashForTest('$reaction')]);
+  assert.equal(segment.operationMetadataRepairPending, undefined);
+  assert.equal(segment.applied, true);
+  assert.equal(segment.verified, undefined);
+  assert.equal(segment.verification, undefined);
+  assert.deepEqual(segment.lastApply, originalApply);
+  assert.deepEqual(segment.events, originalEvents);
+  assert.equal(fixture.requested.length, 6);
+  assert.equal(fixture.classifiedTargets.length, 2);
+
+  const posted = [];
+  const result = await applyRecoverySegment(segment, {
+    sourceAccountId: 'private-source',
+    postBatch: async (events, deliveryMode) => {
+      assert.equal(deliveryMode, 'backfill');
+      posted.push(...events);
+      return { accepted: 0, duplicates: events.length, rejected: 0 };
+    },
+    enqueueMedia: async () => assert.fail('policy repair must not enqueue the full media segment'),
+    drainMedia: async () => ({ stored: 0, pending: 0, unavailable: [] }),
+  });
+  assert.deepEqual(
+    posted.map(({ matrixEventId }) => matrixEventId),
+    ['$reaction']
+  );
+  assert.equal(posted[0].message.reaction.targetUnavailableReason, 'redacted_reaction_tombstone');
+  assert.equal(result.duplicates, 1);
+  assert.deepEqual(segment.events, originalEvents);
+});
+
+test('policy review refuses incomplete applies, conflicting repairs and missing or misclassified evidence without staging', async () => {
+  for (const scenario of [
+    'not-applied',
+    'metadata-pending',
+    'main-missing',
+    'identity',
+    'wrong-target',
+    'classification',
+    'fetch-failed',
+  ]) {
+    const fixture = policyRepairFixture();
+    if (scenario === 'not-applied') fixture.segment.applied = false;
+    if (scenario === 'metadata-pending') fixture.segment.operationMetadataRepairPending = true;
+    if (scenario === 'main-missing')
+      fixture.documents.delete(createHashForTest('private-source\0$media'));
+    if (scenario === 'identity')
+      fixture.documents.get(createHashForTest('private-source\0$media')).userId = 'foreign-user';
+    if (scenario === 'wrong-target')
+      fixture.deps.fetchMatrixEvent = async () => ({ event_id: '$different' });
+    if (scenario === 'classification')
+      fixture.deps.classifyTarget = () => ({ classification: 'mapped' });
+    if (scenario === 'fetch-failed')
+      fixture.deps.fetchMatrixEvent = async () => {
+        throw new Error('fixture_matrix_unavailable');
+      };
+    const before = structuredClone(fixture.segment);
+    await assert.rejects(
+      reviewPolicySkippedRelationTargets(fixture.segment, 'private-source', fixture.deps)
+    );
+    assert.deepEqual(fixture.segment, before, scenario);
+  }
+});
+
+test('policy repair proof rejects stale segment, evidence, foreign, duplicate, malformed and unused hashes before writes', async () => {
+  const mutations = [
+    (segment) => {
+      segment.events[0].message.text = 'changed';
+    },
+    (segment) => {
+      segment.fromToken = 'different';
+    },
+    (segment) => {
+      segment.lastApply.mediaStored = 2;
+    },
+    (segment) => {
+      segment.mediaUnavailableEventHashes.push(createHashForTest('$media'));
+    },
+    (segment) => {
+      segment.relationTargetPolicySkips[0].reason = 'redacted_reaction_tombstone';
+    },
+    (segment) => {
+      segment.policyRelationRepairProof.eventHashes = ['$raw-id'];
+    },
+    (segment) => {
+      segment.policyRelationRepairProof.eventHashes.push(
+        segment.policyRelationRepairProof.eventHashes[0]
+      );
+    },
+    (segment) => {
+      segment.policyRelationRepairProof.eventHashes = [createHashForTest('$foreign')];
+      resignPolicyRepairSelection(segment);
+    },
+    (segment) => {
+      segment.policyRelationRepairProof.eventHashes = [createHashForTest('$media')];
+      resignPolicyRepairSelection(segment);
+    },
+    (segment) => {
+      segment.policyRelationRepairProof.proofHash = '0'.repeat(64);
+    },
+    (segment) => {
+      segment.policyRelationRepairProof = undefined;
+    },
+    (segment) => {
+      segment.operationMetadataRepairPending = true;
+    },
+    (segment) => {
+      segment.applied = false;
+    },
+  ];
+  for (const mutate of mutations) {
+    const fixture = policyRepairFixture();
+    await reviewPolicySkippedRelationTargets(fixture.segment, 'private-source', fixture.deps);
+    mutate(fixture.segment);
+    let writes = 0;
+    await assert.rejects(
+      applyRecoverySegment(fixture.segment, {
+        sourceAccountId: 'private-source',
+        postBatch: async () => {
+          writes += 1;
+          return {};
+        },
+        enqueueMedia: async () => {
+          writes += 1;
+        },
+        drainMedia: async () => {
+          writes += 1;
+          return {};
+        },
+      })
+    );
+    assert.equal(writes, 0);
+  }
+  const fixture = policyRepairFixture();
+  await reviewPolicySkippedRelationTargets(fixture.segment, 'private-source', fixture.deps);
+  await assert.rejects(
+    applyRecoverySegment(fixture.segment, {
+      sourceAccountId: 'foreign-source',
+      postBatch: async () => assert.fail('foreign source must not post'),
+    })
+  );
+});
+
+function resignPolicyRepairSelection(segment) {
+  const { proofHash, ...proof } = segment.policyRelationRepairProof;
+  assert.equal(typeof proofHash, 'string');
+  segment.policyRelationRepairProof.proofHash = createHashForTest(JSON.stringify(proof));
+}
+
+test('policy repair records a separate successful outcome, retains pending on failures and retries deterministically', async () => {
+  assert.equal(typeof recovery.recordRecoveryApplyResult, 'function');
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wa-policy-retry-'));
+  try {
+    const stateFile = path.join(directory, 'state.json');
+    const s0Bytes = Buffer.from('{"nextBatch":"s0"}\n');
+    await fsp.writeFile(stateFile, s0Bytes, { mode: 0o600 });
+    const fixture = policyRepairFixture();
+    await reviewPolicySkippedRelationTargets(fixture.segment, 'private-source', fixture.deps);
+    const originalApply = structuredClone(fixture.segment.lastApply);
+    const originalEvents = structuredClone(fixture.segment.events);
+    const posted = [];
+    let attempts = 0;
+    let pending = 1;
+    const deps = {
+      sourceAccountId: 'private-source',
+      postBatch: async (events, deliveryMode) => {
+        assert.equal(deliveryMode, 'backfill');
+        posted.push(events.map(({ matrixEventId }) => matrixEventId));
+        attempts += 1;
+        if (attempts <= 5) throw new Error('intexuraos_ingest_failed_503');
+        return { accepted: 0, duplicates: events.length, rejected: 0 };
+      },
+      waitBeforeRetry: async () => {},
+      enqueueMedia: async () => assert.fail('repair must not requeue media'),
+      drainMedia: async () => ({ stored: 0, pending, unavailable: [] }),
+    };
+    await assert.rejects(
+      applyRecoverySegment(fixture.segment, deps),
+      /intexuraos_ingest_failed_503/
+    );
+    assert.equal(fixture.segment.policyRelationRepairPending, true);
+    assert.equal(fixture.segment.lastPolicyRelationRepair, undefined);
+
+    const pendingResult = await applyRecoverySegment(fixture.segment, deps);
+    recovery.recordRecoveryApplyResult(fixture.segment, pendingResult, 'private-source');
+    assert.equal(fixture.segment.policyRelationRepairPending, true);
+    assert.equal(fixture.segment.applied, true);
+    pending = 0;
+    const result = await applyRecoverySegment(fixture.segment, deps);
+    recovery.recordRecoveryApplyResult(fixture.segment, result, 'private-source');
+    assert.equal(fixture.segment.policyRelationRepairPending, false);
+    assert.deepEqual(fixture.segment.lastPolicyRelationRepair, result);
+    assert.deepEqual(fixture.segment.lastApply, originalApply);
+    assert.deepEqual(fixture.segment.events, originalEvents);
+    assert.deepEqual(fixture.segment.mediaUnavailableEvents, []);
+    assert.deepEqual(await fsp.readFile(stateFile), s0Bytes);
+    assert.equal(fixture.segment.verified, undefined);
+    assert.ok(
+      posted.every((ids) => JSON.stringify(ids) === JSON.stringify(['$replacement', '$reaction']))
+    );
+
+    const reviewAgain = await reviewPolicySkippedRelationTargets(
+      fixture.segment,
+      'private-source',
+      fixture.deps
+    );
+    assert.equal(reviewAgain.repairedEventCount, 0);
+    assert.equal(fixture.segment.policyRelationRepairPending, false);
+  } finally {
+    await fsp.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('policy repair refuses stale proof or changed full-media evidence before accepting completion', async () => {
+  assert.equal(typeof recovery.recordRecoveryApplyResult, 'function');
+  for (const scenario of ['stale-proof', 'new-media-evidence']) {
+    const fixture = policyRepairFixture();
+    await reviewPolicySkippedRelationTargets(fixture.segment, 'private-source', fixture.deps);
+    if (scenario === 'stale-proof') fixture.segment.events[0].message.text = 'changed';
+    const result = {
+      accepted: 0,
+      duplicates: 2,
+      rejected: 0,
+      mediaStored: 0,
+      mediaPending: 0,
+      mediaUnavailable:
+        scenario === 'new-media-evidence'
+          ? [{ eventHash: createHashForTest('$media'), reason: 'matrix_media_too_large' }]
+          : [],
+    };
+    const before = structuredClone(fixture.segment);
+    assert.throws(() =>
+      recovery.recordRecoveryApplyResult(fixture.segment, result, 'private-source')
+    );
+    assert.deepEqual(fixture.segment, before);
+  }
+});
+
+test('completed targeted repair still verifies the entire original segment and all media', async () => {
+  assert.equal(typeof recovery.recordRecoveryApplyResult, 'function');
+  const fixture = policyRepairFixture();
+  await reviewPolicySkippedRelationTargets(fixture.segment, 'private-source', fixture.deps);
+  const result = await applyRecoverySegment(fixture.segment, {
+    sourceAccountId: 'private-source',
+    postBatch: async (events) => ({ accepted: 0, duplicates: events.length, rejected: 0 }),
+    enqueueMedia: async () => assert.fail('repair must not enqueue'),
+    drainMedia: async () => ({ stored: 0, pending: 0, unavailable: [] }),
+  });
+  recovery.recordRecoveryApplyResult(fixture.segment, result, 'private-source');
+  const mediaId = createHashForTest('private-source\0$media');
+  fixture.documents.get(mediaId).media = {
+    storageStatus: 'stored',
+    gcsPath: 'fixture/media',
+    thumbnailGcsPath: 'fixture/thumbnail',
+  };
+  for (const event of fixture.segment.events.slice(2)) {
+    const key = event.message.relation === undefined ? 'reaction' : 'relation';
+    const operation = event.message[key];
+    fixture.documents.get(createHashForTest(`private-source\0${event.matrixEventId}`))[key] = {
+      ...operation,
+      targetMessageId: createHashForTest(`private-source\0${operation.targetMatrixEventId}`),
+      applicationStatus: 'superseded',
+      targetUnavailableReason: key === 'relation' ? 'matrix_notice' : 'redacted_reaction_tombstone',
+    };
+  }
+  const objects = [];
+  const deps = {
+    fetchDocuments: async (ids) => {
+      assert.equal(ids.length, 4);
+      return fixture.documents;
+    },
+    verifyObject: async (objectPath) => objects.push(objectPath),
+    readCounters: async () => ({ accountMessageCount: 4, totalMessageCount: 4 }),
+  };
+  const verification = await verifyRecoveryEvidence(
+    fixture.segment,
+    'private-source',
+    'user-1',
+    deps
+  );
+  assert.equal(verification.messageCount, 4);
+  assert.equal(verification.verifiedRelationCount, 2);
+  assert.deepEqual(objects, ['fixture/media', 'fixture/thumbnail']);
+  fixture.documents.delete(createHashForTest('private-source\0$unrelated'));
+  await assert.rejects(
+    verifyRecoveryEvidence(fixture.segment, 'private-source', 'user-1', deps),
+    /recovery_verify_missing_documents_1/
+  );
+  assert.equal(fixture.segment.verified, undefined);
+});
+
+test('CLI apply selects applied=true pending policy repair and conflicting review modes reject', async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wa-policy-selection-'));
+  try {
+    const fixture = policyRepairFixture();
+    await reviewPolicySkippedRelationTargets(fixture.segment, 'private-source', fixture.deps);
+    const manifestFile = path.join(directory, 'manifest.json');
+    const fenceFile = path.join(directory, 'recovery-required');
+    const credentialFile = path.join(directory, 'fixture-credential.json');
+    await fsp.writeFile(
+      manifestFile,
+      JSON.stringify({ sourceAccountId: 'private-source', segments: [fixture.segment] }),
+      { mode: 0o600 }
+    );
+    await fsp.writeFile(fenceFile, '', { mode: 0o600 });
+    await fsp.writeFile(credentialFile, '{}', { mode: 0o644 });
+    await fsp.chmod(credentialFile, 0o644);
+    const env = {
+      INTEXURAOS_SOURCE_ACCOUNT_ID: 'private-source',
+      WHATSAPP_SYNC_MAINTENANCE_FENCE_FILE: fenceFile,
+      INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE: credentialFile,
+    };
+    await assert.rejects(
+      runBackfillCli(['apply', '--manifest', manifestFile], env),
+      /recovery_apply_identity_file_not_private/
+    );
+    const summary = JSON.parse(await fsp.readFile(`${manifestFile}.summary.json`, 'utf8'));
+    assert.equal(summary.segments[0].policyRelationRepairPending, true);
+    assert.equal(summary.segments[0].policyRelationRepairEventCount, 2);
+    assert.deepEqual(summary.segments[0].lastApply, fixture.segment.lastApply);
+    await assert.rejects(
+      runBackfillCli(
+        [
+          'verify',
+          '--manifest',
+          manifestFile,
+          '--review-policy-skipped-relations',
+          'true',
+          '--review-missing-operation-metadata',
+          'true',
+        ],
+        env
+      ),
+      /recovery_repair_modes_conflict/
+    );
+  } finally {
+    await fsp.rm(directory, { recursive: true, force: true });
+  }
+});
+
+function mediaRetryFixture() {
+  const segment = {
+    name: 's0-s1',
+    fromToken: 's0',
+    toToken: 's1',
+    applied: false,
+    events: [
+      { matrixEventId: '$text', message: { type: 'text' } },
+      {
+        matrixEventId: '$already-stored',
+        message: { type: 'image', media: { mxcUri: 'mxc://fixture/done', mimeType: 'image/jpeg' } },
+      },
+      {
+        matrixEventId: '$stl',
+        message: {
+          type: 'file',
+          media: {
+            mxcUri: 'mxc://fixture/stl',
+            mimeType: 'model/stl',
+            fileName: 'original.stl',
+            sizeBytes: 113884,
+          },
+        },
+      },
+      {
+        matrixEventId: '$image',
+        message: {
+          type: 'image',
+          media: { mxcUri: 'mxc://fixture/image', mimeType: 'image/jpeg' },
+        },
+      },
+    ],
+    lastApply: {
+      accepted: 3,
+      duplicates: 1,
+      rejected: 0,
+      mediaStored: 1,
+      mediaPending: 2,
+      mediaUnavailable: [],
+    },
+    mediaUnavailableEvents: [],
+    mediaUnavailableEventHashes: [],
+  };
+  const queue = {
+    version: 1,
+    items: segment.events.slice(2).map((event) => ({
+      matrixEventId: event.matrixEventId,
+      messageId: createHashForTest(`private-source\0${event.matrixEventId}`),
+      mediaKind: event.message.type,
+      media: structuredClone(event.message.media),
+      queuedAt: '2026-10-12T12:00:00.000Z',
+      attempts: 1,
+    })),
+  };
+  return { segment, queue };
+}
+
+test('media-only retry drains exact pending items without metadata replay and accumulates progress once', async () => {
+  assert.equal(typeof recovery.retryPendingRecoveryMedia, 'function');
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wa-media-only-'));
+  try {
+    const { segment, queue } = mediaRetryFixture();
+    const originalEvents = structuredClone(segment.events);
+    const stateFile = path.join(directory, 'state.json');
+    const pendingMediaFile = path.join(directory, 'pending-media.json');
+    const s0Bytes = Buffer.from('{"nextBatch":"s0"}\n');
+    await fsp.writeFile(stateFile, s0Bytes, { mode: 0o600 });
+    await fsp.writeFile(pendingMediaFile, JSON.stringify(queue), { mode: 0o600 });
+    let attempt = 0;
+    const patched = [];
+    const deps = {
+      postBatch: async () => assert.fail('media retry must not post metadata'),
+      enqueueMedia: async () => assert.fail('media retry must not enqueue'),
+      drainMedia: () =>
+        drainPendingMedia(
+          { sourceAccountId: 'private-source', pendingMediaFile },
+          'fixture-token',
+          {
+            checkPrivateMediaStored: async () => false,
+            fetchMatrixMedia: async (_config, _token, mxcUri) => {
+              if (mxcUri.endsWith('/image'))
+                throw new Error(
+                  attempt === 0 ? 'matrix_media_download_failed_404' : 'matrix_media_too_large'
+                );
+              return { buffer: Buffer.from('stl fixture'), contentType: 'model/stl' };
+            },
+            uploadPrivateMedia: async () => ({
+              gcsPath: 'fixture/stl',
+              storageStatus: 'stored',
+              mimeType: 'model/stl',
+              storedMimeType: 'application/octet-stream',
+            }),
+            postPrivateMediaBackfill: async (_config, payload) => patched.push(payload),
+            nowISOString: () => '2026-10-12T12:01:00.000Z',
+          }
+        ),
+    };
+    const first = await recovery.retryPendingRecoveryMedia(segment, 'private-source', queue, deps);
+    recovery.recordRecoveryApplyResult(segment, first, 'private-source');
+    assert.equal(segment.applied, false);
+    assert.deepEqual(
+      [first.accepted, first.duplicates, first.mediaStored, first.mediaPending],
+      [3, 1, 2, 1]
+    );
+    assert.equal(patched.length, 1);
+    assert.equal(patched[0].media.mimeType, 'model/stl');
+    assert.equal(patched[0].media.fileName, 'original.stl');
+    const remaining = JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8'));
+    attempt = 1;
+    const second = await recovery.retryPendingRecoveryMedia(
+      segment,
+      'private-source',
+      remaining,
+      deps
+    );
+    recovery.recordRecoveryApplyResult(segment, second, 'private-source');
+    assert.equal(segment.applied, true);
+    assert.deepEqual(
+      [second.accepted, second.duplicates, second.mediaStored, second.mediaPending],
+      [3, 1, 2, 0]
+    );
+    assert.deepEqual(second.mediaUnavailable, [
+      { eventHash: createHashForTest('$image'), reason: 'matrix_media_too_large' },
+    ]);
+    assert.equal(segment.mediaUnavailableEvents.length, 1);
+    assert.equal(segment.verified, undefined);
+    assert.deepEqual(segment.events, originalEvents);
+    assert.deepEqual(await fsp.readFile(stateFile), s0Bytes);
+    assert.deepEqual(JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8')).items, []);
+
+    const documents = new Map(
+      segment.events.map((event) => [
+        createHashForTest(`private-source\0${event.matrixEventId}`),
+        {
+          matrixEventId: event.matrixEventId,
+          sourceAccountId: 'private-source',
+          userId: 'user-1',
+          ...(['$already-stored', '$stl'].includes(event.matrixEventId)
+            ? { media: { storageStatus: 'stored', gcsPath: `fixture/${event.matrixEventId}` } }
+            : {}),
+        },
+      ])
+    );
+    const verificationDeps = {
+      fetchDocuments: async () => documents,
+      verifyObject: async () => {},
+      readCounters: async () => ({ accountMessageCount: 4, totalMessageCount: 4 }),
+    };
+    const verification = await verifyRecoveryEvidence(
+      segment,
+      'private-source',
+      'user-1',
+      verificationDeps
+    );
+    assert.equal(verification.messageCount, 4);
+    assert.equal(verification.storedMediaCount, 2);
+    documents.delete(createHashForTest('private-source\0$text'));
+    await assert.rejects(
+      verifyRecoveryEvidence(segment, 'private-source', 'user-1', verificationDeps),
+      /recovery_verify_missing_documents/
+    );
+  } finally {
+    await fsp.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('media-only retry refuses incomplete metadata, conflicts and stale or foreign queue before drain', async () => {
+  assert.equal(typeof recovery.retryPendingRecoveryMedia, 'function');
+  const mutations = [
+    ({ segment }) => {
+      segment.lastApply.accepted -= 1;
+    },
+    ({ segment }) => {
+      segment.lastApply.rejected = 1;
+    },
+    ({ segment }) => {
+      segment.lastApply.duplicates = -1;
+    },
+    ({ segment }) => {
+      segment.lastApply.mediaPending = 0;
+    },
+    ({ segment }) => {
+      segment.applied = true;
+    },
+    ({ segment }) => {
+      segment.verified = true;
+    },
+    ({ segment }) => {
+      segment.errors = [{ errorCode: 'malformed_event' }];
+    },
+    ({ segment }) => {
+      segment.policyRelationRepairPending = true;
+    },
+    ({ segment }) => {
+      segment.operationMetadataRepairPending = true;
+    },
+    ({ segment }) => {
+      segment.mediaUnavailableEvents = [
+        { eventHash: 'malformed', reason: 'matrix_media_too_large' },
+      ];
+    },
+    ({ queue }) => {
+      queue.version = 2;
+    },
+    ({ queue }) => {
+      queue.items.pop();
+    },
+    ({ queue }) => {
+      queue.items[1] = structuredClone(queue.items[0]);
+    },
+    ({ queue }) => {
+      queue.items[0].messageId = createHashForTest('foreign-source\0$stl');
+    },
+    ({ queue }) => {
+      queue.items[0].matrixEventId = '$foreign';
+    },
+    ({ queue }) => {
+      queue.items[0].mediaKind = 'image';
+    },
+    ({ queue }) => {
+      queue.items[0].media.mxcUri = 'mxc://fixture/foreign';
+    },
+    ({ queue }) => {
+      queue.items[0].media.mimeType = 'application/octet-stream';
+    },
+    ({ queue }) => {
+      queue.items[0].media.fileName = 'changed';
+    },
+    ({ queue }) => {
+      queue.items[0].attempts = -1;
+    },
+  ];
+  for (const mutate of mutations) {
+    const fixture = mediaRetryFixture();
+    mutate(fixture);
+    const before = structuredClone(fixture);
+    let drainCalls = 0;
+    await assert.rejects(
+      recovery.retryPendingRecoveryMedia(fixture.segment, 'private-source', fixture.queue, {
+        drainMedia: async () => {
+          drainCalls += 1;
+          return { stored: 2, pending: 0, unavailable: [] };
+        },
+      })
+    );
+    assert.equal(drainCalls, 0);
+    assert.deepEqual(fixture, before);
+  }
+});
+
+test('media-only retry failure or inconsistent result leaves apply proof and pending state intact', async () => {
+  assert.equal(typeof recovery.retryPendingRecoveryMedia, 'function');
+  for (const result of [
+    undefined,
+    { stored: 3, pending: 0, unavailable: [] },
+    {
+      stored: 0,
+      pending: 0,
+      unavailable: [{ eventHash: createHashForTest('$foreign'), reason: 'matrix_media_too_large' }],
+    },
+  ]) {
+    const { segment, queue } = mediaRetryFixture();
+    const before = structuredClone(segment);
+    await assert.rejects(
+      recovery.retryPendingRecoveryMedia(segment, 'private-source', queue, {
+        drainMedia: async () => {
+          if (result === undefined) throw new Error('fixture_drain_failed');
+          return result;
+        },
+      })
+    );
+    assert.deepEqual(segment, before);
+  }
+});
+
+test('CLI media-only retry requires preserved S0 and validates queue before credentials or writes', async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wa-media-only-guard-'));
+  try {
+    const { segment, queue } = mediaRetryFixture();
+    const manifestFile = path.join(directory, 'manifest.json');
+    const stateFile = path.join(directory, 'state.json');
+    const pendingMediaFile = path.join(directory, 'pending-media.json');
+    const fenceFile = path.join(directory, 'recovery-required');
+    const s0Bytes = Buffer.from('{"nextBatch":"s0"}\n');
+    const manifestBytes = Buffer.from(
+      JSON.stringify({
+        version: 1,
+        sourceAccountId: 'private-source',
+        s0StateBytesBase64: s0Bytes.toString('base64'),
+        s0StateHash: createHashForTest(s0Bytes),
+        segments: [segment],
+      })
+    );
+    await fsp.writeFile(manifestFile, manifestBytes, { mode: 0o600 });
+    await fsp.writeFile(pendingMediaFile, JSON.stringify(queue), { mode: 0o600 });
+    await fsp.writeFile(fenceFile, '', { mode: 0o600 });
+    await fsp.writeFile(stateFile, '{"nextBatch":"changed"}', { mode: 0o600 });
+    const env = {
+      INTEXURAOS_SOURCE_ACCOUNT_ID: 'private-source',
+      WHATSAPP_SYNC_STATE_FILE: stateFile,
+      WHATSAPP_SYNC_PENDING_MEDIA_FILE: pendingMediaFile,
+      WHATSAPP_SYNC_MAINTENANCE_FENCE_FILE: fenceFile,
+    };
+    await assert.rejects(
+      runBackfillCli(['apply', '--manifest', manifestFile, '--retry-pending-media', 'true'], env),
+      /recovery_media_retry_state_mismatch/
+    );
+    await fsp.writeFile(stateFile, s0Bytes, { mode: 0o600 });
+    queue.items[0].media.fileName = 'changed';
+    const queueBytes = Buffer.from(JSON.stringify(queue));
+    await fsp.writeFile(pendingMediaFile, queueBytes, { mode: 0o600 });
+    await assert.rejects(
+      runBackfillCli(['apply', '--manifest', manifestFile, '--retry-pending-media', 'true'], env),
+      /recovery_media_retry_queue_mismatch/
+    );
+    assert.deepEqual(await fsp.readFile(manifestFile), manifestBytes);
+    assert.deepEqual(await fsp.readFile(pendingMediaFile), queueBytes);
+    assert.deepEqual(await fsp.readFile(stateFile), s0Bytes);
+  } finally {
+    await fsp.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('media-only retry option rejects wrong stage, false value and review-mode conflicts before setup', async () => {
+  for (const args of [
+    ['verify', '--retry-pending-media', 'true'],
+    ['apply', '--retry-pending-media', 'false'],
+    ['apply', '--retry-pending-media', 'true', '--review-policy-skipped-relations', 'true'],
+    ['apply', '--retry-pending-media', 'true', '--review-missing-operation-metadata', 'true'],
+  ]) {
+    await assert.rejects(
+      runBackfillCli([args[0], '--manifest', 'unused', ...args.slice(1)], {}),
+      /invalid_recovery_media_retry_options/
+    );
+  }
+});
+
+test('policy pending blocks verify, next discovery and finalization even with inconsistent verified=true', async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wa-policy-pending-'));
+  try {
+    const manifestFile = path.join(directory, 'manifest.json');
+    const fenceFile = path.join(directory, 'recovery-required');
+    const stateFile = path.join(directory, 'state.json');
+    const queueFile = path.join(directory, 'pending-media.json');
+    const s0Bytes = Buffer.from('{"nextBatch":"s0"}\n');
+    const { segment } = policyRepairFixture();
+    segment.policyRelationRepairPending = true;
+    const manifest = {
+      version: 1,
+      sourceAccountId: 'private-source',
+      s0StateBytesBase64: s0Bytes.toString('base64'),
+      segments: [segment],
+    };
+    await fsp.writeFile(manifestFile, JSON.stringify(manifest), { mode: 0o600 });
+    await fsp.writeFile(fenceFile, '', { mode: 0o600 });
+    await fsp.writeFile(stateFile, s0Bytes, { mode: 0o600 });
+    await fsp.writeFile(queueFile, '{"items":[]}', { mode: 0o600 });
+    const env = {
+      INTEXURAOS_SOURCE_ACCOUNT_ID: 'private-source',
+      WHATSAPP_SYNC_MAINTENANCE_FENCE_FILE: fenceFile,
+    };
+    await assert.rejects(
+      runBackfillCli(['verify', '--manifest', manifestFile], env),
+      /recovery_policy_relation_repair_pending/
+    );
+    await assert.rejects(
+      runBackfillCli(['discover', '--manifest', manifestFile], env),
+      /recovery_policy_relation_repair_pending/
+    );
+    manifest.segments.push({ name: 's1-s2', fromToken: 's1', toToken: 's2', verified: true });
+    manifest.finalStateUpdatedAt = '2026-10-12T12:00:00.000Z';
+    await assert.rejects(
+      finalizeRecoveryState({ manifest, stateFile, pendingMediaFile: queueFile }),
+      /recovery_policy_relation_repair_pending/
+    );
+    assert.deepEqual(await fsp.readFile(stateFile), s0Bytes);
+  } finally {
+    await fsp.rm(directory, { recursive: true, force: true });
   }
 });
 

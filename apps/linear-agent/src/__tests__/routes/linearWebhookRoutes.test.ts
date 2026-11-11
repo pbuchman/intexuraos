@@ -1,3 +1,4 @@
+import { createFakeJobHeartbeatStore } from '../fakes.js';
 /**
  * Tests for Linear webhook routes.
  */
@@ -61,6 +62,7 @@ describe('Linear Webhook Routes', () => {
     });
 
     setServices({
+      jobHeartbeatStore: createFakeJobHeartbeatStore(),
       connectionRepository: connectionRepo,
       linearApiClient,
       extractionService,
@@ -292,6 +294,7 @@ describe('Linear Webhook Routes', () => {
       });
 
       setServices({
+      jobHeartbeatStore: createFakeJobHeartbeatStore(),
         connectionRepository: connectionRepo2,
         linearApiClient,
         extractionService,

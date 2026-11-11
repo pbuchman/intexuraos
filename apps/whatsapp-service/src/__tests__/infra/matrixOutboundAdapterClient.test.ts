@@ -131,7 +131,9 @@ describe('createMatrixOutboundAdapterClient', () => {
   });
 
   it('keeps loopback DEV requests independent from Cloudflare Access', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({ status: 'ready' }));
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ status: 'ready' }));
     const client = createMatrixOutboundAdapterClient({
       baseUrl: 'http://127.0.0.1:8099',
       authToken: 'matrix-token',
@@ -204,5 +206,28 @@ describe('createMatrixOutboundAdapterClient', () => {
       target: 'intex_agent',
       text: 'hello',
     });
+  });
+  it('bounds readiness at five seconds and sends at thirty seconds', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ status: 'ready' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'sent', matrixEventId: 'event' }));
+    const client = createMatrixOutboundAdapterClient({
+      baseUrl: 'http://localhost:8080',
+      authToken: 'token',
+      fetchImpl,
+    });
+    await client.getDeliveryReadiness({ sourceAccountId: 'source', target: 'intex_agent' });
+    await client.sendMessage({
+      sourceAccountId: 'source',
+      target: 'intex_agent',
+      text: 'lookahead',
+    });
+    expect(timeout.mock.calls.map(([duration]) => duration)).toEqual([5000, 30000]);
+    expect(
+      fetchImpl.mock.calls.every(([, options]) => options?.signal instanceof AbortSignal)
+    ).toBe(true);
+    timeout.mockRestore();
   });
 });

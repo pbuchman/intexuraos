@@ -6,7 +6,6 @@
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { LinearApiClient, LinearConnectionRepository, LinearLabel } from '../index.js';
 
 export interface ValidateIssueDeps {
@@ -34,7 +33,7 @@ export interface ValidatedIssue {
 }
 
 export interface ValidateIssueError {
-  code: 'NOT_CONNECTED' | 'INVALID_FORMAT' | 'NOT_FOUND' | 'WRONG_TEAM' | 'API_ERROR';
+  code: 'NOT_CONNECTED' | 'INVALID_FORMAT' | 'NOT_FOUND' | 'WRONG_TEAM' | 'API_ERROR' | 'UPSTREAM_UNAVAILABLE';
   message: string;
 }
 
@@ -71,12 +70,20 @@ export async function validateIssue(
   const issueResult = await linearApiClient.getIssueByIdentifier(connection.apiKey, identifier);
 
   if (!issueResult.ok) {
-    logger.warn(
-      { identifier, error: issueResult.error, [SKIP_SENTRY_KEY]: true },
-      'Failed to fetch issue'
+    const { code, diagnostics } = issueResult.error;
+    const operation = diagnostics?.operation ?? 'getIssueByIdentifier';
+    const reason = diagnostics?.message ?? `Linear ${operation} failed: ${code}`;
+    logger.error(
+      {
+        err: new Error(reason),
+        code,
+        operation,
+        ...(diagnostics?.statusCode !== undefined ? { statusCode: diagnostics.statusCode } : {}),
+      },
+      'Failed to validate Linear issue'
     );
     return err({
-      code: 'API_ERROR',
+      code: code === 'UPSTREAM_UNAVAILABLE' ? code : 'API_ERROR',
       message: issueResult.error.message,
     });
   }

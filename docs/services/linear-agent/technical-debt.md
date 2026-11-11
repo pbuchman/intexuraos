@@ -125,6 +125,10 @@ None. The service uses current versions of:
 
 Since v3.8.0, deterministic internal issue IDs and post-create race recovery protect retrying remediation requests. Issue-list page retries and typed `UPSTREAM_UNAVAILABLE` mapping distinguish transient failures from authentication problems. Webhook authentication now precedes event filtering. Existing internal-route, webhook, and Linear mapper/client tests cover these cases.
 
+## Current Read-Reliability Corrections
+
+Transient issue-list relationship failures now retry the failed read independently, preserving successful reads. Terminal full-sync reports retain sanitized operation/status and per-attempt timing evidence with stable grouping. Identifier validation uses bounded transient retries and one owning final report; handled retry logs remain available without duplicate Sentry capture.
+
 ## Resolved Issues
 
 | Date       | Issue                                                    | Resolution                                                                        |

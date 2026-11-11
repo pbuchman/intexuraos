@@ -81,7 +81,7 @@ export function createWhatsAppDigestClient(
         }
         return {
           ok: true,
-          value: { status: 'sent', acceptedAt: result.value.acceptedAt },
+          value: { status: 'sent', acceptedAt: result.value.acceptedAt, ...(result.value.transportConfirmation === undefined ? {} : { transportConfirmation: result.value.transportConfirmation }) },
         };
       }
       if (result.value.status === 'ambiguous') {

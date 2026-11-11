@@ -24,6 +24,7 @@ export interface MessageDigestInstructions {
 export type MessageDigestSchedule = CalendarMessageDigestSchedule;
 
 export interface MessageDigestLatestRunProjection {
+  transportConfirmation?: import('@intexuraos/http-contracts').TransportConfirmation | undefined;
   runId: string;
   startedAt: string;
   generationStatus: 'queued' | 'processing' | 'completed' | 'failed' | 'skipped_no_activity';
@@ -60,6 +61,7 @@ export interface MessageDigestDefinition {
     readinessObservedAt: string;
   };
   checkpointAt: string;
+  resumeCutoff?: string | undefined;
   nextRunAt: string;
   lastRunAt: string | null;
   /** Missing only on legacy records before the normalized Firestore codec has read them. */

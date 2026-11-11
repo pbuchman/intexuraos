@@ -58,7 +58,7 @@ module.exports = {
     );
     writeFixture(
       rootDir,
-      'terraform/environments/dev/main.tf',
+      'terraform/shared-gcp/main.tf',
       `
 resource "google_pubsub_subscription" "approval_reply" {
   push_endpoint = "/internal/actions/approval-reply"
@@ -146,32 +146,6 @@ const receipt = command.ingestReceiptId;
     writeFixture(rootDir, 'apps/actions-agent/dist/package.json', '{"name":"ignored"}');
     writeFixture(rootDir, 'apps/commands-agent/node_modules/some-package/index.js', '');
     writeFixture(rootDir, 'apps/commands-agent/dist/package.json', '{"name":"ignored"}');
-
-    const result = runVerifier(rootDir);
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Removed agent verification passed');
-  });
-
-  it('allows only the explicit Terraform retired async cleanup inventory to name deleted resources', () => {
-    writeFixture(
-      rootDir,
-      'terraform/hetzner-prod/retired-async-cleanup.tf',
-      `
-locals {
-  retired_prod_hetzner_pubsub_subscriptions = {
-    commands_ingest = {
-      subscription_name = "intexuraos-commands-ingest-prod-hetzner"
-      push_path         = "/internal/commands"
-    }
-    actions_queue = {
-      subscription_name = "intexuraos-actions-queue-prod-hetzner"
-      push_path         = "/internal/actions/process"
-    }
-  }
-}
-`
-    );
 
     const result = runVerifier(rootDir);
 

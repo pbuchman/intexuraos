@@ -222,10 +222,10 @@ describe('Webhook async processing', () => {
       // Trigger processing via Pub/Sub endpoint
       await triggerWebhookProcessing();
 
-      // Event should be persisted with IGNORED status (no sender)
+      // Status receipts are valid work even without an incoming sender.
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('ignored');
+      expect(events[0]?.status).toBe('completed');
     });
 
     it('processes webhook when user mapping is disconnected', async () => {
@@ -903,7 +903,6 @@ describe('Webhook async processing', () => {
       expect(events[0]?.failureDetails).toContain('Failed to get video URL');
       expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
     });
-
   });
 
   describe('text message error handling', () => {
@@ -1787,7 +1786,10 @@ describe('Webhook async processing', () => {
         mimeType: 'audio/ogg',
         fileSize: 1000,
       });
-      ctx.whatsappCloudApi.setMediaContent('https://cdn.example.com/audio.ogg', Buffer.from([0x00, 0x01]));
+      ctx.whatsappCloudApi.setMediaContent(
+        'https://cdn.example.com/audio.ogg',
+        Buffer.from([0x00, 0x01])
+      );
       ctx.whatsappCloudApi.setFailMarkAsRead(true);
 
       const payload = createAudioWebhookPayload({ mediaId });

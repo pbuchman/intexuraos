@@ -1,4 +1,4 @@
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { ok, type Result } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
 import type { CalendarScheduleRepository } from './scheduleRepository.js';
 import type { CalendarSchedule, WhatsAppScheduleClient, MatrixDeliveryStatus } from './types.js';
@@ -12,7 +12,9 @@ export interface GetDailyLookaheadScheduleDeps {
 export async function getDailyLookaheadSchedule(
   userId: string,
   deps: GetDailyLookaheadScheduleDeps
-): Promise<Result<{ schedule: CalendarSchedule | null; delivery: MatrixDeliveryStatus }, CalendarError>> {
+): Promise<
+  Result<{ schedule: CalendarSchedule | null; delivery: MatrixDeliveryStatus }, CalendarError>
+> {
   const scheduleResult = await deps.scheduleRepository.getByUserAndTaskType(
     userId,
     CALENDAR_DAILY_LOOKAHEAD_TASK_TYPE
@@ -22,15 +24,10 @@ export async function getDailyLookaheadSchedule(
   }
 
   const deliveryResult = await deps.whatsAppScheduleClient.getMatrixDeliveryStatus(userId);
-  if (!deliveryResult.ok) {
-    return err({
-      code: 'INTERNAL_ERROR',
-      message: deliveryResult.error.message,
-    });
-  }
-
   return ok({
     schedule: scheduleResult.value,
-    delivery: deliveryResult.value,
+    delivery: deliveryResult.ok
+      ? deliveryResult.value
+      : { status: 'error', message: deliveryResult.error.message },
   });
 }

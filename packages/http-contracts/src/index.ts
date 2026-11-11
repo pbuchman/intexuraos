@@ -275,3 +275,14 @@ export {
 } from './intexAgentTestRuns.js';
 
 export { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from './whatsapp.js';
+
+export {
+  notificationContextSchema,
+  transportConfirmationSchema,
+  notificationRunStateSchema,
+} from './notification-delivery.js';
+export type {
+  NotificationContext,
+  TransportConfirmation,
+  NotificationRunState,
+} from './notification-delivery.js';

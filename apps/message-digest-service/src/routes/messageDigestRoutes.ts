@@ -553,7 +553,14 @@ export const messageDigestRoutes: FastifyPluginAsync = (app) => {
       if (!result.ok) return await sendMessageDigestRouteError(reply, result.code);
 
       let run = result.run;
-      if (run.generationStatus === 'completed' && run.delivery.status === 'pending') {
+      if (
+        run.generationStatus === 'completed' &&
+        (run.delivery.status === 'pending' ||
+          (run.delivery.status === 'sent' &&
+            (run.delivery.transportConfirmation === undefined ||
+              run.delivery.transportConfirmation.status === 'pending' ||
+              run.delivery.transportConfirmation.status === 'failed')))
+      ) {
         const reconciled = await reconcileMessageDigestDelivery(
           {
             userId: user.userId,
@@ -628,8 +635,7 @@ export function toPublicDefinition(definition: MessageDigestDefinition): Record<
     attentionCode: definition.attentionCode,
     revision: definition.revision,
     sourceLocked: definition.hasRuns,
-    erasureRequestId:
-      definition.status === 'deleting' ? definition.activeErasureRequestId : null,
+    erasureRequestId: definition.status === 'deleting' ? definition.activeErasureRequestId : null,
     source: {
       chatId: definition.source.chatId,
       chatType: definition.source.chatType,
@@ -662,6 +668,9 @@ export function toPublicDefinition(definition: MessageDigestDefinition): Record<
             generationStatus: definition.latestRun.generationStatus,
             processingStage: definition.latestRun.processingStage,
             deliveryStatus: definition.latestRun.deliveryStatus,
+            ...(definition.latestRun.transportConfirmation === undefined
+              ? {}
+              : { transportConfirmation: definition.latestRun.transportConfirmation }),
           },
     createdAt: definition.createdAt,
     updatedAt: definition.updatedAt,
@@ -714,6 +723,9 @@ export function toPublicRun(run: MessageDigestRun): Record<string, unknown> {
     delivery: {
       type: run.delivery.type,
       status: run.delivery.status,
+      ...(run.delivery.transportConfirmation === undefined
+        ? {}
+        : { transportConfirmation: run.delivery.transportConfirmation }),
       acceptedAt: run.delivery.acceptedAt,
       failedAt: run.delivery.failedAt,
       failureCode: run.delivery.failureCode,

@@ -9,6 +9,17 @@ import {
 const NOW = '2026-07-27T12:00:00.000Z';
 
 describe('recoverMessageDigestWork', () => {
+  it('returns partial logical failures for retryable publication and failed delivery reconciliation', async () => {
+    const harness = createHarness();
+    harness.listReadyDispatches.mockResolvedValue({ items: [dispatch('mdo_failure')], nextCursor: null });
+    harness.listPendingDeliveryRuns.mockResolvedValue({ items: [deliveryRun('mdr_failure')], nextCursor: null });
+    harness.dispatchOutbox.mockResolvedValue({ ok: true, disposition: 'retry_scheduled' });
+    harness.reconcileDelivery.mockResolvedValue({ ok: false, code: 'STATE_UNAVAILABLE' });
+    expect(await recoverMessageDigestWork({ now: NOW, limit: 25 }, harness.dependencies)).toEqual({ ok: true, recoveredDispatches: 1, reconciledDeliveries: 1, failures: 2 });
+    harness.dispatchOutbox.mockResolvedValue(null);
+    harness.reconcileDelivery.mockResolvedValue({ ok: true, disposition: 'failed' });
+    expect(await recoverMessageDigestWork({ now: NOW, limit: 25 }, harness.dependencies)).toMatchObject({ failures: 1 });
+  });
   it('republishes pending run requests before reconciling deliveries and preserves page cursors', async () => {
     const harness = createHarness();
     harness.listReadyDispatches

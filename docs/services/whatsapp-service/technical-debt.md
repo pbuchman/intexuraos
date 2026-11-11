@@ -6,7 +6,7 @@
 - Preserve idempotent webhook replay for text messages.
 - Keep outbound send payloads compatible with existing notification publishers.
 - Keep the approved Message Digest template and run authorization contract frozen until a coordinated template migration is available.
-- Add provider-status reconciliation automation for ambiguous Message Digest sends without ever allowing a blind retry.
+- Preserve provider-status callback correlation and Message Digest receipt reconciliation without ever allowing a blind retry of ambiguous sends or accepted sends awaiting confirmation.
 - Preserve `intex_confirm:` button routing and Intex confirmation replay checks; do not revive retired workflow buttons.
 - Keep private Matrix ingest idempotent by Matrix event ID.
 - Preserve private chat group classification when later bridge events report weaker metadata.
@@ -19,6 +19,8 @@
 - Keep model-specific context budgets, immutable snapshots, explicit continuation, PDF export, and replay recovery aligned.
 - Cover media backfill, inline reaction relations, and account-generation changes without crossing private-account ownership boundaries.
 - Preserve metadata redaction and strict mocked actions in Matrix corpus evaluations.
+- Keep receipt-before-acceptance ordering, status-only/mixed batches, final-part completeness, and delivered/read precedence covered. Never count a preparation acknowledgment as final calendar delivery.
+- Keep reviewed policy relation repairs and generic-file media recovery separate from ordinary message replay.
 
 ## Future Work
 

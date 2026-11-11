@@ -4,6 +4,8 @@ WhatsApp Service is the mobile edge for IntexuraOS. It receives WhatsApp Busines
 
 It is also the source and delivery boundary for Message Digests. Group and direct-chat summaries read a fenced projection of private WhatsApp messages, and completed summaries are delivered to the user's first connected mapping without a second destination setting.
 
+Scheduled calendar summaries now distinguish preparation progress from final WhatsApp delivery. Delivery and read receipts confirm the final response; accepting a send request or delivering a preparation acknowledgment does not complete the summary.
+
 ## Text To Intex Agent
 
 Text messages are persisted and forwarded as `intex.message.ingest` events with `sourceType: "whatsapp_text"`. Intex Agent handles the assistant session and any permitted actions downstream.

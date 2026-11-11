@@ -449,13 +449,13 @@ git add -A && git commit -m "feat(internal-clients): add GitHub OAuth and userna
 ### Task B2: Infrastructure — Add GitHub OAuth Env Vars to user-service
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `scripts/verify-env-vars.mjs`
 
 **Step 1: Add secrets to terraform**
 
-In `terraform/environments/dev/main.tf`:
+In `terraform/shared-gcp/main.tf`:
 - Add to secrets map: `"INTEXURAOS_GITHUB_OAUTH_CLIENT_ID" = "GitHub OAuth App Client ID"`
 - Add to secrets map: `"INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET" = "GitHub OAuth App Client Secret"`
 - Add to user-service secrets block: both vars referencing `module.secret_manager.secret_ids`
@@ -483,7 +483,7 @@ git add -A && git commit -m "infra: add GitHub OAuth env vars to user-service"
 ### Task B3: Infrastructure — Remove INTEXURAOS_GITHUB_API_TOKEN from code-agent
 
 **Files:**
-- Modify: `terraform/environments/dev/main.tf` — remove from code-agent secrets
+- Modify: `terraform/shared-gcp/main.tf` — remove from code-agent secrets
 - Modify: `ecosystem.config.cjs` — remove from code-agent env
 - Modify: `scripts/verify-env-vars.mjs` — remove from `COMMON_OPTIONAL_ENV`
 
@@ -600,7 +600,7 @@ git add -A && git commit -m "refactor(code-agent): remove githubUsername from Wo
 - Modify: `apps/code-agent/src/config.ts` — add `userServiceUrl: string`
 - Modify: `apps/code-agent/src/services.ts` — add `userServiceClient` to ServiceContainer
 - Modify: `apps/code-agent/src/index.ts` — add `INTEXURAOS_USER_SERVICE_URL` to env vars, wire into services
-- Modify: `terraform/environments/dev/main.tf` — add env var to code-agent
+- Modify: `terraform/shared-gcp/main.tf` — add env var to code-agent
 - Modify: `ecosystem.config.cjs` — add env var to code-agent
 
 **Step 1: Add `userServiceUrl` to `Config`**

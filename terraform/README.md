@@ -1,23 +1,26 @@
 # IntexuraOS Terraform Infrastructure
 
-Terraform owns persistent GCP and Hetzner infrastructure, including the two
+Terraform owns persistent GCP infrastructure, including the two
 Secret Manager package containers, native transcription exceptions, and
 least-privilege IAM. It never owns package payloads, secret versions, or
 service-account private key material.
 
 ## Environment Model
 
-`terraform/environments/dev/` is the retained GCP control plane for local,
-home-dev, production, and the retained workers. The legacy project name does
-not mean production has a separate GCP project. Hetzner production host
-infrastructure lives in `terraform/hetzner-prod/`.
+`terraform/shared-gcp/` is the retained GCP control plane for local,
+production, and the retained workers. The backend bucket, state prefix, resource
+addresses, and physical names remain unchanged. The legacy project and
+`hetzner` resource-address names do not mean production has a separate GCP
+project or active Hetzner host. Production callback resources live in
+`terraform/prod-runtime/`; its backend prefix remains
+`terraform/state/prod-hetzner` for state continuity.
 
 ## Structure
 
 ```text
 terraform/
-├── environments/dev/       # Retained shared GCP project
-├── hetzner-prod/            # Hetzner VM/bootstrap/deploy integration
+├── shared-gcp/              # Retained shared GCP project
+├── prod-runtime/            # Production Pub/Sub/Scheduler control plane
 ├── modules/
 │   ├── artifact-registry/
 │   ├── cloud-build/
@@ -49,7 +52,7 @@ plan:
 ```bash
 gcloud auth list --filter=status:ACTIVE --format='value(account)'
 gcloud config get-value project
-cd terraform/environments/dev
+cd terraform/shared-gcp
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform init
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform plan
 ```
@@ -95,15 +98,15 @@ it is not secret material.
   `home_dev_secret_renderer_service_account_email`; its external transitional
   JSON is not Terraform-managed and grants no non-package role.
 - local/home-dev PM2 runtime: `ixos-home-runtime-dev`, output as
-  `home_dev_runtime_service_account_email`; it mirrors the minimum Hetzner
+  `home_dev_runtime_service_account_email`; it mirrors the minimum production
   data-plane union and has no Secret Manager access.
 - home-dev orchestrator: `ixos-home-orchestrator-dev`, output as
   `home_dev_orchestrator_service_account_email`; it can only read images from
   the DEV Artifact Registry repository and has no Secret Manager access.
-- Hetzner provisioner: accessor on the PROD package only.
+- PROD provisioner (historical Terraform identity name): accessor on the PROD package only.
 - retained-GCP GitHub identity: narrow WIF-based Cloud Build trigger capability
-  only, with no package access; the Hetzner job uses SSH.
-- Hetzner runtime SA: minimum Firestore/GCS/Pub/Sub/Firebase Auth roles and no
+  only, with no package access; Home PROD deployment uses the local bounded launcher.
+- PROD runtime SA (historical Terraform identity name): minimum Firestore/GCS/Pub/Sub/Firebase Auth roles and no
   Secret Manager access.
 - orchestrator and code workers: no Secret Manager access; they receive
   allowlisted host-rendered projections.
@@ -120,7 +123,7 @@ Workflows must not use long-lived GCP service-account keys.
 
 ## Runtime Service-Account Key
 
-The Hetzner runtime service-account JSON is created and rotated outside
+The production runtime service-account JSON is created and rotated outside
 Terraform so private material cannot enter state. It is inserted into a new
 PROD package version, fetched by the distinct provisioner, and atomically
 rendered to `/home/deploy/runtime-sa-key.json` as mode `0600`.

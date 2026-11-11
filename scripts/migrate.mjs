@@ -7,6 +7,7 @@
  *
  * Indexes and rules are defined inline in migrations (indexes[], rules{}) and
  * aggregated into firestore.indexes.json and firestore.rules before deployment.
+ * Terraform-managed monitoring indexes are retained from firestore.monitoring-indexes.json.
  *
  * Usage:
  *   node scripts/migrate.mjs                    # Run pending migrations

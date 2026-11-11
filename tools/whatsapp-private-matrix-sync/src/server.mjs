@@ -9,9 +9,11 @@ const DEFAULT_PORT = 8099;
 const DEFAULT_POLL_TIMEOUT_MS = 30_000;
 const DEFAULT_RETRY_DELAY_MS = 10_000;
 const DEFAULT_INITIAL_SYNC_TIMEOUT_MS = 0;
+const HEALTH_MAX_ITERATION_AGE_MS = 120_000;
 const MAX_EVENTS_PER_INGEST_REQUEST = 100;
 const MAX_PRIVATE_MEDIA_BYTES = 25 * 1024 * 1024;
 const DEFAULT_BRIDGE_BOT_USERS = ['@whatsappbot:home-dev', '@whatsapp-sync:home-dev'];
+const UNSTABLE_POLL_RESPONSE_EVENT_TYPE = 'org.matrix.msc3381.poll.response';
 
 const defaultBridgeBotUsers = new Set(DEFAULT_BRIDGE_BOT_USERS);
 
@@ -70,16 +72,31 @@ export function createConfig(env = process.env) {
   };
 }
 
-export function buildHealthPayload(config, readiness) {
+export function buildHealthPayload(config, readiness, nowMs = Date.now()) {
   let state = readiness.runtimeState;
   if (!readiness.hasMatrixAccessToken) {
     state = 'waiting_for_matrix_access_token';
   } else if (!readiness.hasOidcCredentials) {
     state = 'waiting_for_intexuraos_oidc_credentials';
   }
+  if (readiness.hasMaintenanceFence === true) state = 'recovery_required';
+  if (state === 'running') {
+    const completedAt = Date.parse(readiness.lastSuccessfulIterationAt ?? '');
+    if (readiness.lastError !== undefined) {
+      state = 'error';
+    } else if ((readiness.counters?.mediaPending ?? 0) > 0) {
+      state = 'media_degraded';
+    } else if (
+      !Number.isFinite(completedAt) ||
+      nowMs < completedAt ||
+      nowMs - completedAt >= HEALTH_MAX_ITERATION_AGE_MS
+    ) {
+      state = 'stale';
+    }
+  }
 
   const payload = {
-    ok: state !== 'error' && state !== 'recovery_required',
+    ok: state === 'running',
     state,
     homeserverUrl: config.homeserverUrl,
     matrixUserId: config.matrixUserId,
@@ -90,6 +107,14 @@ export function buildHealthPayload(config, readiness) {
 
   if (readiness.lastError !== undefined) {
     payload.lastError = readiness.lastError;
+  }
+  for (const timestamp of [
+    'lastSuccessfulPollAt',
+    'lastCheckpointAt',
+    'lastIngestAt',
+    'lastSuccessfulIterationAt',
+  ]) {
+    if (readiness[timestamp] !== undefined) payload[timestamp] = readiness[timestamp];
   }
 
   return payload;
@@ -348,7 +373,8 @@ export function classifyMatrixEventForRecovery(roomId, event, roomContext, confi
     type === 'm.room.message' ||
     type === 'm.reaction' ||
     type === 'm.sticker' ||
-    type === 'm.room.redaction'
+    type === 'm.room.redaction' ||
+    type === UNSTABLE_POLL_RESPONSE_EVENT_TYPE
   ) {
     return { classification: 'error', reason: 'malformed_message_like_event' };
   }
@@ -383,7 +409,12 @@ function getWhatsAppMatrixEventDirection(event, config) {
   }
 
   const type = readString(event, 'type');
-  if (type === 'm.reaction' || type === 'm.sticker' || type === 'm.room.redaction') {
+  if (
+    type === 'm.reaction' ||
+    type === 'm.sticker' ||
+    type === 'm.room.redaction' ||
+    type === UNSTABLE_POLL_RESPONSE_EVENT_TYPE
+  ) {
     return direction;
   }
   if (type !== 'm.room.message') {
@@ -486,7 +517,8 @@ export async function runSyncIteration(config, runtime, deps = {}) {
 
   const state = await readSyncStateFn(config.stateFile);
   const hasStoredBatch = typeof state.nextBatch === 'string' && state.nextBatch.length > 0;
-  runtime.state = hasStoredBatch ? 'running' : 'initializing';
+  // A retry must keep the previous failure visible until all its work succeeds.
+  if (runtime.state === 'starting') runtime.state = 'initializing';
 
   let syncResponse = await fetchMatrixSyncFn(
     config,
@@ -513,6 +545,8 @@ export async function runSyncIteration(config, runtime, deps = {}) {
     roomContexts,
   });
   runtime.counters.syncResponses = (runtime.counters.syncResponses ?? 0) + syncResponseCount;
+  if (plan.nextBatch === undefined) throw new Error('matrix_sync_missing_next_batch');
+  runtime.lastSuccessfulPollAt = nowISOString();
 
   if (plan.hasLimitedTimeline) {
     runtime.counters.limitedTimelines = plan.limitedTimelineCount;
@@ -536,6 +570,7 @@ export async function runSyncIteration(config, runtime, deps = {}) {
 
   if (plan.events.length > 0) {
     await postEventsInBatchesFn(config, plan.events);
+    runtime.lastIngestAt = nowISOString();
     await enqueuePendingMedia(
       config.pendingMediaFile,
       config.sourceAccountId,
@@ -546,11 +581,13 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   }
 
   if (plan.shouldPersistNextBatch) {
+    const checkpointAt = nowISOString();
     await writeSyncStateFn(config.stateFile, {
       nextBatch: plan.nextBatch,
       roomContexts,
-      updatedAt: nowISOString(),
+      updatedAt: checkpointAt,
     });
+    runtime.lastCheckpointAt = checkpointAt;
   }
 
   const mediaResult = await drainPendingMedia(config, matrixAccessToken, {
@@ -568,6 +605,7 @@ export async function runSyncIteration(config, runtime, deps = {}) {
     runtime.lastError = `pending_private_media_${mediaResult.pending}`;
   } else {
     delete runtime.lastError;
+    runtime.lastSuccessfulIterationAt = nowISOString();
   }
 }
 
@@ -818,13 +856,17 @@ export function createHealthServer(config, runtime) {
         const payload = buildHealthPayload(config, {
           hasMatrixAccessToken: readAccessToken(config.matrixAccessTokenFile) !== '',
           hasOidcCredentials: hasNonEmptyFile(config.googleApplicationCredentialsFile),
+          hasMaintenanceFence: hasMaintenanceFence(config.maintenanceFenceFile),
           runtimeState: runtime.state,
           counters: runtime.counters,
           lastError: runtime.lastError,
+          lastSuccessfulPollAt: runtime.lastSuccessfulPollAt,
+          lastCheckpointAt: runtime.lastCheckpointAt,
+          lastIngestAt: runtime.lastIngestAt,
+          lastSuccessfulIterationAt: runtime.lastSuccessfulIterationAt,
         });
 
-        const status =
-          payload.state === 'error' || payload.state === 'recovery_required' ? 503 : 200;
+        const status = payload.ok ? 200 : 503;
         writeJson(response, status, payload);
         return;
       }
@@ -1125,6 +1167,25 @@ function matrixEventToMessage(event, direction) {
       text: reactionText,
       reaction: { emoji: reactionText, targetMatrixEventId },
     };
+  }
+
+  if (type === UNSTABLE_POLL_RESPONSE_EVENT_TYPE) {
+    const relation = isRecord(content['m.relates_to']) ? content['m.relates_to'] : {};
+    const response = isRecord(content[UNSTABLE_POLL_RESPONSE_EVENT_TYPE])
+      ? content[UNSTABLE_POLL_RESPONSE_EVENT_TYPE]
+      : {};
+    const targetMatrixEventId = readString(relation, 'event_id');
+    const answers = response.answers;
+    if (
+      readString(relation, 'rel_type') !== 'm.reference' ||
+      targetMatrixEventId === undefined ||
+      targetMatrixEventId === eventId ||
+      !Array.isArray(answers) ||
+      !answers.every((answer) => typeof answer === 'string')
+    ) {
+      return null;
+    }
+    return { direction, type: 'unknown' };
   }
 
   if (type === 'm.sticker') {
@@ -1709,16 +1770,25 @@ export function validateIngestResponse(body, events) {
   }
 }
 
-export async function uploadPrivateMedia(config, event, media, downloaded) {
+export async function uploadPrivateMedia(config, event, media, downloaded, deps = {}) {
   if (config.mediaUploadUrl === '') {
     throw new Error('missing_private_media_upload_url');
   }
-  const authorization = await createGoogleIdentityAuthorizationHeader(config);
+  const authorization = await (
+    deps.createAuthorizationHeader ?? createGoogleIdentityAuthorizationHeader
+  )(config);
+  const declaredMimeType = media.mimeType ?? downloaded.contentType;
+  const uploadMimeType =
+    /^(?:image|audio|video)\//u.test(declaredMimeType) ||
+    declaredMimeType === 'application/octet-stream' ||
+    declaredMimeType === 'application/pdf'
+      ? declaredMimeType
+      : 'application/octet-stream';
   const params = new URLSearchParams({
     sourceAccountId: config.sourceAccountId,
     matrixEventId: event.matrixEventId,
     mxcUri: media.mxcUri,
-    mimeType: media.mimeType ?? downloaded.contentType,
+    mimeType: uploadMimeType,
     mediaId: mediaIdFromMxcUri(media.mxcUri),
   });
   if (typeof media.fileName === 'string' && media.fileName !== '') {
@@ -1728,7 +1798,7 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
     params.set('sha256', media.sha256);
   }
 
-  const response = await fetch(`${config.mediaUploadUrl}?${params.toString()}`, {
+  const response = await (deps.fetch ?? fetch)(`${config.mediaUploadUrl}?${params.toString()}`, {
     method: 'POST',
     headers: {
       authorization,
@@ -1760,7 +1830,7 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
   ) {
     throw new Error('intexuraos_private_media_upload_invalid_response');
   }
-  return body.data.media;
+  return { ...body.data.media, mimeType: declaredMimeType };
 }
 
 export function privateMediaUploadFailureCode(status, body, storageFailureReason) {

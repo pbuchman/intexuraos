@@ -12,7 +12,7 @@ const COMMON_SERVICE_URLS_GENERATED = {
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
-  INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
+  INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8128',
   INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
   INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',

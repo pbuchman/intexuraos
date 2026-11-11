@@ -1,0 +1,20 @@
+[Unit]
+Description=IntexuraOS private Matrix integration
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=@DEPLOY_DIR@
+ExecStart=/usr/bin/docker compose --project-name intexuraos-matrix-sync --env-file @DEPLOY_DIR@/.env -f @DEPLOY_DIR@/compose.yaml up --no-build --pull never --exit-code-from matrix-sync matrix-sync
+ExecStop=/usr/bin/docker compose --project-name intexuraos-matrix-sync --env-file @DEPLOY_DIR@/.env -f @DEPLOY_DIR@/compose.yaml stop --timeout 30 matrix-sync
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=60
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

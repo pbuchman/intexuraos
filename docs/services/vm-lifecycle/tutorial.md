@@ -270,6 +270,6 @@ gcloud functions logs read intexuraos-vm-stop-dev \
 
 ### Exercise 3: Change Scheduler Time
 
-Edit `terraform/environments/dev/main.tf`, find the `google_cloud_scheduler_job.vm_start` resource, change `schedule = "0 7 * * 1-5"` to `schedule = "0 8 * * 1-5"`, then run `terraform apply`.
+Edit `terraform/shared-gcp/main.tf`, find the `google_cloud_scheduler_job.vm_start` resource, change `schedule = "0 7 * * 1-5"` to `schedule = "0 8 * * 1-5"`, then run `terraform apply`.
 
 </details>

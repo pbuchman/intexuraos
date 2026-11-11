@@ -18,7 +18,7 @@ function getHostUserString(): { uid: number; gid: number; userString: string } {
 
 export interface CredentialRefresherConfig {
   sharedCredsPath: string;
-  imageName: string;
+  resolveImage: () => Promise<string>;
   networkName: string;
 }
 
@@ -38,8 +38,9 @@ export class CredentialRefresher {
     const { uid, gid, userString } = getHostUserString();
 
     try {
+      const image = await this.config.resolveImage();
       container = await this.docker.createContainer({
-        Image: this.config.imageName,
+        Image: image,
         name: `claude-cred-refresh-${String(Date.now())}`,
         Entrypoint: ['/bin/bash', '-lc'],
         Cmd: [CLAUDE_REFRESH_COMMAND],

@@ -71,7 +71,7 @@ To test immediately:
 3. Queue the run.
 4. Follow its progress on the detail page or in **History**.
 
-A window without messages ends as **No activity** and does not send. A completed run should progress from summary complete to WhatsApp delivery sent.
+A window without messages ends as **No activity** and does not send. Summary completion and provider acceptance are intermediate evidence. In the run response, `delivery.status: sent` and `acceptedAt` mean the provider accepted the message; check `delivery.transportConfirmation` for delivered/read confirmation and its timestamp before reporting confirmed delivery.
 
 ## 7. Verify in WhatsApp
 
@@ -88,6 +88,8 @@ If delivery readiness fails, repair the account's WhatsApp mapping rather than a
 - **Delete** disables new work immediately and starts physical erasure.
 
 Never retry an ambiguous provider result manually. The service reconciles the provider outcome before another send is allowed.
+
+An accepted send still awaiting transport confirmation also requires observation rather than another send. Operators can inspect the internal-authenticated `GET /internal/monitoring/status` for the scheduler heartbeat, pending/failed notification summary, and monitoring diagnostics. A monitoring failure returns unavailable; it does not justify replaying historical digest windows.
 
 ## API discovery
 

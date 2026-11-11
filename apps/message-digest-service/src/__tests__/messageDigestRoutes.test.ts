@@ -685,9 +685,7 @@ describe('Message Digest public routes', () => {
         headline: 'Tomorrow morning agreed',
         summaryMarkdown: '- The participants agreed on tomorrow morning.',
         whatsappPreview: {
-          sections: [
-            { icon: 'decision', title: 'Ustalenie', items: ['Tomorrow morning agreed.'] },
-          ],
+          sections: [{ icon: 'decision', title: 'Ustalenie', items: ['Tomorrow morning agreed.'] }],
         },
         evidenceMessageRefs: ['a'.repeat(64)],
         continuityMemoryMarkdown: 'Private continuity memory.',
@@ -1143,6 +1141,116 @@ describe('Message Digest public routes', () => {
     run.delivery.status = 'not_sent';
 
     expect(toPublicRun(run)).toMatchObject({ content: null, delivery: { status: 'not_sent' } });
+  });
+
+  it('exposes delivered confirmation in run and latest-run projections and reconciles accepted detail reads', async () => {
+    const run = completedRun();
+    run.delivery.transportConfirmation = { status: 'pending' };
+    const delivered = {
+      ...run,
+      delivery: {
+        ...run.delivery,
+        transportConfirmation: {
+          status: 'delivered' as const,
+          deliveredAt: '2026-07-27T12:04:00.000Z',
+        },
+      },
+    };
+    vi.spyOn(store, 'getOwnedRun').mockResolvedValue(run);
+    const receipt = vi.spyOn(whatsappClient, 'getOutboundDeliveryState').mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'sent',
+        acceptedAt: run.delivery.acceptedAt as string,
+        transportConfirmation: delivered.delivery.transportConfirmation,
+      },
+    });
+    vi.spyOn(store, 'recordRunDeliveryState').mockResolvedValue({
+      ok: true,
+      disposition: 'updated',
+      run: delivered,
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/md_definition_001/runs/mdr_run_001',
+      headers: { authorization: 'Bearer test-token' },
+    });
+    expect(response.json().data.run.delivery.transportConfirmation).toEqual(
+      delivered.delivery.transportConfirmation
+    );
+    expect(receipt).toHaveBeenCalledOnce();
+    expect(toPublicRun(delivered)).toMatchObject({
+      delivery: { status: 'sent', transportConfirmation: delivered.delivery.transportConfirmation },
+    });
+    const record = definition();
+    record.latestRun = {
+      runId: run.runId,
+      startedAt: run.createdAt,
+      generationStatus: 'completed',
+      processingStage: 'completed',
+      deliveryStatus: 'sent',
+      transportConfirmation: delivered.delivery.transportConfirmation,
+    };
+    expect(toPublicDefinition(record)).toMatchObject({
+      latestRun: { transportConfirmation: delivered.delivery.transportConfirmation },
+    });
+  });
+
+  it('reconciles provider-failed detail reads to later delivery confirmation', async () => {
+    const run = completedRun();
+    const now = new Date().toISOString();
+    run.delivery.acceptedAt = now;
+    run.delivery.transportConfirmation = { status: 'failed', failedAt: now };
+    const delivered = {
+      ...run,
+      delivery: {
+        ...run.delivery,
+        transportConfirmation: { status: 'delivered' as const, deliveredAt: now },
+      },
+    };
+    vi.spyOn(store, 'getOwnedRun').mockResolvedValue(run);
+    const receipt = vi.spyOn(whatsappClient, 'getOutboundDeliveryState').mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'sent',
+        acceptedAt: now,
+        transportConfirmation: delivered.delivery.transportConfirmation,
+      },
+    });
+    vi.spyOn(store, 'recordRunDeliveryState').mockResolvedValue({
+      ok: true,
+      disposition: 'updated',
+      run: delivered,
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/md_definition_001/runs/mdr_run_001',
+      headers: { authorization: 'Bearer test-token' },
+    });
+    expect(response.json().data.run.delivery.transportConfirmation).toEqual(
+      delivered.delivery.transportConfirmation
+    );
+    expect(receipt).toHaveBeenCalledOnce();
+  });
+
+  it('returns already delivered detail without another transport observation', async () => {
+    const run = completedRun();
+    run.delivery.transportConfirmation = {
+      status: 'delivered',
+      deliveredAt: '2026-07-27T12:04:00.000Z',
+    };
+    vi.spyOn(store, 'getOwnedRun').mockResolvedValue(run);
+    const receipt = vi.spyOn(whatsappClient, 'getOutboundDeliveryState');
+    const response = await app.inject({
+      method: 'GET',
+      url: '/md_definition_001/runs/mdr_run_001',
+      headers: { authorization: 'Bearer test-token' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.run.delivery.transportConfirmation).toEqual(
+      run.delivery.transportConfirmation
+    );
+    expect(receipt).not.toHaveBeenCalled();
   });
 
   it('projects immutable run revision and the safe latest-run definition summary', () => {

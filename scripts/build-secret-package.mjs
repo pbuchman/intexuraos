@@ -133,6 +133,12 @@ export async function buildSecretPackageCandidate(options) {
       manifest,
       projectId,
       version: baseVersion,
+      missingEnvOverrides: Object.fromEntries(
+        Object.entries(overrides.env).map(([name, data]) => [
+          name,
+          decodeEnvUtf8(data, 'env override'),
+        ])
+      ),
     });
     const env = Object.fromEntries(
       packageDefinition.envNames.map((name) => [name, basePackage.payload.env[name]])

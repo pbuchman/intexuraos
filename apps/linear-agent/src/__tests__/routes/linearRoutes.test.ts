@@ -1,3 +1,4 @@
+import { createFakeJobHeartbeatStore } from '../fakes.js';
 import { createToken, describe, expect, it, setupTestContext, clearTestLogs, getTestLoggerStream, beforeEach, afterEach, beforeAll, afterAll, setupJwksServer, teardownJwksServer, resetServices, setServices } from '../testUtils.js';
 import { buildServer } from '../../server.js';
 import type { FastifyInstance } from 'fastify';
@@ -1944,6 +1945,7 @@ describe('linearRoutes', () => {
 describe('linearRoutes logging coverage', () => {
   let loggingApp: FastifyInstance;
   const loggingRepos = {
+    jobHeartbeatStore: createFakeJobHeartbeatStore(),
     connectionRepository: new FakeLinearConnectionRepository(),
     linearApiClient: new FakeLinearApiClient(),
     extractionService: new FakeLinearActionExtractionService(),

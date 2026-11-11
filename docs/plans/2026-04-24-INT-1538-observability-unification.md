@@ -277,12 +277,12 @@ The Fastify `setErrorHandler` in `packages/http-server` MUST:
   - `terraform/modules/monitoring/variables.tf` — add `alert_email`, `slack_auth_token`, `slack_channel_name` variables (kept optional at the module boundary so the module continues to plan/apply on workstations without a Slack token; values are supplied per-environment in `terraform.tfvars`).
   - `terraform/modules/monitoring/main.tf` — add `google_monitoring_notification_channel.slack` (gated on `slack_auth_token != null`, with `sensitive_labels`).
   - `terraform/modules/monitoring/code-task-alerts.tf` — add alert policy for `code_tasks_failed` rate (5 failures / 15-minute window), notifying email + Slack channels when configured.
-  - `terraform/environments/dev/main.tf` + `terraform/environments/dev/terraform.tfvars.example` — wire the new variables through to the monitoring module.
+  - `terraform/shared-gcp/main.tf` + `terraform/shared-gcp/terraform.tfvars.example` — wire the new variables through to the monitoring module.
   - `scripts/verify-incoming-request-logging.mjs` (new) — AST-style scan of Fastify route files; fail if any route handler file lacks `logIncomingRequest(` on the matched path.
   - `package.json` root — register new script under `ci:tracked`.
   - `packages/common-core/src/logging.ts` — standardise `err` key (add deprecation warning if `error` key is used in dev; unit-tested).
   - `packages/infra-sentry/src/logStream.ts` + `packages/common-core/src/logging.ts` — dedupe Pino transport construction (extract `buildPinoTransport()` helper).
-- **Deviation from original §S8:** the original draft of §S8 listed `terraform/environments/prod/**` and required `alert_email` (`type = string`, no default). The monorepo only has `terraform/environments/dev/` (per `.claude/CLAUDE.md`, the single GCP project `intexuraos-dev-pbuchman` serves both `dev.intexuraos.cloud` and `intexuraos.cloud`), so the new resources were folded into the existing `terraform/modules/monitoring/` module and exposed through `terraform/environments/dev/`. `alert_email` is kept optional (`default = null`) at the module boundary so the module is still usable from workstations without secrets; it is supplied per-environment via `terraform.tfvars`. This plan section reflects the as-built design.
+- **Deviation from original §S8:** the original draft of §S8 listed `terraform/environments/prod/**` and required `alert_email` (`type = string`, no default). The monorepo only has `terraform/shared-gcp/` (per `.claude/CLAUDE.md`, the single GCP project `intexuraos-dev-pbuchman` serves both `dev.intexuraos.cloud` and `intexuraos.cloud`), so the new resources were folded into the existing `terraform/modules/monitoring/` module and exposed through `terraform/shared-gcp/`. `alert_email` is kept optional (`default = null`) at the module boundary so the module is still usable from workstations without secrets; it is supplied per-environment via `terraform.tfvars`. This plan section reflects the as-built design.
 - **Scope:**
   - Package passes strict TypeScript + 100% branch coverage per CLAUDE.md.
   - Verify script is invoked by CI; runs in < 5s; output is a list of non-compliant files.
@@ -331,7 +331,7 @@ Not a subtask — the orchestrator of this plan (the parent worker) owns it.
 - [ ] `throw new Error(` count outside tests reduced to zero in `apps/*/src/domain/**`, `packages/infra-firestore/src/**`, `packages/llm-factory/src/**`, `packages/http-server/src/**`.
 - [ ] Every provider `generate()` call emits an `llm.*.generate` OTel span and records `durationMs`.
 - [ ] `@intexuraos/common-metrics` package published (workspace) and consumed by orchestrator.
-- [ ] Terraform `alert_email` + Slack notification channel provisioned via `terraform/modules/monitoring/` and wired through `terraform/environments/dev/` (single-env reality — see §S8 deviation note); both variables are optional at the module boundary and supplied per-environment via `terraform.tfvars`.
+- [ ] Terraform `alert_email` + Slack notification channel provisioned via `terraform/modules/monitoring/` and wired through `terraform/shared-gcp/` (single-env reality — see §S8 deviation note); both variables are optional at the module boundary and supplied per-environment via `terraform.tfvars`.
 - [ ] `scripts/verify-incoming-request-logging.mjs` in `ci:tracked`.
 - [ ] `pnpm run ci:tracked` passes.
 

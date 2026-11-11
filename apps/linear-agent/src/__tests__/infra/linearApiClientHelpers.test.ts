@@ -19,6 +19,92 @@ import {
 } from '../../infra/linear/linearApiClient.js';
 import type { LinearIssue } from '../../domain/index.js';
 import type { Team } from '@linear/sdk';
+import { linearFailureDiagnostics } from '../../infra/linear/linearMappers.js';
+
+describe('Linear failure evidence', () => {
+  it('keeps per-read evidence isolated even when concurrent reads throw the same SDK error', async () => {
+    const shared = Object.freeze(new Error('ECONNRESET private-token'));
+    const results = await Promise.allSettled(['assignee', 'labels'].map(async (relation) =>
+      await retryOnTransient(async () => { throw shared; }, `listIssues.${relation}`, 0, {
+        maxRetries: relation === 'assignee' ? 2 : 0, baseDelayMs: 0,
+        evidenceGroupingOperation: 'listIssues.mapIssuesWithBatchedStates',
+      })
+    ));
+    results.forEach((result, index) => {
+      expect(result.status).toBe('rejected');
+      if (result.status !== 'rejected') throw new Error('Expected a failed read');
+      const diagnostic = linearFailureDiagnostics(result.reason, 'fallback');
+      expect(diagnostic.operation).toBe(`listIssues.${index === 0 ? 'assignee' : 'labels'}`);
+      expect(diagnostic.attemptCount).toBe(index === 0 ? 3 : 1);
+      expect(diagnostic.attempts).toHaveLength(index === 0 ? 3 : 1);
+      expect(diagnostic.attempts?.every((attempt) => attempt.outcome === 'ECONNRESET')).toBe(true);
+      expect(JSON.stringify(diagnostic)).not.toContain('private-token');
+      expect(mapLinearError(result.reason)).toEqual(mapLinearError(shared));
+    });
+    expect(Object.keys(shared)).toEqual([]);
+  });
+
+  it('records measured attempt durations and the delays actually requested', async () => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValueOnce(100).mockReturnValueOnce(223).mockReturnValueOnce(800).mockReturnValueOnce(1034);
+    const onRetry = vi.fn();
+    try {
+      await retryOnTransient(async () => { throw new Error('503 unavailable'); }, 'listIssues.assignee', 0, {
+        maxRetries: 1, baseDelayMs: 1, onRetry,
+        evidenceGroupingOperation: 'listIssues.mapIssuesWithBatchedStates',
+      });
+      throw new Error('Expected failure');
+    } catch (error) {
+      expect(linearFailureDiagnostics(error, 'fallback').attempts).toEqual([
+        { attempt: 1, outcome: 'HTTP_503', durationMs: 123, delayMs: 1 },
+        { attempt: 2, outcome: 'HTTP_503', durationMs: 234, delayMs: 0 },
+      ]);
+      expect(onRetry).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ attempt: 1, delayMs: 1 }));
+    } finally { clock.mockRestore(); }
+  });
+
+  it('retains a safe terminal diagnostic for non-Error throws', async () => {
+    try {
+      await retryOnTransient(async () => { throw null; }, 'listIssues.state', 0, {
+        evidenceGroupingOperation: 'listIssues.mapIssuesWithBatchedStates',
+      });
+      throw new Error('Expected failure');
+    } catch (error) {
+      expect(linearFailureDiagnostics(error, 'fallback')).toMatchObject({
+        operation: 'listIssues.state', attemptCount: 1,
+        attempts: [{ attempt: 1, outcome: 'API_ERROR', durationMs: expect.any(Number), delayMs: 0 }],
+      });
+    }
+  });
+
+  it('bounds evidence without changing the requested retry count', async () => {
+    const read = vi.fn().mockRejectedValue(new Error('503 unavailable'));
+    try {
+      await retryOnTransient(read, 'listIssues.fetchPage', 0, {
+        maxRetries: 4, baseDelayMs: 0, evidenceGroupingOperation: 'listIssues.fetchPage',
+      });
+      throw new Error('Expected failure');
+    } catch (error) {
+      const diagnostic = linearFailureDiagnostics(error, 'fallback');
+      expect(diagnostic.attemptCount).toBe(5);
+      expect(diagnostic.attempts?.map((attempt) => attempt.attempt)).toEqual([3, 4, 5]);
+      expect(read).toHaveBeenCalledTimes(5);
+    }
+  });
+
+  it.each([
+    [new Error('GraphQL Error (Code: 502) - <html>private response</html>'), 'UPSTREAM_UNAVAILABLE (HTTP 502)'],
+    [new Error('fetch failed'), 'fetch failed'],
+    [new Error('ECONNRESET private-host'), 'ECONNRESET'],
+    [Object.assign(new Error('private query and token'), { type: 'Ratelimited', status: 429 }), 'Ratelimited (HTTP 429)'],
+    [Object.assign(new Error('private payload'), { type: 'invented', status: 999 }), 'API_ERROR'],
+    [Object.assign(new Error('private payload'), { status: '502' }), 'API_ERROR'],
+    [null, 'API_ERROR'],
+  ])('keeps only safe diagnostic facts for %s', (error, cause) => {
+    const result = linearFailureDiagnostics(error, 'listIssues.fetchPage');
+    expect(result.message).toBe(`Linear listIssues.fetchPage failed: ${cause}`);
+    expect(JSON.stringify(result)).not.toMatch(/private|token|html|invented/);
+  });
+});
 
 describe('linearApiClient helper functions', () => {
   beforeEach(() => {

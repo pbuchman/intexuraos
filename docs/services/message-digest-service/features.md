@@ -4,7 +4,7 @@ Message Digest Service turns private WhatsApp conversations into scheduled summa
 
 ## Recent Changes
 
-Since v3.8.0, configurable Message Digests replace the former Mobile Notifications digest implementation. The release adds private group/direct-chat sources, editable prompts, schedules, preview, run history, and WhatsApp delivery while retaining the migrated Fishing history. The final delivery format uses the approved v4 template with compact runtime parameters.
+Existing scheduled digests now reconcile WhatsApp transport receipts separately from provider acceptance. Operational monitoring uses compact, change-driven state rather than recurring full run-history reads; this preserves pending work and failure visibility without changing the digest workflow.
 
 ## User experience
 
@@ -34,6 +34,8 @@ Only the selected conversation is read. The definition is bound to the user's pr
 Completed summaries are sent by WhatsApp Service to the user's first mapped phone number. There is no separate destination setting in Message Digests. If the user has no deliverable WhatsApp mapping, the UI shows the readiness problem and no send is attempted.
 
 Delivery uses the approved Polish `intexuraos_message_digest_v4` WhatsApp template. It presents the source window, headline, and up to three importance-ordered sections before linking back to the exact run in the web application. The template owns the visual line breaks while runtime section parameters stay single-line for Meta compatibility. Retries are idempotent and ambiguous provider outcomes are reconciled before another send can occur.
+
+Summary completion, provider acceptance, and final delivery are separate states. A `sent` result records acceptance; delivery/read confirmation supplies the final transport evidence. An accepted send awaiting confirmation is not automatically resent.
 
 ## Reliability and privacy
 

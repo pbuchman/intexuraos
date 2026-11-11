@@ -1,3 +1,4 @@
+import { notificationContextSchema, type NotificationContext } from '@intexuraos/http-contracts';
 /**
  * WhatsApp Send Message Publisher.
  * Publishes SendMessageEvent to Pub/Sub for whatsapp-service to process.
@@ -34,6 +35,7 @@ export interface WhatsAppSendPublisher {
    */
   publishSendMessage(params: {
     userId: string;
+    notificationContext?: NotificationContext;
     message: string;
     replyToMessageId?: string;
     buttons?: WhatsAppInteractiveButton[];
@@ -70,6 +72,7 @@ class WhatsAppSendPublisherImpl
 
   async publishSendMessage(params: {
     userId: string;
+    notificationContext?: NotificationContext;
     message: string;
     replyToMessageId?: string;
     buttons?: WhatsAppInteractiveButton[];
@@ -136,6 +139,11 @@ export function buildSendMessageEvent(
       message: 'WhatsApp send message presentation is invalid',
     });
   }
+  if (
+    params.notificationContext !== undefined &&
+    !notificationContextSchema.safeParse(params.notificationContext).success
+  )
+    return err({ code: 'PUBLISH_FAILED', message: 'Invalid notification context' });
   const correlationId = params.correlationId ?? crypto.randomUUID();
   const event: SendMessageEvent = {
     type: 'whatsapp.message.send',
@@ -155,6 +163,9 @@ export function buildSendMessageEvent(
       : { retainMessageText: params.retainMessageText }),
     ...(params.important === undefined ? {} : { important: params.important }),
     ...(params.idempotencyKey === undefined ? {} : { idempotencyKey: params.idempotencyKey }),
+    ...(params.notificationContext === undefined
+      ? {}
+      : { notificationContext: params.notificationContext }),
   };
   return { ok: true, value: { event, correlationId, userId } };
 }

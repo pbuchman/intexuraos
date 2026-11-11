@@ -18,35 +18,20 @@ describe('local development scripts', () => {
   it('refreshes PM2 environment when starting services', () => {
     expect(packageJson.scripts.dev).toContain('pm2 start ecosystem.config.cjs --update-env');
     expect(packageJson.scripts['services:start']).toBe(
-      'node scripts/run-home-dev-runtime-command.mjs pnpm exec pm2 start ecosystem.config.cjs --update-env'
+      'pnpm exec pm2 start ecosystem.config.cjs --update-env'
     );
   });
 
   it('refreshes PM2 environment when restarting services', () => {
     expect(packageJson.scripts['services:restart']).toBe(
-      'node scripts/run-home-dev-runtime-command.mjs pnpm exec pm2 delete all || true; node scripts/run-home-dev-runtime-command.mjs pnpm exec pm2 start ecosystem.config.cjs --update-env'
+      'pnpm exec pm2 delete all || true; pnpm exec pm2 start ecosystem.config.cjs --update-env'
     );
   });
 
-  it('holds the Home Dev mode lock around every normal PM2 or emulator start path', () => {
-    expect(packageJson.scripts.dev).toMatch(
-      /dev-setup\.mjs && node scripts\/run-home-dev-runtime-command\.mjs pnpm exec pm2 start/u
-    );
-    for (const [name, command] of Object.entries(packageJson.scripts)) {
-      if (!name.startsWith('services:') && name !== 'dev') continue;
-      expect(command).not.toMatch(/(?:^|[;&|]\s*)pnpm exec pm2/u);
-      if (command.includes('pm2')) {
-        expect(command).toContain('node scripts/run-home-dev-runtime-command.mjs');
-      }
-    }
-    expect(devSetupSource).toContain('runHomeDevRuntimeCommand');
-    expect(dockerComposeSource).toContain(
-      "const result = runHomeDevRuntimeCommand('docker', command, options);"
-    );
-    expect(dockerComposeSource).not.toContain('args.some');
-    for (const startCapableCommand of ['watch', 'scale', 'unpause', 'alpha']) {
-      expect(dockerComposeSource).not.toContain(`['${startCapableCommand}'`);
-    }
+  it('starts PM2 and Compose directly without retired hosted-DEV guards', () => {
+    expect(packageJson.scripts.dev).not.toContain('run-home-dev-runtime-command');
+    expect(devSetupSource).toContain('spawnSync');
+    expect(dockerComposeSource).toContain("const result = spawnSync('docker', command, options);");
   });
 
   it('prints the actual API Docs Hub port used by PM2', () => {
@@ -85,6 +70,6 @@ describe('local development scripts', () => {
       "import { buildLocalEmulatorStartPlan } from './lib/local-emulator-lifecycle.mjs';"
     );
     expect(devSetupSource).toContain('for (const command of buildLocalEmulatorStartPlan())');
-    expect(devSetupSource).toMatch(/runHomeDevRuntimeCommand\(\s*'docker'/u);
+    expect(devSetupSource).toMatch(/spawnSync\(\s*'docker'/u);
   });
 });

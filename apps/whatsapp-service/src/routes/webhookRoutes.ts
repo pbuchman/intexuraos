@@ -14,11 +14,7 @@ import { type WebhookPayload, webhookVerifyQuerySchema } from './schemas.js';
 import { SIGNATURE_HEADER, validateWebhookSignature } from '../signature.js';
 import { getServices } from '../services.js';
 import type { Config } from '../config.js';
-import {
-  extractDisplayPhoneNumber,
-  extractPhoneNumberId,
-  extractWabaId,
-} from './shared.js';
+import { extractDisplayPhoneNumber, extractPhoneNumberId, extractWabaId } from './shared.js';
 
 /**
  * Creates webhook routes plugin with config.
@@ -160,7 +156,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         const rawBody =
           /* v8 ignore start -- ts-type: Fastify inject() does not expose rawBody, fallback unreachable in tests @preserve */
           (request as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(request.body);
-          /* v8 ignore stop @preserve */
+        /* v8 ignore stop @preserve */
 
         // Get signature from header
         const signature = request.headers[SIGNATURE_HEADER];
@@ -176,10 +172,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         const signatureValid = validateWebhookSignature(rawBody, signature, config.appSecret);
 
         if (!signatureValid) {
-          request.log.warn(
-            { reason: 'invalid_signature' },
-            'Webhook rejected: invalid signature'
-          );
+          request.log.warn({ reason: 'invalid_signature' }, 'Webhook rejected: invalid signature');
           return await reply.fail('FORBIDDEN', 'Invalid webhook signature');
         }
 
@@ -214,6 +207,42 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
             'Webhook rejected: phone_number_id not in allowed list'
           );
           return await reply.fail('FORBIDDEN', 'Webhook rejected: phone_number_id not allowed');
+        }
+
+        // A signed batch can contain different accounts. Authorize every boundary before any write.
+        for (const entry of request.body.entry) {
+          if (!config.allowedWabaIds.includes(entry.id))
+            return await reply.fail('FORBIDDEN', 'Webhook rejected: waba_id not allowed');
+          for (const change of entry.changes) {
+            if (!config.allowedPhoneNumberIds.includes(change.value.metadata.phone_number_id))
+              return await reply.fail('FORBIDDEN', 'Webhook rejected: phone_number_id not allowed');
+          }
+        }
+        const tracker = getServices().notificationDeliveryRepository;
+        if (tracker !== undefined) {
+          try {
+            for (const entry of request.body.entry)
+              for (const change of entry.changes)
+                for (const status of change.value.statuses ?? []) {
+                  if (
+                    !['sent', 'delivered', 'read', 'failed'].includes(status.status) ||
+                    !Number.isFinite(Number(status.timestamp))
+                  )
+                    return await reply.fail('INVALID_REQUEST', 'Invalid delivery receipt');
+                  const at = new Date(Number(status.timestamp) * 1000).toISOString();
+                  await tracker.recordReceipt({
+                    phoneNumberId: change.value.metadata.phone_number_id,
+                    wamid: status.id,
+                    status: status.status,
+                    at,
+                    ...(status.errors?.[0]?.code === undefined
+                      ? {}
+                      : { failureCode: String(status.errors[0].code) }),
+                  });
+                }
+          } catch {
+            return await reply.fail('INTERNAL_ERROR', 'Failed to persist delivery receipts');
+          }
         }
 
         // Persist webhook event with initial PENDING status

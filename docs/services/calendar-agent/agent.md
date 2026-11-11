@@ -29,6 +29,9 @@ Calendar Agent owns Google Calendar creation/query/update, daily lookahead sched
 - `PUT /schedules/calendar-daily-lookahead` accepts `enabled`, `localTime`, and `timeZone`.
 - `POST /internal/calendar/schedules/tick` claims due schedules with leases and sends the fixed next-24-hours calendar request through WhatsApp’s Matrix outbound path with `startNewSession: true`.
 - Scheduling follows the configured IANA zone, including DST. A per-schedule/local-date idempotency key prevents duplicate outbound requests; transport failures retry after 15 minutes, while setup-required outcomes are recorded without that transient retry.
+- The lookahead starts from processing time. Read `latestRun.stage`, `latestRun.deliveryStatus`, and `latestRun.deliveredAt` separately from Matrix readiness in `delivery`; `status: sent` alone records trigger acceptance.
+- Acknowledgments do not prove final delivery. Every final reply part requires delivered/read confirmation. The tick reconciles existing receipts and expires still-pending runs after six hours.
+- `GET /internal/monitoring/status` requires internal auth and exposes durable tick heartbeats, notification state, and Firestore monitoring diagnostics. Status inspection does not authorize a tick or replay.
 
 Do not reintroduce retired async preview topics or removed action orchestration callers.
 

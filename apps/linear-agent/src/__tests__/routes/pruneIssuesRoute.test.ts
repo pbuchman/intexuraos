@@ -1,3 +1,4 @@
+import { createFakeJobHeartbeatStore } from '../fakes.js';
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
@@ -15,6 +16,7 @@ function createFakeClassifyCandidates(): Mock {
 function createFakeServices(): ServiceContainer {
   const classifyCandidates = createFakeClassifyCandidates();
   return {
+    jobHeartbeatStore: createFakeJobHeartbeatStore(),
     connectionRepository: {
       getAllConnectedUserIds: vi.fn().mockResolvedValue(ok(['user-1'])),
       getFullConnection: vi.fn().mockResolvedValue(

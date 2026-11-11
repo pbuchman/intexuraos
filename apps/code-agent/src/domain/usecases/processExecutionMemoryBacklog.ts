@@ -123,7 +123,7 @@ export async function processExecutionMemoryBacklog(
     try {
       const processed = await processOneTaskCompat(task, deps);
 
-      await deps.codeTaskRepo.update(task.id, {
+      const completion = await deps.codeTaskRepo.update(task.id, {
         executionMemoryPostRun: {
           status: processed.status,
           attempts,
@@ -136,6 +136,11 @@ export async function processExecutionMemoryBacklog(
           completedAt: Timestamp.now(),
         },
       });
+      if (!completion.ok) {
+        summary.errored += 1;
+        deps.logger.warn({ taskId: task.id }, 'Failed to persist execution memory completion');
+        continue;
+      }
 
       if (processed.status === 'completed') {
         summary.completed += 1;

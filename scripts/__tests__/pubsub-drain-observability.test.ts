@@ -223,7 +223,7 @@ describe('Pub/Sub drain observability', () => {
 
   it('makes full local startup an explicit staged topology mutation', () => {
     expect(buildLocalEmulatorStartPlan()).toEqual([
-      ['up', '-d', '--wait', 'pubsub-emulator'],
+      ['up', '-d', '--wait', 'firestore-emulator', 'pubsub-emulator'],
       ['build', 'pubsub-ui'],
       ['run', '--rm', '--no-deps', 'pubsub-ui', 'node', 'bootstrap.mjs'],
       ['up', '-d', '--no-build', 'pubsub-ui'],

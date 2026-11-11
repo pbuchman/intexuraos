@@ -43,11 +43,11 @@
 - `apps/web/src/services/chatService.ts` — replace local UUID generation with call to `/guest-session` endpoint; store signed token instead of raw UUID.
 - `apps/web/src/services/chatService.test.ts` (if exists — otherwise no new test is required per web-app coverage exception, but add if present).
 - `apps/web/src/config.ts` — no new URL needed (reuses `retiredChatServiceUrl`), verify only.
-- `terraform/environments/dev/main.tf` — add `INTEXURAOS_GUEST_SESSION_SECRET` to `chat_agent` secrets and to `common_service_secrets` declaration.
+- `terraform/shared-gcp/main.tf` — add `INTEXURAOS_GUEST_SESSION_SECRET` to `chat_agent` secrets and to `common_service_secrets` declaration.
 - `ecosystem.config.cjs` — add `INTEXURAOS_GUEST_SESSION_SECRET` to retired-chat-service env.
 - `docs/services/retired-chat-service/features.md` — document the guest session flow.
 
-**Files that change together:** The three env-var locations (`apps/retired-chat-service/src/index.ts`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`) MUST all be updated in the same commit per CLAUDE.md rules.
+**Files that change together:** The three env-var locations (`apps/retired-chat-service/src/index.ts`, `terraform/shared-gcp/main.tf`, `ecosystem.config.cjs`) MUST all be updated in the same commit per CLAUDE.md rules.
 
 ---
 
@@ -58,7 +58,7 @@
 - Web client (`apps/web/src/services/chatService.ts:29–40`): generates UUID client-side and persists in `localStorage`.
 - `retired-chat-service` currently runs at `max_scale=1` in dev. A shared multi-pod store (Redis/Firestore-backed rate-limit store) is **out of scope** for this ticket — documented below as a follow-up. The signed-session approach alone closes the cost-attack vector even at multi-pod, because the only way to mint a new `sub` is to call `/guest-session`, which is itself IP-limited. Per-pod in-memory layers are acceptable at current scale.
 - `jose` is already a devDep (`apps/retired-chat-service/package.json:38`); we must promote it to dep because it is imported from production code.
-- Env var `INTEXURAOS_GUEST_SESSION_SECRET` must be added in all three locations: `apps/retired-chat-service/src/index.ts` `REQUIRED_ENV`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`.
+- Env var `INTEXURAOS_GUEST_SESSION_SECRET` must be added in all three locations: `apps/retired-chat-service/src/index.ts` `REQUIRED_ENV`, `terraform/shared-gcp/main.tf`, `ecosystem.config.cjs`.
 
 ---
 
@@ -450,7 +450,7 @@ git commit -m "chore(retired-chat-service): add @fastify/rate-limit and promote 
 
 **Files:**
 - Modify: `apps/retired-chat-service/src/index.ts`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `ecosystem.config.cjs`
 
 - [ ] **Step 1: Update REQUIRED_ENV in `apps/retired-chat-service/src/index.ts`**
@@ -472,7 +472,7 @@ const REQUIRED_ENV = [
 ];
 ```
 
-- [ ] **Step 2: Add secret declaration in `terraform/environments/dev/main.tf`**
+- [ ] **Step 2: Add secret declaration in `terraform/shared-gcp/main.tf`**
 
 In the secret-manager secrets map (near line 513, `INTEXURAOS_OPENAI_APP_API_KEY`), add:
 
@@ -508,7 +508,7 @@ Also add to `home-dev/.env` for PM2 dev environment.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/retired-chat-service/src/index.ts terraform/environments/dev/main.tf ecosystem.config.cjs
+git add apps/retired-chat-service/src/index.ts terraform/shared-gcp/main.tf ecosystem.config.cjs
 git commit -m "feat(retired-chat-service): declare INTEXURAOS_GUEST_SESSION_SECRET env var [INT-1520]"
 ```
 

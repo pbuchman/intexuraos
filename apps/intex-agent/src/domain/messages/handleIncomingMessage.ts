@@ -1,3 +1,4 @@
+import type { NotificationContext } from '@intexuraos/http-contracts';
 import { getErrorMessage, type Result } from '@intexuraos/common-core';
 import {
   calendarEventDateTimeSchema,
@@ -9,7 +10,10 @@ import type {
 } from '@intexuraos/internal-clients';
 import { isIntexAgentModel, type IntexAgentModel } from '@intexuraos/llm-contract';
 import type { WhatsAppInteractiveButton } from '@intexuraos/whatsapp-pubsub-client';
-import type { IntexIncomingMessage, IncomingMessageHandlerResult } from '../ports/incomingMessageHandler.js';
+import type {
+  IntexIncomingMessage,
+  IncomingMessageHandlerResult,
+} from '../ports/incomingMessageHandler.js';
 import type { SessionRepository } from '../ports/sessionRepository.js';
 import {
   decideSessionTransition,
@@ -31,10 +35,7 @@ import {
 import type { CalendarEventDraftV1 } from '../agent/calendarEventReadiness.js';
 import { isWhatsAppImageWithSourceUrl } from '../agent/intexAgentRunner.js';
 
-const CONFIRMATION_BUTTON_LABELS: Record<
-  IntexAgentReplyLanguage,
-  { yes: string; no: string }
-> = {
+const CONFIRMATION_BUTTON_LABELS: Record<IntexAgentReplyLanguage, { yes: string; no: string }> = {
   en: { yes: 'Yes', no: 'No' },
   pl: { yes: 'Tak', no: 'Nie' },
 };
@@ -171,23 +172,25 @@ export type IntexAgentRunnerResult =
     };
 
 export interface IntexAgentRunner {
-  executeConfirmed(input: {
-    session: IntexAgentSession;
-    events?: IntexAgentSessionEvent[];
-    currentDateTime: string;
-    messageId?: string;
-  } & (
-    | {
-        toolName: IntexAgentToolName;
-        toolArgs: Record<string, unknown>;
-        operations?: never;
-      }
-    | {
-        operations: readonly IntexAgentConfirmedOperation[];
-        toolName?: never;
-        toolArgs?: never;
-      }
-  )): Promise<IntexAgentRunnerResult>;
+  executeConfirmed(
+    input: {
+      session: IntexAgentSession;
+      events?: IntexAgentSessionEvent[];
+      currentDateTime: string;
+      messageId?: string;
+    } & (
+      | {
+          toolName: IntexAgentToolName;
+          toolArgs: Record<string, unknown>;
+          operations?: never;
+        }
+      | {
+          operations: readonly IntexAgentConfirmedOperation[];
+          toolName?: never;
+          toolArgs?: never;
+        }
+    )
+  ): Promise<IntexAgentRunnerResult>;
   run(input: {
     session: IntexAgentSession;
     events: IntexAgentSessionEvent[];
@@ -208,6 +211,8 @@ export interface WhatsAppReplyPublisher {
     message: string;
     replyToMessageId: string;
     correlationId: string;
+    notificationContext?: NotificationContext;
+    idempotencyKey?: string;
     ctaUrl?: {
       displayText: string;
       url: string;
@@ -263,11 +268,7 @@ const CONFIRMABLE_TOOL_NAMES = new Set<IntexAgentToolName>([
 ]);
 const CONFIRMED_CALENDAR_UPDATE_BATCH_MIN_OPERATIONS = 2;
 const CONFIRMED_CALENDAR_UPDATE_BATCH_MAX_OPERATIONS = 20;
-const CONFIRMED_CALENDAR_UPDATE_OPERATION_KEYS = new Set([
-  'toolName',
-  'toolArgs',
-  'toolSelection',
-]);
+const CONFIRMED_CALENDAR_UPDATE_OPERATION_KEYS = new Set(['toolName', 'toolArgs', 'toolSelection']);
 const CONFIRMED_CALENDAR_UPDATE_ARG_KEYS = new Set([
   'eventId',
   'eventSummary',
@@ -367,7 +368,9 @@ export async function handleIncomingMessage(
 
   if (effectiveMessage === null) {
     const priorEvents =
-      currentSession === null ? [] : await deps.sessionRepository.listEvents(currentSession.id, input.userId);
+      currentSession === null
+        ? []
+        : await deps.sessionRepository.listEvents(currentSession.id, input.userId);
     const reply = newSessionReadyText(input, priorEvents);
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
@@ -404,6 +407,20 @@ export async function handleIncomingMessage(
     return { sessionId: session.id };
   }
 
+  if (input.notificationContext !== undefined) {
+    await deps.replyPublisher.publishReply({
+      userId: input.userId,
+      message: 'Preparing your calendar summary.',
+      replyToMessageId: input.messageId,
+      correlationId: session.id,
+      notificationContext: {
+        source: input.notificationContext.source,
+        runId: input.notificationContext.runId,
+        phase: 'ack',
+      },
+      idempotencyKey: `notification:${input.notificationContext.source}:${input.notificationContext.runId}:ack`,
+    });
+  }
   const runtimeSettings = isWhatsAppImageWithSourceUrl(input)
     ? undefined
     : await resolveRuntimeSettings(input.userId, deps);
@@ -641,10 +658,16 @@ async function closePreviousSessionIfNeeded(
     endedAt: close.endedAt,
     endReason: close.endReason,
   });
-  await appendEvent(deps, session, 'session_closed', {
-    status: close.status,
-    reason: close.endReason,
-  }, close.endedAt);
+  await appendEvent(
+    deps,
+    session,
+    'session_closed',
+    {
+      status: close.status,
+      reason: close.endReason,
+    },
+    close.endedAt
+  );
 }
 
 async function resolveSession(
@@ -667,10 +690,16 @@ async function resolveSession(
     lastUserMessageAt: normalizedUserTimestamp,
     startReason: decision.startReason,
   });
-  await appendEvent(deps, session, 'session_started', {
-    reason: decision.startReason,
-    explicit: decision.isExplicitNewSession,
-  }, startedAt);
+  await appendEvent(
+    deps,
+    session,
+    'session_started',
+    {
+      reason: decision.startReason,
+      explicit: decision.isExplicitNewSession,
+    },
+    startedAt
+  );
   return session;
 }
 
@@ -836,7 +865,10 @@ async function applyRunnerResult(
               toolName: operation.toolName,
               ...(operation.toolResult !== undefined ? { result: operation.toolResult } : {}),
             }
-          : { toolName: operation.toolName, error: operation.error ?? 'Unknown tool execution error' }
+          : {
+              toolName: operation.toolName,
+              error: operation.error ?? 'Unknown tool execution error',
+            }
       );
     }
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
@@ -880,7 +912,18 @@ async function applyRunnerResult(
     activeTool: null,
     ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
   });
-  await publishReply(input, deps, session.id, reply, runnerResult.ctaUrl);
+  await publishReply(
+    input,
+    deps,
+    session.id,
+    reply,
+    runnerResult.ctaUrl,
+    undefined,
+    input.notificationContext?.source === 'calendar' &&
+      runnerResult.toolName !== 'query_calendar_events'
+      ? 'failed'
+      : 'succeeded'
+  );
 }
 
 function completedReplyWithFollowUp(
@@ -940,13 +983,26 @@ async function publishReply(
     displayText: string;
     url: string;
   },
-  buttons?: WhatsAppInteractiveButton[]
+  buttons?: WhatsAppInteractiveButton[],
+  outcome: 'succeeded' | 'failed' = 'failed'
 ): Promise<void> {
   await deps.replyPublisher.publishReply({
     userId: input.userId,
     message,
     replyToMessageId: input.messageId,
     correlationId: sessionId,
+    ...(input.notificationContext === undefined
+      ? {}
+      : {
+          notificationContext: {
+            ...input.notificationContext,
+            phase: 'final' as const,
+            outcome,
+            partIndex: 0,
+            partCount: 1,
+          },
+          idempotencyKey: `notification:${input.notificationContext.source}:${input.notificationContext.runId}:final:0`,
+        }),
     ...(ctaUrl !== undefined ? { ctaUrl } : {}),
     ...(buttons !== undefined ? { buttons } : {}),
   });
@@ -987,8 +1043,7 @@ function runnerMetadataPayload(
     ...(runnerResult.fallbackReason !== undefined
       ? { fallbackReason: runnerResult.fallbackReason }
       : {}),
-    ...(runnerResult.outcome === 'needs_clarification' &&
-    runnerResult.clarification !== undefined
+    ...(runnerResult.outcome === 'needs_clarification' && runnerResult.clarification !== undefined
       ? { clarification: runnerResult.clarification }
       : {}),
     ...(runnerResult.outcome === 'needs_clarification' &&
@@ -1181,9 +1236,7 @@ function findLatestDirectTextConfirmation(
   const latestConfirmationId = latestRequestedEvent?.payload['confirmationId'];
   if (typeof latestConfirmationId !== 'string') return null;
   const pendingConfirmation = findLatestPendingConfirmation(events);
-  return pendingConfirmation?.confirmationId === latestConfirmationId
-    ? pendingConfirmation
-    : null;
+  return pendingConfirmation?.confirmationId === latestConfirmationId ? pendingConfirmation : null;
 }
 
 function parseConfirmedOperations(value: unknown): IntexAgentConfirmedOperation[] | undefined {
@@ -1197,10 +1250,7 @@ function parseConfirmedOperations(value: unknown): IntexAgentConfirmedOperation[
   const operations: IntexAgentConfirmedOperation[] = [];
   const eventIds = new Set<string>();
   for (const operation of value) {
-    if (
-      !isRecord(operation) ||
-      !hasOnlyKeys(operation, CONFIRMED_CALENDAR_UPDATE_OPERATION_KEYS)
-    ) {
+    if (!isRecord(operation) || !hasOnlyKeys(operation, CONFIRMED_CALENDAR_UPDATE_OPERATION_KEYS)) {
       return undefined;
     }
     const toolName = operation['toolName'];
@@ -1223,9 +1273,7 @@ function parseConfirmedOperations(value: unknown): IntexAgentConfirmedOperation[
   return operations;
 }
 
-function parseConfirmedCalendarUpdateArgs(
-  value: unknown
-): Record<string, unknown> | undefined {
+function parseConfirmedCalendarUpdateArgs(value: unknown): Record<string, unknown> | undefined {
   if (!isRecord(value) || !hasOnlyKeys(value, CONFIRMED_CALENDAR_UPDATE_ARG_KEYS)) {
     return undefined;
   }
@@ -1272,14 +1320,10 @@ function isConfirmedCalendarUpdateChanges(value: unknown): boolean {
 }
 
 function normalizeConfirmedAttendees(value: unknown): unknown {
-  return Array.isArray(value)
-    ? (value as unknown[]).map((email: unknown) => ({ email }))
-    : value;
+  return Array.isArray(value) ? (value as unknown[]).map((email: unknown) => ({ email })) : value;
 }
 
-function parseConfirmedToolSelection(
-  value: unknown
-): IntexAgentToolSelectionMetadata | undefined {
+function parseConfirmedToolSelection(value: unknown): IntexAgentToolSelectionMetadata | undefined {
   if (!isRecord(value) || !hasOnlyKeys(value, CONFIRMED_TOOL_SELECTION_KEYS)) {
     return undefined;
   }
@@ -1367,10 +1411,7 @@ function messageLanguageInput(input: IntexIncomingMessage): IntexAgentLanguageMe
       ? undefined
       : confirmationButtonLanguage(input.buttonResponse.buttonTitle);
   return {
-    text:
-      input.text.trim() !== ''
-        ? input.text
-        : input.buttonResponse?.buttonTitle ?? input.text,
+    text: input.text.trim() !== '' ? input.text : (input.buttonResponse?.buttonTitle ?? input.text),
     sourceType: input.sourceType,
     ...(input.sourceUrl !== undefined ? { hasSourceUrl: true } : {}),
     ...(languageHint !== undefined ? { languageHint } : {}),

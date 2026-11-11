@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', close);
   process.on('SIGINT', close);
 
-  await app.listen({ port, host: '0.0.0.0' });
+  await app.listen({ port, host: process.env['HOST'] ?? '0.0.0.0' });
 }
 
 main().catch((error: unknown) => {

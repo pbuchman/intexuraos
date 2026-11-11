@@ -22,7 +22,7 @@
 - Every HTTP endpoint must call `logIncomingRequest()`.
 - Pub/Sub uses HTTP push only.
 - Firestore collections must be registered in `firestore-collections.json` with one owning service.
-- New service env vars must be wired in `apps/<service>/src/index.ts`, `terraform/environments/dev/main.tf`, and `ecosystem.config.cjs`.
+- New service env vars must be wired in `apps/<service>/src/index.ts`, `terraform/shared-gcp/main.tf`, and `ecosystem.config.cjs`.
 - New web service URLs must be added to `apps/web/service-manifest.json` and regenerated with `pnpm run generate:service-wiring`.
 - Before commit, `pnpm run ci:tracked` must pass.
 
@@ -77,7 +77,7 @@ Modify:
 - `apps/web/src/pages/IntexAgentSessionsPage.tsx` - add session browser page.
 - `apps/web/src/App.tsx` and `apps/web/src/components/sidebar/navItems.ts` - add route/nav.
 - `ecosystem.config.cjs`, `ecosystem.generated.cjs`, `.envrc.local.example` - dev PM2 and env wiring.
-- `terraform/environments/dev/main.tf` - service module, Pub/Sub topic/subscription, env vars, IAM.
+- `terraform/shared-gcp/main.tf` - service module, Pub/Sub topic/subscription, env vars, IAM.
 - `terraform/modules/iam/main.tf` - service account and permissions for `intex-agent`.
 - `terraform/hetzner-prod/main.tf` and `scripts/hetzner/nginx/intexuraos.conf` - production service and nginx route.
 - `tools/pubsub-ui/server.mjs`, `tools/pubsub-ui/index.html`, `tools/pubsub-ui/README.md`, `scripts/pubsub-publish-test.mjs` - Pub/Sub emulator registration and manual test template.
@@ -382,7 +382,7 @@ Expected after implementation: PASS.
 
 - Modify: `ecosystem.config.cjs`
 - Modify: `.envrc.local.example`
-- Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/shared-gcp/main.tf`
 - Modify: `terraform/modules/iam/main.tf`
 - Modify: `terraform/hetzner-prod/main.tf`
 - Modify: `scripts/hetzner/nginx/intexuraos.conf`
@@ -393,7 +393,7 @@ Expected after implementation: PASS.
 - Modify: `apps/web/service-manifest.json`
 - Generated: `apps/web/src/config.generated.ts`
 - Generated: `ecosystem.generated.cjs`
-- Generated: `terraform/environments/dev/service-urls.auto.tfvars.json`
+- Generated: `terraform/shared-gcp/service-urls.auto.tfvars.json`
 
 **Interfaces:**
 

@@ -24,7 +24,7 @@ The stale INT-750 assumptions remain valid where they define what moves and what
 - Move to Hetzner: public production HTTP entrypoint, backend app processes, PM2 runtime, nginx TLS termination, nginx API/internal route fan-out, web SPA serving, and deployment/reload automation.
 - Retain in GCP: Firestore `(default)`, Pub/Sub topics, Secret Manager, GCS buckets, Cloud Functions, Artifact Registry, Cloud Build triggers needed for retained workers and code-worker, Firebase/Auth0 integration data, and the single project `intexuraos-dev-pbuchman`.
 - Retain outside this migration: `workers/orchestrator` remains a VM-hosted worker process managed separately from Cloud Run and Cloud Functions.
-- Do not create a second GCP project or sibling `terraform/environments/prod`. Current project rules say `terraform/environments/dev/` is the only GCP environment root because both domains share one GCP project. Use `terraform/hetzner-prod/` for Hetzner-specific resources and retained-GCP references.
+- Do not create a second GCP project or sibling `terraform/environments/prod`. Current project rules say `terraform/shared-gcp/` is the only GCP environment root because both domains share one GCP project. Use `terraform/hetzner-prod/` for Hetzner-specific resources and retained-GCP references.
 
 ## Current-State Audit
 
@@ -111,12 +111,12 @@ Shared constants for all workers:
 - GCP project: `intexuraos-dev-pbuchman`
 - Service route source of truth: `apps/web/service-manifest.json`
 - Dev service runtime source of truth: `ecosystem.config.cjs`
-- Current Terraform inventory source of truth: `terraform/environments/dev/main.tf` plus `terraform/environments/dev/pubsub_pr_triage.tf`
+- Current Terraform inventory source of truth: `terraform/shared-gcp/main.tf` plus `terraform/shared-gcp/pubsub_pr_triage.tf`
 - Pub/Sub and Scheduler OIDC audience for Hetzner-targeted requests: `https://intexuraos.cloud`
 
 | Child Issue | Boundary | Owned Files | Contract |
 | --- | --- | --- | --- |
-| INT-1633: https://linear.app/pbuchman/issue/INT-1633/plan-hetzner-terraform-foundation-and-retained-gcp-resources | Terraform foundation and retained GCP references | `terraform/hetzner-prod/**`; narrow retained-resource additions in `terraform/environments/dev/main.tf` | Exposes Hetzner IP/host outputs; preserves retained GCP data resources; aligns server and primary IP location |
+| INT-1633: https://linear.app/pbuchman/issue/INT-1633/plan-hetzner-terraform-foundation-and-retained-gcp-resources | Terraform foundation and retained GCP references | `terraform/hetzner-prod/**`; narrow retained-resource additions in `terraform/shared-gcp/main.tf` | Exposes Hetzner IP/host outputs; preserves retained GCP data resources; aligns server and primary IP location |
 | INT-1634: https://linear.app/pbuchman/issue/INT-1634/plan-hetzner-runtime-pm2-nginx-secrets-and-edge-auth | Hetzner runtime and edge | `scripts/hetzner/**`, `ecosystem.config.prod.cjs` | Exposes PM2 services on ports 8110-8133; nginx implements public and internal routes; secret loader produces prod env safely |
 | INT-1635: https://linear.app/pbuchman/issue/INT-1635/plan-gcp-async-control-plane-for-hetzner-cutover | Pub/Sub, Scheduler, Cloud Functions continuity | `terraform/hetzner-prod/pubsub.tf`, `terraform/hetzner-prod/scheduler.tf`, `terraform/hetzner-prod/functions.tf` if split | Exposes app push and scheduler traffic to `https://intexuraos.cloud/internal/*`; keeps retained Cloud Functions on GCP |
 | INT-1636: https://linear.app/pbuchman/issue/INT-1636/plan-web-frontend-static-assets-dns-and-external-integrations | Web frontend and public cutover | `apps/web/**` only if required; DNS/webhook runbook docs | Exposes SPA and service URLs through Hetzner; keeps `/share/*` and `/images/*` backed by retained GCS buckets |
@@ -162,7 +162,7 @@ Expected: the new implementation branch is created fresh from current `developme
 - Create: `terraform/hetzner-prod/hetzner.tf`
 - Create: `terraform/hetzner-prod/outputs.tf`
 - Create: `terraform/hetzner-prod/terraform.tfvars.example`
-- Modify: `terraform/environments/dev/main.tf` only if a retained GCP secret shell or output is required
+- Modify: `terraform/shared-gcp/main.tf` only if a retained GCP secret shell or output is required
 
 - [ ] **Step 1: Create provider-isolated Hetzner root**
 
@@ -208,7 +208,7 @@ terraform {
 }
 ```
 
-Expected: the Hetzner root cannot share the same state object as `terraform/environments/dev`.
+Expected: the Hetzner root cannot share the same state object as `terraform/shared-gcp`.
 
 - [ ] **Step 3: Define Hetzner placement safely**
 

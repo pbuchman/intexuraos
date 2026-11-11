@@ -212,13 +212,50 @@ export function CalendarDailyNotificationCard({
                 </p>
               ) : !deliveryReady ? (
                 <p className="mt-1">
-                  The Matrix host needs the outbound adapter endpoint, auth token, and
-                  intex_agent target room mapping before scheduled notifications can be delivered.
+                  Connect your private WhatsApp account to enable scheduled delivery.
                   {settings.delivery.reason !== undefined ? ` ${settings.delivery.reason}` : ''}
                 </p>
               ) : null}
             </div>
           </div>
+        </div>
+
+        <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
+          <p>Schedule: {settings.schedule.enabled ? 'enabled' : 'paused'}</p>
+          {settings.latestRun !== undefined && (
+            <p>
+              Latest run: {new Date(settings.latestRun.scheduledFor).toLocaleString()} ·{' '}
+              {
+                (
+                  {
+                    trigger_pending: 'sending trigger',
+                    awaiting_ingress: 'waiting for incoming trigger',
+                    processing: 'preparing summary',
+                    awaiting_delivery: 'waiting for WhatsApp delivery',
+                    delivered: 'delivered',
+                    failed: 'failed',
+                  } as const
+                )[
+                  settings.latestRun.stage ??
+                    (settings.latestRun.deliveryStatus === 'delivered'
+                      ? 'delivered'
+                      : settings.latestRun.deliveryStatus === 'failed'
+                        ? 'failed'
+                        : 'awaiting_ingress')
+                ]
+              }
+            </p>
+          )}
+          <p>
+            Latest WhatsApp delivery:{' '}
+            {settings.latestRun?.deliveryStatus === 'delivered'
+              ? `delivered${settings.latestRun.deliveredAt === undefined ? '' : ` at ${new Date(settings.latestRun.deliveredAt).toLocaleString()}`}`
+              : settings.latestRun?.deliveryStatus === 'failed'
+                ? 'failed'
+                : settings.latestRun === undefined
+                  ? 'no delivered summary recorded'
+                  : 'waiting for final summary delivery'}
+          </p>
         </div>
 
         {settings.schedule.nextRunAt !== undefined ? (
