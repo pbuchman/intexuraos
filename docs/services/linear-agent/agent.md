@@ -10,6 +10,18 @@
 | Role      | Bidirectional Linear integration — create issues from text, sync boards, manage issues programmatically |
 | Goal      | Keep the IntexuraOS issue board current and enable AI-driven issue lifecycle management                 |
 
+## Read Scheduled-Job Execution Evidence
+
+`GET /internal/monitoring/status` requires `x-internal-auth` and returns `401 UNAUTHORIZED` on invalid auth. The standard success envelope contains `data.schemaVersion: 1`, `data.observedAt`, `data.jobs`, and aggregate `data.firestoreMonitoring`. Jobs are `linear_sync_hourly` and `linear_issues_prune_hourly`; records contain `key`, nullable `lastStartedAt`/`lastFinishedAt`/`lastSucceededAt`, and `lastOutcome` (`never`, `running`, `succeeded`, `failed`). Scheduler OIDC alone is not accepted for this status read.
+
+Read these as execution heartbeats, not notification-delivery receipts. The scheduled sync-all and prune handlers start records after auth and finish in `finally`. The shared store uses durable local state when the production monitoring state directory is configured, otherwise change-driven per-job Firestore snapshot caches.
+
+Source: `apps/linear-agent/src/routes/internalRoutes.ts:73-80,505-544,720-807`; `packages/infra-firestore/src/jobHeartbeat.ts:43-66,107-134`.
+
+## Read Failure Handling
+
+Issue-list page and relationship reads make at most three attempts for transient failures. Relationship retries repeat only the failed read. Inspect the owning full-sync error report for sanitized operation/status and `linear.attempt_N` timing evidence; handled retry logs do not create separate Sentry reports. Identifier validation preserves `UPSTREAM_UNAVAILABLE` after transient retry exhaustion. A failed upstream read is not evidence of missing issue data.
+
 ## Capabilities
 
 ### Process Natural Language Action

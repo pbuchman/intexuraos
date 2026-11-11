@@ -88,6 +88,10 @@ Schedule calculation uses wall-clock time in the selected zone and explicitly ha
 
 A run moves through `queued`, `processing`, then `completed`, `failed`, or `skipped_no_activity`. Delivery is tracked independently as `not_sent`, `pending`, `sent`, `ambiguous`, or `failed`.
 
+`delivery.status: sent` means provider acceptance at `acceptedAt`; `delivery.transportConfirmation` independently records `pending`, `delivered`, `read`, or `failed` with applicable timestamps and a failure code. Reconciliation observes existing receipts without resending an accepted message. Only runs whose provider acceptance is still unresolved use the receipt timeouts: a missing receipt becomes `DELIVERY_RECEIPT_MISSING` after six hours of observed absence, and a still-pending receipt becomes ambiguous 24 hours after summary completion. Already accepted runs retain `delivery.status: sent` while transport evidence is observed; neither timeout applies to them or authorizes a resend.
+
+Scheduler recovery drains ready outbox work and reconciles due deliveries in at most three pages per category per tick. Failed transport confirmations on accepted sends remain observable for up to seven days after acceptance, allowing later delivered/read proof to supersede them without a blind replay.
+
 The scheduler reserves one deterministic run for a definition and schedule boundary. The worker leases it for 180 seconds and renews the lease every 60 seconds. Source reads use pages of at most 200 messages, 25 pages, 5,000 messages, and 2 MB. The prompt can include the previous three completed summaries for continuity.
 
 After generation, a transactional outbox publishes a frozen WhatsApp payload. WhatsApp Service must acquire a delivery authorization before calling the provider. An ambiguous provider result blocks blind retry until reconciliation proves whether a send happened.

@@ -109,6 +109,8 @@ Callers obtain source fence values from WhatsApp validation; they must not inven
 - Never deliver a preview.
 - Never reuse a preparation token for a different definition, revision, or window.
 - Treat `ambiguous` delivery as potentially sent until reconciliation completes.
+- Treat `delivery.status: sent` as provider acceptance, separate from `transportConfirmation`. An accepted send without delivered/read proof must be observed, never blindly resent.
+- Use internal-authenticated `GET /internal/monitoring/status` for scheduler heartbeats and compact notification monitoring; do not scan canonical history to replace the monitoring projection.
 - Treat source generation or revision mismatch as a hard stop.
 - Prefer `skipped_no_activity` over generating content for an empty source window.
 

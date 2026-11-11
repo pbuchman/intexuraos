@@ -1,5 +1,32 @@
 # Changelog
 
+## 4.0.1
+
+### Changed
+
+- Retired hosted DEV and its hibernation machinery while preserving manual localhost development, persistent data and existing workers (INT-2129).
+- Updated production deployment support for Home Dev with selectable service profiles, profile-aware API documentation, safer activation and portable macOS verification (INT-2152, INT-2166).
+
+### Fixed
+
+- Fixed Code Task callback verification against original request bytes and prevented duplicate terminal retry notifications while retaining delivery-failure fallback (INT-2128, INT-2125).
+- Fixed Google and GitHub account-connection callbacks on localhost (INT-2131).
+- Fixed duplicate Sentry remediation tasks and missing failure evidence, with clearer provider-limit details and no automatic retries when investigation evidence is unavailable (INT-2135, INT-2141).
+- Fixed transient Linear relationship-read failures with bounded retries and preserved per-attempt diagnostics (INT-2137, INT-2142).
+- Fixed recovery and delivery tracking for existing scheduled notifications, allowed valid slower runtime-settings responses, and stopped expected missing-record events from creating Sentry tasks (INT-2157, INT-2165).
+- Fixed private WhatsApp recovery for poll responses, reviewed relations and generic files, with independent Matrix adapter deployment and health checks (INT-2132).
+- Fixed worker credential refresh when a required container image is missing while preserving credential isolation (INT-2156).
+- Fixed failed deployment handling by validating candidate secrets before stopping services and retaining recoverable release artifacts (INT-2130).
+
+### Improved
+
+- Improved calendar-summary visibility with the latest execution stage, final WhatsApp delivery status and confirmed delivery time.
+- Improved monitoring efficiency by replacing recurring Firestore history scans with change-driven status and compact records while preserving failure detection (INT-2167).
+
+### Removed
+
+- Removed expiring manual Cloudflare deployment attestations while retaining live credential and runtime checks (INT-2136).
+
 ## 4.0.0
 
 ### Added

@@ -112,6 +112,10 @@ Several v8 ignore blocks were replaced with real tests in previous releases (INT
 
 Since v3.8.0, SentryBox reservation and correlated-error deduplication, active remediation reuse, durable review locks, lifecycle timestamps, and merge-ready evidence address repeated work and stale task state. Existing tests cover those boundaries in the webhook, queue, review reservation, and task-group repository suites.
 
+## Current Reliability Boundaries
+
+Callback HMAC validation uses captured request bytes to avoid whitespace and schema-coercion mismatches. Retry-exhaustion notification ownership prevents a second generic publish after a successful exhaustion publish, while preserving the generic fallback on publish failure. `SENTRY_EVIDENCE_UNAVAILABLE` bypasses automatic retry; already-reported Linear validation failures retain downstream informational logs rather than duplicate reports.
+
 ## Resolved Issues
 
 | Issue    | Description                                        | Resolution                                                                             |

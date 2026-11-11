@@ -130,3 +130,9 @@ After transcription completes, reply to that audio with a text request. The comp
 ## Send An Outbound Notification
 
 Publish a WhatsApp send-message payload from a platform service. whatsapp-service delivers it through the WhatsApp Cloud API and records send state for observability.
+
+For an idempotent send, inspect `POST /internal/whatsapp/outbound-deliveries/get` with internal auth, `userId`, and `idempotencyKey`. Provider acceptance and `transportConfirmation` are separate: verify a delivered/read confirmation and its timestamp before reporting confirmed delivery. A `sent` callback alone leaves confirmation pending.
+
+For a tracked calendar run, use `POST /internal/whatsapp/notification-runs/get` with internal auth, `userId`, `source: "calendar"`, and the run ID. Follow the stage through ingress, processing, and delivery. All final reply parts must be confirmed; the preparation acknowledgment is insufficient. Inspect existing receipts before considering recovery and never resend an ambiguous outcome blindly.
+
+For private mirror recovery, follow the [controlled recovery procedure](../../setup/16-private-whatsapp-matrix-sync.md#controlled-history-recovery). Review relation repairs explicitly and use media-only recovery for missing generic files; do not replay message ingest to repair media.

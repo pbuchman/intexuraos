@@ -2,7 +2,7 @@
 
 ## Overview
 
-User-service provides authentication, user settings management, LLM API key storage with encryption, and OAuth token management for Google and GitHub. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for all sensitive data. Runs on Cloud Run with Fastify.
+User-service provides authentication, user settings management, LLM API key storage with encryption, and OAuth token management for Google and GitHub. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for all sensitive data. Runs as a Fastify HTTP service.
 
 ## Architecture
 
@@ -163,6 +163,10 @@ sequenceDiagram
 | DELETE | `/users/:uid/settings/llm-keys/:provider`       | Delete LLM API key                       | Bearer token |
 
 PATCH, test, and normal deletion accept only OpenRouter. Retired provider fields can remain in stored documents and compatibility responses, but active clients do not use them. Google OAuth routes below are unchanged and are used for Calendar access, not LLM execution.
+
+### Localhost OAuth Callback Routing
+
+Google and GitHub initiation construct callback URIs from `x-forwarded-proto` and `x-forwarded-host`, falling back to HTTP and the request Host. The Vite dev and preview proxy forwards `/oauth/connections` unchanged to user-service with `changeOrigin: false`, preserving the browser host. The service-worker navigation fallback excludes this path. Register the exact callback origin and path used by the local browser, for example `http://localhost:5173/oauth/connections/google/callback` or `http://localhost:5173/oauth/connections/github/callback`; direct calls to a service port produce that service-port callback instead. After exchange, `INTEXURAOS_WEB_APP_URL` controls the settings-page redirect.
 
 ### OAuth Connection Endpoints (Google)
 

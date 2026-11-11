@@ -120,6 +120,10 @@ Planning now uses a single artifact and one evidence/planning PR. SentryBox reme
 
 Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tunnel, and point it at your IntexuraOS instance. The machine becomes a worker endpoint within minutes. Coding tools execute on that hardware; configure remote model access with its source-code and transcript data flows in mind.
 
+## Recovery and Investigation Corrections
+
+Credential refresh waits for the authenticated worker image to resolve before starting its isolated container. Concurrent refreshes share the image pull, reducing duplicate pull work when the image is missing. SentryBox investigations preserve the available issue evidence and state what is missing when a justified fix cannot be established; those evidence failures stop automatic retries. The investigation prompt requires independent review before opening a pull request.
+
 ## Key Benefits
 
 - **Your execution environment, your hardware** — Repository workspaces and coding tools run locally; remote model calls can include source code and session transcripts, and the platform receives task status, logs, and metrics

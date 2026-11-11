@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MessagesSquare, ScrollText } from 'lucide-react';
+import { CalendarCheck, MessagesSquare, ScrollText } from 'lucide-react';
 
 interface FeatureEntry {
   title: string;
@@ -14,6 +14,16 @@ interface FeatureEntry {
 
 export function WhatsNewSection(): React.JSX.Element {
   const features: FeatureEntry[] = [
+    {
+      title: 'Calendar summary delivery status',
+      description:
+        'See the latest scheduled calendar summary stage, its final WhatsApp delivery status, and the time delivery was confirmed.',
+      icon: CalendarCheck,
+      borderColor: 'border-blue-200',
+      bgGradient: 'bg-gradient-to-br from-blue-50 to-white',
+      iconBg: 'bg-blue-100',
+      iconColor: 'text-blue-700',
+    },
     {
       title: 'Custom WhatsApp Message Digests',
       description:
@@ -53,17 +63,17 @@ export function WhatsNewSection(): React.JSX.Element {
             </a>
           </div>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            v4.0.0 —{' '}
+            v4.0.1 —{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              message digests, conversation answers.
+              clearer calendar delivery status.
             </span>
           </h2>
           <p className="text-lg leading-relaxed text-neutral-600">
-            Choose what your WhatsApp summaries focus on, then explore your conversations with an AI assistant.
+            This patch improves visibility into scheduled calendar summaries, alongside the existing 4.x WhatsApp highlights.
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => {
             const Icon = feature.icon;
             return (

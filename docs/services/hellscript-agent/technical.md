@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hellscript Agent is a voice-to-draft writing assistant that accumulates user utterances into a structured buffer, interprets intent via LLM, and generates versioned markdown drafts. Runs on Cloud Run as a Fastify service (port 8131). Depends on Firestore for persistence and user-service for per-user LLM client resolution. Supports categorized writing configuration — style instructions and writing samples organized per platform (threads, linkedin, general).
+Hellscript Agent is a voice-to-draft writing assistant that accumulates user utterances into a structured buffer, interprets intent via LLM, and generates versioned markdown drafts. Runs as a Fastify service (port 8131 locally). Depends on Firestore for persistence and user-service for per-user LLM client resolution. Supports categorized writing configuration — style instructions and writing samples organized per platform (threads, linkedin, general).
 
 ## Architecture
 

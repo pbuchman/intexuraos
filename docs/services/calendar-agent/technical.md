@@ -45,5 +45,13 @@ flowchart LR
 - `POST /internal/calendar/schedules/tick` claims due schedules with leases and sends the fixed next-24-hours calendar request through WhatsApp’s Matrix outbound path with `startNewSession: true`.
 - Scheduling follows the configured IANA zone, including DST. A per-schedule/local-date idempotency key prevents duplicate outbound requests; transport failures retry after 15 minutes, while setup-required outcomes are recorded without that transient retry.
 
+The lookahead window starts at actual processing time, rather than replaying the original scheduled window. The settings response separates `delivery` (Matrix readiness) from `latestRun` and `operationalState` (`never`, `pending`, `delivered`, or `failed` for an existing schedule). `latestRun.status: sent` records Matrix acceptance, not final WhatsApp delivery. Its independent `deliveryStatus`, `stage`, and optional `deliveredAt` track the correlated reply.
+
+Stages are `trigger_pending`, `awaiting_ingress`, `processing`, `awaiting_delivery`, `delivered`, and `failed`. Each tick observes existing run receipts before claiming new work. Final delivery requires every final reply part to be confirmed delivered or read; acknowledgments do not satisfy it. A still-pending run expires after six hours with `DELIVERY_EXPIRED`.
+
+### Operational Monitoring
+
+Internal-authenticated `GET /internal/monitoring/status` returns the `calendar_schedule_tick` heartbeat, notification summary, and Firestore monitoring diagnostics. Heartbeats persist across restarts. Process-lifetime snapshot caches watch active schedules and a seven-day run window, avoiding a fresh history query on each status request. `resumeCutoff` keeps earlier runs as history rather than current monitoring work.
+
 Every internal route must call `logIncomingRequest()` before auth validation.
 

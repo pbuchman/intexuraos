@@ -22,12 +22,13 @@
 
 ---
 
-## What's New in v4.0.0
+## What's New in v4.0.1
 
-| Feature                             | Description                                                                                                                                              |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Custom WhatsApp Message Digests** | Schedule summaries of a private group or direct chat with your own instructions, preview the result, and review past digests delivered through WhatsApp. |
-| **WhatsApp Conversation Assistant** | Ask questions about private chats using a chosen date range, inspect the captured context, and follow streamed responses.                                |
+| Feature                              | Description                                                                                                                                              |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Custom WhatsApp Message Digests**  | Schedule summaries of a private group or direct chat with your own instructions, preview the result, and review past digests delivered through WhatsApp. |
+| **WhatsApp Conversation Assistant**  | Ask questions about private chats using a chosen date range, inspect the captured context, and follow streamed responses.                                |
+| **Calendar Summary Delivery Status** | See the latest scheduled calendar summary stage, its final WhatsApp delivery status, and the time delivery was confirmed.                                |
 
 See [CHANGELOG.md](CHANGELOG.md) for all release changes.
 

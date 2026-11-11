@@ -22,7 +22,7 @@ Intex accepts text for this flow; voice commands remain unsupported.
 
 ## Recent Changes
 
-Since v3.8.0, calendar queries, confirmed attendee/general updates, and daily lookahead schedules extend existing event creation. The daily schedule sends the next-24-hours request to Intex through the connected private WhatsApp/Matrix path, starting a fresh session at the configured local time.
+The existing daily lookahead now exposes its latest execution stage, final WhatsApp delivery status, and delivery confirmation time. This separates a request accepted by Matrix from a summary actually delivered through WhatsApp.
 
 ## How It Helps
 
@@ -55,6 +55,8 @@ When you create or update an event through the dashboard, you can include attend
 ### Receive A Daily Calendar Lookahead
 
 Enable daily lookahead with a local time and IANA time zone. The schedule checks the private WhatsApp delivery setup and starts a new Intex session with a request for events in the next 24 hours. You can pause it without deleting your calendar events.
+
+The lookahead uses the current time when Intex processes the request. Schedule settings show the latest run's progress and delivery outcome separately from connection readiness. A preparation acknowledgment does not count as a delivered summary; every part of the final reply needs delivery or read confirmation.
 
 ### Recover Failed Extractions
 

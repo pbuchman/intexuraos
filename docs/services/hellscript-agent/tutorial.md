@@ -28,6 +28,20 @@ Before starting, ensure you have:
 
 ---
 
+## Select the Service Base URL
+
+For manual localhost development with Hellscript running on its configured local port:
+
+```bash
+HELLSCRIPT_AGENT_URL=http://localhost:8131
+```
+
+For another environment, set `HELLSCRIPT_AGENT_URL` to the service base URL supplied by its operator, without a trailing slash. The requests below use this value; a retired hosted DEV URL is not required.
+
+Source: `ecosystem.config.cjs:380`; `apps/hellscript-agent/src/index.ts:66`.
+
+---
+
 ## Part 1: Your First Impose (5 minutes)
 
 The core operation in Hellscript is "impose" — sending an utterance to a buffer. If no buffer ID is provided, a new buffer is created automatically.
@@ -35,7 +49,7 @@ The core operation in Hellscript is "impose" — sending an utterance to a buffe
 ### Step 1.1: Send Your First Thought
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
+curl -X POST "${HELLSCRIPT_AGENT_URL}/impose" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -74,7 +88,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose 
 ```bash
 BUFFER_ID="<your-buffer-id>"
 
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
+curl -X POST "${HELLSCRIPT_AGENT_URL}/impose" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -86,7 +100,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose 
 ### Step 2.2: Add a Third Thought
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
+curl -X POST "${HELLSCRIPT_AGENT_URL}/impose" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -98,7 +112,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose 
 ### Step 2.3: Check Your Buffer
 
 ```bash
-curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/buffers/$BUFFER_ID \
+curl "${HELLSCRIPT_AGENT_URL}/buffers/$BUFFER_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -113,7 +127,7 @@ Before generating a draft, set up platform-specific writing preferences.
 ### Step 3.1: Set LinkedIn Style Instructions
 
 ```bash
-curl -X PUT https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-config/linkedin/style \
+curl -X PUT "${HELLSCRIPT_AGENT_URL}/writing-config/linkedin/style" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -137,7 +151,7 @@ curl -X PUT https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-
 Upload a sample that represents your desired writing voice:
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-config/linkedin/samples \
+curl -X POST "${HELLSCRIPT_AGENT_URL}/writing-config/linkedin/samples" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -165,7 +179,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing
 ### Step 3.3: Verify Your Configuration
 
 ```bash
-curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-config \
+curl "${HELLSCRIPT_AGENT_URL}/writing-config" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -178,7 +192,7 @@ curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/writing-config 
 ### Step 4.1: Request a LinkedIn Draft
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
+curl -X POST "${HELLSCRIPT_AGENT_URL}/impose" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -222,7 +236,7 @@ Re-send the impose with the `category` field to resolve this.
 Retrieve the workspace to see your generated draft:
 
 ```bash
-curl https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/buffers/$BUFFER_ID \
+curl "${HELLSCRIPT_AGENT_URL}/buffers/$BUFFER_ID" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -233,7 +247,7 @@ The `draftVersions` array now contains version 1 with the generated markdown, st
 Add another thought and request a new draft — the agent generates version 2, incorporating the new material while building on the previous draft:
 
 ```bash
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
+curl -X POST "${HELLSCRIPT_AGENT_URL}/impose" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
@@ -241,7 +255,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose 
     \"utterance\": \"Also emphasize that we achieved zero downtime during the migration\"
   }"
 
-curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose \
+curl -X POST "${HELLSCRIPT_AGENT_URL}/impose" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{
