@@ -15,12 +15,19 @@ project or active Hetzner host. Production callback resources live in
 `terraform/prod-runtime/`; its backend prefix remains
 `terraform/state/prod-hetzner` for state continuity.
 
+[`terraform/agent-shares/`](agent-shares/README.md) owns the isolated Gen2
+origin and private buckets for `share.intexuraos.cloud`. It uses the existing
+state bucket with the `terraform/state/agent-shares` prefix. The Cloudflare
+Worker deployment is documented alongside the root. The legacy `/share/*`
+bucket and routes are managed through their existing configuration.
+
 ## Structure
 
 ```text
 terraform/
 ├── shared-gcp/              # Retained shared GCP project
 ├── prod-runtime/            # Production Pub/Sub/Scheduler control plane
+├── agent-shares/            # Isolated expiring share origin and edge Worker
 ├── modules/
 │   ├── artifact-registry/
 │   ├── cloud-build/
