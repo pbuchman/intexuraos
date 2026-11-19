@@ -134,6 +134,10 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
   it('returns 200 with dispatch metadata for a known task', async () => {
     const task = await createTask();
 
+    const audience = 'https://worker.example';
+    const update = await getServices().codeTaskRepo.update(task.id, { workerAudience: audience });
+    expect(update.ok).toBe(true);
+
     const response = await app.inject({
       method: 'GET',
       url: `/internal/tasks/${task.id}/dispatch-metadata`,
@@ -143,6 +147,9 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
     expect(response.statusCode).toBe(200);
 
     interface DispatchMetadata {
+      ownerId: string;
+      workerLocation: string;
+      workerAudience: string;
       taskId: string;
       prompt: string;
       repository: string;
@@ -159,6 +166,9 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
 
     const body = JSON.parse(response.body) as DispatchMetadata;
     expect(body.taskId).toBe(task.id);
+    expect(body.ownerId).toBe(task.userId);
+    expect(body.workerAudience).toBe(audience);
+    expect(body.workerLocation).toBe(task.workerLocation);
     expect(body.prompt).toBe('Fix the bug');
     expect(body.repository).toBe('intexuraos/test');
     expect(body.baseBranch).toBe('main');
@@ -202,6 +212,8 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
     expect(response.statusCode).toBe(200);
 
     interface DispatchMetadata {
+      ownerId: string;
+      workerLocation: string;
       taskId: string;
       agentType: string | null;
       linearIssueId: string | null;

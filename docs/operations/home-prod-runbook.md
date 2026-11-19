@@ -4,7 +4,12 @@ Home PROD runs the application on the Home Dev machine under the dedicated
 `intexuraos-prod` account. Deployments are manual, exact-SHA, and fix-forward.
 The GitHub workflow admits only the current `development` SHA after its CI run
 passes, reconciles the protected numeric secret-package version with the
-repository manifest, and invokes the fixed privileged launcher.
+repository manifest, and registers a GitHub Deployment for environment `home-prod`
+at that exact SHA with auto-merge disabled. A GitHub-hosted runner signs the
+deployment ID together with the release request.
+Home Dev pulls that request and invokes the installed launcher after independently
+validating its provenance. The workflow waits for the host's GitHub App to
+report the health result in both the commit check and that Deployment's status.
 
 ## Safe Defaults and Full Restoration
 
@@ -65,7 +70,14 @@ change persistent infrastructure.
    evidence. Never print package payloads, `.env.prod`, service-account JSON,
    internal tokens, or private request bodies.
 
-Dispatch `.github/workflows/deploy.yml` with target `home-prod`. The bounded
+Use **Actions → Deploy → Run workflow** on `development` with target `home-prod`.
+The host's approved package pin and workflow digest must match the selected
+commit. The hosted job polls its exact App-owned check and deployment status and fails when the host
+rejects the request or reports a failed activation. A request older than 15 minutes
+at admission expires. If the host is unreachable, the workflow eventually times
+out. Each fresh dispatch or GitHub re-run has its own request identity. After an
+interruption during activation an operator must inspect the runtime and clear
+the broker hold before another attempt can activate. The bounded
 launcher fetches the exact package version into a root-owned temporary file.
 The unprivileged driver then builds an isolated candidate, validates its exact
 17-app `basic` or 19-app `full` loopback runtime from the package's validated

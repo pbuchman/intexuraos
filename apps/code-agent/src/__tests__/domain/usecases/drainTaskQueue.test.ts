@@ -1385,7 +1385,7 @@ describe('drainTaskQueue', () => {
     setupWorkerSettings();
 
     mockTaskDispatcher.dispatch.mockResolvedValue(
-      ok({ dispatched: true, workerLocation: 'home-mac' })
+      ok({ dispatched: true, workerLocation: 'home-mac', workerAudience: 'https://worker.example' })
     );
 
     const updatedTask = createMockTask({ status: 'dispatched', workerLocation: 'home-mac' });
@@ -1405,6 +1405,7 @@ describe('drainTaskQueue', () => {
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
       lastHeartbeat: expect.any(Date),
       workerLocation: 'home-mac',
+      workerAudience: 'https://worker.example',
       cancelNonce: 'abcd1234',
       cancelNonceExpiresAt: expect.any(String),
       dispatchStatus: null,
@@ -1547,6 +1548,7 @@ describe('drainTaskQueue', () => {
     await drainTaskQueue(createDeps());
 
     expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith({
+      ownerId: 'user-456',
       taskId: 'task-123',
       dispatchAttemptId: 'dispatch-token',
       prompt: 'Fix the bug',
@@ -3238,6 +3240,7 @@ describe('drainTaskQueue', () => {
         message: 'Gateway timed out after accepting the POST',
         outcomeUnknown: true,
         workerLocation: 'home-mac',
+        workerAudience: 'https://worker.example',
       };
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
@@ -3258,6 +3261,7 @@ describe('drainTaskQueue', () => {
             terminal: false,
           }),
           workerLocation: 'home-mac',
+          workerAudience: 'https://worker.example',
         }),
       );
       expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(

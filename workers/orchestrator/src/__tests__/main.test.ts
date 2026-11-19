@@ -1932,7 +1932,7 @@ describe('main.ts', () => {
 
       expect(mockApp.listen).toHaveBeenCalledWith({
         port: 8100,
-        host: '0.0.0.0',
+        host: '127.0.0.1',
       });
 
       // Check that the HTTP server started log was called

@@ -1,5 +1,7 @@
 export interface OrchestratorConfig {
   port: number;
+  bindHost?: string;
+  taskAccess?: import('../services/task-access.js').TaskAccessConfig;
   capacity: number;
   taskTimeoutMs: number;
   stateFilePath: string;

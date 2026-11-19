@@ -1,3 +1,11 @@
+export interface WorkerCancellationCredentials {
+  ownerId: string;
+  workerAudience?: string;
+  url: string;
+  cfAccessClientId: string;
+  cfAccessClientSecret: string;
+}
+
 /**
  * Task dispatcher service interface.
  *
@@ -50,6 +58,7 @@ export interface ExecutionMemoryPromptContext {
  * Request to dispatch a code task to a worker.
  */
 export interface DispatchRequest {
+  ownerId: string;
   taskId: string;
   /** Per-claim identifier used only to correlate dispatch logs; never sent to the Worker. */
   dispatchAttemptId?: string;
@@ -100,6 +109,7 @@ export interface DispatchRequest {
 export interface DispatchResult {
   dispatched: true;
   workerLocation: WorkerLocation;
+  workerAudience?: string;
 }
 
 /**
@@ -118,6 +128,7 @@ export interface DispatchError {
   outcomeUnknown?: boolean;
   /** Worker that received the POST, retained so an ambiguous dispatch can still be cancelled. */
   workerLocation?: WorkerLocation;
+  workerAudience?: string;
   blocker?: Extract<CodeTaskDispatchability, { dispatchable: false }>;
 }
 
@@ -128,6 +139,8 @@ export interface DispatchError {
  * This enables user isolation - each user's dispatch uses their own credentials.
  */
 export interface TaskDispatcherDeps {
+  legacyTaskBindings?: readonly import('@intexuraos/code-task-domain/task-access').TaskBinding[];
+  taskAccessKey?: import('node:crypto').KeyObject;
   logger: Logger;
   workerHealthProbe: WorkerHealthProbe;
 }
@@ -169,7 +182,7 @@ export interface TaskDispatcherService {
   cancelOnWorker(
     taskId: string,
     location: string,
-    credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }
+    credentials?: WorkerCancellationCredentials
   ): Promise<void>;
 
   /**

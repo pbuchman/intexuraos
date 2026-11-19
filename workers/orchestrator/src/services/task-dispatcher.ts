@@ -1,3 +1,4 @@
+import { sameTaskBinding } from '@intexuraos/code-task-domain/task-access';
 import { Mutex } from 'async-mutex';
 import { type Result, type Logger } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
@@ -458,6 +459,10 @@ export class TaskDispatcher {
 
   private async saveTask(task: Task): Promise<void> {
     await this.statePersistence.modify((state) => {
+      const bound = state.tasks[task.taskId]?.accessBinding;
+      if (bound !== undefined && !sameTaskBinding(bound, task.accessBinding)) {
+        throw new Error('Cannot replace a persisted task owner or worker');
+      }
       state.tasks[task.taskId] = task;
     });
   }

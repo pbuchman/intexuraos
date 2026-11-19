@@ -31,6 +31,7 @@ const STANDARD_ENV_VARS = new Set([
   'PATH',
   'HOME',
   'TMPDIR',
+  'CREDENTIALS_DIRECTORY', // Supplied by systemd to services using LoadCredential.
   'VITEST', // Test framework
   'TZ', // Timezone
 ]);

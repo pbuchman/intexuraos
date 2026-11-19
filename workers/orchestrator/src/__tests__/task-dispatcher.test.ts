@@ -848,6 +848,7 @@ describe('TaskDispatcher', () => {
     it('should return task when exists', async () => {
       const request: CreateTaskRequest = {
         taskId: 'test-task',
+        accessBinding: { ownerId: 'owner-a', worker: 'home', audience: 'https://worker.example' },
         workerType: 'auto',
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
@@ -863,6 +864,22 @@ describe('TaskDispatcher', () => {
       expect(task).not.toBeNull();
       expect(task?.taskId).toBe('test-task');
       expect(task?.status).toBe('running');
+      expect(task?.accessBinding).toEqual(request.accessBinding);
+      if (task === null) throw new Error('Expected a persisted task');
+      const writer = dispatcher as unknown as { saveTask: (updated: Task) => Promise<void> };
+      const { accessBinding: _binding, ...unbound } = task;
+      await expect(writer.saveTask(unbound)).rejects.toThrow('Cannot replace');
+      await expect(
+        writer.saveTask({
+          ...task,
+          accessBinding: {
+            ownerId: 'different',
+            worker: 'home',
+            audience: 'https://worker.example',
+          },
+        })
+      ).rejects.toThrow('Cannot replace');
+      expect((await dispatcher.getTask(task.taskId))?.accessBinding).toEqual(request.accessBinding);
     });
 
     it('should return null when task does not exist', async () => {

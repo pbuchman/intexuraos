@@ -27,6 +27,7 @@ TEMP_WEB_RELEASE=""
 WEB_RELEASE_EXISTS="0"
 LOCK_FD=""
 PORTABLE_LOCK_DIR=""
+PM2_CONFIG="ecosystem.config.prod.cjs"
 ACTIVATION_STARTED="0"
 ACTIVATION_SUCCEEDED="0"
 FINALIZING_ACTIVATION="0"
@@ -232,13 +233,16 @@ NODE
   )" || fail 'Invalid pinned production profile'
   printf '%s\n' "${PROD_PROFILE}" > "${STAGING_RELEASE}/.intexuraos-prod-profile"
   chmod 600 "${STAGING_RELEASE}/.intexuraos-prod-profile"
+  if [[ -f "${STAGING_RELEASE}/ecosystem.home-prod.cjs" ]]; then
+    PM2_CONFIG="ecosystem.home-prod.cjs"
+  fi
   INTEXURAOS_COMMIT_SHA="${TARGET_SHA}" \
     INTEXURAOS_ENVIRONMENT=prod \
     INTEXURAOS_PROD_ENV_FILE="${CANDIDATE_OUTPUT}/.env.prod" \
     INTEXURAOS_PROD_PORT_OFFSET=10000 \
     INTEXURAOS_PROD_PROFILE="${PROD_PROFILE}" \
     HOME="${DEPLOY_HOME}" \
-    node - "${STAGING_RELEASE}/ecosystem.config.prod.cjs" > "${rendered}" <<'NODE'
+    CODE_AGENT_PACKAGE_VERSION="${SECRET_PACKAGE_VERSION}" node - "${STAGING_RELEASE}/${PM2_CONFIG}" > "${rendered}" <<'NODE'
 const path = require('node:path');
 const config = require(path.resolve(process.argv[2]));
 if (!config || !Array.isArray(config.apps) || config.apps.length === 0) process.exit(1);
@@ -278,6 +282,22 @@ for (const app of config.apps) {
   if (ports.has(port)) process.exit(1);
   names.add(app.name);
   ports.add(port);
+}
+const fs = require('node:fs');
+const root = path.dirname(path.resolve(process.argv[2]));
+const protectedIssuer = fs.existsSync(path.join(root, 'apps/code-agent/src/infra/services/taskAccessKey.ts'));
+if (protectedIssuer) {
+  if (names.has('code-agent')) {
+    process.stderr.write('Shared PM2 cannot host the task signing identity\n');
+    process.exit(1);
+  }
+  const selector = '/var/lib/intexuraos-code-agent/active';
+  const expected = process.env.INTEXURAOS_COMMIT_SHA + '.' + process.env.CODE_AGENT_PACKAGE_VERSION;
+  if (fs.readlinkSync(selector) !== 'activations/' + expected) {
+    process.stderr.write('Isolated code-agent has not activated the admitted release and package\n');
+    process.exit(1);
+  }
+  expectedNames.splice(expectedNames.indexOf('code-agent'), 1);
 }
 if (names.size !== expectedNames.length || expectedNames.some((name) => !names.has(name))) {
   process.stderr.write(`PM2 candidate does not contain the exact Home PROD ${process.env.INTEXURAOS_PROD_PROFILE} service set\n`);
@@ -428,7 +448,7 @@ publish_staged_release() {
       INTEXURAOS_PROD_PROFILE="${PROD_PROFILE}" \
       PM2_HOME="${EXPECTED_PM2_HOME}" \
       bash scripts/home-prod/reload-pm2.sh \
-        --config ecosystem.config.prod.cjs \
+        --config "${PM2_CONFIG}" \
         --rendered-config "${PROD_CONFIG_ROOT}/pm2-ecosystem.json"
   ); then
     ACTIVATION_SUCCEEDED="1"

@@ -15,6 +15,7 @@ import type {
   DispatchRequest,
   DispatchResult,
   DispatchWorkerCredentials,
+  WorkerCancellationCredentials,
   ExecutionMemoryPromptContext,
 } from '../../domain/services/taskDispatcher.js';
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
@@ -26,6 +27,7 @@ import {
   type CodeTaskDispatchability,
 } from '../../domain/services/codeTaskDispatchBlockers.js';
 import { isTerminalDispatchBlockerReason } from '../../domain/services/codeTaskDispatchProblems.js';
+import { signTaskAccess, taskAudience, TASK_ACCESS_HEADER } from '@intexuraos/code-task-domain/task-access';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
 type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
@@ -126,7 +128,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   private readonly logger: TaskDispatcherDeps['logger'];
   private readonly workerHealthProbe: WorkerHealthProbe;
 
-  constructor(deps: TaskDispatcherDeps) {
+  constructor(private readonly deps: TaskDispatcherDeps) {
     this.logger = deps.logger;
     this.workerHealthProbe = deps.workerHealthProbe;
   }
@@ -317,6 +319,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       body,
       timestamp,
       sortedWorkers,
+      request.ownerId,
       request.dispatchAttemptId,
     );
 
@@ -332,12 +335,19 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     body: string,
     timestamp: number,
     workers: WorkerConfigWithCredentials[],
+    ownerId: string,
     dispatchAttemptId?: string,
   ): Promise<Result<DispatchResult, DispatchError>> {
     let sawCapacity503 = false;
     let sawExplicitRejection = false;
 
     for (const worker of workers) {
+      let audience: string;
+      try {
+        audience = taskAudience(worker.url);
+      } catch {
+        return err({ code: 'dispatch_failed', message: 'Invalid task worker URL' });
+      }
       // Generate nonce for replay protection
       const nonce = generateNonce();
 
@@ -370,6 +380,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           timestamp,
           signature,
           nonce,
+          ownerId,
+          audience,
           dispatchAttemptId,
         );
 
@@ -388,6 +400,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           return ok({
             dispatched: true,
             workerLocation: worker.location,
+            workerAudience: audience,
           });
         }
 
@@ -428,6 +441,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           message: `Network error: ${getErrorMessage(error)}`,
           outcomeUnknown: true,
           workerLocation: worker.location,
+          workerAudience: audience,
         });
       }
     }
@@ -457,6 +471,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     timestamp: number,
     signature: string,
     nonce: string,
+    ownerId: string,
+    audience: string,
     dispatchAttemptId?: string,
   ): Promise<Result<WorkerTaskResponse, DispatchError>> {
     this.logger.debug(
@@ -473,12 +489,20 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       'X-Dispatch-Nonce': nonce,
     };
 
+    if (this.deps.taskAccessKey === undefined || ownerId === '') {
+      return err({ code: 'dispatch_failed', message: 'Task signing identity unavailable' });
+    }
+    headers[TASK_ACCESS_HEADER] = signTaskAccess(this.deps.taskAccessKey, {
+      ownerId, worker: worker.location, audience,
+      method: 'POST', path: '/tasks', taskId: taskRequest.taskId, body,
+    });
     if (taskRequest.traceId !== undefined) {
       headers['X-Trace-Id'] = taskRequest.traceId;
     }
 
-    const response = await this.fetchWithTimeout(worker.credentials.url + '/tasks', {
+    const response = await this.fetchWithTimeout(audience + '/tasks', {
       method: 'POST',
+      redirect: 'error',
       headers,
       body,
       signal: AbortSignal.timeout(30000),
@@ -509,6 +533,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           message: `Worker dispatch outcome is ambiguous (HTTP ${String(response.status)}); refusing multi-worker fallback`,
           outcomeUnknown: true,
           workerLocation: worker.location,
+          workerAudience: audience,
         });
       }
 
@@ -535,6 +560,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         message: 'Worker returned invalid JSON response',
         outcomeUnknown: true,
         workerLocation: worker.location,
+        workerAudience: audience,
       });
     }
 
@@ -544,6 +570,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         message: 'Worker returned an unknown response after the dispatch POST',
         outcomeUnknown: true,
         workerLocation: worker.location,
+        workerAudience: audience,
       });
     }
 
@@ -651,7 +678,11 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
   }
 
-  async cancelOnWorker(taskId: string, location: string, credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }): Promise<void> {
+  async cancelOnWorker(
+    taskId: string,
+    location: string,
+    credentials?: WorkerCancellationCredentials,
+  ): Promise<void> {
     this.logger.info({ taskId, location }, 'Sending cancellation request to worker');
 
     if (credentials === undefined) {
@@ -659,11 +690,24 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       throw new Error(`Worker cancellation credentials unavailable for ${location}`);
     }
 
+    if (this.deps.taskAccessKey === undefined) throw new Error('Task signing identity unavailable');
+    const target = taskAudience(credentials.url);
+    const assignedAudience = credentials.workerAudience ?? this.deps.legacyTaskBindings?.find(
+      (entry) => entry.ownerId === credentials.ownerId && entry.worker === location,
+    )?.audience;
+    if (assignedAudience !== target) throw new Error('Worker cancellation destination is unverified');
+    const path = '/tasks/' + encodeURIComponent(taskId);
+    const proof = signTaskAccess(this.deps.taskAccessKey, {
+      ownerId: credentials.ownerId, worker: location, audience: assignedAudience,
+      taskId, method: 'DELETE', path, body: '',
+    });
     let response: Response;
     try {
-      response = await this.fetchWithTimeout(`${credentials.url}/tasks/${taskId}`, {
+      response = await this.fetchWithTimeout(target + path, {
         method: 'DELETE',
+        redirect: 'error',
         headers: {
+          [TASK_ACCESS_HEADER]: proof,
           'CF-Access-Client-Id': credentials.cfAccessClientId,
           'CF-Access-Client-Secret': credentials.cfAccessClientSecret,
         },

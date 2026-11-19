@@ -1,5 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { TASK_ACCESS_HEADER } from '@intexuraos/code-task-domain/task-access';
+import { TaskAccess, type TaskAccessConfig } from './services/task-access.js';
 import { createHmac } from 'node:crypto';
+import type { Task } from './types/task.js';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { IsolationProvider } from './services/isolation/types.js';
@@ -8,7 +11,11 @@ import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CreateTaskRequest, ProviderApiKeyHealth } from './types/api.js';
-import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
+import {
+  CreateTaskRequestSchema,
+  SendMessageRequestSchema,
+  TaskStatusSchema,
+} from './types/schemas.js';
 import { isOrchestratorAdmissionFrozen } from './admission-freeze.js';
 
 interface TaskParams {
@@ -55,7 +62,7 @@ export function registerRoutes(
   app: FastifyInstance,
   dispatcher: TaskDispatcher,
   tokenService: GitHubTokenService,
-  config: { orchestratorSecret: string },
+  config: { orchestratorSecret: string; taskAccess?: TaskAccessConfig },
   logger: Logger,
   getStatus?: () => OrchestratorStatus,
   workerAuthRegistry?: WorkerAuthRegistry,
@@ -63,6 +70,7 @@ export function registerRoutes(
   providerApiKeys: Record<string, ProviderApiKeyHealth> = {},
   readAdmissionFreeze: () => boolean = isOrchestratorAdmissionFrozen
 ): void {
+  const access = config.taskAccess === undefined ? undefined : new TaskAccess(config.taskAccess);
   const nonceCache: NonceCache = {};
   const activeAdmissionRequests = new WeakMap<
     FastifyRequest,
@@ -216,20 +224,6 @@ export function registerRoutes(
   // POST /tasks - Submit new task
   app.post('/tasks', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
     await runTaskMutation(request, reply, async () => {
-      // Log incoming request (redact secrets)
-      const rawBody = request.body as Record<string, unknown>;
-      logger.info(
-        {
-          method: 'POST',
-          path: '/tasks',
-          body: {
-            ...rawBody,
-            webhookSecret: rawBody['webhookSecret'] ? '[REDACTED]' : undefined,
-          },
-        },
-        'Task submission payload'
-      );
-
       const parseResult = CreateTaskRequestSchema.safeParse(request.body);
       if (!parseResult.success) {
         const errorResponse = { error: parseResult.error.message };
@@ -245,9 +239,31 @@ export function registerRoutes(
         return;
       }
       const parsed = parseResult.data;
+      if (access === undefined) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+      const proof = await access.authenticate(
+        request.headers[TASK_ACCESS_HEADER],
+        'POST',
+        request.url,
+        parsed.taskId,
+        JSON.stringify(request.body)
+      );
+      if (proof === null) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+
+      const existing = await dispatcher.getTask(parsed.taskId);
+      if (existing !== null && !(await access.ownsTask(proof, existing))) {
+        reply.status(409).send({ error: 'Task is already assigned' });
+        return;
+      }
 
       const body: CreateTaskRequest = {
         taskId: parsed.taskId,
+        accessBinding: { ownerId: proof.ownerId, worker: proof.worker, audience: proof.audience },
         workerType: parsed.workerType,
         prompt: parsed.prompt,
         webhookUrl: parsed.webhookUrl,
@@ -318,23 +334,58 @@ export function registerRoutes(
     });
   });
 
-  // GET /tasks/:id - Get task status
-  app.get<{ Params: TaskParams }>('/tasks/:id', async (request: TaskParamsRequest, reply) => {
+  const authorizeTask = async (
+    request: TaskParamsRequest,
+    reply: FastifyReply
+  ): Promise<Task | null> => {
     const { id } = request.params;
+    const path = '/tasks/' + encodeURIComponent(id);
+    if (
+      access === undefined ||
+      request.body !== undefined ||
+      request.url !== path ||
+      request.headers['transfer-encoding'] !== undefined ||
+      (request.headers['content-length'] ?? '0') !== '0'
+    ) {
+      reply.status(401).send({ error: 'Unauthorized' });
+      return null;
+    }
+    const proof = await access.authenticate(
+      request.headers[TASK_ACCESS_HEADER],
+      request.method,
+      path,
+      id,
+      ''
+    );
+    if (proof === null) {
+      reply.status(401).send({ error: 'Unauthorized' });
+      return null;
+    }
     const task = await dispatcher.getTask(id);
-
-    if (task === null) {
+    if (task?.taskId !== id || !(await access.ownsTask(proof, task))) {
       reply.status(404).send({ error: 'Task not found' });
+      return null;
+    }
+    return task;
+  };
+
+  // Fastify also registers HEAD and passes its actual method to authorization.
+  app.get<{ Params: TaskParams }>('/tasks/:id', async (request, reply) => {
+    const task = await authorizeTask(request, reply);
+    if (task === null) return;
+    const status = TaskStatusSchema.safeParse(task.status);
+    if (!status.success) {
+      reply.status(500).send({ error: 'Invalid stored task status' });
       return;
     }
-
-    reply.send(task);
+    reply.send({ taskId: task.taskId, status: status.data });
   });
 
-  // DELETE /tasks/:id - Cancel task
-  app.delete<{ Params: TaskParams }>('/tasks/:id', async (request: TaskParamsRequest, reply) => {
+  app.delete<{ Params: TaskParams }>('/tasks/:id', async (request, reply) => {
+    const task = await authorizeTask(request, reply);
+    if (task === null) return;
     await runTaskMutation(request, reply, async () => {
-      const { id } = request.params;
+      const id = task.taskId;
       const result = await dispatcher.cancelTask(id);
 
       if (!result.ok) {

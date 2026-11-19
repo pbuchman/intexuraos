@@ -1,6 +1,6 @@
 # Independent Home Dev integration
 
-This deployment owns only the IntexuraOS Matrix adapter. Matrix core stays in `pbuchman-dev` under project `whatsapp-matrix`. The integration uses project `intexuraos-matrix-sync`, service `matrix-sync`, container `intexuraos-matrix-sync`, unit `intexuraos-matrix-sync.service` and directory `/home/pbuchman/services/intexuraos-matrix-sync`.
+This deployment owns only the IntexuraOS Matrix adapter. Matrix core stays in `pbuchman-dev` under project `whatsapp-matrix`. The integration uses project `intexuraos-matrix-sync`, service `matrix-sync`, container `intexuraos-matrix-sync`, unit `intexuraos-matrix-sync.service` and protected control directory `/etc/intexuraos-matrix-sync`. The historical directory `/home/pbuchman/services/intexuraos-matrix-sync` holds the application environment and public CA.
 
 The adapter connects to `https://home-dev`, using `home-dev:host-gateway` and the active Caddy public root CA through `NODE_EXTRA_CA_CERTS`. It has its own Docker network. Preserve port 8099 and the existing host-owned Caddy/Cloudflare Service Auth route `https://matrix-outbound.intexuraos.cloud/api/matrix-outbound`. No new ingress resources are needed.
 
@@ -24,7 +24,7 @@ Export the public root from the **running Caddy service's** data store, after co
 These administrator commands prepare the public trust file only; they do not restart Caddy, Matrix or the adapter:
 
 ```bash
-systemctl show caddy -p User -p Environment -p ExecStart
+systemctl show caddy -p User -p ExecStart
 sudo install -d -o pbuchman -g pbuchman -m 0700 /home/pbuchman/services/intexuraos-matrix-sync
 sudo install -d -o pbuchman -g pbuchman -m 0755 /home/pbuchman/services/intexuraos-matrix-sync/ca
 sudo install -o pbuchman -g pbuchman -m 0644 \
@@ -62,17 +62,34 @@ docker run --rm --add-host home-dev:host-gateway \
   'const response = await fetch("https://home-dev/_matrix/client/versions"); if (!response.ok) process.exit(1); console.log(JSON.stringify({status:response.status}));'
 ```
 
-After passing trust and image checks, installing the staged unit is still prepare-only:
+### Stage protected supervision on existing Home Dev
 
-```bash
-systemd-analyze verify /home/pbuchman/services/intexuraos-matrix-sync/intexuraos-matrix-sync.service
-sudo install -m 0644 /home/pbuchman/services/intexuraos-matrix-sync/intexuraos-matrix-sync.service /etc/systemd/system/intexuraos-matrix-sync.service
-sudo systemctl daemon-reload
-```
+Use the host repository's **Phase 8, Existing Home Dev with retained data**
+procedure. Its reviewed `stage-control.py adapter` takes the root-owned copy of
+this release directory and the verified local **image** revision. These two
+revisions can differ when deploying control-only changes. It stages the canonical
+Compose file, `control.env.example` with the selected revision, and fixed unit
+under `/etc/intexuraos-matrix-sync`. Running ordinary `install.sh --prepare-only`
+continues to stage application preparation files. Its systemd template always
+selects the root-controlled production directory.
 
-Do not enable/start the new unit during preparation. Lack of administrator access or authorized recovery ADC blocks cutover, not repository validation. Do not use unrelated sudo launchers or privileged Docker mounts to bypass those prerequisites.
+The production `control.env` holds only the image revision and paths under
+`/run/home-dev-matrix-sources/adapter`. The host enrolls the current objects
+without moving the checkpoint or duplicating private file contents. It verifies
+the existing mounted state, credentials and CA against the running consumer, and
+publishes the verified mounts in a root-owned directory before Docker starts.
+Only the service's `env_file` consumes the historical application environment.
+Values in that application environment cannot select a host mount or the image.
 
-## Controlled ownership transfer
+Validate the canonical Compose model with its protected control file. Verify the
+selected image ID, healthy TLS and active consumer before taking the current
+checkpoint baseline. Install/reload the protected unit in the agreed window.
+Stop its predecessor and preserve the latest checkpoint before starting the
+single separate adapter. Verify the actual container mount sources are all under
+the protected adapter directory and that polling advances. The host guide
+contains the exact stage, enrollment, cutover and rollback commands.
+
+## Historical first transfer from a shared supervisor
 
 1. Refresh the baseline: record core container IDs/restart counts, image identities, adapter checkpoint hash and its `updatedAt`, without exposing private content. Make consistent PostgreSQL and protected configuration/credential/state backups, and rehearse their restore in isolation without starting a copied WhatsApp session.
 2. Confirm the active root CA validates the Matrix endpoint from the release image, the existing ingest service account can mint the expected OIDC token, and the existing authorized recovery reader is available. Keep both the release image and prior adapter image.
@@ -97,7 +114,12 @@ When rollback compatibility has been proved and the new consumer is stopped/fenc
 docker tag "$prior_image_id" "intexuraos-matrix-sync:$prior_source_sha"
 ```
 
-In the reviewed protected deployment `.env`, set only `INTEXURAOS_SOURCE_SHA` to that recorded prior revision; retain account/user, active CA, current checkpoint directory and all explicit credential/target mounts. Do not restore an old environment blindly or copy old state. Validate the separate Compose configuration and compare the selected tag's image ID to the recorded ID before any eventual resume. The prepare-only installer refuses an existing different environment, so this rollback selection is a deliberate operator change. Keep the recovery fence until the latest checkpoint's compatibility and recovery status permit a single consumer to resume.
+In the protected `/etc/intexuraos-matrix-sync/control.env`, select the approved
+prior image revision after confirming its tag resolves to the recorded immutable
+ID. Preserve its explicit enrolled mounts and the application environment.
+Validate with `--env-file /etc/intexuraos-matrix-sync/control.env` and the
+absolute protected Compose file. Keep the recovery fence until the latest
+checkpoint's compatibility and recovery status permit a single consumer to resume.
 
 ## Verification fixtures
 

@@ -6,7 +6,7 @@ services:
     user: '1000:1000'
     restart: 'no'
     init: true
-    env_file: .env
+    env_file: ${MATRIX_SYNC_APPLICATION_ENV:-.env}
     environment:
       PORT: '8099'
       MATRIX_HOMESERVER_URL: https://home-dev
