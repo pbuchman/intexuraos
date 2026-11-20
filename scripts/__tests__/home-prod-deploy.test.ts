@@ -531,7 +531,7 @@ describe('Home PROD release deployment', () => {
     verifyDenied();
   });
 
-  it('validates disposable credentials from the isolated service entry point without starting a server', () => {
+  it('loads the production code-agent bundle and validates its environment and signing credentials before it listens', () => {
     const root = mkdtempSync(join(tmpdir(), 'isolated-code-agent-'));
     try {
       const credentials = join(root, 'credentials');
@@ -545,13 +545,51 @@ describe('Home PROD release deployment', () => {
         { mode: 0o600 }
       );
       writeFileSync(join(credentials, 'legacy-worker-bindings.json'), '[]', { mode: 0o600 });
-      writeFileSync(join(credentials, 'application.json'), '{"INTEXURAOS_PROD_PROFILE":"basic"}', {
-        mode: 0o600,
+      const projection = {
+        INTEXURAOS_PROD_PROFILE: 'basic',
+        INTEXURAOS_GITHUB_WEBHOOK_SECRET: 'fixture-github',
+        INTEXURAOS_INTERNAL_AUTH_TOKEN: 'fixture-internal',
+        INTEXURAOS_OPENROUTER_APP_API_KEY: 'fixture-openrouter',
+        INTEXURAOS_ORCHESTRATOR_SECRET: 'fixture-orchestrator',
+        INTEXURAOS_SENTRY_WEBHOOK_SECRET: 'fixture-sentry',
+        INTEXURAOS_TOKEN_ENCRYPTION_KEY: 'fixture-encryption-key-32-bytes!',
+      };
+      const application = join(credentials, 'application.json');
+      writeFileSync(application, JSON.stringify(projection), { mode: 0o600 });
+      const build = spawnSync(process.execPath, ['scripts/build-service.mjs', 'code-agent'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
       });
-      const run = (): SpawnSyncReturns<string> =>
+      expect(build.status, build.stderr).toBe(0);
+      const networkGuard = join(root, 'forbid-network.mjs');
+      writeFileSync(
+        networkGuard,
+        `import { Server, Socket } from 'node:net';
+        function forbidden() { process.exit(91); }
+        Server.prototype.listen = forbidden;
+        Socket.prototype.connect = forbidden;
+        globalThis.fetch = forbidden;`
+      );
+      const missingExternal = join(root, 'missing-external.mjs');
+      writeFileSync(
+        missingExternal,
+        `export function resolve(specifier, context, nextResolve) {
+        if (specifier === '@sentry/node' && context.parentURL?.endsWith('/apps/code-agent/dist/index.js')) {
+          throw new Error('Fixture missing bundle dependency');
+        }
+        return nextResolve(specifier, context);
+      }`
+      );
+      const run = (nodeArgs: string[] = []): SpawnSyncReturns<string> =>
         spawnSync(
           process.execPath,
-          [join(repoRoot, 'scripts/home-prod/start-code-agent.mjs'), '--preflight'],
+          [
+            '--import',
+            networkGuard,
+            ...nodeArgs,
+            join(repoRoot, 'scripts/home-prod/start-code-agent.mjs'),
+            '--preflight',
+          ],
           {
             cwd,
             env: { CREDENTIALS_DIRECTORY: credentials, PATH: '/usr/bin:/bin' },
@@ -560,6 +598,17 @@ describe('Home PROD release deployment', () => {
         );
       const valid = run();
       expect(valid.status, valid.stderr).toBe(0);
+      const missing = run(['--experimental-loader', missingExternal]);
+      expect(missing.status).not.toBe(0);
+      expect(missing.stderr).toContain('Fixture missing bundle dependency');
+      writeFileSync(
+        application,
+        JSON.stringify({ ...projection, INTEXURAOS_INTERNAL_AUTH_TOKEN: '' })
+      );
+      const invalidApplication = run();
+      expect(invalidApplication.status).not.toBe(0);
+      expect(invalidApplication.stderr).toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN');
+      writeFileSync(application, JSON.stringify(projection));
       chmodSync(join(credentials, 'signing.pem'), 0o644);
       expect(run().status).not.toBe(0);
     } finally {

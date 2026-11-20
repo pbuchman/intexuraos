@@ -77,6 +77,13 @@ isolated transition runner, root-owned release service and dedicated code-agent
 unit through the host runbook. The transition job uses package version `5`.
 Its only step submits the run ID and attempt and waits for the host's result.
 The runner account should have access only to this request socket.
+Before handing over the code-agent port, the isolated service preflight loads
+the selected production bundle, validates the signing credentials and environment,
+and registers its Fastify plugins. The live service then runs the database
+migrations and starts listening. The compiled bundle imports dependencies of
+its bundled workspace packages directly. Its build checks these imports against
+the installed code-agent tree. The code-agent Knip exceptions cover dependencies
+used by this bundle through workspace packages.
 
 To switch to the hosted broker, provision its host consumer, review the exact
 workflow digest and package pin and set `HOME_PROD_BROKER_APP_ID`. All

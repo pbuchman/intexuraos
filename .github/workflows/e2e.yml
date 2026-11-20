@@ -168,7 +168,7 @@ jobs:
           INTEXURAOS_WEB_APP_URL=http://localhost:3000 \
           FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 \
           PUBSUB_EMULATOR_HOST=127.0.0.1:8085 \
-          pnpm tsx src/index.ts > /tmp/code-agent.log 2>&1 &
+          node dist/index.js > /tmp/code-agent.log 2>&1 &
           echo $! > /tmp/code-agent.pid
 
           echo "=== Immediately after starting (still in apps/code-agent) ==="
