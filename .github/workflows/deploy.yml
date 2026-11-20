@@ -25,9 +25,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  deploy-home-prod-compatibility:
+    name: Deploy Home Production (transition, package ${{ vars.PROD_SECRET_PACKAGE_VERSION }})
+    if: ${{ inputs.target == 'home-prod' && vars.HOME_PROD_BROKER_APP_ID == '' }}
+    runs-on: [self-hosted, Linux, X64, builder]
+    timeout-minutes: 210
+    permissions: {}
+    env:
+      PROD_SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
+    steps:
+      - name: Activate admitted release
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_NAME" == 'home-dev' ]]
+          [[ "$GITHUB_REF" == 'refs/heads/development' ]]
+          [[ "$PROD_SECRET_PACKAGE_VERSION" == '5' ]]
+          /usr/local/bin/intexuraos-home-prod-request "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+
   deploy-home-prod:
     name: Deploy Home Production
-    if: ${{ inputs.target == 'home-prod' }}
+    if: ${{ inputs.target == 'home-prod' && vars.HOME_PROD_BROKER_APP_ID != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 210
     permissions:

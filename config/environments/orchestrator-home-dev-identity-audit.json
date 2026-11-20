@@ -152,7 +152,7 @@
     "bootstrapConfig": {
       "file": "workers/orchestrator/src/bootstrap/env-config.ts",
       "forbiddenField": "environment",
-      "reviewedSha256": "9b22c8acaab01d95008815df1ec73566eb6393b924c473c00867d90966794541"
+      "reviewedSha256": "570338ea9e02f3b38d0018de8ef5ac1091ab1c8c7d3cfbfc35fbeca71ad5826e"
     },
     "boundaryModule": {
       "file": "workers/orchestrator/src/bootstrap/observability-identity.ts",

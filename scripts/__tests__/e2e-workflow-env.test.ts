@@ -38,6 +38,13 @@ describe('E2E workflow code-agent startup env', () => {
     expect(startCodeAgentStep).not.toContain('dev.intexuraos.cloud');
   });
 
+  it('creates a private disposable task signer for the E2E dispatcher', () => {
+    const step = getStartCodeAgentStep(readRepoFile('.github/workflows/e2e.yml'));
+    expect(step).toContain('mktemp -d "$RUNNER_TEMP/task-signer.XXXXXXXX"');
+    expect(step).toContain('openssl genpkey -algorithm ED25519 -out "$signer_dir/signing.pem"');
+    expect(step).toContain('INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH="$signer_dir/signing.pem"');
+  });
+
   it('does not require Sentry automation env vars during E2E startup', () => {
     const indexSource = readRepoFile('apps/code-agent/src/index.ts');
     const requiredEnv = getConstArray(indexSource, 'REQUIRED_ENV');
