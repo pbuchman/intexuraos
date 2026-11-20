@@ -38,14 +38,6 @@ if (config?.env.PORT !== '18128' || config.env.HOST !== '127.0.0.1') {
   throw new Error('Invalid isolated service configuration');
 }
 Object.assign(process.env, config.env);
-if (process.argv[2] === '--preflight') {
-  const { loadTaskAccessKey, loadLegacyTaskBindings } = require('tsx/cjs/api').require(
-    '../../apps/code-agent/src/infra/services/taskAccessKey.ts',
-    import.meta.url
-  );
-  loadTaskAccessKey(process.env.INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH);
-  loadLegacyTaskBindings(process.env.INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH);
-} else {
-  process.chdir(config.cwd);
-  await import('../../apps/code-agent/dist/index.js');
-}
+// The same production entry point handles --preflight with external migrations and listening disabled.
+process.chdir(config.cwd);
+await import('../../apps/code-agent/dist/index.js');

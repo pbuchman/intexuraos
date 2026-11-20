@@ -40,6 +40,7 @@ describe('E2E workflow code-agent startup env', () => {
 
   it('creates a private disposable task signer for the E2E dispatcher', () => {
     const step = getStartCodeAgentStep(readRepoFile('.github/workflows/e2e.yml'));
+    expect(step).toContain('node dist/index.js > /tmp/code-agent.log');
     expect(step).toContain('mktemp -d "$RUNNER_TEMP/task-signer.XXXXXXXX"');
     expect(step).toContain('openssl genpkey -algorithm ED25519 -out "$signer_dir/signing.pem"');
     expect(step).toContain('INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH="$signer_dir/signing.pem"');
