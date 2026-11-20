@@ -9,7 +9,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { homedir } from 'node:os';
+import { generateKeyPairSync } from 'node:crypto';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Track invocation order across mocks.
@@ -199,6 +200,29 @@ describe('start() — full bootstrap happy path', () => {
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
     expect(initOrchestratorObservability).toHaveBeenCalledOnce();
     expect(main).toHaveBeenCalledOnce();
+  });
+
+  it('wires the operator-pinned public key, audience and listener address into main', async () => {
+    const fs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    const dir = fs.mkdtempSync(join(tmpdir(), 'orchestrator-start-test-'));
+    try {
+      const path = join(dir, 'public.pem');
+      const { publicKey } = generateKeyPairSync('ed25519');
+      fs.writeFileSync(path, publicKey.export({ type: 'spki', format: 'pem' }), { mode: 0o600 });
+      vi.mocked(loadEnvConfig).mockReturnValueOnce({
+        ...loadEnvConfig(),
+        taskAccessPublicKeyPath: path,
+        taskAccessAudience: 'https://worker.example',
+        bindHost: '127.0.0.2',
+      });
+      await start();
+      const config = vi.mocked(main).mock.calls[0]?.[0];
+      expect(config?.bindHost).toBe('127.0.0.2');
+      expect(config?.taskAccess?.audience).toBe('https://worker.example');
+      expect(config?.taskAccess?.key.equals(publicKey)).toBe(true);
+    } finally {
+      fs.rmSync(dir, { force: true, recursive: true });
+    }
   });
 
   it('initializes observability through the closed identity boundary', async () => {

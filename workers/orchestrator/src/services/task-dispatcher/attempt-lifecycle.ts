@@ -189,6 +189,7 @@ export class AttemptLifecycle {
       // Create task object
       const task: Task = {
         taskId,
+        ...(request.accessBinding !== undefined && { accessBinding: request.accessBinding }),
         workerType: request.workerType,
         runtime: WORKER_TYPES[request.workerType].runtime,
         prompt: request.prompt,

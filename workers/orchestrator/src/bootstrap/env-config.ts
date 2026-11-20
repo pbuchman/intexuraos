@@ -27,6 +27,9 @@ export type EnvReader = Record<string, string | undefined>;
  */
 export interface BootstrapEnvConfig {
   repoUrl: string;
+  bindHost?: string;
+  taskAccessPublicKeyPath?: string;
+  taskAccessAudience?: string;
   repoPath?: string;
   codeAgentUrl: string;
   internalAuthToken: string;
@@ -221,6 +224,13 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
 
   return {
     repoUrl,
+    bindHost: getOptionalEnv('INTEXURAOS_ORCHESTRATOR_BIND_HOST', '127.0.0.1', env),
+    ...(env['INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH'] && {
+      taskAccessPublicKeyPath: env['INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH'],
+    }),
+    ...(env['INTEXURAOS_TASK_ACCESS_AUDIENCE'] && {
+      taskAccessAudience: env['INTEXURAOS_TASK_ACCESS_AUDIENCE'],
+    }),
     ...(repoPath !== undefined ? { repoPath } : {}),
     codeAgentUrl,
     internalAuthToken,

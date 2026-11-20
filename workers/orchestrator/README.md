@@ -64,16 +64,25 @@ orchestrator (local)
 
 ## Endpoints
 
-| Method | Path                   | Auth | Description                            |
-| ------ | ---------------------- | ---- | -------------------------------------- |
-| POST   | `/tasks`               | HMAC | Submit new task                        |
-| GET    | `/tasks/:id`           | None | Get task status                        |
-| DELETE | `/tasks/:id`           | None | Cancel task                            |
-| GET    | `/health`              | None | Health check (capacity, running count) |
-| POST   | `/admin/refresh-token` | None | Force GitHub token refresh             |
-| POST   | `/admin/shutdown`      | None | Graceful shutdown                      |
+| Method    | Path                   | Auth                    | Description                                    |
+| --------- | ---------------------- | ----------------------- | ---------------------------------------------- |
+| POST      | `/tasks`               | HMAC + code-agent proof | Submit a task and persist its owner and worker |
+| GET, HEAD | `/tasks/:id`           | Code-agent proof        | Read task ID and status                        |
+| DELETE    | `/tasks/:id`           | Code-agent proof        | Cancel a task on its assigned worker           |
+| GET       | `/health`              | None                    | Health check (capacity, running count)         |
+| POST      | `/admin/refresh-token` | HMAC                    | Force GitHub token refresh                     |
+| POST      | `/admin/shutdown`      | HMAC                    | Graceful shutdown                              |
 
 ---
+
+## Task authorization rollout
+
+1. The application owner provisions a dedicated Ed25519 signing key through an approved application-managed secret mount. Code-agent reads an owner-only PKCS#8 PEM using `INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH`. Home PROD mounts its root-provisioned key only in the separate code-agent systemd unit. Its shared PM2 user cannot load the signing identity. Use a private directory and a regular 0400 or 0600 file for a normal key mount. For a systemd credential mount on Linux, the loader also accepts the exact read-only ACL that grants the service UID access to its root-owned credential directory and file. The host module requires getfacl for this check. Provision the matching public SPKI PEM for each worker independently and check its fingerprint through the operator's trusted channel. Only code-agent needs the private key. The current package pins do not establish that either file exists.
+2. For tasks dispatched before this release, put confirmed assignments in `legacy-worker-bindings.json` alongside the signing key, with the same owner-only permissions. Its JSON array contains objects with `ownerId`, `worker` (the historical worker name) and `audience` (the historical worker base URL, including any path prefix). Obtain these values from trusted assignment records. An absent entry blocks historical cancellation. New dispatches persist the exact audience on the code-agent record. User changes to a saved worker URL then require a new dispatch assignment.
+3. Install the reviewed Home PROD launcher, user driver, boot validator and isolated code-agent module through the host installation procedure. The isolated candidate preflight opens the signing key and validates the historical mapping as the dedicated code-agent UID before stopping the previous process. Deploy code-agent first. It attaches a dedicated proof and the existing transport credentials to all cancellation paths. Older worker releases ignore this additional header. On each worker set `INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH` and `INTEXURAOS_TASK_ACCESS_AUDIENCE` to the reviewed public key and this worker's externally configured base URL. The Home Dev env generator accepts these two settings and pins the listener to `127.0.0.1`. Other installations may set `INTEXURAOS_ORCHESTRATOR_BIND_HOST` to the intended protected interface. Deploy the worker through its normal drain procedure.
+4. Check local `/health`, the existing authorized worker probe, and rejection of unsigned synthetic task requests. Test positive reads and cancellation only with an explicitly disposable task. Signed GET returns only `taskId` and `status`. HEAD has its own method-bound proof. Code-agent's authenticated UI reads the owner's canonical record directly.
+
+Each proof binds the task ID, owner, worker name, audience, HTTP method, route, request-body digest, issue time, and random nonce. The worker keeps consumed nonces under its persistent state directory for the 30-second validity window. For historical worker records it checks the original callback binding and owner assignment against the configured code-agent metadata endpoint. Unknown records and changed assignments deny access. A rollback to an older worker would reopen its unsigned origin routes. Preserve the trusted ingress boundary and loopback binding when recovering or rotating the app key.
 
 ## Environment Variables
 

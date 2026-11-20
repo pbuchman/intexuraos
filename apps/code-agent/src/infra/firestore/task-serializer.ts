@@ -340,6 +340,9 @@ export function buildUpdateData(
   if (input.statusSummary !== undefined) {
     updateData['statusSummary'] = input.statusSummary;
   }
+  if (input.workerAudience !== undefined) {
+    updateData['workerAudience'] = input.workerAudience;
+  }
   if (input.workerLocation !== undefined) {
     updateData['workerLocation'] = input.workerLocation;
   }

@@ -292,6 +292,8 @@ export interface CodeTask {
   userId: string;
   workerType: WorkerType;
   workerLocation: WorkerLocation;
+  /** Canonical URL of the selected worker at dispatch, before settings can change. */
+  workerAudience?: string;
 
   // Task state
   status: TaskStatus;

@@ -25,46 +25,128 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-home-prod:
-    name: Deploy Home Production
-    if: ${{ inputs.target == 'home-prod' }}
+  deploy-home-prod-compatibility:
+    name: Deploy Home Production (transition, package ${{ vars.PROD_SECRET_PACKAGE_VERSION }})
+    if: ${{ inputs.target == 'home-prod' && vars.HOME_PROD_BROKER_APP_ID == '' }}
     runs-on: [self-hosted, Linux, X64, builder]
     timeout-minutes: 210
+    permissions: {}
+    env:
+      PROD_SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
+    steps:
+      - name: Activate admitted release
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_NAME" == 'home-dev' ]]
+          [[ "$GITHUB_REF" == 'refs/heads/development' ]]
+          [[ "$PROD_SECRET_PACKAGE_VERSION" == '5' ]]
+          /usr/local/bin/intexuraos-home-prod-request "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+
+  deploy-home-prod:
+    name: Deploy Home Production
+    if: ${{ inputs.target == 'home-prod' && vars.HOME_PROD_BROKER_APP_ID != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    permissions:
+      actions: read
+      contents: read
+      checks: read
+      deployments: write
+      attestations: write
+      id-token: write
     env:
       GH_TOKEN: ${{ github.token }}
       PROD_SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
+      HOME_PROD_BROKER_APP_ID: ${{ vars.HOME_PROD_BROKER_APP_ID }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Admit exact development release
+      - name: Prepare exact development release intent
         run: |
           set -euo pipefail
-          [[ "$RUNNER_NAME" == 'home-dev' ]] || { echo 'Home PROD requires the home-dev runner' >&2; exit 1; }
-          [[ "$GITHUB_REF" == 'refs/heads/development' ]] || { echo 'Home PROD deploys only development' >&2; exit 1; }
-          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid release SHA' >&2; exit 1; }
-          [[ "$PROD_SECRET_PACKAGE_VERSION" =~ ^[1-9][0-9]*$ ]] || { echo 'PROD_SECRET_PACKAGE_VERSION must be a positive integer' >&2; exit 1; }
-          git fetch --quiet --no-tags origin development
-          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
-          [[ "$(git rev-parse origin/development)" == "$GITHUB_SHA" ]]
-          node scripts/home-prod/verify-secret-package-version-pins.mjs "$PROD_SECRET_PACKAGE_VERSION" config/environments/secret-packages.json
+          [[ "$GITHUB_REF" == refs/heads/development ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PROD_SECRET_PACKAGE_VERSION" =~ ^[1-9][0-9]*$ ]]
+          [[ "$HOME_PROD_BROKER_APP_ID" =~ ^[1-9][0-9]*$ ]]
+          api="repos/${GITHUB_REPOSITORY}"
+          [[ "$(gh api "$api/git/ref/heads/development" --jq .object.sha)" == "$GITHUB_SHA" ]]
+          gh api -H 'Accept: application/vnd.github.raw+json' \
+            "$api/contents/config/environments/secret-packages.json?ref=$GITHUB_SHA" |
+            jq -e --argjson version "$PROD_SECRET_PACKAGE_VERSION" \
+              '.schemaVersion == 1 and .packages.prod.stableVersion == $version' >/dev/null
+          gh api "$api/actions/workflows/ci.yml/runs?branch=development&event=push&status=success&head_sha=$GITHUB_SHA" |
+            jq -e --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" \
+              'any(.workflow_runs[]; .head_sha == $sha and .event == "push" and
+               .head_branch == "development" and .head_repository.full_name == $repo and
+               .status == "completed" and .conclusion == "success")' >/dev/null
+      - name: Register Home PROD deployment
+        run: |
+          set -euo pipefail
+          api="repos/${GITHUB_REPOSITORY}/deployments"
+          task="home-prod-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          payload="$(jq -nc --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            '{protocol: "home-prod/v2", run_id: $run, run_attempt: $attempt}')"
+          lookup() {
+            gh api --method GET "$api" -f sha="$GITHUB_SHA" -f task="$task" -f environment=home-prod -f per_page=100 |
+              jq -cer --argjson payload "$payload" --arg sha "$GITHUB_SHA" --arg task "$task" '
+                [.[] | select(.sha == $sha and .ref == $sha and .environment == "home-prod" and
+                  .task == $task and .creator.id == 41898282 and
+                  ((.payload | if type == "string" then try fromjson catch null else . end) == $payload)) | .id] |
+                if length == 0 then 0 elif length == 1 then .[0] else error("ambiguous deployment") end'
+          }
+          deployment_id="$(lookup)"
+          if [[ "$deployment_id" == 0 ]]; then
+            # A transport failure may follow a successful POST. Only repeat the lookup.
+            body="$(jq -nc --arg sha "$GITHUB_SHA" --arg task "$task" --argjson payload "$payload" \
+              '{ref: $sha, environment: "home-prod", task: $task, payload: $payload, auto_merge: false,
+                required_contexts: [], production_environment: true, transient_environment: false}')"
+            if ! deployment_id="$(gh api --method POST "$api" --input - --jq '.id' <<< "$body")" ||
+               [[ ! "$deployment_id" =~ ^[1-9][0-9]*$ ]]; then
+              for delay in 1 2 4 8 16; do
+                sleep "$delay"
+                deployment_id="$(lookup)" && [[ "$deployment_id" =~ ^[1-9][0-9]*$ ]] && break
+              done
+            fi
+          fi
+          [[ "$deployment_id" =~ ^[1-9][0-9]*$ ]]
+          printf 'HOME_PROD_DEPLOYMENT_ID=%s\n' "$deployment_id" >> "$GITHUB_ENV"
+          printf '%s\n' 'home-prod/v2' "$GITHUB_REPOSITORY" "$GITHUB_REF" \
+            "$GITHUB_SHA" "$PROD_SECRET_PACKAGE_VERSION" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$deployment_id" > home-prod.intent
 
-          ci_runs="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=development&event=push&status=success&head_sha=${GITHUB_SHA}&per_page=100")"
-          printf '%s' "$ci_runs" | node -e '
-            const fs = require("node:fs");
-            const expected = process.argv[1];
-            const payload = JSON.parse(fs.readFileSync(0, "utf8"));
-            if (!payload.workflow_runs?.some((run) =>
-              run.head_sha === expected && run.head_branch === "development"
-              && run.event === "push" && run.conclusion === "success")) process.exit(1);
-          ' "$GITHUB_SHA"
+      - name: Attest Home PROD release intent
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: home-prod.intent
 
-      - name: Activate admitted release
-        run: sudo /usr/local/sbin/intexuraos-home-prod-deploy "$GITHUB_SHA" "$PROD_SECRET_PACKAGE_VERSION"
+      - name: Wait for Home PROD activation
+        run: |
+          set -euo pipefail
+          [[ "$HOME_PROD_DEPLOYMENT_ID" =~ ^[1-9][0-9]*$ ]]
+          key="home-prod/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}/${HOME_PROD_DEPLOYMENT_ID}"
+          api="repos/${GITHUB_REPOSITORY}"
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}"
+          while true; do
+            if checks="$(gh api --method GET "$api/commits/$GITHUB_SHA/check-runs" \
+                -f check_name="$key" -f filter=all -f per_page=100)" &&
+               statuses="$(gh api "$api/deployments/$HOME_PROD_DEPLOYMENT_ID/statuses?per_page=100")"; then
+              result="$(jq -r --arg key "$key" --arg sha "$GITHUB_SHA" --arg url "$url" \
+                --argjson statuses "$statuses" --argjson app "$HOME_PROD_BROKER_APP_ID" '
+                [.check_runs[] | select(.name == $key and .external_id == $key and
+                  .head_sha == $sha and .app.id == $app and .status == "completed")] as $checks |
+                ($checks[0].app.slug // "") as $slug |
+                [$statuses[] | select(.log_url == $url and .environment == "home-prod" and
+                  (.performed_via_github_app.id == $app or
+                   (.performed_via_github_app == null and $slug != "" and
+                    .creator.type == "Bot" and .creator.login == ($slug + "[bot]"))))] as $reports |
+                if ($checks | length) == 0 or ($reports | length) == 0 then "waiting"
+                elif all($checks[]; .conclusion == "success") and all($reports[]; .state == "success")
+                then "success" else "failure" end' <<< "$checks")"
+              case "$result" in
+                success) echo "Home PROD activated and passed health checks."; exit 0 ;;
+                failure) echo "::error::Home PROD broker reported an unsuccessful deployment."; exit 1 ;;
+              esac
+            fi
+            sleep 30
+          done
 
   deploy-retained-gcp:
     name: Deploy Retained GCP ${{ inputs.target }}

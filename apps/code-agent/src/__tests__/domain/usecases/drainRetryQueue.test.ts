@@ -813,7 +813,11 @@ describe('drainRetryQueue', () => {
     it('dispatches successfully and deletes retry entry', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
-      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({
+        dispatched: true,
+        workerLocation: 'home-mac',
+        workerAudience: 'https://worker.example',
+      }));
 
       const result = await drainRetryQueue(buildDeps());
 
@@ -825,6 +829,7 @@ describe('drainRetryQueue', () => {
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
         dispatchStatus: null,
         workerLocation: 'home-mac',
+        workerAudience: 'https://worker.example',
         callbackState: expect.objectContaining({
           webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
           callbackBaseUrl: 'https://callback.test',
@@ -1154,6 +1159,7 @@ describe('drainRetryQueue', () => {
         message: 'Worker returned invalid JSON after accepting the POST',
         outcomeUnknown: true,
         workerLocation: 'home-mac',
+        workerAudience: 'https://worker.example',
       };
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
@@ -1168,6 +1174,7 @@ describe('drainRetryQueue', () => {
         'task_xyz',
         expect.objectContaining({
           workerLocation: 'home-mac',
+          workerAudience: 'https://worker.example',
           dispatchStatus: expect.objectContaining({
             state: 'waiting',
             reason: 'network_error',

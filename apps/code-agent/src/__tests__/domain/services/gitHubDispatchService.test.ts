@@ -822,6 +822,7 @@ describe('GitHubDispatchService', () => {
       expect(result.success).toBe(true);
       expect(result.taskId).toBe('task-new-creds');
       expect(mockCancelOnWorker).toHaveBeenCalledWith('task-old', 'vm-1', {
+        ownerId: 'user-456',
         url: 'https://vm-1.example.com',
         cfAccessClientId: 'client-id-abc',
         cfAccessClientSecret: 'client-secret-xyz',

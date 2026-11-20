@@ -337,13 +337,14 @@ export function selectNonMergeConflict(
  */
 export function selectPreservedPullRequest(
   docs: readonly DocLike[]
-): { id: string; workerLocation: string; userId: string } | null {
+): { id: string; workerLocation: string; userId: string; workerAudience?: string } | null {
   for (const doc of docs) {
     const data = doc.data();
     if (!isMergeConflictTaskData(data)) {
       return {
         id: doc.id,
         workerLocation: String(data['workerLocation'] ?? ''),
+        ...(typeof data['workerAudience'] === 'string' && { workerAudience: data['workerAudience'] }),
         userId: String(data['userId'] ?? ''),
       };
     }

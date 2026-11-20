@@ -62,6 +62,8 @@ export interface SentryIssueTaskContext {
 
 export interface Task {
   taskId: string;
+  /** Set by the origin only after verification of the code-agent dispatch signature. */
+  accessBinding?: import('@intexuraos/code-task-domain/task-access').TaskBinding;
   workerType: WorkerType;
   runtime?: WorkerRuntime;
   runtimeSessionId?: string;

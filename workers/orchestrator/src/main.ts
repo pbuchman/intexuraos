@@ -83,7 +83,7 @@ export async function main(
       providerApiKeys
     );
 
-    await app.listen({ port: config.port, host: '0.0.0.0' });
+    await app.listen({ port: config.port, host: config.bindHost ?? '127.0.0.1' });
 
     logger.info({ port: config.port }, 'Orchestrator HTTP server started');
 

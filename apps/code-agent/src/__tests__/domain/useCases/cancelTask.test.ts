@@ -197,6 +197,7 @@ describe('cancelTask', () => {
       { transaction: expect.any(Object) },
     );
     expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', {
+      ownerId: 'user-789',
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'client-id',
       cfAccessClientSecret: 'client-secret',
@@ -336,6 +337,7 @@ describe('cancelTask', () => {
       'task-123',
       'home-mac',
       {
+        ownerId: 'user-789',
         url: 'https://cc-mac.intexuraos.cloud',
         cfAccessClientId: 'client-id',
         cfAccessClientSecret: 'client-secret',

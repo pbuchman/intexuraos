@@ -1,3 +1,5 @@
+import { rmSync } from 'node:fs';
+import { accessConfig, accessHeaders, binding, dispatchProof } from './task-access-fixture.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
@@ -23,6 +25,7 @@ describe('Routes', () => {
     debug: vi.fn(),
   };
 
+  let config: ReturnType<typeof accessConfig>;
   const orchestratorSecret = 'test-secret';
 
   const createSignedRequest = (
@@ -36,6 +39,7 @@ describe('Routes', () => {
 
     return {
       headers: {
+        ...dispatchProof(payload, body),
         'x-dispatch-timestamp': timestamp,
         'x-dispatch-signature': signature,
         'x-dispatch-nonce': nonce,
@@ -48,12 +52,22 @@ describe('Routes', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     app = Fastify();
+    config = accessConfig();
 
     dispatcher = {
       submitTask: vi.fn(async () => ({ ok: true, value: undefined })),
       cancelTask: vi.fn(async () => ({ ok: true, value: undefined })),
       sendMessage: vi.fn(async () => ({ ok: true, value: { action: 'queued' } })),
-      getTask: vi.fn(async () => null),
+      getTask: vi.fn(async (id: string) =>
+        id === 'non-existent'
+          ? null
+          : {
+              taskId: id,
+              status: 'running',
+              prompt: 'private prompt',
+              accessBinding: binding,
+            }
+      ),
       getRunningCount: vi.fn(() => 0),
       getCapacity: vi.fn(() => 5),
       getDrainOwnershipSnapshot: vi.fn(async () => ({
@@ -114,7 +128,7 @@ describe('Routes', () => {
       app,
       dispatcher,
       tokenService,
-      { orchestratorSecret },
+      { orchestratorSecret, taskAccess: config },
       mockLogger,
       undefined,
       workerAuthRegistry,
@@ -127,9 +141,34 @@ describe('Routes', () => {
 
   afterEach(async () => {
     await app.close();
+    rmSync(config.nonceDir, { recursive: true, force: true });
   });
 
   describe('POST /tasks', () => {
+    it('requires the independent code-agent dispatch signature and preserves an existing binding', async () => {
+      const payload = {
+        taskId: 'task_00000000-0000-0000-0000-000000000001',
+        workerType: 'auto',
+        prompt: 'fixture',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'fixture',
+      };
+      const unsigned = createSignedRequest(payload);
+      delete unsigned.headers['x-task-access-proof'];
+      expect((await app.inject({ method: 'POST', url: '/tasks', ...unsigned })).statusCode).toBe(
+        401
+      );
+      vi.mocked(dispatcher.getTask).mockResolvedValueOnce({
+        taskId: payload.taskId,
+        accessBinding: { ...binding, ownerId: 'other-owner' },
+      } as never);
+      expect(
+        (await app.inject({ method: 'POST', url: '/tasks', ...createSignedRequest(payload) }))
+          .statusCode
+      ).toBe(409);
+      expect(dispatcher.submitTask).not.toHaveBeenCalled();
+    });
+
     it('should accept valid task with correct signature', async () => {
       const taskPayload = {
         taskId: 'task_00000000-0000-0000-0000-000000000001',
@@ -726,29 +765,122 @@ describe('Routes', () => {
   });
 
   describe('GET /tasks/:id', () => {
+    it('denies a correctly signed task request when the worker has no verification configuration', async () => {
+      const unconfigured = Fastify();
+      try {
+        registerRoutes(unconfigured, dispatcher, tokenService, { orchestratorSecret }, mockLogger);
+        const response = await unconfigured.inject({
+          method: 'GET',
+          url: '/tasks/test-task',
+          headers: accessHeaders('GET', 'test-task'),
+        });
+        expect(response.statusCode).toBe(401);
+        const payload = {
+          taskId: 'task_00000000-0000-0000-0000-000000000001',
+          workerType: 'auto',
+          prompt: 'fixture',
+          webhookUrl: 'https://example.com/hook',
+          webhookSecret: 'fixture',
+        };
+        const submission = await unconfigured.inject({
+          method: 'POST',
+          url: '/tasks',
+          ...createSignedRequest(payload),
+        });
+        expect(submission.statusCode).toBe(401);
+        expect(dispatcher.getTask).not.toHaveBeenCalled();
+        expect(dispatcher.submitTask).not.toHaveBeenCalled();
+      } finally {
+        await unconfigured.close();
+      }
+    });
+
+    it.each(['GET', 'HEAD', 'DELETE'] as const)(
+      'requires an app proof before task lookup for %s',
+      async (method) => {
+        const response = await app.inject({ method, url: '/tasks/test-task' });
+        expect(response.statusCode).toBe(401);
+        expect(dispatcher.getTask).not.toHaveBeenCalled();
+        expect(dispatcher.cancelTask).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([
+      ['owner-b', 'worker-a'],
+      ['owner-a', 'worker-b'],
+    ])('denies mismatched binding %s %s', async (ownerId, worker) => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/tasks/test-task',
+        headers: accessHeaders('DELETE', 'test-task', '', ownerId, worker),
+      });
+      expect(response.statusCode).toBe(404);
+      expect(dispatcher.cancelTask).not.toHaveBeenCalled();
+    });
+
+    it('handles HEAD as a distinct signed operation', async () => {
+      const method = 'HEAD';
+      expect(
+        (
+          await app.inject({
+            method,
+            url: '/tasks/test-task',
+            headers: accessHeaders('GET', 'test-task'),
+          })
+        ).statusCode
+      ).toBe(401);
+      const response = await app.inject({
+        method,
+        url: '/tasks/test-task',
+        headers: accessHeaders(method, 'test-task'),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toBe('');
+    });
+
     it('should return task status', async () => {
       vi.mocked(dispatcher.getTask).mockResolvedValueOnce({
         taskId: 'test-task',
         status: 'running',
         startedAt: '2025-01-25T14:00:00Z',
+        prompt: 'private prompt',
+        webhookSecret: 'private callback',
+        accessBinding: binding,
       } as never);
 
       const response = await app.inject({
         method: 'GET',
         url: '/tasks/test-task',
+        headers: accessHeaders('GET', 'test-task'),
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
+      expect(response.json()).toEqual({
         taskId: 'test-task',
         status: 'running',
       });
+    });
+
+    it('never serializes an invalid stored status', async () => {
+      vi.mocked(dispatcher.getTask).mockResolvedValueOnce({
+        taskId: 'test-task',
+        accessBinding: binding,
+        status: { prompt: 'private' },
+      } as never);
+      const response = await app.inject({
+        method: 'GET',
+        url: '/tasks/test-task',
+        headers: accessHeaders('GET', 'test-task'),
+      });
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({ error: 'Invalid stored task status' });
     });
 
     it('should return 404 for non-existent task', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/tasks/non-existent',
+        headers: accessHeaders('GET', 'non-existent'),
       });
 
       expect(response.statusCode).toBe(404);
@@ -764,6 +896,7 @@ describe('Routes', () => {
       const response = await app.inject({
         method: 'DELETE',
         url: '/tasks/test-task',
+        headers: accessHeaders('DELETE', 'test-task'),
       });
 
       expect(response.statusCode).toBe(200);
@@ -773,7 +906,17 @@ describe('Routes', () => {
       });
     });
 
-    it('should return 404 for non-existent task', async () => {
+    it('returns 404 without cancellation when the task does not exist', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/tasks/non-existent',
+        headers: accessHeaders('DELETE', 'non-existent'),
+      });
+      expect(response.statusCode).toBe(404);
+      expect(dispatcher.cancelTask).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when an authorized task disappears before cancellation', async () => {
       vi.mocked(dispatcher.cancelTask).mockResolvedValueOnce({
         ok: false,
         error: { type: 'not_found', message: 'Task not found' },
@@ -781,9 +924,11 @@ describe('Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/tasks/non-existent',
+        url: '/tasks/disappeared',
+        headers: accessHeaders('DELETE', 'disappeared'),
       });
 
+      expect(dispatcher.cancelTask).toHaveBeenCalledWith('disappeared');
       expect(response.statusCode).toBe(404);
     });
   });
@@ -1245,6 +1390,7 @@ describe('Routes', () => {
       const response = await app.inject({
         method: 'DELETE',
         url: '/tasks/completed-task',
+        headers: accessHeaders('DELETE', 'completed-task'),
       });
 
       expect(response.statusCode).toBe(409);
@@ -1262,6 +1408,7 @@ describe('Routes', () => {
       const response = await app.inject({
         method: 'DELETE',
         url: '/tasks/error-task',
+        headers: accessHeaders('DELETE', 'error-task'),
       });
 
       expect(response.statusCode).toBe(500);

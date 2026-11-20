@@ -2,9 +2,15 @@
 
 Home PROD runs the application on the Home Dev machine under the dedicated
 `intexuraos-prod` account. Deployments are manual, exact-SHA, and fix-forward.
-The GitHub workflow admits only the current `development` SHA after its CI run
-passes, reconciles the protected numeric secret-package version with the
-repository manifest, and invokes the fixed privileged launcher.
+The GitHub workflow admits the current `development` SHA after push CI succeeds
+and matches the numeric production package version to the release manifest.
+For the transition, an isolated `home-dev` runner submits the numeric run ID
+and attempt to the host's local release service. That service independently
+checks the manual job, current SHA, reviewed workflow, package pin and push
+CI before invoking the fixed launcher. Once the operator sets `HOME_PROD_BROKER_APP_ID`, the hosted job
+registers a GitHub Deployment for that SHA, signs its ID and waits for the
+host App's check and Deployment status. Home Dev verifies the request before
+invoking the launcher. A broker error fails the deployment.
 
 ## Safe Defaults and Full Restoration
 
@@ -65,7 +71,21 @@ change persistent infrastructure.
    evidence. Never print package payloads, `.env.prod`, service-account JSON,
    internal tokens, or private request bodies.
 
-Dispatch `.github/workflows/deploy.yml` with target `home-prod`. The bounded
+Use **Actions → Deploy → Run workflow** on `development` with target `home-prod`.
+Before the first signer-aware release, drain the original runner and install the
+isolated transition runner, root-owned release service and dedicated code-agent
+unit through the host runbook. The transition job uses package version `5`.
+Its only step submits the run ID and attempt and waits for the host's result.
+The runner account should have access only to this request socket.
+
+To switch to the hosted broker, provision its host consumer, review the exact
+workflow digest and package pin and set `HOME_PROD_BROKER_APP_ID`. All
+subsequent Home PROD dispatches then use the hosted broker. The hosted job polls its exact App-owned check and deployment status and fails when the host
+rejects the request or reports a failed activation. A request older than 15 minutes
+at admission expires. If the host is unreachable, the workflow eventually times
+out. Each fresh dispatch or GitHub re-run has its own request identity. After an
+interruption during activation an operator must inspect the runtime and clear
+the broker hold before another attempt can activate. The bounded
 launcher fetches the exact package version into a root-owned temporary file.
 The unprivileged driver then builds an isolated candidate, validates its exact
 17-app `basic` or 19-app `full` loopback runtime from the package's validated
@@ -168,9 +188,9 @@ all historical resource addresses intact.
 ## Staged Restoration Gates
 
 1. Publish a complete, validated new PROD package version with
-   `INTEXURAOS_PROD_PROFILE=full`. The checked-in stable pin remains `4` until a
-   real version exists; old version 4 lacks the new required member and cannot
-   pass the new loader schema. Build its successor through the canonical tool:
+   `INTEXURAOS_PROD_PROFILE=full`. Version `5` introduced this required
+   member. Version `4` was the historical migration input. The original
+   migration used the canonical tool:
 
    ```bash
    node scripts/build-secret-package.mjs --environment prod \

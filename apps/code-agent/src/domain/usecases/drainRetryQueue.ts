@@ -764,6 +764,7 @@ async function handleNewTaskRetry(
   // Attempt dispatch
   const dispatchResult = await taskDispatcher.dispatch({
     taskId: task.id,
+    ownerId: task.userId,
     dispatchAttemptId: dispatchToken,
     prompt: task.sanitizedPrompt,
     systemPromptHash: task.systemPromptHash,
@@ -800,6 +801,7 @@ async function handleNewTaskRetry(
       const dispatchStatus = buildDispatchStatusForProblem({ task, problem: dispatchProblem });
       const updateResult = await codeTaskRepo.update(task.id, {
         dispatchStatus,
+        ...(dispatchError.workerAudience !== undefined && { workerAudience: dispatchError.workerAudience }),
         ...(dispatchError.workerLocation !== undefined && {
           workerLocation: dispatchError.workerLocation,
         }),
@@ -915,6 +917,7 @@ async function handleNewTaskRetry(
     // the field would be missing and the inequality filter would exclude the doc forever.
     lastHeartbeat: now,
     workerLocation: dispatchResult.value.workerLocation,
+    ...(dispatchResult.value.workerAudience !== undefined && { workerAudience: dispatchResult.value.workerAudience }),
     cancelNonce,
     cancelNonceExpiresAt,
     dispatchStatus: null,

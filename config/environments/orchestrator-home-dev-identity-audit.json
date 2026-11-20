@@ -145,14 +145,14 @@
   },
   "runtimeBundleClosure": {
     "entryPoints": ["workers/orchestrator/src/index.ts"],
-    "inputCount": 167,
-    "inputsSha256": "58f29f6bbf260a46305bc5c96cf94ccce5d3d34ffd65ffdb8911372349392101"
+    "inputCount": 170,
+    "inputsSha256": "8b32333bb3fcbaceaef4989031cc30f6e4f5bfb51c1a469de6a0e3d082a5939a"
   },
   "observabilityIdentityBoundary": {
     "bootstrapConfig": {
       "file": "workers/orchestrator/src/bootstrap/env-config.ts",
       "forbiddenField": "environment",
-      "reviewedSha256": "4dbc426d9f2c9e0b12e87d4afaa1773a75359cac7560a30c457cbeecc0204d25"
+      "reviewedSha256": "570338ea9e02f3b38d0018de8ef5ac1091ab1c8c7d3cfbfc35fbeca71ad5826e"
     },
     "boundaryModule": {
       "file": "workers/orchestrator/src/bootstrap/observability-identity.ts",
@@ -162,7 +162,7 @@
     },
     "soleImporter": {
       "file": "workers/orchestrator/src/start.ts",
-      "reviewedSha256": "1b0598e119a8148f6882807b37211641cd375207d6d025a326fb073230d6f7f8"
+      "reviewedSha256": "48b372bdafb0c635fb27fed0fafd53493082f0ef803b8552593f5f325d18f734"
     },
     "serviceWiring": {
       "file": "workers/orchestrator/src/bootstrap/service-wiring.ts",
@@ -189,39 +189,39 @@
       "line": 15,
       "column": 3,
       "nodeKind": "StringLiteral",
-      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+      "reviewedSha256": "3626ae19768e5d12360c1e673f444c0aba273436a2b4eb5196c14c2c9a221c79"
     },
     {
       "envName": "INTEXURAOS_RUNTIME",
       "file": "scripts/generate-orchestrator-env.mjs",
-      "line": 32,
+      "line": 35,
       "column": 3,
       "nodeKind": "StringLiteral",
-      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+      "reviewedSha256": "3626ae19768e5d12360c1e673f444c0aba273436a2b4eb5196c14c2c9a221c79"
     },
     {
       "envName": "INTEXURAOS_RUNTIME",
       "file": "scripts/generate-orchestrator-env.mjs",
-      "line": 55,
+      "line": 58,
       "column": 3,
       "nodeKind": "StringLiteral",
-      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+      "reviewedSha256": "3626ae19768e5d12360c1e673f444c0aba273436a2b4eb5196c14c2c9a221c79"
     },
     {
       "envName": "INTEXURAOS_ENVIRONMENT",
       "file": "scripts/generate-orchestrator-env.mjs",
-      "line": 136,
+      "line": 140,
       "column": 5,
       "nodeKind": "Identifier",
-      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+      "reviewedSha256": "3626ae19768e5d12360c1e673f444c0aba273436a2b4eb5196c14c2c9a221c79"
     },
     {
       "envName": "INTEXURAOS_RUNTIME",
       "file": "scripts/generate-orchestrator-env.mjs",
-      "line": 137,
+      "line": 141,
       "column": 5,
       "nodeKind": "Identifier",
-      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4"
+      "reviewedSha256": "3626ae19768e5d12360c1e673f444c0aba273436a2b4eb5196c14c2c9a221c79"
     },
     {
       "envName": "INTEXURAOS_ENVIRONMENT",
@@ -239,11 +239,11 @@
       "purpose": "Pins the legacy physical-host and observability classification in the protected systemd projection.",
       "routingAuthority": false,
       "sinkClassification": "generator-fixed-host-observability-tag",
-      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4",
+      "reviewedSha256": "3626ae19768e5d12360c1e673f444c0aba273436a2b4eb5196c14c2c9a221c79",
       "usageBindings": [
         {
           "usageClass": "fixed-value-assignment",
-          "line": 136,
+          "line": 140,
           "column": 5,
           "nodeKind": "PropertyAssignment",
           "spanSha256": "2ac7296a50a4c4848499894fbcc06b6142a96e14f58a509dbfb79ce070299905"
@@ -338,11 +338,11 @@
       "purpose": "Pins the legacy physical runtime label in the protected systemd projection.",
       "routingAuthority": false,
       "sinkClassification": "generator-fixed-host-observability-tag",
-      "reviewedSha256": "6c5cf6b00afc345ef1d197223da1790d0d35ab0d76f973f2d97bb5f07ce0fba4",
+      "reviewedSha256": "3626ae19768e5d12360c1e673f444c0aba273436a2b4eb5196c14c2c9a221c79",
       "usageBindings": [
         {
           "usageClass": "fixed-value-assignment",
-          "line": 137,
+          "line": 141,
           "column": 5,
           "nodeKind": "PropertyAssignment",
           "spanSha256": "e25764a3b9ad592cec1698313a3c2206d3426d5cfc36ebaf035cbec6b8af06b3"
@@ -382,7 +382,9 @@
   "credentialAuthorities": [
     "GOOGLE_APPLICATION_CREDENTIALS",
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
-    "INTEXURAOS_ORCHESTRATOR_SECRET"
+    "INTEXURAOS_ORCHESTRATOR_SECRET",
+    "INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH",
+    "INTEXURAOS_TASK_ACCESS_AUDIENCE"
   ],
   "pendingLiveGates": ["credential-principal-metadata", "prod-hmac-internal-auth-secret-match"]
 }

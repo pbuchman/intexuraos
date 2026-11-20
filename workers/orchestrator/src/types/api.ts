@@ -8,6 +8,8 @@ import type { LogForwarderDrainSnapshot } from '../services/log-forwarder.js';
 // POST /tasks request
 export interface CreateTaskRequest {
   taskId: string;
+  /** Set by the origin only after verification of the code-agent dispatch signature. */
+  accessBinding?: import('@intexuraos/code-task-domain/task-access').TaskBinding;
   workerType: WorkerType;
   prompt: string;
   repository?: string;

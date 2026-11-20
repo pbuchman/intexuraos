@@ -1035,6 +1035,7 @@ export async function drainTaskQueue(
 
     const dispatchResult = await taskDispatcher.dispatch({
       taskId: task.id,
+      ownerId: task.userId,
       dispatchAttemptId: dispatchToken,
       prompt: task.sanitizedPrompt,
       systemPromptHash: task.systemPromptHash,
@@ -1075,6 +1076,7 @@ export async function drainTaskQueue(
         const dispatchStatus = buildDispatchStatusForProblem({ task, problem: dispatchProblem });
         const updateResult = await codeTaskRepo.update(task.id, {
           dispatchStatus,
+          ...(dispatchError.workerAudience !== undefined && { workerAudience: dispatchError.workerAudience }),
           ...(dispatchError.workerLocation !== undefined && {
             workerLocation: dispatchError.workerLocation,
           }),
@@ -1184,6 +1186,7 @@ export async function drainTaskQueue(
       // the field would be missing and the inequality filter would exclude the doc forever.
       lastHeartbeat: now,
       workerLocation: dispatchResult.value.workerLocation,
+      ...(dispatchResult.value.workerAudience !== undefined && { workerAudience: dispatchResult.value.workerAudience }),
       cancelNonce,
       cancelNonceExpiresAt,
       dispatchStatus: null,

@@ -338,7 +338,7 @@ describe('handlePrClose (merged and closed-without-merge)', () => {
       expect(mockTaskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
         'task_preserved',
         'worker-home',
-        { url: 'https://worker.example.com', cfAccessClientId: 'client-id', cfAccessClientSecret: 'client-secret' },
+        { ownerId: 'user-preserved', url: 'https://worker.example.com', cfAccessClientId: 'client-id', cfAccessClientSecret: 'client-secret' },
       );
     });
 
