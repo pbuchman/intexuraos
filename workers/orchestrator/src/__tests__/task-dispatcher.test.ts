@@ -5854,10 +5854,13 @@ describe('TaskDispatcher', () => {
     });
 
     it.each([
-      { path: 'verified completion', agentType: 'planning', resumed: false },
-      { path: 'ask-agent completion', agentType: 'ask_agent', resumed: false },
-      { path: 'resumed completion', agentType: 'planning', resumed: true },
-    ] as const)('reports a queued follow-up policy refusal after $path', async ({ agentType, resumed }) => {
+      { path: 'verified completion', agentType: 'planning', resumed: false, outcome: 'refused' },
+      { path: 'ask-agent completion', agentType: 'ask_agent', resumed: false, outcome: 'refused' },
+      { path: 'resumed completion', agentType: 'planning', resumed: true, outcome: 'refused' },
+      { path: 'verified completion', agentType: 'planning', resumed: false, outcome: 'delivered' },
+      { path: 'ask-agent completion', agentType: 'ask_agent', resumed: false, outcome: 'delivered' },
+      { path: 'verified completion', agentType: 'planning', resumed: false, outcome: 'failed' },
+    ] as const)('handles a $outcome queued follow-up after $path', async ({ agentType, resumed, outcome }) => {
       const dir = await mkdtemp(join(tmpdir(), 'intex-queued-policy-'));
       const workerTypePolicy = await WorkerTypePolicy.load(join(dir, 'worker-types.json'));
       const preserveWorker = vi.fn().mockResolvedValue(true);
@@ -5869,7 +5872,8 @@ describe('TaskDispatcher', () => {
           { ...mockIsolationConfig, workerTypePolicy, provider: { ...mockIsolationProvider, preserveWorker } },
           singleAttemptCompletionControl
         );
-        const log = vi.spyOn(local, 'appendTaggedTaskLog');
+        const errorLog = vi.spyOn(local, 'appendTaggedTaskLog');
+        const taskLog = vi.spyOn(local, 'appendOrchestratorTaskLog');
         const taskId = 'verified-queued-policy';
         const runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
         vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
@@ -5888,17 +5892,35 @@ describe('TaskDispatcher', () => {
         expect(await local.sendMessage(taskId, 'Follow-up message')).toMatchObject({
           ok: true, value: { action: 'queued' },
         });
-        await workerTypePolicy.apply([], 0);
+        if (outcome === 'refused') {
+          await workerTypePolicy.apply([], 0);
+        }
+        if (outcome === 'failed') {
+          vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(new Error('Docker startup failed'));
+        }
 
         vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
         await vi.advanceTimersByTimeAsync(30 * 1000);
 
-        expect(await local.getTask(taskId)).toMatchObject({ status: 'completed', runtimeSessionId });
-        expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
-        expect(log).toHaveBeenCalledWith(taskId, 'error', expect.stringContaining('worker_type_disabled'));
-        expect(log).toHaveBeenCalledWith(taskId, 'error', expect.stringContaining('resend'));
-        expect(preserveWorker).toHaveBeenCalledWith(taskId);
-        expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
+        if (outcome === 'delivered') {
+          expect(await local.getTask(taskId)).toMatchObject({ status: 'running', runtimeSessionId });
+          expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(2);
+          const followUp = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1)?.[0];
+          expect(followUp?.prompt).toContain('Follow-up message');
+          expect(preserveWorker).not.toHaveBeenCalled();
+        } else if (outcome === 'refused') {
+          expect(await local.getTask(taskId)).toMatchObject({ status: 'completed', runtimeSessionId });
+          expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
+          expect(errorLog).toHaveBeenCalledWith(taskId, 'error', expect.stringContaining('worker_type_disabled'));
+          expect(errorLog).toHaveBeenCalledWith(taskId, 'error', expect.stringContaining('resend'));
+          expect(preserveWorker).toHaveBeenCalledWith(taskId);
+          expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
+        } else {
+          expect(await local.getTask(taskId)).toMatchObject({ status: 'completed' });
+          expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(2);
+          expect(taskLog).toHaveBeenCalledWith(taskId, 'Failed to deliver queued messages, finalizing normally');
+          expect(preserveWorker).not.toHaveBeenCalled();
+        }
       } finally {
         vi.useRealTimers();
         await rm(dir, { recursive: true, force: true });
