@@ -5886,6 +5886,7 @@ describe('TaskDispatcher', () => {
               singleAttemptCompletionControl
             );
           const local = makeDispatcher(workerTypePolicy);
+          const taggedLog = vi.spyOn(local, 'appendTaggedTaskLog');
           const request: CreateTaskRequest = {
             taskId: 'blocked-queued-followups',
             workerType: 'auto',
@@ -5932,9 +5933,10 @@ describe('TaskDispatcher', () => {
           expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
           expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
           if (agentType === 'planning') expect(preserveWorker).toHaveBeenCalledOnce();
-          expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+          expect(taggedLog).toHaveBeenCalledWith(
             request.taskId,
-            expect.stringContaining('worker_type_disabled')
+            'error',
+            expect.stringContaining("worker_type_disabled: Re-enable 'auto' on this host and send the next message")
           );
 
           await workerTypePolicy.apply(['auto'], 1);

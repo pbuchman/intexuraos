@@ -350,9 +350,9 @@ export class CompletionPipeline {
     if (!resumeResult.ok) {
       const reason =
         resumeResult.error instanceof WorkerTypeDisabledError
-          ? `${resumeResult.error.type}: ${resumeResult.error.message}`
+          ? `${resumeResult.error.type}: Re-enable '${task.workerType}' on this host and send the next message to deliver the retained follow-ups.`
           : 'Unable to start a follow-up attempt';
-      ctx.appendOrchestratorTaskLog(task.taskId, reason);
+      ctx.appendTaggedTaskLog(task.taskId, 'error', reason);
       return false;
     }
 

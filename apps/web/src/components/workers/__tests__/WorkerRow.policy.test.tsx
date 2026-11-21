@@ -41,23 +41,24 @@ describe('per-worker type controls', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ enabledWorkerTypes: CODE_TASK_WORKER_TYPES.filter((type) => type !== 'auto'), expectedRevision: 5, expectedRegistration: worker.url });
   });
 
-  it('clears a partially selected Claude group in one click and preserves each Codex preset', async () => {
+  it.each(['codex', 'codex-xhigh'] as const)('clears a mixed Claude Code selection in one click and keeps %s', async (preset) => {
     const user = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     render(<WorkerRow {...common} worker={{
-      ...worker, enabledWorkerTypes: ['openrouter-free', 'codex-xhigh'], workerTypesRevision: 4,
+      ...worker, enabledWorkerTypes: ['openrouter-free', preset], workerTypesRevision: 4,
     }} onUpdate={onUpdate} />);
     await user.click(screen.getByRole('button', { name: 'Edit worker types' }));
     const group = screen.getByRole('checkbox', { name: 'Claude Code' });
     expect((group as HTMLInputElement).indeterminate).toBe(true);
     await user.click(group);
-    for (const label of ['Claude Auto', 'Claude Opus', 'Claude Sonnet', 'OpenRouter Free', 'Codex']) {
+    for (const label of ['Claude Auto', 'Claude Opus', 'Claude Sonnet', 'OpenRouter Free']) {
       expect((screen.getByRole('checkbox', { name: label, exact: true }) as HTMLInputElement).checked).toBe(false);
     }
-    expect((screen.getByRole('checkbox', { name: 'Codex xhigh' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: 'Codex', exact: true }) as HTMLInputElement).checked).toBe(preset === 'codex');
+    expect((screen.getByRole('checkbox', { name: 'Codex xhigh', exact: true }) as HTMLInputElement).checked).toBe(preset === 'codex-xhigh');
     await user.click(screen.getByRole('button', { name: 'Save worker types' }));
     expect(onUpdate).toHaveBeenCalledWith({
-      enabledWorkerTypes: ['codex-xhigh'], expectedRevision: 4, expectedRegistration: worker.url,
+      enabledWorkerTypes: [preset], expectedRevision: 4, expectedRegistration: worker.url,
     });
   });
 
