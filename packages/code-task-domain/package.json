@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./worker-types": "./src/codeTaskWorkerTypes.ts",
     "./review-types": "./src/codeTaskReviewTypes.ts",
+    "./task-access": "./src/taskAccess.ts",
     "./timeout": "./src/codeTaskTimeout.ts"
   },
   "scripts": {

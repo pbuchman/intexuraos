@@ -2,6 +2,11 @@ import * as fs from 'node:fs';
 import type { Logger } from '@intexuraos/common-core';
 import type { AnthropicOAuthCredentials, OAuthState } from './types.js';
 
+type MonitoredCredentials = Pick<
+  AnthropicOAuthCredentials,
+  'accessToken' | 'expiresAt' | 'subscriptionType'
+>;
+
 export interface CredentialMonitorConfig {
   credentialsPath: string;
   reloadIntervalMs: number;
@@ -10,7 +15,7 @@ export interface CredentialMonitorConfig {
 export class CredentialMonitor {
   private readonly config: CredentialMonitorConfig;
   private readonly logger: Logger;
-  private credentials: AnthropicOAuthCredentials | null = null;
+  private credentials: MonitoredCredentials | null = null;
   private reloadHandle?: NodeJS.Timeout | undefined;
 
   constructor(config: CredentialMonitorConfig, logger: Logger) {
@@ -19,6 +24,7 @@ export class CredentialMonitor {
   }
 
   loadCredentials(): boolean {
+    this.credentials = null;
     if (!fs.existsSync(this.config.credentialsPath)) {
       this.logger.error(
         { path: this.config.credentialsPath },
@@ -39,21 +45,36 @@ export class CredentialMonitor {
         return false;
       }
 
-      const oauth = parsed['claudeAiOauth'] as AnthropicOAuthCredentials;
+      const oauth = parsed['claudeAiOauth'] as Partial<MonitoredCredentials>;
+      if (
+        typeof oauth.accessToken !== 'string' ||
+        oauth.accessToken === '' ||
+        typeof oauth.expiresAt !== 'number' ||
+        Number.isNaN(new Date(oauth.expiresAt).getTime())
+      ) {
+        this.logger.error(
+          { path: this.config.credentialsPath },
+          'Invalid Claude OAuth credentials'
+        );
+        return false;
+      }
       this.credentials = {
         accessToken: oauth.accessToken,
-        refreshToken: oauth.refreshToken,
         expiresAt: oauth.expiresAt,
-        scopes: oauth.scopes,
-        subscriptionType: oauth.subscriptionType,
-        rateLimitTier: oauth.rateLimitTier,
+        subscriptionType:
+          typeof oauth.subscriptionType === 'string' ? oauth.subscriptionType : 'unknown',
       };
 
       return true;
     } catch (error) {
       this.logger.error(
         {
-          error: error instanceof Error ? error : new Error(String(error)),
+          error:
+            error instanceof SyntaxError
+              ? new Error('Invalid credentials JSON')
+              : error instanceof Error
+                ? error
+                : new Error(String(error)),
           path: this.config.credentialsPath,
         },
         'Failed to parse credentials file'
@@ -73,6 +94,7 @@ export class CredentialMonitor {
       clearInterval(this.reloadHandle);
       this.reloadHandle = undefined;
     }
+    this.credentials = null;
   }
 
   getCurrentAccessToken(): string | null {

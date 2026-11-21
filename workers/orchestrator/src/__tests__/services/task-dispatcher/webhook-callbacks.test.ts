@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { WorkerTypeDisabledError } from '../../../services/worker-type-disabled-error.js';
 import {
   sendSetupFailureWebhook,
   buildResultFromVerification,
@@ -72,6 +73,19 @@ beforeEach(() => {
 });
 
 describe('sendSetupFailureWebhook', () => {
+  it('uses the specific host refusal in the callback if policy changes after admission', async () => {
+    const webhook = createMockWebhookClient();
+    const request = makeRequest();
+    const refusal = new WorkerTypeDisabledError(request.workerType);
+    await sendSetupFailureWebhook(webhook as never, mockLogger as never, request, 'Task setup failed', refusal);
+    expect(webhook.send).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        status: 'failed',
+        error: { code: 'worker_type_disabled', message: refusal.message },
+      }),
+    }));
+  });
+
   it('posts a failed webhook with SETUP_FAILED code and duration 0', async () => {
     const webhook = createMockWebhookClient();
     const request = makeRequest();

@@ -39,6 +39,9 @@ export const taskAdminRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
       // @allow-raw-send: internal endpoint returns structured dispatch metadata directly
       return await reply.send({
         taskId: task.id,
+        ownerId: task.userId,
+        workerLocation: task.workerLocation,
+        ...(task.workerAudience !== undefined && { workerAudience: task.workerAudience }),
         prompt: task.prompt,
         repository: task.repository,
         baseBranch: task.baseBranch,

@@ -83,6 +83,22 @@ describe('getOptionalEnv', () => {
 });
 
 describe('loadEnvConfig', () => {
+  it('loads the configured task verification file, audience and listener address', () => {
+    expect(
+      loadEnvConfig(
+        makeValidEnv({
+          INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH: '/test-mount/public.pem',
+          INTEXURAOS_TASK_ACCESS_AUDIENCE: 'https://worker.example',
+          INTEXURAOS_ORCHESTRATOR_BIND_HOST: '127.0.0.2',
+        })
+      )
+    ).toMatchObject({
+      taskAccessPublicKeyPath: '/test-mount/public.pem',
+      taskAccessAudience: 'https://worker.example',
+      bindHost: '127.0.0.2',
+    });
+  });
+
   it('starts without a Gemini API key', () => {
     const env = makeValidEnv();
     delete env['INTEXURAOS_GEMINI_APP_API_KEY'];

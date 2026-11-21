@@ -7,20 +7,20 @@
  * - `PATCH /code/worker-settings/workers/:name` — partial update of a worker
  * - `DELETE /code/worker-settings/workers/:name` — remove a worker
  *
- * Handlers delegate all business logic to the `workerSettingsRepo`; the only
- * in-handler work is request parsing, credential-mask validation, and
- * mapping domain errors to HTTP codes.
+ * Handlers delegate worker registration to the repository and host policy edits
+ * to the worker settings use case.
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
+import { CODE_TASK_WORKER_TYPES, isCodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
 import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import type {
   UserWorkerSettingsResponse,
   WorkerConfigInput,
   WorkerConfigUpdateInput,
+  WorkerTypePolicyUpdate,
 } from '../../domain/models/workerSettings.js';
 import { WORKER_NAME_REGEX } from '../../domain/models/workerSettings.js';
 import {
@@ -29,9 +29,34 @@ import {
 } from '../../domain/services/workerSecretMasking.js';
 import {
   addWorkerSchema,
+  enabledWorkerTypesSchema,
   maskedWorkerConfigSchema,
   updateWorkerSchema,
+  workerTypesRevisionSchema,
 } from './schemas.js';
+import { updateWorkerTypePolicy } from '../../domain/usecases/workerSettings/updateWorkerTypePolicy.js';
+import { putWorkerTypePolicy } from '../../infra/services/workerTypePolicyClient.js';
+
+type WorkerPatchBody = WorkerConfigUpdateInput & Partial<WorkerTypePolicyUpdate> & { expectedRegistration?: string };
+
+function workerUpdateErrorResponse(code: string, description: string): Record<string, unknown> {
+  return {
+    description,
+    type: 'object',
+    required: ['success', 'error'],
+    properties: {
+      success: { type: 'boolean', enum: [false] },
+      error: {
+        type: 'object',
+        required: ['code', 'message'],
+        properties: {
+          code: { type: 'string', enum: [code] },
+          message: { type: 'string' },
+        },
+      },
+    },
+  } as const;
+}
 
 export interface SettingCrudRoutesOptions {
   jwtValidator: JwtValidator;
@@ -305,12 +330,30 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
   // PATCH /code/worker-settings/workers/:name - Update worker
   fastify.patch<{
     Params: { name: string };
-    Body: WorkerConfigUpdateInput;
+    Body: WorkerPatchBody;
   }>(
     '/worker-settings/workers/:name',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
+      // Validate policy edits before Fastify can coerce JSON primitive types.
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      preValidation: async (request, reply) => {
+        const input: unknown = request.body;
+        if (typeof input !== 'object' || input === null ||
+            (!Object.hasOwn(input, 'enabledWorkerTypes') && !Object.hasOwn(input, 'expectedRevision') &&
+             !Object.hasOwn(input, 'expectedRegistration') && !Object.hasOwn(input, 'workerTypesRevision'))) {
+          return;
+        }
+        const body = input as WorkerPatchBody;
+        if (Object.keys(body).length !== 3 || typeof body.expectedRegistration !== 'string' ||
+            body.expectedRegistration === '' || !isCodeTaskWorkerTypePolicy({
+          enabledWorkerTypes: body.enabledWorkerTypes,
+          workerTypesRevision: body.expectedRevision,
+        })) {
+          return await reply.fail('INVALID_REQUEST', 'A worker type edit requires enabledWorkerTypes, expectedRevision and expectedRegistration.');
+        }
+      },
       schema: {
         operationId: 'updateWorker',
         summary: 'Update worker configuration',
@@ -335,6 +378,8 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
                 type: 'object',
                 properties: {
                   updated: { type: 'boolean', enum: [true] },
+                  enabledWorkerTypes: enabledWorkerTypesSchema,
+                  workerTypesRevision: workerTypesRevisionSchema,
                 },
                 required: ['updated'],
               },
@@ -388,11 +433,14 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
               },
             },
           },
+          404: workerUpdateErrorResponse('NOT_FOUND', 'Worker not found'),
+          409: workerUpdateErrorResponse('CONFLICT', 'Worker registration or revision changed'),
+          503: workerUpdateErrorResponse('SERVICE_UNAVAILABLE', 'Worker policy could not be confirmed'),
         },
       },
     },
     async (
-      request: FastifyRequest<{ Params: { name: string }; Body: WorkerConfigUpdateInput }>,
+      request: FastifyRequest<{ Params: { name: string }; Body: WorkerPatchBody }>,
       reply: FastifyReply
     ) => {
       logIncomingRequest(request, {
@@ -400,10 +448,27 @@ export const settingCrudRoutes: FastifyPluginCallback<SettingCrudRoutesOptions> 
         includeParams: true,
       });
 
-      const { workerSettingsRepo } = getServices();
-      const userId = request.user?.userId ?? 'unknown-user';
+      const { workerSettingsRepo, workerHealthProbe } = getServices();
+      const authenticatedUserId = request.user?.userId;
       const { name } = request.params;
+      const { enabledWorkerTypes, expectedRevision, expectedRegistration } = request.body;
 
+      if (enabledWorkerTypes !== undefined && expectedRevision !== undefined && expectedRegistration !== undefined) {
+        if (authenticatedUserId === undefined || authenticatedUserId === '') {
+          return await reply.fail('UNAUTHORIZED', 'Authentication required');
+        }
+        const result = await updateWorkerTypePolicy(
+          { workerSettingsRepo, workerHealthProbe, putWorkerTypePolicy },
+          authenticatedUserId,
+          name,
+          expectedRegistration,
+          { enabledWorkerTypes, expectedRevision }
+        );
+        if (!result.ok) return await reply.fail(result.error.code, result.error.message);
+        return await reply.ok({ updated: true, ...result.value });
+      }
+
+      const userId = authenticatedUserId ?? 'unknown-user';
       // Validate credentials are not masked values (security: prevent storing display-only data)
       const maskedError = validateCredentialsNotMasked(request.body);
       if (maskedError !== undefined) {

@@ -1807,6 +1807,109 @@ describe('codeRoutes', () => {
       mockGetHealthStatuses.mockRestore();
     });
 
+    it.each([
+      {
+        description: 'a corrupt auth container',
+        workerAuths: null,
+        expected: {},
+      },
+      {
+        description: 'malformed provider entries',
+        workerAuths: { claude: null, codex: 'active' },
+        expected: {},
+      },
+      {
+        description: 'an unsupported status with valid metadata for the other provider',
+        workerAuths: {
+          claude: { status: 'unknown-status' },
+          codex: {
+            status: 'active', authMode: 'chatgpt', refreshSupported: true,
+            expiresAt: '2027-01-01T01:00:00+01:00', expiresInMinutes: 20,
+            message: 'private diagnostic', subscriptionType: 'private account plan',
+          },
+        },
+        expected: {
+          codex: {
+            status: 'active', authMode: 'chatgpt', refreshSupported: true,
+            expiresAt: '2027-01-01T00:00:00.000Z', expiresInMinutes: 20,
+          },
+        },
+      },
+      {
+        description: 'invalid optional metadata',
+        workerAuths: {
+          claude: {
+            status: 'active', authMode: null, refreshSupported: 'true',
+            expiresAt: 'invalid-date', expiresInMinutes: Infinity,
+          },
+          codex: { status: 'expired', authMode: 'oauth', expiresInMinutes: '12' },
+        },
+        expected: { claude: { status: 'active', authMode: null }, codex: { status: 'expired', authMode: 'oauth' } },
+      },
+    ])('exposes only valid public worker auth fields for $description', async ({ workerAuths, expected }) => {
+      const { workerSettingsRepo } = getServices();
+      const now = new Date().toISOString();
+      vi.spyOn(workerSettingsRepo, 'getSettings').mockResolvedValue(ok({
+        userId: 'test-user-id',
+        workers: [{
+          name: 'test-worker', url: 'http://test-worker:3000', enabled: true,
+          cfAccessClientId: 'client-id', cfAccessClientSecret: 'client-secret', dispatchSigningSecret: 'secret',
+        }],
+        createdAt: now, updatedAt: now,
+      }));
+      vi.spyOn(workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(ok({
+        'test-worker': {
+          state: healthyWorkerState({
+            enabledWorkerTypes: ['codex'], workerTypesRevision: 2,
+            workerAuths: workerAuths as Extract<WorkerHealthState, { _tag: 'healthy' }>['workerAuths'],
+          }),
+          checkedAt: now, stale: false,
+        },
+      }));
+
+      const response = await server.inject({
+        method: 'GET', url: '/workers/status', headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.workers).toHaveLength(1);
+      expect(response.json().data.workers[0].details).toMatchObject({
+        enabledWorkerTypes: ['codex'], workerTypesRevision: 2,
+      });
+      expect(response.json().data.workers[0].details.workerAuths).toEqual(expected);
+    });
+
+    it('ignores cached health for a replaced worker registration and starts a fresh probe', async () => {
+      const services = getServices();
+      const worker: WorkerConfig = {
+        name: 'test-worker', url: 'http://new-worker:3000', enabled: true, registrationId: 'new-registration',
+        cfAccessClientId: 'client-id', cfAccessClientSecret: 'client-secret', dispatchSigningSecret: 'secret',
+      };
+      const now = new Date().toISOString();
+      vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(ok({
+        userId: 'test-user-id', workers: [worker], createdAt: now, updatedAt: now,
+      }));
+      vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(ok({
+        'test-worker': {
+          state: healthyWorkerState({ enabledWorkerTypes: ['codex'], workerTypesRevision: 9 }),
+          checkedAt: now, stale: false, registrationId: 'old-registration',
+        },
+      }));
+      const probeAllWorkers = vi.fn().mockResolvedValue({});
+      setServices({ ...services, workerHealthProbe: { probeWorker: vi.fn(), probeAllWorkers } });
+
+      const response = await server.inject({
+        method: 'GET', url: '/workers/status', headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.workers).toEqual([{
+        name: 'test-worker', url: worker.url, priority: 1, enabled: true, healthy: false,
+        status: 'unknown', details: null, checkedAt: null, stale: true,
+      }]);
+      expect(probeAllWorkers).toHaveBeenCalledExactlyOnceWith([worker]);
+    });
+
     it('returns disabled worker status without probing disabled workers', async () => {
       const services = getServices();
       const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
@@ -1817,6 +1920,8 @@ describe('codeRoutes', () => {
               name: 'disabled-worker',
               url: 'http://disabled-worker:3000',
               enabled: false,
+              enabledWorkerTypes: ['codex'],
+              workerTypesRevision: 4,
               cfAccessClientId: 'client-id',
               cfAccessClientSecret: 'client-secret',
               dispatchSigningSecret: 'secret',
@@ -1828,7 +1933,13 @@ describe('codeRoutes', () => {
       );
 
       const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
-        ok({})
+        ok({
+          'disabled-worker': {
+            state: healthyWorkerState({ enabledWorkerTypes: ['codex'], workerTypesRevision: 4 }),
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
       );
       const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
 

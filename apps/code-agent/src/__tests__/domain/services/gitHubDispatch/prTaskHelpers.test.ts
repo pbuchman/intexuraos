@@ -176,6 +176,7 @@ describe('prTaskHelpers / resolveWorkerCredentials', () => {
       ),
     });
     expect(await resolveWorkerCredentials(repo, 'user-1', 'home')).toEqual({
+      ownerId: 'user-1',
       url: 'http://home',
       cfAccessClientId: 'id',
       cfAccessClientSecret: 'secret',
@@ -208,11 +209,13 @@ describe('prTaskHelpers / destroyPreservedContainer', () => {
 
     await destroyPreservedContainer(
       deps,
-      { id: 'task-1', userId: 'user-1', workerLocation: 'home' },
+      { id: 'task-1', userId: 'user-1', workerLocation: 'home', workerAudience: 'http://home' },
       mockLogger,
     );
 
     expect(cancelOnWorker).toHaveBeenCalledWith('task-1', 'home', {
+      ownerId: 'user-1',
+      workerAudience: 'http://home',
       url: 'http://home',
       cfAccessClientId: 'id',
       cfAccessClientSecret: 'secret',

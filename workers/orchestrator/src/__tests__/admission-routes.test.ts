@@ -1,3 +1,5 @@
+import { rmSync } from 'node:fs';
+import { accessConfig, accessHeaders, binding, dispatchProof } from './task-access-fixture.js';
 import { createHmac } from 'node:crypto';
 import { request as createHttpRequest } from 'node:http';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -18,6 +20,7 @@ function signedRequest(payload: object): { headers: Record<string, string>; body
     .digest('hex');
   return {
     headers: {
+      ...dispatchProof(payload, body),
       'content-type': 'application/json',
       'x-dispatch-timestamp': timestamp,
       'x-dispatch-signature': signature,
@@ -42,7 +45,9 @@ function createDispatcher(): TaskDispatcher {
     submitTask: vi.fn(async () => ({ ok: true, value: undefined })),
     cancelTask: vi.fn(async () => ({ ok: true, value: undefined })),
     sendMessage: vi.fn(async () => ({ ok: true, value: { action: 'queued' } })),
-    getTask: vi.fn(async () => ({ taskId: 'readable' })),
+    getTask: vi.fn(async (id: string) =>
+      id === 'readable' ? { taskId: id, status: 'running', accessBinding: binding } : null
+    ),
     getRunningCount: vi.fn(() => 0),
     getCapacity: vi.fn(() => 5),
     getDrainOwnershipSnapshot: vi.fn(async () => ({
@@ -83,6 +88,7 @@ const tokenService = {
 
 describe('task admission freeze lifecycle', () => {
   const apps: FastifyInstance[] = [];
+  const dirs: string[] = [];
 
   async function build(
     dispatcher: TaskDispatcher,
@@ -90,13 +96,15 @@ describe('task admission freeze lifecycle', () => {
     configureApp?: (app: FastifyInstance) => void
   ): Promise<FastifyInstance> {
     const app = Fastify();
+    const config = accessConfig();
+    dirs.push(config.nonceDir);
     apps.push(app);
     configureApp?.(app);
     registerRoutes(
       app,
       dispatcher,
       tokenService,
-      { orchestratorSecret },
+      { orchestratorSecret, taskAccess: config },
       logger,
       undefined,
       undefined,
@@ -110,6 +118,7 @@ describe('task admission freeze lifecycle', () => {
 
   afterEach(async () => {
     await Promise.all(apps.splice(0).map(async (app) => app.close()));
+    for (const path of dirs.splice(0)) rmSync(path, { recursive: true, force: true });
     vi.clearAllMocks();
   });
 
@@ -121,7 +130,11 @@ describe('task admission freeze lifecycle', () => {
     const message = signedRequest({ message: 'hello' });
     const responses = await Promise.all([
       app.inject({ method: 'POST', url: '/tasks', ...create }),
-      app.inject({ method: 'DELETE', url: '/tasks/readable' }),
+      app.inject({
+        method: 'DELETE',
+        url: '/tasks/readable',
+        headers: accessHeaders('DELETE', 'readable'),
+      }),
       app.inject({ method: 'POST', url: '/tasks/readable/message', ...message }),
     ]);
 
@@ -130,7 +143,11 @@ describe('task admission freeze lifecycle', () => {
     expect(dispatcher.cancelTask).not.toHaveBeenCalled();
     expect(dispatcher.sendMessage).not.toHaveBeenCalled();
 
-    const read = await app.inject({ method: 'GET', url: '/tasks/readable' });
+    const read = await app.inject({
+      method: 'GET',
+      url: '/tasks/readable',
+      headers: accessHeaders('GET', 'readable'),
+    });
     expect(read.statusCode).toBe(200);
     const health = await app.inject({ method: 'GET', url: '/health' });
     expect(health.json()).toMatchObject({

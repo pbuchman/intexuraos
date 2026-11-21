@@ -540,6 +540,9 @@ export const feedbackRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
           if (error.code === 'worker_unavailable') {
             return await reply.fail('WORKER_UNAVAILABLE', error.message);
           }
+          if (error.code === 'worker_type_disabled') {
+            return await reply.fail('CONFLICT', error.message);
+          }
           return await reply.fail('INTERNAL_ERROR' as ErrorCode, error.message);
         }
 

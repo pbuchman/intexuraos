@@ -25,6 +25,7 @@ import {
   type DrainRetryQueueDeps,
 } from '../../../domain/usecases/drainRetryQueue.js';
 import type { CodeTaskDispatchStatusService } from '../../../domain/services/codeTaskDispatchStatusService.js';
+import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 
 const prepareExecutionMemoryContextMock = vi.fn();
 let mockExecutionMemoryEnabled = false;
@@ -90,6 +91,7 @@ describe('drainRetryQueue', () => {
   };
   let mockCodeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
+    findByIdForUser: ReturnType<typeof vi.fn>;
     claimForDispatch: ReturnType<typeof vi.fn>;
     rollbackDispatch: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -178,6 +180,7 @@ describe('drainRetryQueue', () => {
     repository: 'intexuraos/test-repo',
     baseBranch: 'main',
     workerType: 'opus',
+    workerLocation: 'home-mac',
     sanitizedPrompt: 'fix the bug',
     prompt: 'fix the bug',
     systemPromptHash: 'abc123',
@@ -227,6 +230,7 @@ describe('drainRetryQueue', () => {
 
     mockCodeTaskRepo = {
       findById: vi.fn().mockResolvedValue(ok(sampleTask)),
+      findByIdForUser: vi.fn().mockResolvedValue(ok(sampleTask)),
       claimForDispatch: vi.fn().mockResolvedValue(ok({
         kind: 'claimed',
         dispatchToken: 'retry-dispatch-token',
@@ -810,10 +814,50 @@ describe('drainRetryQueue', () => {
   });
 
   describe('new_task retry', () => {
+    it('reloads worker policy and credentials and keeps the original task type and failed host preference', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok({ ...sampleTask, failedWorkerLocation: 'home-mac' }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({
+        workers: [{
+          ...workerConfig,
+          registrationId: 'retry-registration',
+          dispatchSigningSecret: 'rotated-secret',
+          enabledWorkerTypes: [],
+          workerTypesRevision: 4,
+        }],
+      }));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({
+        code: 'worker_type_disabled',
+        message: 'opus is disabled on all enabled workers',
+      }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'failed' } });
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+        workerType: 'opus',
+        failedWorkerLocation: 'home-mac',
+        workerCredentials: {
+          workers: [expect.objectContaining({
+            registrationId: 'retry-registration',
+            dispatchSigningSecret: 'rotated-secret',
+            enabledWorkerTypes: [],
+            workerTypesRevision: 4,
+          })],
+        },
+      }));
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
+        dispatchStatus: expect.objectContaining({ reason: 'worker_type_disabled', terminal: true }),
+      }));
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+    });
+
     it('dispatches successfully and deletes retry entry', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
-      mockTaskDispatcher.dispatch.mockResolvedValue(ok({ dispatched: true, workerLocation: 'home-mac' }));
+      mockTaskDispatcher.dispatch.mockResolvedValue(ok({
+        dispatched: true,
+        workerLocation: 'home-mac',
+        workerAudience: 'https://worker.example',
+      }));
 
       const result = await drainRetryQueue(buildDeps());
 
@@ -825,6 +869,7 @@ describe('drainRetryQueue', () => {
       expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task_xyz', expect.objectContaining({
         dispatchStatus: null,
         workerLocation: 'home-mac',
+        workerAudience: 'https://worker.example',
         callbackState: expect.objectContaining({
           webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
           callbackBaseUrl: 'https://callback.test',
@@ -1154,6 +1199,7 @@ describe('drainRetryQueue', () => {
         message: 'Worker returned invalid JSON after accepting the POST',
         outcomeUnknown: true,
         workerLocation: 'home-mac',
+        workerAudience: 'https://worker.example',
       };
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
@@ -1168,6 +1214,7 @@ describe('drainRetryQueue', () => {
         'task_xyz',
         expect.objectContaining({
           workerLocation: 'home-mac',
+          workerAudience: 'https://worker.example',
           dispatchStatus: expect.objectContaining({
             state: 'waiting',
             reason: 'network_error',
@@ -2173,6 +2220,110 @@ describe('drainRetryQueue', () => {
   });
 
   describe('task_message retry', () => {
+    it('delivers to the assigned worker even when another worker is first or the task type is disabled', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok({ ...sampleTask, status: 'running', workerLocation: 'second-worker' }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({
+        workers: [workerConfig, {
+          ...workerConfig,
+          name: 'second-worker',
+          url: 'https://assigned-worker.local',
+          enabledWorkerTypes: [],
+          workerTypesRevision: 4,
+        }],
+      }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'queued' }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'message_sent' } });
+      expect(mockCodeTaskRepo.findByIdForUser).toHaveBeenCalledWith('task_xyz', 'user_123');
+      expect(mockTaskDispatcher.sendMessageToWorker).toHaveBeenCalledExactlyOnceWith(
+        'task_xyz', 'please also fix tests', expect.objectContaining({ url: 'https://assigned-worker.local' }),
+      );
+    });
+
+    it('waits for the assigned host when the alias was changed to a different destination', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok({
+        ...sampleTask, workerAudience: 'https://assigned-worker.local',
+      }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(ok({ action: 'queued' }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'retry_failed' } });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
+    it('does not send to another worker when the assigned registration is missing', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok({
+        ...sampleTask, workerLocation: 'missing-worker',
+      }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'retry_failed' } });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
+    it('keeps a message retry recoverable for an invalid configured worker URL', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok({ ...sampleTask, workerAudience: workerConfig.url }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({
+        workers: [{ ...workerConfig, url: 'https://worker.local?unexpected=query' }],
+      }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'retry_failed' } });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
+    it('deletes a message retry if the assigned worker declines a disabled resume', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok({ ...sampleTask, workerAudience: workerConfig.url }));
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(err({
+        code: 'worker_type_disabled', message: 'opus is disabled on this worker',
+      }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'failed' } });
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+      expect(mockCreateTaskForPRFn).not.toHaveBeenCalled();
+    });
+
+    it('deletes a completed task message retry when a downgraded host was known to exclude its type', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok({
+        ...sampleTask, status: 'completed', workerAudience: workerConfig.url,
+      }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({
+        workers: [{ ...workerConfig, enabledWorkerTypes: ['codex'], workerTypesRevision: 4 }],
+      }));
+      const probeWorker = vi.fn().mockResolvedValue({
+        _tag: 'healthy', healthy: true, capacity: 1, running: 0, available: 1,
+        workerAuths: { claude: { status: 'active' } }, providerApiKeys: {},
+        dockerHealthy: true, diskHealthy: true, responseTimeMs: 1,
+      });
+      const taskDispatcher = createTaskDispatcherService({
+        logger: mockLogger, workerHealthProbe: { probeWorker, probeAllWorkers: vi.fn() },
+      });
+
+      expect(await drainRetryQueue({ ...buildDeps(), taskDispatcher })).toMatchObject({ ok: true, value: { action: 'failed' } });
+      expect(probeWorker).toHaveBeenCalledWith(expect.objectContaining({ name: 'home-mac' }));
+      expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_def');
+      expect(mockCreateTaskForPRFn).not.toHaveBeenCalled();
+    });
+
+    it('handles a task disappearing before the message retry without calling a worker', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(err({ code: 'NOT_FOUND', message: 'Task missing' }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'stale_task_fallback' } });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
+    it('retains a message retry after a transient task lookup failure', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Lookup failed' }));
+
+      expect(await drainRetryQueue(buildDeps())).toMatchObject({ ok: true, value: { action: 'retry_failed' } });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
     it('sends message successfully and deletes retry entry', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleTaskMessageRetry));
       mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [workerConfig] }));

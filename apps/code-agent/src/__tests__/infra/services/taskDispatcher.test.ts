@@ -1,3 +1,5 @@
+import { TASK_ACCESS_HEADER, verifyTaskAccess } from '@intexuraos/code-task-domain/task-access';
+import { generateKeyPairSync } from 'node:crypto';
 /**
  * Tests for Task Dispatcher service with HMAC signing and worker fallback.
  *
@@ -79,6 +81,7 @@ describe('taskDispatcherImpl', () => {
   let baseDeps: TaskDispatcherDeps;
   let testWorkerCredentials: DispatchWorkerCredentials;
 
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   beforeEach(() => {
     logger = {
       info: vi.fn(),
@@ -88,6 +91,7 @@ describe('taskDispatcherImpl', () => {
     };
 
     baseDeps = {
+      taskAccessKey: privateKey,
       logger,
       workerHealthProbe: createMockHealthProbe(),
     };
@@ -121,6 +125,28 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('dispatch', () => {
+    it.each(['missing key', 'missing owner'])('declines unsigned dispatch for %s', async (reason) => {
+      const { taskAccessKey: _key, ...withoutKey } = baseDeps;
+      const service = createTaskDispatcherService(reason === 'missing key' ? withoutKey : baseDeps);
+      const result = await service.dispatch({
+        ownerId: reason === 'missing owner' ? '' : 'test-owner',
+        taskId: 'task-123',
+        prompt: 'fixture',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'fixture',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'dispatch_failed' } });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it('successfully dispatches to available worker', async () => {
       const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
@@ -129,6 +155,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Fix the bug',
         systemPromptHash: 'abc123',
@@ -202,6 +229,7 @@ describe('taskDispatcherImpl', () => {
       }
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Fix the bug',
         systemPromptHash: 'abc123',
@@ -245,6 +273,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const dispatchRequest = {
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Fix the bug',
         systemPromptHash: 'abc123',
@@ -280,7 +309,7 @@ describe('taskDispatcherImpl', () => {
       const timestamp = headers['X-Dispatch-Timestamp'];
       const nonce = headers['X-Dispatch-Nonce'];
       // Body excludes workerCredentials (not sent to worker)
-      const { workerCredentials: _, ...requestWithoutCredentials } = dispatchRequest;
+      const { workerCredentials: _, ownerId: _owner, ...requestWithoutCredentials } = dispatchRequest;
       const body = JSON.stringify(requestWithoutCredentials);
       const crypto = await import('node:crypto');
       const message = `${timestamp}.${nonce}.${body}`;
@@ -300,6 +329,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -340,6 +370,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -370,6 +401,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-memory-context',
         prompt: 'Fix callback route logging and tests',
         systemPromptHash: 'hash-123',
@@ -444,6 +476,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -475,6 +508,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockRejectedValueOnce(Object.assign(new Error('HTTP 503'), { code: '503' }));
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -533,6 +567,7 @@ describe('taskDispatcherImpl', () => {
       });
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-codex-auth',
         prompt: 'Test codex auth',
         systemPromptHash: 'abc123',
@@ -573,6 +608,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         dispatchAttemptId: '00000000-0000-4000-8000-000000000002',
         prompt: 'Test',
@@ -613,6 +649,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -647,6 +684,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -681,6 +719,7 @@ describe('taskDispatcherImpl', () => {
       } as unknown as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -714,6 +753,7 @@ describe('taskDispatcherImpl', () => {
       } as unknown as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -731,6 +771,7 @@ describe('taskDispatcherImpl', () => {
         code: 'network_error',
         message: 'Worker returned an unknown response after the dispatch POST',
         outcomeUnknown: true,
+        workerAudience: 'https://cc-mac.intexuraos.cloud',
         workerLocation: 'home-mac',
       }));
       expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -744,6 +785,7 @@ describe('taskDispatcherImpl', () => {
       } as unknown as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -761,6 +803,7 @@ describe('taskDispatcherImpl', () => {
         code: 'network_error',
         message: 'Worker returned an unknown response after the dispatch POST',
         outcomeUnknown: true,
+        workerAudience: 'https://cc-mac.intexuraos.cloud',
         workerLocation: 'home-mac',
       }));
       expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -786,6 +829,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         dispatchAttemptId: '00000000-0000-4000-8000-000000000003',
         prompt: 'Test',
@@ -835,6 +879,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         dispatchAttemptId: '00000000-0000-4000-8000-000000000004',
         prompt: 'Test',
@@ -882,6 +927,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -922,6 +968,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -951,6 +998,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 502, json: async () => ({}) } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -981,6 +1029,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 502, json: async () => ({}) } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1010,6 +1059,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 504, json: async () => ({}) } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1047,6 +1097,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1086,6 +1137,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1115,6 +1167,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 530, json: async () => ({}) } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1145,6 +1198,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 530, json: async () => ({}) } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1177,6 +1231,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1225,6 +1280,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1253,6 +1309,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1289,6 +1346,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1321,6 +1379,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Continue existing PR work',
         systemPromptHash: 'abc123',
@@ -1355,6 +1414,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'PR task',
         systemPromptHash: 'abc123',
@@ -1388,6 +1448,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1424,6 +1485,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1460,6 +1522,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1495,6 +1558,7 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockRejectedValueOnce(new Error('Network connection failed'));
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         dispatchAttemptId: '00000000-0000-4000-8000-000000000005',
         prompt: 'Test',
@@ -1541,6 +1605,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-transport-503-text',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1558,6 +1623,7 @@ describe('taskDispatcherImpl', () => {
         code: 'network_error',
         message: 'Network error: socket closed by upstream node worker-503',
         outcomeUnknown: true,
+        workerAudience: 'https://cc-mac.intexuraos.cloud',
         workerLocation: 'home-mac',
       }));
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -1576,6 +1642,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-timeout',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1622,6 +1689,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1658,6 +1726,7 @@ describe('taskDispatcherImpl', () => {
       };
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1701,6 +1770,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1743,6 +1813,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1789,6 +1860,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-123',
         prompt: 'Test',
         systemPromptHash: 'abc123',
@@ -1901,6 +1973,30 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('cancelOnWorker', () => {
+    const legacy = { ownerId: 'owner-a', worker: 'shared', audience: 'https://worker.example' };
+    const cred = { ownerId: legacy.ownerId, url: legacy.audience, cfAccessClientId: 'id', cfAccessClientSecret: 'fixture' };
+    it('refuses changed or uncorroborated historical worker destinations before transport', async () => {
+      const service = createTaskDispatcherService({ ...baseDeps, legacyTaskBindings: [legacy] });
+      for (const changed of [
+        { ...cred, url: 'https://other.example' },
+        { ...cred, ownerId: 'other-owner' },
+        { ...cred, workerAudience: 'https://assigned.example' },
+      ]) {
+        await expect(service.cancelOnWorker('task-a', 'shared', changed)).rejects.toThrow('unverified');
+      }
+      expect(global.fetch).not.toHaveBeenCalled();
+      vi.mocked(global.fetch).mockResolvedValueOnce(new Response(null, { status: 200 }));
+      await service.cancelOnWorker('task-a', 'shared', cred);
+      expect(global.fetch).toHaveBeenCalledOnce();
+    });
+
+    it('refuses cancellation without an application signing key', async () => {
+      const { taskAccessKey: _key, ...unconfigured } = baseDeps;
+      const service = createTaskDispatcherService(unconfigured);
+      await expect(service.cancelOnWorker('task-a', 'shared', cred)).rejects.toThrow('signing identity');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it('sends DELETE request to worker with credentials', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
@@ -1910,6 +2006,8 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const credentials = {
+        ownerId: 'test-owner',
+        workerAudience: 'https://cc-mac.intexuraos.cloud',
         url: 'https://cc-mac.intexuraos.cloud',
         cfAccessClientId: 'test-client-id',
         cfAccessClientSecret: 'test-client-secret',
@@ -1917,6 +2015,13 @@ describe('taskDispatcherImpl', () => {
       };
 
       await service.cancelOnWorker('task-123', 'mac', credentials);
+
+      const sentHeaders = new Headers(mockFetch.mock.calls[0]?.[1]?.headers);
+      const proof = sentHeaders.get(TASK_ACCESS_HEADER);
+      expect(verifyTaskAccess(publicKey, proof ?? '', {
+        method: 'DELETE', path: '/tasks/task-123', taskId: 'task-123', body: '',
+        audience: 'https://cc-mac.intexuraos.cloud',
+      })).toMatchObject({ ownerId: 'test-owner', worker: 'mac' });
 
       expect(mockFetch).toHaveBeenCalledWith(
         'https://cc-mac.intexuraos.cloud/tasks/task-123',
@@ -1951,6 +2056,8 @@ describe('taskDispatcherImpl', () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       const credentials = {
+        ownerId: 'test-owner',
+        workerAudience: 'https://cc-mac.intexuraos.cloud',
         url: 'https://cc-mac.intexuraos.cloud',
         cfAccessClientId: 'test-client-id',
         cfAccessClientSecret: 'test-client-secret',
@@ -2007,6 +2114,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-cap-1',
         prompt: 'Test capacity',
         systemPromptHash: 'abc123',
@@ -2067,6 +2175,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-cap-2',
         prompt: 'Test tiebreak',
         systemPromptHash: 'abc123',
@@ -2119,6 +2228,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-cap-3',
         prompt: 'Test probe exclusion',
         systemPromptHash: 'abc123',
@@ -2166,6 +2276,7 @@ describe('taskDispatcherImpl', () => {
       });
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-cap-4',
         prompt: 'Test all probes fail',
         systemPromptHash: 'abc123',
@@ -2230,6 +2341,7 @@ describe('taskDispatcherImpl', () => {
       } as Response);
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-cap-5',
         prompt: 'Test single worker',
         systemPromptHash: 'abc123',

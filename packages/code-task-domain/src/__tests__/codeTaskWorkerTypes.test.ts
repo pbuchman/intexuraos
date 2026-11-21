@@ -66,3 +66,27 @@ describe('code task worker types', () => {
     });
   });
 });
+
+describe('worker type policy', () => {
+  it('separates Claude Code execution from Claude OAuth', async () => {
+    const { CODE_TASK_WORKER_CAPABILITIES: capabilities } = await import('../index.js');
+    expect(Object.values(capabilities).filter((c) => c.cliRuntime === 'claude').map((c) => c.workerType))
+      .toEqual(['auto', 'opus', 'sonnet', 'openrouter-free']);
+    expect(Object.values(capabilities).filter((c) => c.auth.kind === 'claude').map((c) => c.workerType))
+      .toEqual(['auto', 'opus', 'sonnet']);
+  });
+
+  it('recognizes explicit empty and valid lists and safe, nonnegative revisions', async () => {
+    const { isCodeTaskWorkerTypePolicy, isEnabledWorkerTypeList } = await import('../index.js');
+    expect(isEnabledWorkerTypeList([])).toBe(true);
+    for (const value of [null, 'codex', ['other'], ['codex', 'codex'], [false]]) {
+      expect(isEnabledWorkerTypeList(value)).toBe(false);
+    }
+    for (const value of [null, false, {}, { enabledWorkerTypes: [], workerTypesRevision: -1 },
+      { enabledWorkerTypes: [], workerTypesRevision: 0.5 }, { enabledWorkerTypes: [], workerTypesRevision: '1' },
+      { enabledWorkerTypes: ['bad'], workerTypesRevision: 1 }]) {
+      expect(isCodeTaskWorkerTypePolicy(value)).toBe(false);
+    }
+    expect(isCodeTaskWorkerTypePolicy({ enabledWorkerTypes: ['codex'], workerTypesRevision: 0 })).toBe(true);
+  });
+});

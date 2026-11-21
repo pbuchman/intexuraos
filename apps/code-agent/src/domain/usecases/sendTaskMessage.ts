@@ -12,6 +12,7 @@ import { err, ok, type Result, type Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
+import { resolveAssignedTaskMessageWorker } from '../services/assignedTaskMessageWorker.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 
@@ -31,6 +32,7 @@ export type SendTaskMessageErrorCode =
   | 'invalid_status'
   | 'worker_not_configured'
   | 'worker_unavailable'
+  | 'worker_type_disabled'
   | 'session_expired'
   | 'worker_error'
   | 'internal_error';
@@ -122,33 +124,17 @@ export async function sendTaskMessage(
     return err({ code: 'internal_error', message: 'Failed to fetch worker settings' });
   }
 
-  const settings = settingsResult.value;
-  const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
-
-  if (enabledWorkers.length === 0) {
-    logger.warn({ userId }, 'User has no workers configured for messaging');
+  const credentials = resolveAssignedTaskMessageWorker(task, settingsResult.value?.workers ?? []);
+  if (credentials === undefined) {
+    logger.warn({ taskId, userId, workerLocation: task.workerLocation }, 'Assigned worker is unavailable for messaging');
     return err({
       code: 'worker_not_configured',
-      message: 'No workers configured',
+      message: 'The assigned worker is unavailable. Check its URL and registration in worker settings.',
     });
   }
 
-  // Find the worker matching the task's workerLocation
-  const worker = enabledWorkers.find((w) => w.name === task.workerLocation) ?? enabledWorkers[0];
-
-  /* v8 ignore start -- ts-type: Array filter always returns dense array — cannot produce sparse result @preserve */
-  if (worker === undefined) {
-    return err({ code: 'worker_not_configured', message: 'No workers configured' });
-  }
-  /* v8 ignore stop @preserve */
-
   // Step 5: Forward to orchestrator
-  const forwardResult = await taskDispatcher.sendMessageToWorker(taskId, message, {
-    url: worker.url,
-    cfAccessClientId: worker.cfAccessClientId,
-    cfAccessClientSecret: worker.cfAccessClientSecret,
-    dispatchSigningSecret: worker.dispatchSigningSecret,
-  });
+  const forwardResult = await taskDispatcher.sendMessageToWorker(taskId, message, credentials);
 
   if (!forwardResult.ok) {
     // Handle session_expired specially - this is an expected condition when container is cleaned up
@@ -158,6 +144,9 @@ export async function sendTaskMessage(
         code: 'session_expired',
         message: forwardResult.error.message,
       });
+    }
+    if (forwardResult.error.code === 'worker_type_disabled') {
+      return err({ code: 'worker_type_disabled', message: forwardResult.error.message });
     }
     const errorCode = forwardResult.error.code === 'worker_unavailable' ? 'worker_unavailable' : 'worker_error';
     logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');

@@ -437,6 +437,7 @@ const SERVICE_ENV_MAPPINGS = {
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
   },
   'code-agent': {
+    INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH: envValue('INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH'),
     INTEXURAOS_PR_TRIAGE_ENABLED:
       PROD_PROFILE === 'basic' ? 'false' : (envValue('INTEXURAOS_PR_TRIAGE_ENABLED') ?? 'true'),
     INTEXURAOS_SERVICE_URL: envValue('INTEXURAOS_SERVICE_URL') ?? publicServiceUrl('code-agent'),

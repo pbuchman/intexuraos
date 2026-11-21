@@ -41,6 +41,13 @@ try {
   }).trim();
   if (dirty !== '') throw new Error('canonical_tool_source_not_committed');
   const target = options['deploy-dir'] ?? '/home/pbuchman/services/intexuraos-matrix-sync';
+  const protectedControl = '/etc/intexuraos-matrix-sync';
+  if (
+    path.resolve(target) === protectedControl ||
+    path.resolve(target).startsWith(protectedControl + '/')
+  ) {
+    throw new Error('use_protected_host_control_stager');
+  }
   for (const value of [
     target,
     ...['env-file', 'state-dir', 'secrets-dir', 'targets-file', 'ca-file'].map(
@@ -78,6 +85,7 @@ try {
     'MATRIX_SYNC_SECRETS_DIR',
     'MATRIX_SYNC_TARGETS_FILE',
     'MATRIX_SYNC_CA_FILE',
+    'MATRIX_SYNC_APPLICATION_ENV',
   ]);
   for (const line of suppliedEnv.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -101,9 +109,7 @@ try {
     await fs.writeFile(envPath, environment, { mode: 0o600, flag: 'wx' });
   }
   await fs.copyFile(path.join(assets, 'compose.yaml'), path.join(target, 'compose.yaml'));
-  const unit = (
-    await fs.readFile(path.join(assets, 'intexuraos-matrix-sync.service'), 'utf8')
-  ).replaceAll('@DEPLOY_DIR@', target);
+  const unit = await fs.readFile(path.join(assets, 'intexuraos-matrix-sync.service'), 'utf8');
   await fs.writeFile(path.join(target, 'intexuraos-matrix-sync.service'), unit, { mode: 0o600 });
   execFileSync(
     'docker',

@@ -26,6 +26,7 @@ const TERMINAL_STATUSES: ReadonlySet<CodeTaskStatus> = new Set([
 
 const DISPATCH_REASON_LABELS = {
   no_enabled_workers: 'No enabled workers',
+  worker_type_disabled: 'Worker type disabled',
   workers_unreachable: 'Workers unreachable',
   worker_health_contract_mismatch: 'Worker health information incomplete',
   workers_at_capacity: 'Workers at capacity',

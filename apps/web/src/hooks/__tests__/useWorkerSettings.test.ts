@@ -132,6 +132,24 @@ describe('useWorkerSettings', () => {
     await waitFor(() => { expect(result.current.error).toBe('duplicate'); });
   });
 
+  it('reloads the confirmed host revision when an edit conflicts on a disabled registration', async () => {
+    const [original] = sampleSettings.workers;
+    if (original === undefined) throw new Error('Missing registered worker fixture');
+    const worker = { ...original, enabled: false, registrationKey: 'registration-a' };
+    mocks.getWorkerSettings.mockResolvedValueOnce({ workers: [worker] }).mockResolvedValue({
+      workers: [{ ...worker, workerTypesRevision: 1, enabledWorkerTypes: ['opus'] }],
+    });
+    mocks.updateWorker.mockRejectedValueOnce(new Error('Worker types changed on the host'));
+    const { result } = renderHook(() => useWorkerSettings());
+    await waitFor(() => { expect(result.current.loading).toBe(false); });
+    await act(async () => {
+      await expect(result.current.updateWorker('mac', {
+        enabledWorkerTypes: ['codex'], expectedRevision: 0, expectedRegistration: 'registration-a',
+      })).rejects.toThrow('Worker types changed on the host');
+    });
+    expect(result.current.settings?.workers[0]?.workerTypesRevision).toBe(1);
+  });
+
   it('skips load when user is unauthenticated', async () => {
     mocks.user = undefined;
 

@@ -217,7 +217,7 @@ export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrClos
         const preserved = preservedResult.value;
         logger.info({ taskId: preserved.id, prNumber }, 'Destroying preserved container for merged PR');
         const workerCreds = await resolveWorkerCredentials(
-          workerSettingsRepo, preserved.userId, preserved.workerLocation,
+          workerSettingsRepo, preserved.userId, preserved.workerLocation, preserved.workerAudience,
         );
         await taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
       }

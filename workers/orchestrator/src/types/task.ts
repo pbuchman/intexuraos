@@ -45,6 +45,7 @@ export interface TaskInfraFailureRecord {
 export interface PendingResumeStart {
   prompt: string;
   acceptedAt: string;
+  queuedFollowupCount?: number;
 }
 
 export interface SentryIssueTaskContext {
@@ -62,6 +63,8 @@ export interface SentryIssueTaskContext {
 
 export interface Task {
   taskId: string;
+  /** Set by the origin only after verification of the code-agent dispatch signature. */
+  accessBinding?: import('@intexuraos/code-task-domain/task-access').TaskBinding;
   workerType: WorkerType;
   runtime?: WorkerRuntime;
   runtimeSessionId?: string;
@@ -150,6 +153,8 @@ export interface Task {
    * Allows startup recovery to restart the accepted resume instead of interrupting it.
    */
   pendingResumeStart?: PendingResumeStart;
+  /** Accepted user messages still waiting to reach a worker attempt, in order. */
+  queuedFollowups?: string[];
   /**
    * Total number of inactivity restarts for this task (persisted to Firestore).
    * Tracks lifetime restarts for observability — never reset.

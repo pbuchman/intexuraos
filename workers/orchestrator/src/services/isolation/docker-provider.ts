@@ -138,14 +138,16 @@ export class DockerProvider implements IsolationProvider {
       logger: this.logger,
       resolveRuntime: (): WorkerRuntime =>
         config.runtimeOverride ?? WORKER_TYPES[config.workerType].runtime,
-      runAttempt: (taskId, cfg): void => {
-        void this.runAttempt(taskId, cfg);
-      },
+      // Return once Docker starts the exec. The completion monitor owns its later exit.
+      runAttempt: (taskId, cfg): Promise<void> => new Promise<void>((resolve, reject) => {
+        void this.runAttempt(taskId, cfg, resolve).then(resolve, reject);
+      }),
     });
   }
 
-  private async runAttempt(taskId: string, config: WorkerConfig): Promise<void> {
+  private async runAttempt(taskId: string, config: WorkerConfig, onStarted?: () => void): Promise<void> {
     await runAttemptInContainer({
+      ...(onStarted !== undefined && { onStarted }),
       taskId,
       config,
       workers: this.workers,

@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 /**
  * Tests for taskDispatcherImpl.ts v8 ignore blocks.
  *
@@ -43,6 +44,7 @@ describe('taskDispatcherImpl', () => {
   let logger: Logger;
   let deps: TaskDispatcherDeps;
 
+  const { privateKey } = generateKeyPairSync('ed25519');
   beforeEach(() => {
     nock.cleanAll();
 
@@ -54,6 +56,7 @@ describe('taskDispatcherImpl', () => {
     };
 
     deps = {
+      taskAccessKey: privateKey,
       logger,
       workerHealthProbe: {
         probeWorker: vi.fn(),
@@ -175,6 +178,17 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('sendMessageToWorker non-OK response handling', () => {
+    it('returns the explicit policy refusal from a terminal message resume', async () => {
+      const service = createTaskDispatcherService(deps);
+      nock(WORKER_URL)
+        .post('/tasks/task-disabled/message')
+        .reply(409, { code: 'worker_type_disabled', error: 'This worker no longer accepts auto' });
+
+      expect(await service.sendMessageToWorker('task-disabled', 'test message', workerCredentials)).toEqual({
+        ok: false, error: { code: 'worker_type_disabled', message: 'This worker no longer accepts auto' },
+      });
+    });
+
     it('returns worker_unavailable for retryable infrastructure status 503', async () => {
       const service = createTaskDispatcherService(deps);
 
@@ -323,6 +337,7 @@ describe('taskDispatcherImpl', () => {
         .reply(200, { status: 'accepted' });
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-timeout-set',
         prompt: 'Long task',
         systemPromptHash: 'hash-123',
@@ -375,6 +390,7 @@ describe('taskDispatcherImpl', () => {
         .reply(200, { status: 'accepted' });
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-timeout-absent',
         prompt: 'Default-timeout task',
         systemPromptHash: 'hash-123',
@@ -428,6 +444,7 @@ describe('taskDispatcherImpl', () => {
         .reply(200, { status: 'accepted' });
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-review-types',
         prompt: 'Review PR',
         systemPromptHash: 'hash-123',
@@ -494,6 +511,7 @@ describe('taskDispatcherImpl', () => {
         .reply(200, { status: 'accepted' });
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-sentry-context',
         prompt: 'Fix Sentry issue',
         systemPromptHash: 'hash-123',
@@ -549,6 +567,7 @@ describe('taskDispatcherImpl', () => {
         .reply(400, { error: 'String must contain at least 1 character(s)' });
 
       const result = await service.dispatch({
+        ownerId: 'test-owner',
         taskId: 'task-validation-failure',
         dispatchAttemptId: '00000000-0000-4000-8000-000000000001',
         prompt: 'Fix CI',
@@ -594,6 +613,7 @@ describe('taskDispatcherImpl', () => {
 
   describe('dispatch blocker metadata', () => {
     const baseRequest = {
+      ownerId: 'test-owner',
       taskId: 'task-blocked',
       prompt: 'Fix CI',
       systemPromptHash: 'hash-123',
@@ -975,6 +995,7 @@ describe('taskDispatcherImpl', () => {
     const WORKER_B_URL = 'https://worker-b.example.com';
 
     const baseDispatchRequest = {
+      ownerId: 'test-owner',
       prompt: 'Do something',
       systemPromptHash: 'hash-abc',
       repository: 'test/repo',
@@ -1144,6 +1165,8 @@ describe('taskDispatcherImpl', () => {
         'task-cancel-ok',
         'test-worker',
         {
+          ownerId: 'test-owner',
+          workerAudience: WORKER_URL,
           url: WORKER_URL,
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
@@ -1169,6 +1192,8 @@ describe('taskDispatcherImpl', () => {
         'task-already-complete',
         'test-worker',
         {
+          ownerId: 'test-owner',
+          workerAudience: WORKER_URL,
           url: WORKER_URL,
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
@@ -1197,6 +1222,8 @@ describe('taskDispatcherImpl', () => {
         'task-cancel-fail',
         'test-worker',
         {
+          ownerId: 'test-owner',
+          workerAudience: WORKER_URL,
           url: WORKER_URL,
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
@@ -1220,6 +1247,8 @@ describe('taskDispatcherImpl', () => {
         'task-not-found',
         'test-worker',
         {
+          ownerId: 'test-owner',
+          workerAudience: WORKER_URL,
           url: WORKER_URL,
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
@@ -1257,6 +1286,8 @@ describe('taskDispatcherImpl', () => {
         'task-network-error',
         'test-worker',
         {
+          ownerId: 'test-owner',
+          workerAudience: WORKER_URL,
           url: WORKER_URL,
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',

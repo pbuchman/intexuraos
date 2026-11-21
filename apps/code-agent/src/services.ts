@@ -9,6 +9,7 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import type { Result } from '@intexuraos/common-core';
 import { closeFirestoreSnapshotCaches, createJobHeartbeatStore, getFirestore } from '@intexuraos/infra-firestore';
+import { loadLegacyTaskBindings, loadTaskAccessKey } from './infra/services/taskAccessKey.js';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createCodeTaskDispatchStatusService } from './domain/services/codeTaskDispatchStatusService.js';
@@ -66,7 +67,13 @@ export function initServices(config: ServiceConfig): void {
   const enableMetrics = process.env['INTEXURAOS_ENABLE_METRICS'] === 'true';
   const metricsClient = isE2eMode || !enableMetrics ? createNoOpMetricsClient() : createMetricsClient();
   const workerHealthProbe = createWorkerHealthProbe();
-  const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe });
+  const taskAccessKeyPath = process.env['INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH'];
+  const taskAccessKey = loadTaskAccessKey(taskAccessKeyPath);
+  const legacyTaskBindings = loadLegacyTaskBindings(taskAccessKeyPath);
+  const taskDispatcher = createTaskDispatcherService({
+    logger, workerHealthProbe, workerSettingsRepo: repos.workerSettingsRepo,
+    legacyTaskBindings, ...(taskAccessKey !== undefined && { taskAccessKey }),
+  });
   const whatsappNotifier = createWhatsAppNotifier({
     whatsappPublisher,
     linearAgentClient,

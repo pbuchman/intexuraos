@@ -29,6 +29,7 @@ import {
 import { ensureDirectoryExists } from './bootstrap/fs-utils.js';
 import { defaultNodeEnv } from './bootstrap/node-env.js';
 import { initOrchestratorObservability } from './bootstrap/observability-identity.js';
+import { configureTaskAccess } from './bootstrap/task-access.js';
 
 function buildOrchestratorConfig(
   env: BootstrapEnvConfig,
@@ -37,7 +38,10 @@ function buildOrchestratorConfig(
   logsDir: string,
   privateKeyPath: string
 ): OrchestratorConfig {
+  const taskAccess = configureTaskAccess(env, orchestratorDir);
   return {
+    ...(taskAccess !== undefined && { taskAccess }),
+    ...(env.bindHost !== undefined && { bindHost: env.bindHost }),
     port: env.port,
     capacity: env.capacity,
     taskTimeoutMs: DEFAULT_TASK_TIMEOUT_MS,
@@ -149,10 +153,12 @@ export async function start(): Promise<void> {
     logger
   );
 
+  const credentialWatchdog = { idleTicks: 0 };
   startCredentialRefreshLoop(
     services.workerAuthRegistry,
     () => services.dispatcher.getRunningTaskIds(),
-    logger
+    logger,
+    credentialWatchdog
   );
 
   await main(
@@ -166,7 +172,8 @@ export async function start(): Promise<void> {
     services.workerAuthRegistry,
     services.isolationProvider,
     flush,
-    services.providerApiKeys
+    services.providerApiKeys,
+    { policy: services.workerTypePolicy, credentialWatchdog }
   );
 }
 

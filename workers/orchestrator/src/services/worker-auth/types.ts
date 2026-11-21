@@ -4,6 +4,7 @@ export type WorkerAuthMode = 'oauth' | 'chatgpt';
 
 export type WorkerAuthStatus =
   | 'active'
+  | 'disabled'
   | 'expired'
   | 'not_configured'
   | 'invalid'
@@ -20,6 +21,11 @@ export interface WorkerAuthState {
   subscriptionType?: string;
 }
 
+export interface WorkerAuthRefreshContext {
+  signal: AbortSignal;
+  runDockerWork: (work: () => Promise<boolean>) => Promise<boolean>;
+}
+
 export interface WorkerAuthManager {
   provider: WorkerAuthProvider;
   loadCredentials(): boolean;
@@ -27,6 +33,6 @@ export interface WorkerAuthManager {
   stopMonitoring(): void;
   getState(): WorkerAuthState;
   isExpiringSoon(bufferMs: number): boolean;
-  refresh(): Promise<boolean>;
+  refresh(context?: WorkerAuthRefreshContext): Promise<boolean>;
   getCurrentAccessToken(): string | null;
 }

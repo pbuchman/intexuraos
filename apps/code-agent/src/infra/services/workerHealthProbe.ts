@@ -8,6 +8,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { performHttpFetch } from '@intexuraos/common-http';
+import { isCodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from '../../domain/models/workerSettings.js';
 import type {
@@ -52,7 +53,9 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
 
       const response = await performHttpFetch(`${worker.url}/health`, {
         method: 'GET',
+        redirect: 'error',
         headers: {
+          'Cache-Control': 'no-cache, no-store',
           'CF-Access-Client-Id': worker.cfAccessClientId,
           'CF-Access-Client-Secret': worker.cfAccessClientSecret,
           'User-Agent': 'intexuraos-code-agent/1.0',
@@ -60,7 +63,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
         signal: controller.signal,
       });
 
-      clearTimeout(timeout);
       const responseTimeMs = Date.now() - startTime;
 
       if (!response.ok) {
@@ -109,11 +111,15 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           capacity: health.capacity,
           running: health.running,
           available: health.available,
-          workerAuths: health.workerAuths as Record<WorkerAuthProvider, WorkerAuthStatusDetails>,
+          workerAuths: health.workerAuths as Partial<Record<WorkerAuthProvider, WorkerAuthStatusDetails>>,
           providerApiKeys: health.providerApiKeys as Record<string, ProviderApiKeyStatus>,
           dockerHealthy: health.dockerHealthy,
           diskHealthy: health.diskHealthy,
           responseTimeMs,
+          ...(isCodeTaskWorkerTypePolicy(health) && {
+            enabledWorkerTypes: health.enabledWorkerTypes,
+            workerTypesRevision: health.workerTypesRevision,
+          }),
         };
       }
 
@@ -133,8 +139,6 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
         error: 'Invalid health response format',
       };
     } catch (error) {
-      clearTimeout(timeout);
-
       const errorMessage = getErrorMessage(error);
       const errorCode = (error as { code?: string }).code;
 
@@ -181,6 +185,8 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
         healthy: false,
         error: errorMessage,
       };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

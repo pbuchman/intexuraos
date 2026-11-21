@@ -35,6 +35,14 @@
     ".": {
       "entry": ["scripts/**/*.mjs", "scripts/**/*.ts", "migrations/**/*.mjs"]
     },
+    "apps/code-agent": {
+      "ignoreDependencies": [
+        "@fastify/formbody",
+        "fastify-plugin",
+        "htmlparser2",
+        "zod-to-json-schema"
+      ]
+    },
     "workers/orchestrator": {
       "entry": ["src/main.ts"]
     },

@@ -14,8 +14,10 @@ import { authenticateInternalScheduler } from '../helpers/internalAuth.js';
 import { extractOrGenerateTraceId, type ErrorCode } from '@intexuraos/common-core';
 import {
   isCodeTaskWorkerType,
+  isCodeTaskWorkerTypePolicy,
   MIN_TIMEOUT_HOURS,
   MAX_TIMEOUT_HOURS,
+  type CodeTaskWorkerTypePolicy,
 } from '@intexuraos/code-task-domain';
 import { createAppLogger, SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
@@ -35,7 +37,9 @@ import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret } from '../../domain/utils/secrets.js';
 import { loadConfig } from '../../config.js';
 import type { TaskStatus, WorkerType } from '../../domain/models/codeTask.js';
-import type { WorkerConfig, WorkerHealthState, WorkerHealthStatus } from '../../domain/models/workerSettings.js';
+import type { WorkerAuthProvider, WorkerAuthStatusDetails, WorkerConfig, WorkerHealthState, WorkerHealthStatus } from '../../domain/models/workerSettings.js';
+import { WORKER_AUTH_STATUSES } from '../../domain/models/workerSettings.js';
+import { enabledWorkerTypesSchema, workerTypesRevisionSchema } from '../worker-settings/schemas.js';
 import type { DispatchScheduleCreateInput } from '../../domain/repositories/codeTaskRepository.js';
 import { classifyCodeTaskDispatchability } from '../../domain/services/codeTaskDispatchBlockers.js';
 import {
@@ -72,6 +76,53 @@ const CANCEL_TASK_ERROR_CODE_MAP: Record<CancelTaskErrorCode, ErrorCode> = {
 
 const logger = createAppLogger({ name: 'code-routes' });
 
+type PublicWorkerAuthStatus = Pick<
+  WorkerAuthStatusDetails,
+  'status' | 'authMode' | 'refreshSupported' | 'expiresAt' | 'expiresInMinutes'
+>;
+
+const publicWorkerAuthStatusSchema = {
+  type: 'object',
+  required: ['status'],
+  properties: {
+    status: { type: 'string', enum: WORKER_AUTH_STATUSES },
+    authMode: { type: 'string', enum: ['oauth', 'chatgpt', null], nullable: true },
+    refreshSupported: { type: 'boolean' },
+    expiresAt: { type: 'string', format: 'date-time' },
+    expiresInMinutes: { type: 'number' },
+  },
+} as const;
+
+const workerStatusCapabilityProperties = {
+  enabledWorkerTypes: enabledWorkerTypesSchema,
+  workerTypesRevision: workerTypesRevisionSchema,
+  workerAuths: {
+    type: 'object',
+    properties: {
+      claude: publicWorkerAuthStatusSchema,
+      codex: publicWorkerAuthStatusSchema,
+    },
+  },
+} as const;
+
+function projectWorkerAuthStatus(auths: unknown, provider: WorkerAuthProvider): PublicWorkerAuthStatus | undefined {
+  if (typeof auths !== 'object' || auths === null) return undefined;
+  const input = (auths as Record<WorkerAuthProvider, unknown>)[provider];
+  if (typeof input !== 'object' || input === null) return undefined;
+  const { status, authMode, refreshSupported, expiresAt, expiresInMinutes } =
+    input as Record<keyof PublicWorkerAuthStatus, unknown>;
+  const publicStatus = WORKER_AUTH_STATUSES.find((candidate) => candidate === status);
+  if (publicStatus === undefined) return undefined;
+  return {
+    status: publicStatus,
+    ...((authMode === 'oauth' || authMode === 'chatgpt' || authMode === null) && { authMode }),
+    ...(typeof refreshSupported === 'boolean' && { refreshSupported }),
+    ...(typeof expiresAt === 'string' && Number.isFinite(Date.parse(expiresAt))
+      && { expiresAt: new Date(expiresAt).toISOString() }),
+    ...(typeof expiresInMinutes === 'number' && Number.isFinite(expiresInMinutes) && { expiresInMinutes }),
+  };
+}
+
 interface WorkerStatusResponse {
   name: string;
   url: string;
@@ -79,7 +130,7 @@ interface WorkerStatusResponse {
   enabled: boolean;
   healthy: boolean;
   status: WorkerHealthState['_tag'] | 'disabled';
-  details: {
+  details: (Partial<CodeTaskWorkerTypePolicy> & {
     capacity?: number;
     available?: number;
     running?: number;
@@ -89,7 +140,8 @@ interface WorkerStatusResponse {
     error?: string;
     missingFields?: string[];
     contractMismatch?: boolean;
-  } | null;
+    workerAuths?: Partial<Record<WorkerAuthProvider, PublicWorkerAuthStatus>>;
+  }) | null;
   checkedAt: string | null;
   stale: boolean;
 }
@@ -130,6 +182,16 @@ function formatWorkerStatus(
       running: state.running,
       responseTimeMs: state.responseTimeMs,
     };
+    if (isCodeTaskWorkerTypePolicy(state)) {
+      const claude = projectWorkerAuthStatus(state.workerAuths, 'claude');
+      const codex = projectWorkerAuthStatus(state.workerAuths, 'codex');
+      details.enabledWorkerTypes = state.enabledWorkerTypes;
+      details.workerTypesRevision = state.workerTypesRevision;
+      details.workerAuths = {
+        ...(claude !== undefined && { claude }),
+        ...(codex !== undefined && { codex }),
+      };
+    }
   } else if (state?._tag === 'orchestrator-unreachable' || state?._tag === 'tunnel-down') {
     details = {
       reason: state.reason,
@@ -2390,6 +2452,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                               error: { type: 'string' },
                               missingFields: { type: 'array', items: { type: 'string' } },
                               contractMismatch: { type: 'boolean' },
+                              ...workerStatusCapabilityProperties,
                             },
                           },
                           checkedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -2449,10 +2512,15 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const healthStatusesResult = await workerSettingsRepo.getHealthStatuses(userId);
         const healthStatuses = healthStatusesResult.ok ? healthStatusesResult.value ?? {} : {};
         const enabledWorkers = settings.workers.filter(isWorkerEnabled);
+        function cachedStatus(worker: WorkerConfig): WorkerHealthStatus | undefined {
+          const status = healthStatuses[worker.name];
+          if (status?.registrationId !== undefined && status.registrationId !== worker.registrationId) return undefined;
+          return status;
+        }
 
         let stale = false;
         for (const worker of enabledWorkers) {
-          const status = healthStatuses[worker.name];
+          const status = cachedStatus(worker);
           if (status === undefined) {
             continue;
           }
@@ -2463,7 +2531,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }
         }
 
-        const hasMissingEnabledHealthStatus = enabledWorkers.some((w) => healthStatuses[w.name] === undefined);
+        const hasMissingEnabledHealthStatus = enabledWorkers.some((w) => cachedStatus(w) === undefined);
 
         if (enabledWorkers.length > 0 && (stale || hasMissingEnabledHealthStatus)) {
           // Deduplicate in-flight health probes per user
@@ -2471,19 +2539,17 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           let probePromise = inFlightRequests.get(probeKey);
 
           if (!probePromise) {
+            const checkedAt = new Date().toISOString();
             probePromise = workerHealthProbe
               .probeAllWorkers(enabledWorkers)
-              .then((results) => {
-                // Update all health statuses in Firestore
-                const updatePromises = Object.entries(results).map(([name, state]) =>
-                  workerSettingsRepo.updateHealthStatus(userId, name, {
-                    state,
-                    checkedAt: new Date().toISOString(),
-                    stale: false,
-                  })
-                );
-                // Wait for all updates to complete, return void for fire-and-forget
-                void Promise.allSettled(updatePromises);
+              .then(async (results) => {
+                await Promise.allSettled(enabledWorkers.map(async (worker) => {
+                  const state = results[worker.name];
+                  if (state === undefined) return;
+                  await workerSettingsRepo.updateHealthStatus(userId, worker.name, {
+                    state, checkedAt, stale: false,
+                  }, worker);
+                }));
               })
               .finally(() => {
                 // Clean up in-flight request after completion
@@ -2501,7 +2567,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
 
         const workers = settings.workers.map((w, index) =>
-          formatWorkerStatus(w, index + 1, healthStatuses[w.name])
+          formatWorkerStatus(w, index + 1, cachedStatus(w))
         );
 
         return await reply.ok({ workers, stale });
@@ -2554,6 +2620,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                               error: { type: 'string' },
                               missingFields: { type: 'array', items: { type: 'string' } },
                               contractMismatch: { type: 'boolean' },
+                              ...workerStatusCapabilityProperties,
                             },
                           },
                           checkedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -2609,17 +2676,17 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const settings = settingsResult.value;
 
         const enabledWorkers = settings.workers.filter(isWorkerEnabled);
+        const checkedAt = new Date().toISOString();
         const results = enabledWorkers.length > 0
           ? await workerHealthProbe.probeAllWorkers(enabledWorkers)
           : {};
-        const checkedAt = new Date().toISOString();
 
-        for (const [name, state] of Object.entries(results)) {
-          await workerSettingsRepo.updateHealthStatus(userId, name, {
-            state,
-            checkedAt,
-            stale: false,
-          });
+        for (const worker of enabledWorkers) {
+          const state = results[worker.name];
+          if (state === undefined) continue;
+          await workerSettingsRepo.updateHealthStatus(userId, worker.name, {
+            state, checkedAt, stale: false,
+          }, worker);
         }
 
         const workers = settings.workers.map((w, index) => {

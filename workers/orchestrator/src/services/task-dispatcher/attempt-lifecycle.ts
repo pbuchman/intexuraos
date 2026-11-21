@@ -22,6 +22,8 @@ import {
   MAX_INACTIVITY_RESTARTS,
 } from './retry-logic.js';
 import type { DispatcherContext } from './dispatcher-context.js';
+import { disabledWorkerTypeError } from './preflight.js';
+import { WorkerTypeDisabledError } from '../worker-type-disabled-error.js';
 import type { DispatchError } from '../task-dispatcher.js';
 
 /**
@@ -66,7 +68,7 @@ export class AttemptLifecycle {
     );
 
     const resumeError: TaskError = {
-      code: 'RESUME_ATTEMPT_FAILED',
+      code: error instanceof WorkerTypeDisabledError ? error.type : 'RESUME_ATTEMPT_FAILED',
       /* v8 ignore start -- ts-type: error instanceof Error ternary; failAcceptedResume always receives Error instances so String(error) branch is structurally unreachable in unit tests @preserve */
       message: `Failed to resume task: ${error instanceof Error ? error.message : String(error)}`,
       /* v8 ignore stop @preserve */
@@ -110,6 +112,12 @@ export class AttemptLifecycle {
       return null;
     }
 
+    const disabledBeforeRepair = disabledWorkerTypeError(task.workerType, ctx.isolation);
+    if (disabledBeforeRepair !== null) {
+      ctx.releaseSlot();
+      return { ok: false, error: disabledBeforeRepair };
+    }
+
     ctx.logger.warn(
       { taskId: task.taskId, worktreePath: task.worktreePath },
       'Worktree metadata missing on adoption, attempting repair'
@@ -123,6 +131,12 @@ export class AttemptLifecycle {
       await ctx.worktreeManager.repairWorktree(task.taskId);
       return null;
     } catch (error) {
+      const disabledDuringRepair = disabledWorkerTypeError(task.workerType, ctx.isolation);
+      if (disabledDuringRepair !== null) {
+        ctx.releaseSlot();
+        return { ok: false, error: disabledDuringRepair };
+      }
+
       const message = error instanceof Error ? error.message : 'Unknown error';
       ctx.logger.error(
         { taskId: task.taskId, worktreePath: task.worktreePath, error, [SKIP_SENTRY_KEY]: true },
@@ -189,6 +203,7 @@ export class AttemptLifecycle {
       // Create task object
       const task: Task = {
         taskId,
+        ...(request.accessBinding !== undefined && { accessBinding: request.accessBinding }),
         workerType: request.workerType,
         runtime: WORKER_TYPES[request.workerType].runtime,
         prompt: request.prompt,
@@ -323,6 +338,9 @@ export class AttemptLifecycle {
       return null;
     }
 
+    const disabled = disabledWorkerTypeError(metadata.workerType, ctx.isolation);
+    if (disabled !== null) return { ok: false, error: disabled };
+
     if (metadata.agentType === 'review' || metadata.agentType === 'remediation') {
       return {
         ok: false,
@@ -435,8 +453,9 @@ export class AttemptLifecycle {
       }
 
       task.containerId = resumeResult.containerId;
+      const deliveredFollowupCount = task.pendingResumeStart?.queuedFollowupCount;
       delete task.pendingResumeStart;
-      await ctx.saveTask(task);
+      await ctx.saveTask(task, deliveredFollowupCount);
 
       // INT-1585: re-arm timers with the per-task override on resume, too.
       ctx.scheduleTimeoutWarning(task.taskId, task.timeoutMs);
@@ -611,8 +630,14 @@ export class AttemptLifecycle {
         'Failed to restart worker after inactivity timeout'
       );
       const error: TaskError = {
-        code: 'TASK_INACTIVITY_RESTART_FAILED',
-        message: 'Failed to restart worker after inactivity timeout',
+        code:
+          startResult.error instanceof WorkerTypeDisabledError
+            ? startResult.error.type
+            : 'TASK_INACTIVITY_RESTART_FAILED',
+        message:
+          startResult.error instanceof WorkerTypeDisabledError
+            ? startResult.error.message
+            : 'Failed to restart worker after inactivity timeout',
         remediation: { action: 'retry' },
       };
       const result = await ctx.checkForResult(task);

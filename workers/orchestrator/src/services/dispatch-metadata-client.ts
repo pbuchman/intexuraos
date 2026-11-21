@@ -3,6 +3,9 @@ import { HttpWebhookUrlSchema, WorkerTypeSchema } from '../types/schemas.js';
 
 const DispatchMetadataSchema = z.object({
   taskId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
+  workerLocation: z.string().min(1).optional(),
+  workerAudience: z.string().min(1).optional(),
   prompt: z.string(),
   repository: z.string().min(1),
   baseBranch: z.string().min(1),
@@ -36,6 +39,7 @@ export async function fetchDispatchMetadata(
   try {
     const response = await fetchFn(url, {
       method: 'GET',
+      redirect: 'error',
       headers: {
         'X-Internal-Auth': config.internalAuthToken,
       },

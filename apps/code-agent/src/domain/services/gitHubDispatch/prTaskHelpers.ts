@@ -1,6 +1,7 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { WorkerSettingsRepository } from '../../ports/workerSettingsRepository.js';
 import { sendTaskMessage } from '../../usecases/sendTaskMessage.js';
+import type { WorkerCancellationCredentials } from '../taskDispatcher.js';
 import type { WebhookDispatchResult, WebhookDispatchServiceDeps } from './types.js';
 
 /**
@@ -12,12 +13,15 @@ export async function resolveWorkerCredentials(
   workerSettingsRepo: WorkerSettingsRepository,
   userId: string,
   workerLocation: string,
-): Promise<{ url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined> {
+  workerAudience?: string,
+): Promise<WorkerCancellationCredentials | undefined> {
   const settingsResult = await workerSettingsRepo.getSettings(userId);
   if (!settingsResult.ok || settingsResult.value === null) return undefined;
   const workerConfig = settingsResult.value.workers.find((w) => w.name === workerLocation);
   if (workerConfig?.enabled !== true) return undefined;
   return {
+    ownerId: userId,
+    ...(workerAudience !== undefined && { workerAudience }),
     url: workerConfig.url,
     cfAccessClientId: workerConfig.cfAccessClientId,
     cfAccessClientSecret: workerConfig.cfAccessClientSecret,
@@ -57,12 +61,12 @@ export function isStaleTaskError(result: WebhookDispatchResult): boolean {
 /** Best-effort destroy a preserved container when @worker directive requires a fresh agent. */
 export async function destroyPreservedContainer(
   deps: Pick<WebhookDispatchServiceDeps, 'workerSettingsRepo' | 'taskDispatcher'>,
-  preserved: { id: string; userId: string; workerLocation: string },
+  preserved: { id: string; userId: string; workerLocation: string; workerAudience?: string },
   logger: Logger,
 ): Promise<void> {
   try {
     const workerCreds = await resolveWorkerCredentials(
-      deps.workerSettingsRepo, preserved.userId, preserved.workerLocation,
+      deps.workerSettingsRepo, preserved.userId, preserved.workerLocation, preserved.workerAudience,
     );
     await deps.taskDispatcher.cancelOnWorker(preserved.id, preserved.workerLocation, workerCreds);
   } catch (error) {
