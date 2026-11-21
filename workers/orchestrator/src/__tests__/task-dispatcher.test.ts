@@ -5853,6 +5853,58 @@ describe('TaskDispatcher', () => {
       }
     });
 
+    it.each([
+      { path: 'verified completion', agentType: 'planning', resumed: false },
+      { path: 'ask-agent completion', agentType: 'ask_agent', resumed: false },
+      { path: 'resumed completion', agentType: 'planning', resumed: true },
+    ] as const)('reports a queued follow-up policy refusal after $path', async ({ agentType, resumed }) => {
+      const dir = await mkdtemp(join(tmpdir(), 'intex-queued-policy-'));
+      const workerTypePolicy = await WorkerTypePolicy.load(join(dir, 'worker-types.json'));
+      const preserveWorker = vi.fn().mockResolvedValue(true);
+      vi.useFakeTimers();
+      try {
+        const local = new TaskDispatcher(
+          mockConfig, statePersistence, mockWorktreeManager, mockLogForwarder, mockWebhookClient,
+          mockStatusUpdateClient, mockGitHubTokenService, mockLogger,
+          { ...mockIsolationConfig, workerTypePolicy, provider: { ...mockIsolationProvider, preserveWorker } },
+          singleAttemptCompletionControl
+        );
+        const log = vi.spyOn(local, 'appendTaggedTaskLog');
+        const taskId = 'verified-queued-policy';
+        const runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+        vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(executionFinalAssistantLog());
+        expect((await local.submitTask({
+          taskId, workerType: 'auto', prompt: 'Run this task', agentType,
+          webhookUrl: 'https://example.com/webhook', webhookSecret: 'secret', linearIssueLabels: [], hasChildren: false,
+        })).ok).toBe(true);
+        await vi.advanceTimersByTimeAsync(0);
+        await statePersistence.modify((state) => {
+          const task = state.tasks[taskId];
+          if (task === undefined) throw new Error('Expected a running task');
+          task.runtimeSessionId = runtimeSessionId;
+          if (resumed) task.resumedAfterSuccess = true;
+        });
+        expect(await local.sendMessage(taskId, 'Follow-up message')).toMatchObject({
+          ok: true, value: { action: 'queued' },
+        });
+        await workerTypePolicy.apply([], 0);
+
+        vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+        await vi.advanceTimersByTimeAsync(30 * 1000);
+
+        expect(await local.getTask(taskId)).toMatchObject({ status: 'completed', runtimeSessionId });
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
+        expect(log).toHaveBeenCalledWith(taskId, 'error', expect.stringContaining('worker_type_disabled'));
+        expect(log).toHaveBeenCalledWith(taskId, 'error', expect.stringContaining('resend'));
+        expect(preserveWorker).toHaveBeenCalledWith(taskId);
+        expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
     it('should allow Codex tasks when Codex auth is active', async () => {
       const request: CreateTaskRequest = {
         taskId: 'valid-codex-auth',

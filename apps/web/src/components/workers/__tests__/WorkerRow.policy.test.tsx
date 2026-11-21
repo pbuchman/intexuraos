@@ -26,6 +26,20 @@ describe('per-worker type controls', () => {
     expect(await screen.findByText('Worker types applied')).toBeTruthy();
   });
 
+  it.each(['codex', 'codex-xhigh'] as const)('clears a mixed Claude Code selection and keeps %s', async (preset) => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    render(<WorkerRow {...common} worker={{
+      ...worker, enabledWorkerTypes: ['openrouter-free', preset], workerTypesRevision: 1,
+    }} onUpdate={onUpdate} />);
+    await user.click(screen.getByRole('button', { name: 'Edit worker types' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Claude Code' }));
+    await user.click(screen.getByRole('button', { name: 'Save worker types' }));
+    expect(onUpdate).toHaveBeenCalledWith({
+      enabledWorkerTypes: [preset], expectedRevision: 1, expectedRegistration: worker.url,
+    });
+  });
+
   it('keeps a failed edit and requires an explicit choice when the host revision changes', async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn().mockRejectedValueOnce(new Error('Host unavailable')).mockResolvedValue(undefined);

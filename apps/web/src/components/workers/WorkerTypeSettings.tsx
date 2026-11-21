@@ -101,7 +101,7 @@ export function WorkerTypeSettings({ worker, status, onUpdate, onRefreshStatus }
           <label className="flex items-center gap-2 font-medium">
             <input type="checkbox" checked={allClaude}
               ref={(el) => { if (el !== null) el.indeterminate = someClaude && !allClaude; }}
-              onChange={(e) => { select(claudeTypes, e.target.checked); }} />
+              onChange={() => { select(claudeTypes, !someClaude); }} />
             Claude Code
           </label>
           <div className="grid gap-2 pl-5 sm:grid-cols-2">{claudeTypes.map(option)}</div>

@@ -13,6 +13,7 @@ import { orchestratorHealthV2 } from '../../helpers/orchestratorHealth.js';
 type WorkerCredentials = DispatchRequest['workerCredentials']['workers'][number];
 const { privateKey: taskAccessKey, publicKey } = generateKeyPairSync('ed25519');
 const servers: Server[] = [];
+const autoDisabledMessage = "Worker type 'auto' is disabled on this host. Enable it in Worker types or select another worker.";
 
 async function startWorker(name: string, options: {
   types?: CodeTaskWorkerType[];
@@ -72,6 +73,11 @@ async function startWorker(name: string, options: {
     if (request.method === 'POST' && request.url === '/tasks/task_worker_type_dispatch/message') {
       messagePosts.push(request.url);
       request.resume();
+      if (options.types !== undefined && !options.types.includes('auto')) {
+        response.statusCode = 409;
+        response.end(JSON.stringify({ code: 'worker_type_disabled', error: autoDisabledMessage }));
+        return;
+      }
       response.end(JSON.stringify({ action: options.messageAction ?? 'queued' }));
       return;
     }
@@ -326,7 +332,9 @@ describe('per-host task type dispatch over HTTP', () => {
     expect(credentials).toBeDefined();
     if (credentials === undefined) return;
     expect(await taskDispatcher.sendMessageToWorker('task_worker_type_dispatch', 'Please check the tests', credentials))
-      .toEqual(ok({ action }));
+      .toEqual(status === 'running'
+        ? { ok: false, error: { code: 'worker_type_disabled', message: autoDisabledMessage } }
+        : ok({ action }));
     expect(assigned.messagePosts).toEqual(['/tasks/task_worker_type_dispatch/message']);
     expect(assigned.events.probes).toBe(probes);
     expect(other.messagePosts).toEqual([]);

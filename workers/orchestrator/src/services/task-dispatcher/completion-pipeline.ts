@@ -354,43 +354,8 @@ export class CompletionPipeline {
         );
       }
 
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing ask_agent task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      // Check for pending messages before finalizing — user may have sent
-      // a follow-up while this attempt was completing.
-      const pendingQueue = ctx.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        ctx.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Ask agent: delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        ctx.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt
-        );
-        await ctx.flushTaskLogs(task.taskId);
-        await ctx.teardownAttempt(task.taskId, true);
-        const resumeResult = await ctx.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: false,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await ctx.saveTask(task);
-          ctx.claudeErrors.delete(task.taskId);
-          ctx.taskExitCodes.delete(task.taskId);
-          ctx.attemptStartedAt.delete(task.taskId);
-          return;
-        }
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          resumeResult.error instanceof WorkerTypeDisabledError ? resumeResult.error.message : 'Failed to deliver queued messages, finalizing normally'
-        );
-      }
-      /* v8 ignore stop @preserve */
+      const followUp = await this.deliverQueuedFollowUp(task, false);
+      if (followUp === 'started') return;
 
       const rawLogs = await ctx.isolation.provider.getWorkerLogs(task.taskId);
       const summary = getLast50ClaudeLines(rawLogs);
@@ -398,7 +363,7 @@ export class CompletionPipeline {
         task.taskId,
         `Ask agent completed — skipping structured verification`
       );
-      await this.finalizeTaskWithResult(task, 'ask_agent', { summary });
+      await this.finalizeTaskWithResult(task, 'ask_agent', { summary }, false, followUp === 'policy-refused');
       return;
     }
 
@@ -672,41 +637,8 @@ export class CompletionPipeline {
         /* v8 ignore stop @preserve */
       }
 
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      const pendingQueue = ctx.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        ctx.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        ctx.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt
-        );
-        await ctx.flushTaskLogs(task.taskId);
-        await ctx.teardownAttempt(task.taskId, true);
-        const resumeResult = await ctx.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: true,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await ctx.saveTask(task);
-          ctx.claudeErrors.delete(task.taskId);
-          ctx.taskExitCodes.delete(task.taskId);
-          ctx.attemptStartedAt.delete(task.taskId);
-          return;
-        }
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to deliver queued messages, finalizing normally`
-        );
-      }
-      /* v8 ignore stop @preserve */
+      const followUp = await this.deliverQueuedFollowUp(task, true);
+      if (followUp === 'started') return;
 
       ctx.appendOrchestratorTaskLog(
         task.taskId,
@@ -746,7 +678,9 @@ export class CompletionPipeline {
       }
 
       const keepLogOpen = complianceInput !== undefined;
-      await this.finalizeTaskWithResult(task, completionAgentType, finalResult, keepLogOpen);
+      await this.finalizeTaskWithResult(
+        task, completionAgentType, finalResult, keepLogOpen, followUp === 'policy-refused'
+      );
 
       if (complianceInput !== undefined) {
         // Track on the in-flight set so SIGTERM-driven shutdown awaits the
@@ -1036,7 +970,8 @@ export class CompletionPipeline {
     task: Task,
     agentType: CompletionAgentType,
     finalResult: TaskResult,
-    keepLogForwarderOpen = false
+    keepLogForwarderOpen = false,
+    retainSession = false
   ): Promise<void> {
     /* v8 ignore start -- upstream: planning 'unclear' outcome requires FakeCompletionVerifier to return unclear outcome label; fake verifier always returns 'completed' outcome and cannot simulate unclear planning decisions @preserve */
     if (agentType === 'planning' && finalResult.planning_outcome_label === 'unclear') {
@@ -1045,6 +980,7 @@ export class CompletionPipeline {
         'failed',
         {
           result: finalResult,
+          retainSession,
           error: {
             code: 'PLANNING_AGENT_UNCLEAR',
             message:
@@ -1057,7 +993,7 @@ export class CompletionPipeline {
       return;
     }
     /* v8 ignore stop @preserve */
-    await this.finalizeTask(task, 'completed', { result: finalResult }, keepLogForwarderOpen);
+    await this.finalizeTask(task, 'completed', { result: finalResult, retainSession }, keepLogForwarderOpen);
   }
 
   async handleResumedAfterSuccessCompletion(task: Task): Promise<void> {
@@ -1144,41 +1080,8 @@ export class CompletionPipeline {
     /* v8 ignore stop @preserve */
 
     // Check for pending messages before finalizing
-    /* v8 ignore start -- upstream: pending messages path in resumed-after-success requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-    const pendingQueue = ctx.pendingMessages.get(task.taskId);
-    if (pendingQueue !== undefined && pendingQueue.length > 0) {
-      ctx.pendingMessages.delete(task.taskId);
-      const combinedPrompt = pendingQueue.join('\n\n');
-      ctx.appendOrchestratorTaskLog(
-        task.taskId,
-        `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-      );
-      ctx.appendTaggedTaskLog(
-        task.taskId,
-        'prompt',
-        combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt
-      );
-      await ctx.flushTaskLogs(task.taskId);
-      await ctx.teardownAttempt(task.taskId, true);
-      const resumeResult = await ctx.startWorkerAttempt(task, {
-        prompt: combinedPrompt,
-        continueSession: true,
-        injectActiveGoal: true,
-      });
-      if (resumeResult.ok) {
-        task.containerId = resumeResult.containerId;
-        await ctx.saveTask(task);
-        ctx.claudeErrors.delete(task.taskId);
-        ctx.taskExitCodes.delete(task.taskId);
-        ctx.attemptStartedAt.delete(task.taskId);
-        return;
-      }
-      ctx.appendOrchestratorTaskLog(
-        task.taskId,
-        resumeResult.error instanceof WorkerTypeDisabledError ? resumeResult.error.message : 'Failed to deliver queued messages, finalizing normally'
-      );
-    }
-    /* v8 ignore stop @preserve */
+    const followUp = await this.deliverQueuedFollowUp(task, true);
+    if (followUp === 'started') return;
 
     ctx.appendOrchestratorTaskLog(task.taskId, 'Resumed-after-success verification passed');
     await ctx.flushTaskLogs(task.taskId);
@@ -1195,13 +1098,56 @@ export class CompletionPipeline {
     await this.finalizeTask(task, 'completed', {
       ...(enrichedResult !== undefined && { result: enrichedResult }),
       resumedCompletion: true,
+      retainSession: followUp === 'policy-refused',
     });
+  }
+
+  private async deliverQueuedFollowUp(
+    task: Task,
+    injectActiveGoal: boolean
+  ): Promise<'none' | 'started' | 'policy-refused'> {
+    const ctx = this.ctx;
+    const pendingQueue = ctx.pendingMessages.get(task.taskId);
+    if (pendingQueue === undefined) return 'none';
+
+    ctx.pendingMessages.delete(task.taskId);
+    const combinedPrompt = pendingQueue.join('\n\n');
+    ctx.appendOrchestratorTaskLog(
+      task.taskId,
+      `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
+    );
+    await ctx.flushTaskLogs(task.taskId);
+    const resumeResult = await ctx.startWorkerAttempt(task, {
+      prompt: combinedPrompt,
+      continueSession: true,
+      injectActiveGoal,
+    });
+    if (resumeResult.ok) {
+      task.containerId = resumeResult.containerId;
+      await ctx.saveTask(task);
+      ctx.claudeErrors.delete(task.taskId);
+      ctx.taskExitCodes.delete(task.taskId);
+      ctx.attemptStartedAt.delete(task.taskId);
+      return 'started';
+    }
+
+    if (resumeResult.error instanceof WorkerTypeDisabledError) {
+      ctx.appendTaggedTaskLog(
+        task.taskId,
+        'error',
+        'Queued follow-up was not delivered (worker_type_disabled). Re-enable this task type on the assigned worker and resend the queued messages from the task transcript.'
+      );
+      return 'policy-refused';
+    }
+
+    ctx.appendOrchestratorTaskLog(task.taskId, 'Failed to deliver queued messages, finalizing normally');
+    return 'none';
   }
 
   async finalizeTask(
     task: Task,
     statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
-    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean; retainSession?: boolean },
     keepLogForwarderOpen = false
   ): Promise<void> {
     try {
@@ -1224,14 +1170,14 @@ export class CompletionPipeline {
   private async finalizeTaskKeepingLogForwarderOpen(
     task: Task,
     statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
-    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean }
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean; retainSession?: boolean }
   ): Promise<void> {
     const ctx = this.ctx;
     const finalStatus = statusParam;
     const isNonPreservableAgentType =
       task.agentType === 'review' || task.agentType === 'remediation';
     const shouldPreserve =
-      ctx.preserveWorkerContainers &&
+      (ctx.preserveWorkerContainers || payload.retainSession === true) &&
       !isNonPreservableAgentType &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
     ctx.appendOrchestratorTaskLog(
