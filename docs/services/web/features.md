@@ -70,6 +70,8 @@ To run only Codex on Home Dev, open **Edit worker types** on the Home Dev row. C
 
 The host applies the selection when it confirms the save and keeps it across restarts. Running attempts finish normally. New attempts, including queued tasks and retries, use the current selection. With two workers, a new task can use the other host if it supports the requested type. If every enabled worker excludes it, the task shows which type was disabled. To turn Claude back on, select the group or individual types and save again. Enabling an OAuth-backed type restores the credential check and shows the actual session state.
 
+Clicking the **Claude Code** group clears it even when only some of its types are selected. If a follow-up was queued just before you disabled its type, check the task log. Re-enable the type and send the next message in the same task to deliver the waiting messages in order.
+
 Registrations without a saved selection start with all types enabled. If the panel asks for an orchestrator update or cannot confirm the save, your selection stays in the editor. A conflicting host change requires a fresh status check before you can save again.
 
 ### Everything Else in One Place

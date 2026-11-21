@@ -41,7 +41,6 @@ function buildContext(): {
       attemptCompletionSignals: new Set(),
       completionInProgress: new Set(),
       inactivityRestartInProgress: new Set(),
-      pendingMessages: new Map(),
       lastOutputAt: new Map(),
       inFlightHandlers,
       capacityMutex: new Mutex(),

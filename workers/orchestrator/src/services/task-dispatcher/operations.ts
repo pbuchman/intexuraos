@@ -184,7 +184,6 @@ export async function cancelTask(
     ctx.attemptStartedAt.delete(taskId);
     ctx.attemptCompletionSignals.delete(taskId);
     ctx.completionInProgress.delete(taskId);
-    ctx.pendingMessages.delete(taskId);
     ctx.lastOutputAt.delete(taskId);
     await ctx.isolation.provider.cleanupTaskSession?.(taskId);
 
@@ -218,6 +217,35 @@ export async function cancelTask(
       error: { type: 'service_error', message: 'Failed to cancel task', originalError: error },
     };
   }
+}
+
+async function persistTaskMessage(
+  ctx: DispatcherContext,
+  task: Task,
+  message: string,
+  onAccepted?: (current: Task, queue: string[]) => void
+): Promise<{ task: Task; queue: string[] } | null> {
+  let accepted: { task: Task; queue: string[] } | null = null;
+  await ctx.statePersistence.modify((state) => {
+    const current = state.tasks[task.taskId];
+    if (current?.status !== task.status || current.startedAt !== task.startedAt) return;
+
+    const queue = [...(current.queuedFollowups ?? []), message];
+    current.queuedFollowups = queue;
+    onAccepted?.(current, queue);
+    accepted = { task: current, queue };
+  });
+  return accepted;
+}
+
+function messageStateChanged(): Result<SendMessageResult, SendMessageError> {
+  return {
+    ok: false,
+    error: {
+      type: 'invalid_status',
+      message: 'Task changed while sending the message. Send it again.',
+    },
+  };
 }
 
 export async function sendMessage(
@@ -258,9 +286,9 @@ export async function sendMessage(
   }
 
   if (task.status === 'running') {
-    const queue = ctx.pendingMessages.get(taskId) ?? [];
-    queue.push(message);
-    ctx.pendingMessages.set(taskId, queue);
+    const accepted = await persistTaskMessage(ctx, task, message);
+    if (accepted === null) return messageStateChanged();
+    const { queue } = accepted;
     /* v8 ignore start -- source-map: ternary inside template literal misattributed by v8; truncation branch covered by test but not tracked by coverage @preserve */
     ctx.appendOrchestratorTaskLog(
       taskId,
@@ -302,13 +330,37 @@ export async function sendMessage(
       };
     }
 
-    const wasCompleted = task.status === 'completed';
     await ctx.teardownAttempt(taskId, true);
 
     // Register secret BEFORE any appendOrchestratorTaskLog calls, because
     // appendChunk creates a ForwardingState that captures the webhook secret
     // at creation time and never refreshes it.
     ctx.logForwarder.registerTask(taskId, task.webhookSecret, task.webhookUrl);
+
+    const wasCompleted = task.status === 'completed';
+    const accepted = await persistTaskMessage(ctx, task, message, (current, queue) => {
+      const combinedPrompt = queue.join('\n\n');
+      const prompt =
+        current.agentType === 'ask_agent'
+          ? combinedPrompt
+          : ctx.buildResumePreamble(current) + combinedPrompt;
+      const now = new Date().toISOString();
+      current.status = 'running';
+      current.containerId = '';
+      current.startedAt = now;
+      current.attemptCount = 1;
+      current.verificationHistory = [];
+      // Keep taskInfraFailureHistory so repeated infrastructure failures still
+      // produce the established remediation.
+      current.pendingResumeStart = { prompt, acceptedAt: now, queuedFollowupCount: queue.length };
+      delete current.completedAt;
+      if (wasCompleted) {
+        current.resumedAfterSuccess = true;
+      } else {
+        delete current.resumedAfterSuccess;
+      }
+    });
+    if (accepted === null) return messageStateChanged();
 
     ctx.appendOrchestratorTaskLog(taskId, 'Resuming task with user message');
     /* v8 ignore start -- source-map: ternary inside function argument misattributed by v8; truncation branch covered by test but not tracked by coverage @preserve */
@@ -319,37 +371,11 @@ export async function sendMessage(
     );
     /* v8 ignore stop @preserve */
 
-    const prompt =
-      task.agentType === 'ask_agent' ? message : ctx.buildResumePreamble(task) + message;
-    task.status = 'running';
-    task.containerId = '';
-    task.startedAt = new Date().toISOString();
-    task.attemptCount = 1;
-    task.verificationHistory = [];
-    // INT-1455: `taskInfraFailureHistory` is intentionally NOT reset on resume.
-    // When a user resumes a failed task that died on infra (e.g. image pull),
-    // and the resume fails the SAME way, the classifier's repeat-sub-reason
-    // check at finalizeAttemptAsInfraFailure flips the remediation copy to
-    // contact_support so log/UI triage clearly shows this isn't a flaky
-    // first-time failure. `verificationHistory`, by contrast, describes the
-    // old attempt's verifier verdict and is no longer relevant.
-    task.pendingResumeStart = {
-      prompt,
-      acceptedAt: new Date().toISOString(),
-    };
-    delete task.completedAt;
-    if (wasCompleted) {
-      task.resumedAfterSuccess = true;
-    } else {
-      delete task.resumedAfterSuccess;
-    }
-    await ctx.saveTask(task);
-
     ctx.incrementRunningCount();
     // INT-1551 §E.7: track resume so shutdown can wait for it to settle.
     void ctx.trackInFlight(
-      attemptLifecycle.resumeTaskWithUserMessage(task).catch((error: unknown) => {
-        void attemptLifecycle.failAcceptedResume(task, error);
+      attemptLifecycle.resumeTaskWithUserMessage(accepted.task).catch((error: unknown) => {
+        void attemptLifecycle.failAcceptedResume(accepted.task, error);
       })
     );
     ctx.logger.info({ taskId }, 'Task resume accepted with user message');

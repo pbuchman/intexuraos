@@ -313,9 +313,16 @@ async function runStartupRecovery(
       // emitted below has a meaningful wall-clock window (computed from
       // `startedAt` -> `completedAt`); without it `computeTaskDurationMs`
       // would clamp to 0 even when the task ran for hours before restart.
+      const completedAt = new Date().toISOString();
+      await statePersistence.modify((latest) => {
+        const current = latest.tasks[task.taskId];
+        if (current?.status === 'running' && current.startedAt === task.startedAt) {
+          current.status = 'interrupted';
+          current.completedAt = completedAt;
+        }
+      });
       task.status = 'interrupted';
-      task.completedAt = new Date().toISOString();
-      await statePersistence.save(state);
+      task.completedAt = completedAt;
 
       // INT-1565 §S5: emit `code_tasks_*` metrics for restart-induced
       // interruptions so the counter/duration series cover EVERY terminal

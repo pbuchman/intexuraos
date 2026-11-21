@@ -331,6 +331,39 @@ export class CompletionPipeline {
     ctx.metrics.record(CODE_TASK_METRICS.DURATION, { status: metricStatus }, durationMs);
   }
 
+  private async deliverQueuedFollowups(task: Task, injectActiveGoal: boolean): Promise<boolean> {
+    const ctx = this.ctx;
+    const pendingQueue = (await ctx.getTask(task.taskId))?.queuedFollowups ?? [];
+    if (pendingQueue.length === 0) return false;
+
+    const combinedPrompt = pendingQueue.join('\n\n');
+    ctx.appendOrchestratorTaskLog(
+      task.taskId,
+      `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
+    );
+    await ctx.flushTaskLogs(task.taskId);
+    const resumeResult = await ctx.startWorkerAttempt(task, {
+      prompt: combinedPrompt,
+      continueSession: true,
+      injectActiveGoal,
+    });
+    if (!resumeResult.ok) {
+      const reason =
+        resumeResult.error instanceof WorkerTypeDisabledError
+          ? `${resumeResult.error.type}: ${resumeResult.error.message}`
+          : 'Unable to start a follow-up attempt';
+      ctx.appendOrchestratorTaskLog(task.taskId, reason);
+      return false;
+    }
+
+    task.containerId = resumeResult.containerId;
+    await ctx.saveTask(task, pendingQueue.length);
+    ctx.claudeErrors.delete(task.taskId);
+    ctx.taskExitCodes.delete(task.taskId);
+    ctx.attemptStartedAt.delete(task.taskId);
+    return true;
+  }
+
   async handleTaskCompletion(task: Task): Promise<void> {
     const ctx = this.ctx;
     if (task.resumedAfterSuccess === true) {
@@ -354,43 +387,7 @@ export class CompletionPipeline {
         );
       }
 
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing ask_agent task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      // Check for pending messages before finalizing — user may have sent
-      // a follow-up while this attempt was completing.
-      const pendingQueue = ctx.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        ctx.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Ask agent: delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        ctx.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt
-        );
-        await ctx.flushTaskLogs(task.taskId);
-        await ctx.teardownAttempt(task.taskId, true);
-        const resumeResult = await ctx.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: false,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await ctx.saveTask(task);
-          ctx.claudeErrors.delete(task.taskId);
-          ctx.taskExitCodes.delete(task.taskId);
-          ctx.attemptStartedAt.delete(task.taskId);
-          return;
-        }
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          resumeResult.error instanceof WorkerTypeDisabledError ? resumeResult.error.message : 'Failed to deliver queued messages, finalizing normally'
-        );
-      }
-      /* v8 ignore stop @preserve */
+      if (await this.deliverQueuedFollowups(task, false)) return;
 
       const rawLogs = await ctx.isolation.provider.getWorkerLogs(task.taskId);
       const summary = getLast50ClaudeLines(rawLogs);
@@ -672,41 +669,7 @@ export class CompletionPipeline {
         /* v8 ignore stop @preserve */
       }
 
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      const pendingQueue = ctx.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        ctx.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        ctx.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt
-        );
-        await ctx.flushTaskLogs(task.taskId);
-        await ctx.teardownAttempt(task.taskId, true);
-        const resumeResult = await ctx.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: true,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await ctx.saveTask(task);
-          ctx.claudeErrors.delete(task.taskId);
-          ctx.taskExitCodes.delete(task.taskId);
-          ctx.attemptStartedAt.delete(task.taskId);
-          return;
-        }
-        ctx.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to deliver queued messages, finalizing normally`
-        );
-      }
-      /* v8 ignore stop @preserve */
+      if (await this.deliverQueuedFollowups(task, true)) return;
 
       ctx.appendOrchestratorTaskLog(
         task.taskId,
@@ -1144,41 +1107,7 @@ export class CompletionPipeline {
     /* v8 ignore stop @preserve */
 
     // Check for pending messages before finalizing
-    /* v8 ignore start -- upstream: pending messages path in resumed-after-success requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-    const pendingQueue = ctx.pendingMessages.get(task.taskId);
-    if (pendingQueue !== undefined && pendingQueue.length > 0) {
-      ctx.pendingMessages.delete(task.taskId);
-      const combinedPrompt = pendingQueue.join('\n\n');
-      ctx.appendOrchestratorTaskLog(
-        task.taskId,
-        `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-      );
-      ctx.appendTaggedTaskLog(
-        task.taskId,
-        'prompt',
-        combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '…' : combinedPrompt
-      );
-      await ctx.flushTaskLogs(task.taskId);
-      await ctx.teardownAttempt(task.taskId, true);
-      const resumeResult = await ctx.startWorkerAttempt(task, {
-        prompt: combinedPrompt,
-        continueSession: true,
-        injectActiveGoal: true,
-      });
-      if (resumeResult.ok) {
-        task.containerId = resumeResult.containerId;
-        await ctx.saveTask(task);
-        ctx.claudeErrors.delete(task.taskId);
-        ctx.taskExitCodes.delete(task.taskId);
-        ctx.attemptStartedAt.delete(task.taskId);
-        return;
-      }
-      ctx.appendOrchestratorTaskLog(
-        task.taskId,
-        resumeResult.error instanceof WorkerTypeDisabledError ? resumeResult.error.message : 'Failed to deliver queued messages, finalizing normally'
-      );
-    }
-    /* v8 ignore stop @preserve */
+    if (await this.deliverQueuedFollowups(task, true)) return;
 
     ctx.appendOrchestratorTaskLog(task.taskId, 'Resumed-after-success verification passed');
     await ctx.flushTaskLogs(task.taskId);
@@ -1260,7 +1189,6 @@ export class CompletionPipeline {
     ctx.taskExitCodes.delete(task.taskId);
     ctx.attemptStartedAt.delete(task.taskId);
     ctx.attemptCompletionSignals.delete(task.taskId);
-    ctx.pendingMessages.delete(task.taskId);
     ctx.lastOutputAt.delete(task.taskId);
 
     task.status = finalStatus;
@@ -1273,7 +1201,24 @@ export class CompletionPipeline {
       delete task.lastSuccessResult;
     }
     delete task.pendingResumeStart;
-    await ctx.saveTask(task);
+    await ctx.saveTask(task, 0, async () => {
+      if (task.queuedFollowups === undefined) return;
+
+      ctx.appendOrchestratorTaskLog(
+        task.taskId,
+        `Retained ${String(task.queuedFollowups.length)} follow-up message(s). Send another message to resume them when this worker type is enabled.`
+      );
+      // Finish preserving the session before the terminal task can accept a resume.
+      // A missing/untracked container still leaves the accepted input available.
+      try {
+        await ctx.isolation.provider.preserveWorker?.(task.taskId);
+      } catch (error) {
+        ctx.logger.warn(
+          { taskId: task.taskId, error },
+          'Unable to preserve queued follow-up session'
+        );
+      }
+    });
 
     // INT-1565 §S5: emit code_tasks_* metrics on every terminal transition.
     try {
@@ -1404,7 +1349,9 @@ export class CompletionPipeline {
       {},
       `Task finalized: id=${task.taskId} status=${finalStatus} durationMs=${String(new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime())}`
     );
-    await this.cleanupFinalizedWorker(task, finalStatus, shouldPreserve);
+    if (task.queuedFollowups === undefined) {
+      await this.cleanupFinalizedWorker(task, finalStatus, shouldPreserve);
+    }
   }
 
   private async cleanupFinalizedWorker(

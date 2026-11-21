@@ -11,7 +11,7 @@ import {
   hasFatalExitCodeField,
 } from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
-import type { StatePersistence } from '../services/state-persistence.js';
+import { StatePersistence } from '../services/state-persistence.js';
 import type { WorktreeManager } from '../services/worktree-manager.js';
 import type { LogForwarder } from '../services/log-forwarder.js';
 import type { WebhookClient } from '../services/webhook-client.js';
@@ -2551,10 +2551,9 @@ describe('TaskDispatcher', () => {
 
       const internalState = agentDispatcher as unknown as {
         taskExitCodes: Map<string, number>;
-        pendingMessages: Map<string, string[]>;
       };
       internalState.taskExitCodes.set('exit-code-pending-test', 1);
-      internalState.pendingMessages.set('exit-code-pending-test', ['queued message']);
+      expect((await agentDispatcher.sendMessage(request.taskId, 'queued message')).ok).toBe(true);
 
       const createWorkerCallsBefore = vi.mocked(mockIsolationProvider.createWorker).mock.calls
         .length;
@@ -5853,6 +5852,181 @@ describe('TaskDispatcher', () => {
       }
     });
 
+    it.each([
+      { agentType: 'ask_agent', resumed: false },
+      { agentType: 'planning', resumed: false },
+      { agentType: 'planning', resumed: true },
+    ] as const)(
+      'retains accepted follow-ups after policy blocks completion delivery ($agentType, resumed=$resumed)',
+      async ({ agentType, resumed }) => {
+        const dir = await mkdtemp(join(tmpdir(), 'intex-followup-policy-'));
+        vi.useFakeTimers();
+        try {
+          const path = join(dir, 'worker-types.json');
+          const workerTypePolicy = await WorkerTypePolicy.load(path);
+          const preserveWorker = vi.fn(async (): Promise<boolean> => {
+            if (resumed) throw new Error('fixture preservation I/O failure');
+            return true;
+          });
+          const provider =
+            agentType === 'planning'
+              ? { ...mockIsolationProvider, preserveWorker }
+              : mockIsolationProvider;
+          const makeDispatcher = (policy: WorkerTypePolicy): TaskDispatcher =>
+            new TaskDispatcher(
+              mockConfig,
+              statePersistence,
+              mockWorktreeManager,
+              mockLogForwarder,
+              mockWebhookClient,
+              mockStatusUpdateClient,
+              mockGitHubTokenService,
+              mockLogger,
+              { ...mockIsolationConfig, workerTypePolicy: policy, provider },
+              singleAttemptCompletionControl
+            );
+          const local = makeDispatcher(workerTypePolicy);
+          const request: CreateTaskRequest = {
+            taskId: 'blocked-queued-followups',
+            workerType: 'auto',
+            prompt: 'Initial task',
+            webhookUrl: 'https://example.com/webhook',
+            webhookSecret: 'secret',
+            linearIssueLabels: [],
+            hasChildren: false,
+            agentType,
+          };
+          vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+          vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValue(
+            planningFinalAssistantLog('planned')
+          );
+          expect((await local.submitTask(request)).ok).toBe(true);
+          await vi.advanceTimersByTimeAsync(0);
+          const current = await statePersistence.load();
+          const task = current.tasks[request.taskId];
+          if (task === undefined) throw new Error('Task not found');
+          task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+          if (resumed) task.resumedAfterSuccess = true;
+          await statePersistence.save(current);
+          expect(await local.sendMessage(request.taskId, 'First accepted follow-up')).toMatchObject(
+            {
+              ok: true,
+              value: { action: 'queued' },
+            }
+          );
+          expect(
+            await local.sendMessage(request.taskId, 'Second accepted follow-up')
+          ).toMatchObject({
+            ok: true,
+            value: { action: 'queued' },
+          });
+          await workerTypePolicy.apply([], 0);
+          vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+          await vi.advanceTimersByTimeAsync(30_000);
+
+          expect(await local.getTask(request.taskId)).toMatchObject({
+            status: 'completed',
+            runtimeSessionId: 'aaaaaaaa-0000-4000-a000-000000000000',
+            queuedFollowups: ['First accepted follow-up', 'Second accepted follow-up'],
+          });
+          expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
+          expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
+          if (agentType === 'planning') expect(preserveWorker).toHaveBeenCalledOnce();
+          expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+            request.taskId,
+            expect.stringContaining('worker_type_disabled')
+          );
+
+          await workerTypePolicy.apply(['auto'], 1);
+          const restarted = makeDispatcher(await WorkerTypePolicy.load(path));
+          expect(
+            await restarted.sendMessage(request.taskId, 'Resume with these instructions')
+          ).toMatchObject({
+            ok: true,
+            value: { action: 'resumed' },
+          });
+          await vi.advanceTimersByTimeAsync(0);
+          expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(2);
+          const delivery = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1)?.[0];
+          expect(delivery?.prompt).toContain(
+            'First accepted follow-up\n\nSecond accepted follow-up\n\nResume with these instructions'
+          );
+          expect((await restarted.getTask(request.taskId))?.queuedFollowups).toBeUndefined();
+        } finally {
+          vi.useRealTimers();
+          await rm(dir, { recursive: true, force: true });
+        }
+      }
+    );
+
+    it.each(['ask_agent', 'planning'] as const)(
+      'acknowledges only the delivered queue prefix when another message arrives during %s follow-up startup',
+      async (agentType) => {
+        vi.useFakeTimers();
+        try {
+          const taskId = 'followup-arrives-during-start';
+          const request: CreateTaskRequest = {
+            taskId,
+            agentType,
+            workerType: 'auto',
+            prompt: 'Initial task',
+            webhookUrl: 'https://example.com/webhook',
+            webhookSecret: 'secret',
+            linearIssueLabels: [],
+            hasChildren: false,
+          };
+          vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValue(
+            planningFinalAssistantLog('planned')
+          );
+          vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+          expect((await dispatcher.submitTask(request)).ok).toBe(true);
+          await vi.advanceTimersByTimeAsync(0);
+          const state = await statePersistence.load();
+          const task = state.tasks[taskId];
+          if (task === undefined) throw new Error('Task not found');
+          task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+          await statePersistence.save(state);
+          expect((await dispatcher.sendMessage(taskId, 'First message')).ok).toBe(true);
+
+          const worker = createDeferred<WorkerHandle>();
+          vi.mocked(mockIsolationProvider.createWorker).mockReturnValueOnce(worker.promise);
+          vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+          await vi.advanceTimersByTimeAsync(30_000);
+          expect(mockIsolationProvider.createWorker).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ prompt: 'First message', continueSession: true })
+          );
+          expect((await dispatcher.sendMessage(taskId, 'Arrived during startup')).ok).toBe(true);
+          worker.resolve({
+            taskId,
+            containerId: 'retained-container',
+            status: 'running',
+            startedAt: new Date(),
+          });
+          await vi.advanceTimersByTimeAsync(0);
+          expect(await dispatcher.getTask(taskId)).toMatchObject({
+            status: 'running',
+            queuedFollowups: ['Arrived during startup'],
+          });
+
+          vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+            new Error('Docker unavailable')
+          );
+          await vi.advanceTimersByTimeAsync(30_000);
+          expect(await dispatcher.getTask(taskId)).toMatchObject({
+            status: 'completed',
+            queuedFollowups: ['Arrived during startup'],
+          });
+          expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+            taskId,
+            expect.stringContaining('Unable to start a follow-up attempt')
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+    );
+
     it('should allow Codex tasks when Codex auth is active', async () => {
       const request: CreateTaskRequest = {
         taskId: 'valid-codex-auth',
@@ -7306,10 +7480,9 @@ describe('TaskDispatcher', () => {
       task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await resumedStatePersistence.save(state);
 
-      const internal = resumedDispatcher as unknown as {
-        pendingMessages: Map<string, string[]>;
-      };
-      internal.pendingMessages.set('resumed-pending-msg-test', ['Follow-up message']);
+      expect((await resumedDispatcher.sendMessage(request.taskId, 'Follow-up message')).ok).toBe(
+        true
+      );
 
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
@@ -9883,6 +10056,92 @@ describe('TaskDispatcher', () => {
         });
       }
     });
+
+    it('persists concurrent accepted messages in the task record before acknowledging them', async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'intex-durable-queue-'));
+      vi.useFakeTimers();
+      try {
+        const filePath = join(directory, 'state.json');
+        const diskState = new StatePersistence(filePath, mockLogger);
+        const durableDispatcher = new TaskDispatcher(
+          mockConfig,
+          diskState,
+          mockWorktreeManager,
+          mockLogForwarder,
+          mockWebhookClient,
+          mockStatusUpdateClient,
+          mockGitHubTokenService,
+          mockLogger,
+          mockIsolationConfig,
+          singleAttemptCompletionControl
+        );
+        const taskId = 'task_12345678-abcd-4eed-a012-0123456789ab';
+        expect(
+          (
+            await durableDispatcher.submitTask({
+              taskId,
+              workerType: 'auto',
+              prompt: 'Test durable follow-ups',
+              webhookUrl: 'https://example.com/webhook',
+              webhookSecret: 'secret',
+              linearIssueLabels: [],
+              hasChildren: false,
+            })
+          ).ok
+        ).toBe(true);
+        await Promise.all(durableDispatcher.getInFlightPromises());
+
+        const first = durableDispatcher.sendMessage(taskId, 'First concurrent message');
+        const second = durableDispatcher.sendMessage(taskId, 'Second concurrent message');
+        for (const accepted of await Promise.all([first, second])) {
+          expect(accepted).toMatchObject({ ok: true, value: { action: 'queued' } });
+        }
+
+        const restarted = await new StatePersistence(filePath, mockLogger).load();
+        const queued = restarted.tasks[taskId]?.queuedFollowups;
+        expect(queued?.slice().sort()).toEqual([
+          'First concurrent message',
+          'Second concurrent message',
+        ]);
+      } finally {
+        vi.useRealTimers();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+
+    it.each(['running', 'completed'] as const)(
+      'declines a message without enqueueing it when a %s task changes before acceptance',
+      async (status) => {
+        const taskId = 'message-state-race';
+        await dispatcher.submitTask({
+          taskId,
+          workerType: 'auto',
+          prompt: 'Initial task',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
+        });
+        await flushAsync();
+        const stale = await statePersistence.load();
+        const oldTask = stale.tasks[taskId];
+        if (oldTask === undefined) throw new Error('Task not found');
+        oldTask.status = status;
+        const latest = await statePersistence.load();
+        const current = latest.tasks[taskId];
+        if (current === undefined) throw new Error('Task not found');
+        current.status = status === 'running' ? 'completed' : 'running';
+        await statePersistence.save(latest);
+        vi.mocked(statePersistence.load).mockResolvedValueOnce(stale);
+
+        expect(await dispatcher.sendMessage(taskId, 'A message to retry')).toMatchObject({
+          ok: false,
+          error: { type: 'invalid_status', message: expect.stringContaining('Send it again') },
+        });
+        expect((await dispatcher.getTask(taskId))?.queuedFollowups).toBeUndefined();
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
+      }
+    );
 
     it('recreates a missing execution task from dispatch metadata and resumes it', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(

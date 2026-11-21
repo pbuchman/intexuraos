@@ -423,7 +423,9 @@ Code-agent probes the registered host and sends `PUT /admin/worker-types` with `
 | 409 `CONFLICT` | A concurrent change superseded the displayed revision or registration |
 | 503 `SERVICE_UNAVAILABLE` | Code-agent could not confirm the change on the registered host |
 
-The orchestrator's `GET /health` contract v2 exposes `enabledWorkerTypes`, `workerTypesRevision`, `workerAuths` and `credentialWatchdog.idleTicks`. The user-facing worker status endpoints (`GET /api/code/workers/status` and `POST /api/code/workers/refresh-status`) expose the confirmed selection and safe auth states under each reachable worker's `details`. Claude OAuth reports `disabled` whenever no selected type requires it. `expired` denotes a selected provider with an expired session. A new local attempt for an excluded type receives HTTP 409 with reason `worker_type_disabled` before container creation. See the [orchestrator operator guide](../../workers/orchestrator/README.md#per-host-worker-types).
+The orchestrator's `GET /health` contract v2 exposes `enabledWorkerTypes`, `workerTypesRevision`, `workerAuths` and `credentialWatchdog.idleTicks`. The user-facing worker status endpoints (`GET /api/code/workers/status` and `POST /api/code/workers/refresh-status`) expose the confirmed selection and safe auth states under each reachable worker's `details`. Claude OAuth reports `disabled` whenever no selected type requires it. `expired` denotes a selected provider with an expired session.
+
+The host returns HTTP 409 with `code: "worker_type_disabled"` for a newly submitted attempt or follow-up whose type is already excluded. If a follow-up was acknowledged before the selection changed, the host reports the refusal in the task log and keeps the pending input for delivery after re-enabling. See the [orchestrator operator guide](../../workers/orchestrator/README.md#per-host-worker-types).
 
 ## user-service Endpoints
 

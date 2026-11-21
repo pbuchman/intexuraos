@@ -161,7 +161,6 @@ export class TaskDispatcher {
    *  monitor skips these to avoid running verification on the stale transcript
    *  of the killed session. */
   private readonly inactivityRestartInProgress = new Set<string>();
-  private readonly pendingMessages = new Map<string, string[]>();
   private readonly lastOutputAt = new Map<string, number>();
   /**
    * INT-1551 §E.7: in-flight fire-and-forget handler promises. The shutdown
@@ -277,7 +276,6 @@ export class TaskDispatcher {
         attemptCompletionSignals: this.attemptCompletionSignals,
         completionInProgress: this.completionInProgress,
         inactivityRestartInProgress: this.inactivityRestartInProgress,
-        pendingMessages: this.pendingMessages,
         lastOutputAt: this.lastOutputAt,
         inFlightHandlers: this.inFlightHandlers,
         capacityMutex: this.capacityMutex,
@@ -293,7 +291,8 @@ export class TaskDispatcher {
         flushTaskLogs: (taskId) => this.flushTaskLogs(taskId),
         handleTaskCompletion: (task) => this.completionPipeline.handleTaskCompletion(task),
         checkForResult: (task) => this.checkForResult(task),
-        saveTask: (task) => this.saveTask(task),
+        saveTask: (task, deliveredFollowupCount, beforePersist) =>
+          this.saveTask(task, deliveredFollowupCount, beforePersist),
         getTask: (taskId) => this.getTask(taskId),
         startWorkerAttempt: (task, params) => this.taskRunner.startWorkerAttempt(task, params),
         finalizeTask: (task, statusParam, payload, keepLogForwarderOpen) =>
@@ -460,12 +459,28 @@ export class TaskDispatcher {
       .map((key) => key.replace('-monitor', ''));
   }
 
-  private async saveTask(task: Task): Promise<void> {
-    await this.statePersistence.modify((state) => {
+  private async saveTask(
+    task: Task,
+    deliveredFollowupCount = 0,
+    beforePersist?: () => Promise<void>
+  ): Promise<void> {
+    await this.statePersistence.modify(async (state) => {
       const bound = state.tasks[task.taskId]?.accessBinding;
       if (bound !== undefined && !sameTaskBinding(bound, task.accessBinding)) {
         throw new Error('Cannot replace a persisted task owner or worker');
       }
+      // Follow-ups can be admitted while a runner holds an older task snapshot.
+      // Only a successfully started attempt removes the prefix it received.
+      const queuedFollowups =
+        task.status === 'cancelled'
+          ? []
+          : (state.tasks[task.taskId]?.queuedFollowups ?? []).slice(deliveredFollowupCount);
+      if (queuedFollowups.length > 0) {
+        task.queuedFollowups = queuedFollowups;
+      } else {
+        delete task.queuedFollowups;
+      }
+      await beforePersist?.();
       state.tasks[task.taskId] = task;
     });
   }

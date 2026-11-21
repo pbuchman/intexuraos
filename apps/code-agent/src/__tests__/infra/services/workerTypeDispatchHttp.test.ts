@@ -1,13 +1,17 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
+import { Timestamp } from '@google-cloud/firestore';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ok } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
 import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { TASK_ACCESS_HEADER, verifyTaskAccess } from '@intexuraos/code-task-domain/task-access';
-import { resolveAssignedTaskMessageWorker } from '../../../domain/services/assignedTaskMessageWorker.js';
 import type { DispatchRequest, TaskDispatcherDeps } from '../../../domain/services/taskDispatcher.js';
+import type { DispatchRetry } from '../../../domain/models/dispatchRetry.js';
+import { drainRetryQueue, type DrainRetryQueueDeps } from '../../../domain/usecases/drainRetryQueue.js';
+import { sendTaskMessage, type SendTaskMessageDeps } from '../../../domain/usecases/sendTaskMessage.js';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 import { createWorkerHealthProbe } from '../../../infra/services/workerHealthProbe.js';
+import { createFakeTask } from '../../helpers/mockFirestore.js';
 import { orchestratorHealthV2 } from '../../helpers/orchestratorHealth.js';
 
 type WorkerCredentials = DispatchRequest['workerCredentials']['workers'][number];
@@ -21,16 +25,16 @@ async function startWorker(name: string, options: {
   healthStatus?: number;
   dispatchStatus?: number;
   dispatchResponse?: Record<string, unknown> | string;
-  messageAction?: 'queued' | 'resumed';
+  messageTask?: { workerType: CodeTaskWorkerType; action: 'queued' | 'resumed' };
   claudeAuth?: 'active' | 'not_configured';
   missingWorkerAuths?: boolean;
 } = {}): Promise<{
   credentials: WorkerCredentials;
   events: { probes: number; posts: string[] };
-  messagePosts: string[];
+  messagePosts: { path: string; status: number }[];
 }> {
   const events = { probes: 0, posts: [] as string[] };
-  const messagePosts: string[] = [];
+  const messagePosts: { path: string; status: number }[] = [];
   const server = createServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
     if (request.method === 'GET' && request.url === '/health') {
@@ -70,9 +74,23 @@ async function startWorker(name: string, options: {
       return;
     }
     if (request.method === 'POST' && request.url === '/tasks/task_worker_type_dispatch/message') {
-      messagePosts.push(request.url);
       request.resume();
-      response.end(JSON.stringify({ action: options.messageAction ?? 'queued' }));
+      const task = options.messageTask;
+      let body: object;
+      if (task === undefined) {
+        response.statusCode = 404;
+        body = { error: 'Task not found' };
+      } else if (options.types?.includes(task.workerType) === false) {
+        response.statusCode = 409;
+        body = {
+          code: 'worker_type_disabled',
+          error: `Worker type '${task.workerType}' is disabled on this host. Enable it in Worker types or select another worker.`,
+        };
+      } else {
+        body = { action: task.action };
+      }
+      messagePosts.push({ path: request.url, status: response.statusCode });
+      response.end(JSON.stringify(body));
       return;
     }
     response.statusCode = 404;
@@ -306,28 +324,85 @@ describe('per-host task type dispatch over HTTP', () => {
   });
 
   it.each([
-    { status: 'implemented', types: ['auto'], probes: 1, action: 'resumed' },
-    { status: 'running', types: [], probes: 0, action: 'queued' },
-  ] as const)('sends a message for a $status task only to its assigned worker', async ({ status, types, probes, action }) => {
+    {
+      name: 'resumes a finished task after the host re-enables its type',
+      delivery: 'direct', status: 'implemented', types: ['auto'], probes: 1, action: 'resumed', httpStatus: 200,
+      expected: ok({ action: 'resumed' }),
+    },
+    {
+      name: 'queues a message when the running task type is enabled',
+      delivery: 'direct', status: 'running', types: ['auto'], probes: 0, action: 'queued', httpStatus: 200,
+      expected: ok({ action: 'queued' }),
+    },
+    {
+      name: 'surfaces the assigned host refusal when the running task type is disabled',
+      delivery: 'direct', status: 'running', types: [], probes: 0, action: 'queued', httpStatus: 409,
+      expected: err({
+        code: 'worker_type_disabled',
+        message: "Worker type 'auto' is disabled on this host. Enable it in Worker types or select another worker.",
+      }),
+    },
+    {
+      name: 'queues a delayed message when the running task type is enabled',
+      delivery: 'retry', status: 'running', types: ['auto'], probes: 0, action: 'queued', httpStatus: 200,
+      expected: ok({ action: 'message_sent', taskId: 'task_worker_type_dispatch' }),
+    },
+    {
+      name: 'drops a delayed message refused by its assigned host',
+      delivery: 'retry', status: 'running', types: [], probes: 0, action: 'queued', httpStatus: 409,
+      expected: ok({ action: 'failed', taskId: 'task_worker_type_dispatch' }),
+    },
+  ] as const)('$name', async ({ delivery, status, types, probes, action, httpStatus, expected }) => {
     const other = await startWorker('other-host');
-    const assigned = await startWorker('assigned-host', { types: [...types], revision: 2, messageAction: action });
+    const assigned = await startWorker('assigned-host', {
+      types: [...types], revision: 2, messageTask: { workerType: 'auto', action },
+    });
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const taskDispatcher = createTaskDispatcherService({
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      logger,
       workerHealthProbe: createWorkerHealthProbe(),
     });
-    const credentials = resolveAssignedTaskMessageWorker({
+    const task = createFakeTask({
+      id: 'task_worker_type_dispatch',
       userId: 'user_test', workerType: 'auto', workerLocation: 'assigned-host',
       workerAudience: `${assigned.credentials.url}/`, status,
-    }, [
-      { ...other.credentials, enabled: true },
-      { ...assigned.credentials, enabled: true, enabledWorkerTypes: [], workerTypesRevision: 1 },
-    ]);
-
-    expect(credentials).toBeDefined();
-    if (credentials === undefined) return;
-    expect(await taskDispatcher.sendMessageToWorker('task_worker_type_dispatch', 'Please check the tests', credentials))
-      .toEqual(ok({ action }));
-    expect(assigned.messagePosts).toEqual(['/tasks/task_worker_type_dispatch/message']);
+    });
+    const message = 'Please check the tests';
+    const deps: SendTaskMessageDeps = {
+      logger,
+      taskDispatcher,
+      codeTaskRepo: {
+        findByIdForUser: vi.fn().mockResolvedValue(ok(task)), update: vi.fn().mockResolvedValue(ok(task)),
+      } as unknown as SendTaskMessageDeps['codeTaskRepo'],
+      workerSettingsRepo: {
+        getSettings: vi.fn().mockResolvedValue(ok({ workers: [
+          { ...other.credentials, enabled: true },
+          { ...assigned.credentials, enabled: true, enabledWorkerTypes: [], workerTypesRevision: 1 },
+        ] })),
+      } as unknown as SendTaskMessageDeps['workerSettingsRepo'],
+      logLineRepo: { storeBatch: vi.fn().mockResolvedValue(ok(undefined)) } as unknown as SendTaskMessageDeps['logLineRepo'],
+      whatsappNotifier: { notifyTaskResumed: vi.fn().mockResolvedValue(ok(undefined)) } as unknown as SendTaskMessageDeps['whatsappNotifier'],
+    };
+    if (delivery === 'direct') {
+      expect(await sendTaskMessage(deps, { taskId: task.id, userId: task.userId, message })).toEqual(expected);
+    } else {
+      const entry: DispatchRetry = {
+        id: 'dispatch-retry', type: 'task_message', eventId: 'event-id', repository: task.repository,
+        pullRequestNumber: 1, senderLogin: 'test-user', taskId: task.id, userId: task.userId, message,
+        attempts: 1, maxAttempts: 3, lastError: 'worker_unavailable', createdAt: Timestamp.now(), ttlMinutes: 10,
+      };
+      const deleteRetry = vi.fn().mockResolvedValue(ok(undefined));
+      expect(await drainRetryQueue({
+        ...deps,
+        dispatchRetryRepo: {
+          findOldest: vi.fn().mockResolvedValue(ok(entry)), claimForProcessing: vi.fn().mockResolvedValue(ok(true)),
+          delete: deleteRetry,
+        } as unknown as DrainRetryQueueDeps['dispatchRetryRepo'],
+        linearAgentClient: { validateIssue: vi.fn() } as unknown as DrainRetryQueueDeps['linearAgentClient'],
+      })).toEqual(expected);
+      expect(deleteRetry).toHaveBeenCalledExactlyOnceWith(entry.id);
+    }
+    expect(assigned.messagePosts).toEqual([{ path: '/tasks/task_worker_type_dispatch/message', status: httpStatus }]);
     expect(assigned.events.probes).toBe(probes);
     expect(other.messagePosts).toEqual([]);
     expect(other.events.probes).toBe(0);

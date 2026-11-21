@@ -99,6 +99,8 @@ Code-agent sends the edit to the registered endpoint over Cloudflare Access with
 
 The dispatcher checks the type again before starting each attempt. A running attempt can finish. A queued request, retry or follow-up that would start a disabled type gets a `worker_type_disabled` reason. Code-agent can dispatch new work to a different eligible host. Re-enable an OAuth-backed type to resume Claude credential monitoring and expose the current state of the worker session. OpenRouter Free alone leaves Claude OAuth disabled.
 
+If a follow-up was already accepted while an attempt was running, the original request has already returned. When the host subsequently blocks delivery, the task log records `worker_type_disabled` and the host keeps the queued messages with the session. The completed attempt keeps its result. After re-enabling the type, send the next message on that task to deliver the retained input in order.
+
 Check the applied configuration on the host, including after a guarded restart:
 
 ```bash

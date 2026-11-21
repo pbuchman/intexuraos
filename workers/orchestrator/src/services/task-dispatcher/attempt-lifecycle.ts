@@ -453,8 +453,9 @@ export class AttemptLifecycle {
       }
 
       task.containerId = resumeResult.containerId;
+      const deliveredFollowupCount = task.pendingResumeStart?.queuedFollowupCount;
       delete task.pendingResumeStart;
-      await ctx.saveTask(task);
+      await ctx.saveTask(task, deliveredFollowupCount);
 
       // INT-1585: re-arm timers with the per-task override on resume, too.
       ctx.scheduleTimeoutWarning(task.taskId, task.timeoutMs);

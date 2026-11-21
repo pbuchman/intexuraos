@@ -138,6 +138,11 @@ describe('main.ts', () => {
       pendingWebhooks: [],
     });
     vi.mocked(mockStatePersistence.save).mockResolvedValue(undefined);
+    vi.mocked(mockStatePersistence.modify).mockImplementation(async (update) => {
+      const current = await mockStatePersistence.load();
+      await update(current);
+      await mockStatePersistence.save(current);
+    });
     vi.mocked(mockTokenService.refreshToken).mockResolvedValue({
       ok: true,
       value: 'new-token',
@@ -543,6 +548,67 @@ describe('main.ts', () => {
 
       // mockExit doesn't need restore - it's cleared in beforeEach
     });
+
+    it.each(['running', 'completed'] as const)(
+      'preserves a follow-up accepted during startup notification (current status %s)',
+      async (status) => {
+        const task = {
+          taskId: 'startup-durable-queue',
+          workerType: 'opus',
+          prompt: 'Test',
+          repository: 'test/repo',
+          baseBranch: 'main',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          status: 'running',
+          containerId: '',
+          worktreePath: '/path/to/worktree',
+          startedAt: '2025-01-26T00:00:00.000Z',
+          linearIssueLabels: [],
+        } satisfies OrchestratorState['tasks'][string];
+        const previous = {
+          tasks: { [task.taskId]: task },
+          githubToken: null,
+          pendingWebhooks: [],
+        };
+        vi.mocked(mockStatePersistence.load).mockResolvedValue(previous);
+        vi.mocked(mockWebhookClient.send).mockImplementationOnce(async () => {
+          vi.mocked(mockStatePersistence.load).mockResolvedValue({
+            ...previous,
+            tasks: {
+              [task.taskId]: {
+                ...task,
+                status,
+                queuedFollowups: ['Arrived during startup recovery'],
+              },
+            },
+          });
+          return { ok: true, value: undefined };
+        });
+
+        const { main } = await import('../main.js');
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger
+        );
+
+        expect(mockStatePersistence.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tasks: {
+              [task.taskId]: expect.objectContaining({
+                status: status === 'running' ? 'interrupted' : 'completed',
+                queuedFollowups: ['Arrived during startup recovery'],
+              }),
+            },
+          })
+        );
+      }
+    );
 
     it('should adopt running container with matching state', async () => {
       const runningTask = {

@@ -200,7 +200,7 @@ describe('CompletionPipeline', () => {
       await Promise.resolve();
 
       expect(task.status).toBe('completed');
-      expect(harness.saveTask).toHaveBeenCalledWith(task);
+      expect(harness.saveTask).toHaveBeenCalledWith(task, 0, expect.any(Function));
       expect(commit).toHaveBeenCalledWith(expect.objectContaining({ taskId: task.taskId }));
       await Promise.resolve();
       await Promise.resolve();

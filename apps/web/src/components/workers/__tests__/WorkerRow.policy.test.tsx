@@ -41,6 +41,26 @@ describe('per-worker type controls', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ enabledWorkerTypes: CODE_TASK_WORKER_TYPES.filter((type) => type !== 'auto'), expectedRevision: 5, expectedRegistration: worker.url });
   });
 
+  it('clears a partially selected Claude group in one click and preserves each Codex preset', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    render(<WorkerRow {...common} worker={{
+      ...worker, enabledWorkerTypes: ['openrouter-free', 'codex-xhigh'], workerTypesRevision: 4,
+    }} onUpdate={onUpdate} />);
+    await user.click(screen.getByRole('button', { name: 'Edit worker types' }));
+    const group = screen.getByRole('checkbox', { name: 'Claude Code' });
+    expect((group as HTMLInputElement).indeterminate).toBe(true);
+    await user.click(group);
+    for (const label of ['Claude Auto', 'Claude Opus', 'Claude Sonnet', 'OpenRouter Free', 'Codex']) {
+      expect((screen.getByRole('checkbox', { name: label, exact: true }) as HTMLInputElement).checked).toBe(false);
+    }
+    expect((screen.getByRole('checkbox', { name: 'Codex xhigh' }) as HTMLInputElement).checked).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Save worker types' }));
+    expect(onUpdate).toHaveBeenCalledWith({
+      enabledWorkerTypes: ['codex-xhigh'], expectedRevision: 4, expectedRegistration: worker.url,
+    });
+  });
+
   it('shows the applied Claude OAuth status separately from an active endpoint', () => {
     const { rerender } = render(<WorkerRow {...common} worker={{ ...worker, enabledWorkerTypes: ['openrouter-free'], workerTypesRevision: 1 }} onUpdate={vi.fn()} />);
     expect(screen.getByText('Claude OAuth · Disabled')).toBeTruthy();
