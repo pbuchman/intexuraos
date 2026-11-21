@@ -204,6 +204,20 @@ describe('fetchWithRetry', () => {
 });
 
 describe('logWorkerAuthStartupStatus', () => {
+  it('reports policy-disabled auth without warning that providers are unavailable', async () => {
+    const logger = makeLogger();
+    const disabled = makeState('disabled', { refreshSupported: false });
+    const registry = makeRegistry({ claude: disabled, codex: disabled });
+
+    logWorkerAuthStartupStatus(registry, logger);
+    await validateWorkerApiKeys(registry, { openRouterKey: '' }, logger);
+
+    expect(logger.calls).toEqual([
+      ['info', {}, 'Claude worker auth disabled by worker type policy'],
+      ['info', {}, 'Codex worker auth disabled by worker type policy'],
+    ]);
+  });
+
   it('logs info for claude when the claude state is active', () => {
     const logger = makeLogger();
     const registry = makeRegistry({

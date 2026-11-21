@@ -3666,7 +3666,24 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.callbackReceived).toBe(true);
     });
 
-    it('stores error for interrupted tasks', async () => {
+    const defaultInterruption = {
+      code: 'worker_interrupted',
+      message: 'Worker was interrupted during task execution',
+    };
+    const policyInterruption = {
+      code: 'worker_type_disabled',
+      message: 'Codex is disabled on this worker. Enable Codex on this worker to resume the task.',
+    };
+
+    it.each([
+      { reason: 'no callback error', callbackError: undefined, expectedError: defaultInterruption },
+      {
+        reason: 'an unrelated callback error',
+        callbackError: { code: 'test_other_error', message: 'Other error' },
+        expectedError: defaultInterruption,
+      },
+      { reason: 'a worker policy interruption', callbackError: policyInterruption, expectedError: policyInterruption },
+    ])('persists and sends the interruption reason for $reason', async ({ callbackError, expectedError }) => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
         prompt: 'Fix the bug',
@@ -3687,6 +3704,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       const payload = {
         taskId: task.id,
         status: 'interrupted' as const,
+        ...(callbackError !== undefined && { error: callbackError }),
       };
 
       const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
@@ -3709,8 +3727,12 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.ok).toBe(true);
       if (!getResult.ok) throw new Error('Failed to get task');
       expect(getResult.value.status).toBe('interrupted');
-      expect(getResult.value.error?.code).toBe('worker_interrupted');
+      expect(getResult.value.error).toEqual(expectedError);
       expect(getResult.value.callbackReceived).toBe(true);
+      expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        userId: task.userId,
+        message: expect.stringContaining(expectedError.message),
+      }));
     });
 
     it('stores error for cancelled tasks', async () => {

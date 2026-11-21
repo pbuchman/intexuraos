@@ -4340,7 +4340,7 @@ describe('drainTaskQueue', () => {
       }));
     });
 
-    it('dispatches a scheduled task normally once notBeforeAt has passed, without resetting queuedAt', async () => {
+    it('loads current worker policy and credentials when a scheduled task becomes eligible', async () => {
       const now = Date.now();
       const originalQueuedAt = Timestamp.fromDate(new Date(now - 5 * 60 * 1000));
       const task = createMockTask({
@@ -4353,28 +4353,79 @@ describe('drainTaskQueue', () => {
         },
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      setupWorkerSettings();
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({
+        workers: [{
+          ...workerConfig,
+          registrationId: 'scheduled-registration',
+          dispatchSigningSecret: 'rotated-dispatch-secret',
+          enabledWorkerTypes: [],
+          workerTypesRevision: 2,
+        }],
+      }));
       mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
 
-      mockTaskDispatcher.dispatch.mockResolvedValue(
-        ok({ dispatched: true, workerLocation: 'home-mac' })
-      );
-      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({
+        code: 'worker_type_disabled',
+        message: 'auto is disabled on all enabled workers',
+      }));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'failed' })));
 
       const result = await drainTaskQueue(createDeps());
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toEqual({ action: 'dispatched', taskId: 'eligible-scheduled' });
+        expect(result.value).toMatchObject({ action: 'failed', taskId: 'eligible-scheduled' });
       }
       expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'eligible-scheduled' }),
+        expect.objectContaining({
+          taskId: 'eligible-scheduled',
+          workerCredentials: {
+            workers: [expect.objectContaining({
+              registrationId: 'scheduled-registration',
+              dispatchSigningSecret: 'rotated-dispatch-secret',
+              enabledWorkerTypes: [],
+              workerTypesRevision: 2,
+            })],
+          },
+        }),
       );
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('eligible-scheduled', expect.objectContaining({
+        dispatchStatus: expect.objectContaining({ reason: 'worker_type_disabled', terminal: true }),
+      }));
       // No queuedAt reset while crossing the schedule boundary.
       expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
         'eligible-scheduled',
         expect.objectContaining({ queuedAt: expect.any(Date) }),
       );
+    });
+
+    it('does not fail future scheduled work when the same type is currently disabled', async () => {
+      const task = createMockTask();
+      const scheduled = createMockTask({
+        id: 'future-scheduled',
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromMillis(Date.now() + 60_000),
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task, scheduled]));
+      setupWorkerSettings();
+      mockTaskDispatcher.dispatch.mockResolvedValue(err({
+        code: 'worker_type_disabled',
+        message: 'auto is disabled on all enabled workers',
+        blocker: {
+          dispatchable: false,
+          reason: 'worker_type_disabled',
+          severity: 'critical',
+          message: 'auto is disabled on all enabled workers',
+          remediation: 'Enable this task type on a worker in worker settings, then retry the task.',
+          workerNames: ['home-mac'],
+        },
+      }));
+
+      expect(await drainTaskQueue(createDeps())).toMatchObject({ ok: true, value: { action: 'failed', taskId: task.id } });
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith('future-scheduled', expect.objectContaining({ status: 'failed' }));
     });
 
     it('calls listQueuedByAge with config.queue.maxSize (50), not the legacy batch of 10', async () => {

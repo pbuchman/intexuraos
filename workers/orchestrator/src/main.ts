@@ -9,7 +9,8 @@ import type { HeartbeatManager } from './heartbeat.js';
 import type { DiscoveredContainer, IsolationProvider } from './services/isolation/types.js';
 import type { WorkerAuthRegistry } from './services/worker-auth/index.js';
 import type { ProviderApiKeyHealth } from './types/api.js';
-import { registerRoutes } from './routes.js';
+import { WorkerTypeDisabledError, type WorkerTypePolicy } from './services/worker-type-policy.js';
+import { registerRoutes, type WorkerTypeControls } from './routes.js';
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { Logger } from '@intexuraos/common-core';
@@ -56,7 +57,8 @@ export async function main(
    * can omit it.
    */
   flush?: () => Promise<void>,
-  providerApiKeys?: Record<string, ProviderApiKeyHealth>
+  providerApiKeys?: Record<string, ProviderApiKeyHealth>,
+  workerTypeControls?: WorkerTypeControls
 ): Promise<void> {
   const app = fastify({
     logger: false,
@@ -80,7 +82,9 @@ export async function main(
       () => getServiceStatus(),
       workerAuthRegistry,
       isolationProvider,
-      providerApiKeys
+      providerApiKeys,
+      undefined,
+      workerTypeControls
     );
 
     await app.listen({ port: config.port, host: config.bindHost ?? '127.0.0.1' });
@@ -105,7 +109,8 @@ export async function main(
       dispatcher,
       webhookClient,
       logger,
-      isolationProvider
+      isolationProvider,
+      workerTypeControls?.policy
     );
 
     // Schedule background jobs
@@ -146,7 +151,8 @@ async function runStartupRecovery(
   dispatcher: TaskDispatcher,
   webhookClient: WebhookClient,
   logger: Logger,
-  isolationProvider?: IsolationProvider
+  isolationProvider?: IsolationProvider,
+  workerTypePolicy?: Pick<WorkerTypePolicy, 'isEnabled'>
 ): Promise<void> {
   logger.info({ message: 'Running startup recovery' });
 
@@ -216,7 +222,12 @@ async function runStartupRecovery(
   // Process each running task
   for (const task of runningTasks) {
     try {
-      if (task.pendingResumeStart !== undefined) {
+      let policyRefusal =
+        workerTypePolicy?.isEnabled(task.workerType) === false
+          ? new WorkerTypeDisabledError(task.workerType).message
+          : undefined;
+
+      if (policyRefusal === undefined && task.pendingResumeStart !== undefined) {
         try {
           const result = await dispatcher.recoverPendingResumeTask(task);
           if (result.ok) {
@@ -226,7 +237,6 @@ async function runStartupRecovery(
             );
             continue;
           }
-
           logger.warn(
             { taskId: task.taskId, error: result.error },
             'Pending accepted resume recovery failed, marking as interrupted'
@@ -241,13 +251,16 @@ async function runStartupRecovery(
 
       const container = containerMap?.get(task.taskId);
 
-      if (container?.state === 'running') {
+      if (policyRefusal === undefined && container?.state === 'running') {
         // Container is running — attempt adoption
         try {
           const result = await dispatcher.adoptTask(task);
           if (result.ok) {
             logger.info({ taskId: task.taskId }, 'Adopted running container');
             continue; // Skip interrupted webhook
+          }
+          if (result.error.type === 'worker_type_disabled') {
+            policyRefusal = result.error.message;
           }
           // Adoption returned error — fall through to interrupted. The
           // `adoptTask` failure (e.g. "Task at max attempts", capacity exhausted,
@@ -265,7 +278,11 @@ async function runStartupRecovery(
         } catch (error) {
           logger.error({ taskId: task.taskId, error }, 'Adoption threw, marking as interrupted');
         }
-      } else if (container !== undefined && isolationProvider !== undefined) {
+      } else if (
+        policyRefusal === undefined &&
+        container !== undefined &&
+        isolationProvider !== undefined
+      ) {
         // Non-running states are left in place for periodic cleanup if they become stale.
         logger.info(
           { taskId: task.taskId, state: container.state },
@@ -281,6 +298,13 @@ async function runStartupRecovery(
           taskId: task.taskId,
           status: 'interrupted',
           duration: 0,
+          ...(policyRefusal !== undefined && {
+            error: {
+              code: 'worker_type_disabled',
+              message: policyRefusal,
+              remediation: { action: 'retry' },
+            },
+          }),
         },
         taskId: task.taskId,
       });

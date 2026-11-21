@@ -200,6 +200,8 @@ export function logWorkerAuthStartupStatus(
       },
       'Code worker auth active'
     );
+  } else if (claudeState.status === 'disabled') {
+    logger.info({}, 'Claude worker auth disabled by worker type policy');
   } else {
     // Expired OAuth tokens are refreshed on first use; this warning is informational.
     // Real auth failures still surface via per-task error paths.
@@ -216,6 +218,8 @@ export function logWorkerAuthStartupStatus(
       },
       'Codex worker auth active'
     );
+  } else if (codexState.status === 'disabled') {
+    logger.info({}, 'Codex worker auth disabled by worker type policy');
   } else {
     // Same rationale as Claude: expired Codex auth is refreshed on demand,
     // not a startup-time error worth paging on.
@@ -249,7 +253,7 @@ export async function validateWorkerApiKeys(
       },
       'Code worker auth validated — Claude-backed tasks ready'
     );
-  } else {
+  } else if (claudeState.status !== 'disabled') {
     // Sentry INTEXURAOS-HOME-DEV-1G: an expired Claude OAuth token at startup is
     // expected (tokens are refreshed on first use), so this warn is informational
     // and must not become alert noise. The Pino Sentry transport honors
@@ -267,7 +271,7 @@ export async function validateWorkerApiKeys(
       },
       'Codex worker auth validated — Codex tasks ready'
     );
-  } else {
+  } else if (codexState.status !== 'disabled') {
     // Same rationale as Claude: do not page on an informational startup state.
     logger.warn({ state: codexState, _skipSentry: true }, 'Codex worker auth not ready at startup');
   }

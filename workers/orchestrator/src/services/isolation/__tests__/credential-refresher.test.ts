@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import type { WorkerAuthRefreshContext } from '../../worker-auth/types.js';
 
 // Mock os.userInfo() to prevent crashing in Docker environments without /etc/passwd.
 vi.mock('node:os', async (importOriginal) => {
@@ -38,6 +39,10 @@ interface MockContainer {
 
 interface MockDocker {
   createContainer: ReturnType<typeof vi.fn>;
+}
+
+function refreshContext(signal: AbortSignal): WorkerAuthRefreshContext {
+  return { signal, runDockerWork: async (work) => await work() };
 }
 
 function createMockDocker(mockContainer: MockContainer): MockDocker {
@@ -101,6 +106,65 @@ describe('CredentialRefresher', () => {
     expect(mockDocker.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({ Image: 'registry/code-worker@sha256:resolved' })
     );
+  });
+
+  it('does not create a container when policy disables auth during the image pull', async () => {
+    let finishPull: ((image: string) => void) | undefined;
+    resolveImage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPull = resolve;
+        })
+    );
+    const controller = new AbortController();
+
+    const result = refresher.refresh(refreshContext(controller.signal));
+    controller.abort();
+    finishPull?.('registry/code-worker@sha256:resolved');
+
+    expect(await result).toBe(false);
+    expect(mockDocker.createContainer).not.toHaveBeenCalled();
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
+  it('removes a created container when auth is disabled before Docker returns it', async () => {
+    let finishCreation: ((container: MockContainer) => void) | undefined;
+    mockDocker.createContainer.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCreation = resolve;
+        })
+    );
+    const controller = new AbortController();
+
+    const result = refresher.refresh(refreshContext(controller.signal));
+    await vi.waitFor(() => expect(mockDocker.createContainer).toHaveBeenCalledOnce());
+    controller.abort();
+    finishCreation?.(mockContainer);
+
+    expect(await result).toBe(false);
+    expect(mockContainer.start).not.toHaveBeenCalled();
+    expect(mockContainer.remove).toHaveBeenCalledWith({ force: true });
+  });
+
+  it('removes a running refresh container when policy disables auth', async () => {
+    const controller = new AbortController();
+    mockContainer.wait.mockImplementation(
+      ({ abortSignal }: { abortSignal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          abortSignal.addEventListener('abort', () => reject(new Error('wait aborted')), {
+            once: true,
+          });
+        })
+    );
+
+    const refresh = refresher.refresh(refreshContext(controller.signal));
+    await vi.waitFor(() => expect(mockContainer.wait).toHaveBeenCalledOnce());
+    controller.abort();
+
+    expect(await refresh).toBe(false);
+    expect(mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(mockLogger.error).not.toHaveBeenCalled();
   });
 
   it('does not create a refresh container when the registry pull fails', async () => {
@@ -179,17 +243,14 @@ describe('CredentialRefresher', () => {
     expect(result).toBe(false);
   });
 
-  it('logs container output at error level on failure', async () => {
+  it('reports refresh failure without reading the credential container output', async () => {
     mockContainer.wait.mockResolvedValue({ StatusCode: 1 });
 
     await refresher.refresh();
 
-    expect(mockContainer.logs).toHaveBeenCalled();
+    expect(mockContainer.logs).not.toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({
-        output: expect.stringContaining('Claude replied'),
-        _skipSentry: true,
-      }),
+      { containerId: 'refresh-container-id', exitCode: 1, _skipSentry: true },
       expect.stringContaining('refresh failed')
     );
   });
@@ -214,19 +275,6 @@ describe('CredentialRefresher', () => {
     const result = await refresher.refresh();
 
     expect(result).toBe(true);
-  });
-
-  it('handles container.logs() failure gracefully on success', async () => {
-    mockContainer.logs.mockRejectedValue(new Error('logs not available'));
-
-    const result = await refresher.refresh();
-
-    // Should still succeed because log capture failure is silently caught
-    expect(result).toBe(true);
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ containerId: 'refresh-container-id' }),
-      expect.stringContaining('refresh completed')
-    );
   });
 
   it('wraps non-Error thrown during container creation', async () => {

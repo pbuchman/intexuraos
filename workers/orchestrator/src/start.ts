@@ -153,10 +153,12 @@ export async function start(): Promise<void> {
     logger
   );
 
+  const credentialWatchdog = { idleTicks: 0 };
   startCredentialRefreshLoop(
     services.workerAuthRegistry,
     () => services.dispatcher.getRunningTaskIds(),
-    logger
+    logger,
+    credentialWatchdog
   );
 
   await main(
@@ -170,7 +172,8 @@ export async function start(): Promise<void> {
     services.workerAuthRegistry,
     services.isolationProvider,
     flush,
-    services.providerApiKeys
+    services.providerApiKeys,
+    { policy: services.workerTypePolicy, credentialWatchdog }
   );
 }
 

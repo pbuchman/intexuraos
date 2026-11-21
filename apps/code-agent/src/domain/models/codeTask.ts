@@ -183,6 +183,7 @@ export type CodeTaskDispatchStatusReason =
   | 'workers_unreachable'
   | 'worker_health_contract_mismatch'
   | 'workers_at_capacity'
+  | 'worker_type_disabled'
   | 'codex_auth_unavailable'
   | 'claude_auth_unavailable'
   | 'provider_auth_unavailable'

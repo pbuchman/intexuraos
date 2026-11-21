@@ -60,6 +60,7 @@ const DISPATCH_REASON_SEQUENCE_SLOT: Record<CodeTaskDispatchStatusReason, number
   missing_pr_branch: 20,
   scheduled_wait: 21,
   active_task_blocked: 22,
+  worker_type_disabled: 23,
 };
 
 const DISPATCH_REASON_SEQUENCE_WIDTH = 100;

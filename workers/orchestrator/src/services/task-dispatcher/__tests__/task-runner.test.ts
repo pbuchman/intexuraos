@@ -13,6 +13,26 @@ describe('TaskRunner', () => {
   });
 
   describe('startWorkerAttempt', () => {
+    it.each([false, true])('rejects a disabled type before starting or resuming (continue=%s)', async (continueSession) => {
+      harness.ctx.isolation.workerTypePolicy = { isEnabled: (): boolean => false, withStart: vi.fn() };
+      const task = makeTask({ runtimeSessionId: 'old-session' });
+      const result = await runner.startWorkerAttempt(task, { prompt: 'probe', continueSession });
+      expect(result).toMatchObject({ ok: false, error: { message: expect.stringContaining('sonnet') } });
+      expect(harness.pullImage).not.toHaveBeenCalled();
+      expect(harness.createWorker).not.toHaveBeenCalled();
+    });
+
+    it('checks policy again after pulling the image before creating the worker', async () => {
+      const refusal = new Error('sonnet disabled during image pull');
+      const withStart = vi.fn().mockRejectedValue(refusal);
+      harness.ctx.isolation.workerTypePolicy = { isEnabled: (): boolean => true, withStart };
+      const result = await runner.startWorkerAttempt(makeTask(), { prompt: 'probe', continueSession: false });
+      expect(harness.pullImage).toHaveBeenCalledOnce();
+      expect(withStart).toHaveBeenCalledWith('sonnet', expect.any(Function));
+      expect(harness.createWorker).not.toHaveBeenCalled();
+      expect(result).toEqual({ ok: false, error: refusal });
+    });
+
     it('happy path: pulls image, creates container, registers state, returns success', async () => {
       const task = makeTask();
 

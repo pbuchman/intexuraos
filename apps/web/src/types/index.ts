@@ -1446,6 +1446,7 @@ export interface CodeTaskError {
 
 export type CodeTaskDispatchStatusReason =
   | 'no_enabled_workers'
+  | 'worker_type_disabled'
   | 'workers_unreachable'
   | 'worker_health_contract_mismatch'
   | 'workers_at_capacity'
@@ -1726,6 +1727,11 @@ export type WorkerStatusTag =
  * Worker status details
  */
 export interface WorkerStatusDetails {
+  enabledWorkerTypes?: SharedCodeTaskWorkerType[];
+  workerTypesRevision?: number;
+  workerAuths?: Partial<Record<'claude' | 'codex', {
+    status: 'active' | 'disabled' | 'expired' | 'not_configured' | 'invalid' | 'refresh_failed';
+  }>>;
   capacity?: number;
   available?: number;
   running?: number;

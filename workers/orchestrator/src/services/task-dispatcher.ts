@@ -14,6 +14,7 @@ import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
+import type { WorkerTypePolicy } from './worker-type-policy.js';
 import type { WorkerAuthRegistry } from './worker-auth/index.js';
 import { ActivityTimeoutManager } from './activity-timeout-manager.js';
 import {
@@ -77,6 +78,7 @@ export interface DispatchError {
     | 'at_capacity'
     | 'docker_unavailable'
     | 'auth_unavailable'
+    | 'worker_type_disabled'
     | 'invalid_request'
     | 'invalid_status'
     | 'service_error';
@@ -95,6 +97,7 @@ export interface IsolationConfig {
   tokenRefresher: TokenRefresher;
   apiKeyValidator: ApiKeyValidator;
   workerAuthRegistry: WorkerAuthRegistry;
+  workerTypePolicy?: Pick<WorkerTypePolicy, 'isEnabled' | 'withStart'>;
   getSecrets: () => {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;

@@ -1,6 +1,6 @@
 import type { CredentialMonitor } from '../isolation/credential-monitor.js';
 import type { CredentialRefresher } from '../isolation/credential-refresher.js';
-import type { WorkerAuthManager, WorkerAuthState } from './types.js';
+import type { WorkerAuthManager, WorkerAuthRefreshContext, WorkerAuthState } from './types.js';
 
 export class ClaudeAuthManager implements WorkerAuthManager {
   readonly provider = 'claude' as const;
@@ -47,8 +47,8 @@ export class ClaudeAuthManager implements WorkerAuthManager {
     return this.monitor.isExpiringSoon(bufferMs);
   }
 
-  async refresh(): Promise<boolean> {
-    return await this.refresher.refresh();
+  async refresh(context?: WorkerAuthRefreshContext): Promise<boolean> {
+    return await this.refresher.refresh(context);
   }
 
   getCurrentAccessToken(): string | null {

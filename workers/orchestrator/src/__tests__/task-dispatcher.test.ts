@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { exec, type ChildProcess } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { WorkerTypePolicy } from '../services/worker-type-policy.js';
 import {
   TaskDispatcher,
   type IsolationConfig,
@@ -5772,7 +5776,7 @@ describe('TaskDispatcher', () => {
       });
     });
 
-    it('should skip shared auth preflight for GLM tasks', async () => {
+    it('uses the OpenRouter key without consulting OAuth for OpenRouter Free', async () => {
       const request: CreateTaskRequest = {
         taskId: 'glm-skip-validation',
         workerType: 'openrouter-free',
@@ -5789,6 +5793,64 @@ describe('TaskDispatcher', () => {
       expect(result.ok).toBe(true);
       expect(dispatcher.getRunningCount()).toBe(1);
       expect(mockWorkerAuthRegistry.getState).not.toHaveBeenCalled();
+    });
+
+    it('rejects an OpenRouter task with a missing provider key during preflight', async () => {
+      const routerDispatcher = new TaskDispatcher(
+        mockConfig, statePersistence, mockWorktreeManager, mockLogForwarder, mockWebhookClient,
+        mockStatusUpdateClient, mockGitHubTokenService, mockLogger,
+        {
+          ...mockIsolationConfig,
+          getSecrets: (): ReturnType<IsolationConfig['getSecrets']> => ({
+            ...mockIsolationConfig.getSecrets(),
+            OPENROUTER_API_KEY: ' ',
+          }),
+        },
+        singleAttemptCompletionControl
+      );
+      const result = await routerDispatcher.submitTask({
+        taskId: 'missing-router-key', workerType: 'openrouter-free', prompt: 'probe',
+        webhookUrl: 'https://example.com/webhook', webhookSecret: 'secret', linearIssueLabels: [], hasChildren: false,
+      });
+      expect(result).toMatchObject({ ok: false, error: { type: 'auth_unavailable', message: expect.stringContaining('OPENROUTER_API_KEY') } });
+      expect(mockWorkerAuthRegistry.getState).not.toHaveBeenCalled();
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+    });
+
+    it('accepts authenticated Codex after a Codex-only restart and lets an admitted attempt continue', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'intex-codex-dispatch-'));
+      try {
+        const path = join(dir, 'worker-types.json');
+        await (await WorkerTypePolicy.load(path)).apply(['codex'], 0);
+        const workerTypePolicy = await WorkerTypePolicy.load(path);
+        const local = new TaskDispatcher(
+          mockConfig, statePersistence, mockWorktreeManager, mockLogForwarder, mockWebhookClient,
+          mockStatusUpdateClient, mockGitHubTokenService, mockLogger,
+          { ...mockIsolationConfig, workerTypePolicy }, singleAttemptCompletionControl
+        );
+        const request: CreateTaskRequest = {
+          taskId: 'codex-only-admission', workerType: 'codex', prompt: 'probe',
+          webhookUrl: 'https://example.com/webhook', webhookSecret: 'secret', linearIssueLabels: [], hasChildren: false,
+        };
+        expect(await local.submitTask({ ...request, workerType: 'auto' })).toMatchObject({
+          ok: false, error: { type: 'worker_type_disabled', message: expect.stringContaining('auto') },
+        });
+        expect(mockWorkerAuthRegistry.getState).not.toHaveBeenCalled();
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        expect((await local.submitTask(request)).ok).toBe(true);
+        await Promise.all(local.getInFlightPromises());
+        expect(mockWorkerAuthRegistry.getState).toHaveBeenCalledWith('codex');
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
+        await workerTypePolicy.apply([], 1);
+        expect(await local.sendMessage(request.taskId, 'Start a follow-up attempt')).toMatchObject({
+          ok: false, error: { type: 'worker_type_disabled', message: expect.stringContaining('codex') },
+        });
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalledOnce();
+        expect(local.getRunningCount()).toBe(1);
+        expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
     });
 
     it('should allow Codex tasks when Codex auth is active', async () => {
@@ -8308,6 +8370,80 @@ describe('TaskDispatcher', () => {
       ...overrides,
     });
 
+    function createPolicyDispatcher(isEnabled: () => boolean): TaskDispatcher {
+      return new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        { ...mockIsolationConfig, workerTypePolicy: { isEnabled, withStart: vi.fn() } },
+        singleAttemptCompletionControl
+      );
+    }
+
+    it('retains the saved session when startup adoption would start a disabled worker type', async () => {
+      const task = createTask();
+      const policyDispatcher = createPolicyDispatcher(() => false);
+
+      const adoption = await policyDispatcher.adoptTask(task);
+
+      expect(adoption).toMatchObject({ ok: false, error: { type: 'worker_type_disabled' } });
+      expect(policyDispatcher.getRunningCount()).toBe(0);
+      expect(mockWorktreeManager.isWorktreeRegistered).not.toHaveBeenCalled();
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+      expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
+      expect(task.runtimeSessionId).toBe('aaaaaaaa-0000-4000-a000-000000000000');
+    });
+
+    it.each([true, false])(
+      'retains the session when policy changes during adoption worktree inspection (registered=%s)',
+      async (registered) => {
+        const task = createTask();
+        let allowed = true;
+        const inspect = createDeferred<boolean>();
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockReturnValueOnce(inspect.promise);
+        const policyDispatcher = createPolicyDispatcher(() => allowed);
+        const adoption = policyDispatcher.adoptTask(task);
+        await vi.waitFor(() =>
+          expect(mockWorktreeManager.isWorktreeRegistered).toHaveBeenCalledOnce()
+        );
+        allowed = false;
+        inspect.resolve(registered);
+
+        expect(await adoption).toMatchObject({
+          ok: false,
+          error: { type: 'worker_type_disabled' },
+        });
+        expect(policyDispatcher.getRunningCount()).toBe(0);
+        expect(mockWorktreeManager.repairWorktree).not.toHaveBeenCalled();
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
+      }
+    );
+
+    it('retains the session if an admitted worktree repair fails after disable', async () => {
+      const task = createTask();
+      let allowed = true;
+      const repair = createDeferred<undefined>();
+      vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(false);
+      vi.mocked(mockWorktreeManager.repairWorktree).mockReturnValueOnce(repair.promise);
+      const policyDispatcher = createPolicyDispatcher(() => allowed);
+      const adoption = policyDispatcher.adoptTask(task);
+      await vi.waitFor(() => expect(mockWorktreeManager.repairWorktree).toHaveBeenCalledOnce());
+      allowed = false;
+      repair.reject(new Error('worktree repair fixture failed'));
+
+      expect(await adoption).toMatchObject({ ok: false, error: { type: 'worker_type_disabled' } });
+      expect(policyDispatcher.getRunningCount()).toBe(0);
+      expect(mockWebhookClient.send).not.toHaveBeenCalled();
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+      expect(mockIsolationProvider.cleanupTaskSession).not.toHaveBeenCalled();
+    });
+
     it('should adopt a task: increments runningCount, calls createWorker with continueSession: true', async () => {
       const task = createTask();
 
@@ -9707,6 +9843,22 @@ describe('TaskDispatcher', () => {
         }),
         { status: 200, headers: { 'content-type': 'application/json' } }
       );
+
+    it('declines a missing task recovered from metadata before creating its replacement worktree', async () => {
+      const policyDispatcher = new TaskDispatcher(
+        mockConfig, statePersistence, mockWorktreeManager, mockLogForwarder, mockWebhookClient,
+        mockStatusUpdateClient, mockGitHubTokenService, mockLogger,
+        { ...mockIsolationConfig, workerTypePolicy: { isEnabled: (): boolean => false, withStart: vi.fn() } },
+        singleAttemptCompletionControl
+      );
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(createDispatchMetadataResponse()));
+      const result = await policyDispatcher.sendMessage('recovered-task', 'Follow up');
+      expect(result).toMatchObject({
+        ok: false, error: { type: 'worker_type_disabled', message: expect.stringContaining('auto') },
+      });
+      expect(mockWorktreeManager.createWorktree).not.toHaveBeenCalled();
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+    });
 
     it('queues message for running task', async () => {
       const request: CreateTaskRequest = {

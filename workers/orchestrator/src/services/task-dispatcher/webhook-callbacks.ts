@@ -10,6 +10,8 @@ import type { WebhookClient } from '../webhook-client.js';
 import type { CompletionVerifierVerdict } from '../completion-verifier.js';
 import { parseRebaseResultOutput, parseContinuationPrOutput } from './prompts.js';
 
+import { WorkerTypeDisabledError } from '../worker-type-disabled-error.js';
+
 const execFileAsync = promisify(execFile);
 
 /**
@@ -55,8 +57,8 @@ export async function sendSetupFailureWebhook(
         taskId: request.taskId,
         status: 'failed',
         error: {
-          code: 'SETUP_FAILED',
-          message,
+          code: originalError instanceof WorkerTypeDisabledError ? originalError.type : 'SETUP_FAILED',
+          message: originalError instanceof WorkerTypeDisabledError ? originalError.message : message,
         },
         duration: 0,
       },

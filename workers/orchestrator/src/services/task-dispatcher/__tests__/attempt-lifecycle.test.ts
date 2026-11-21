@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AttemptLifecycle } from '../attempt-lifecycle.js';
+import { WorkerTypeDisabledError } from '../../worker-type-disabled-error.js';
 import { makeContextHarness, makeTask, type ContextHarness } from './fixtures.js';
 
 describe('AttemptLifecycle', () => {
@@ -31,6 +32,15 @@ describe('AttemptLifecycle', () => {
   });
 
   describe('failAcceptedResume', () => {
+    it('preserves the host refusal if a type is disabled during an accepted resume', async () => {
+      const task = makeTask();
+      const refusal = new WorkerTypeDisabledError(task.workerType);
+      await al.failAcceptedResume(task, refusal);
+      expect(harness.ctx.finalizeTask).toHaveBeenCalledWith(task, 'failed', {
+        error: expect.objectContaining({ code: refusal.type, message: expect.stringContaining(refusal.message) }),
+      });
+    });
+
     it('finalizes the task as failed with RESUME_ATTEMPT_FAILED', async () => {
       const task = makeTask({ taskId: 'fa-1' });
       await al.failAcceptedResume(task, new Error('startup failed'));
@@ -42,6 +52,17 @@ describe('AttemptLifecycle', () => {
   });
 
   describe('handleInactivityRestart', () => {
+    it('records the policy reason when the inactivity restart can no longer start this type', async () => {
+      const task = makeTask({ runtimeSessionId: 'session-1' });
+      harness.tasks.set(task.taskId, task);
+      const refusal = new WorkerTypeDisabledError(task.workerType);
+      vi.mocked(harness.ctx.startWorkerAttempt).mockResolvedValue({ ok: false, error: refusal });
+      await al.doHandleInactivityRestart(task.taskId);
+      expect(harness.ctx.finalizeTask).toHaveBeenCalledWith(task, 'failed', {
+        error: expect.objectContaining({ code: refusal.type, message: refusal.message }),
+      });
+    });
+
     it('flips inactivityRestartInProgress flag', async () => {
       // Make the inner doHandleInactivityRestart a no-op for this test by
       // forcing completionInProgress so it short-circuits.

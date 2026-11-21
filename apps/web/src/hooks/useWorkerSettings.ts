@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-
-function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
-  return error instanceof Error ? error.message : fallback;
-}
+import { isCodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain/worker-types';
 import { useAuth } from '@/context';
 import {
   getWorkerSettings,
@@ -19,6 +16,10 @@ import type {
   WorkerConfigUpdateInput,
   TestWorkerConnectivityResponse,
 } from '@/services/workerSettingsApi.types';
+
+function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
+  return error instanceof Error ? error.message : fallback;
+}
 
 interface UseWorkerSettingsResult {
   settings: WorkerSettingsResponse | null;
@@ -99,13 +100,32 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
   const handleUpdateWorker = useCallback(
     async (workerName: string, config: WorkerConfigUpdateInput): Promise<void> => {
       const userId = user?.sub;
-      if (userId === undefined) return;
+      if (userId === undefined) throw new Error('User not authenticated');
 
       try {
         const token = await getAccessToken();
-        await updateWorkerApi(token, workerName, config);
-        await refresh(false);
+        const response = await updateWorkerApi(token, workerName, config);
+        if (config.enabledWorkerTypes === undefined) {
+          await refresh(false);
+        } else {
+          if (!isCodeTaskWorkerTypePolicy(response)) {
+            throw new Error('The server did not confirm the worker type settings.');
+          }
+          setError(null);
+          setSettings((prev) => prev === null ? null : {
+            ...prev,
+            workers: prev.workers.map((worker) => {
+              if (worker.name !== workerName || (worker.registrationKey ?? worker.url) !== config.expectedRegistration) {
+                return worker;
+              }
+              return { ...worker, enabledWorkerTypes: response.enabledWorkerTypes, workerTypesRevision: response.workerTypesRevision };
+            }),
+          });
+        }
       } catch (err) {
+        if (config.enabledWorkerTypes !== undefined) {
+          await refresh(false);
+        }
         setError(getErrorMessage(err, 'Failed to update worker'));
         throw err;
       }

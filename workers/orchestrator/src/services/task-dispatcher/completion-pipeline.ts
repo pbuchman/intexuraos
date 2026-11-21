@@ -1,3 +1,4 @@
+import { WorkerTypeDisabledError } from '../worker-type-disabled-error.js';
 import type { Task, TaskError, TaskResult } from '../../types/task.js';
 import type { CompletionAgentType, CompletionVerifierVerdict } from '../completion-verifier.js';
 import { getLast50ClaudeLines, getLast50Lines } from '../completion-verifier.js';
@@ -386,7 +387,7 @@ export class CompletionPipeline {
         }
         ctx.appendOrchestratorTaskLog(
           task.taskId,
-          'Failed to deliver queued messages, finalizing normally'
+          resumeResult.error instanceof WorkerTypeDisabledError ? resumeResult.error.message : 'Failed to deliver queued messages, finalizing normally'
         );
       }
       /* v8 ignore stop @preserve */
@@ -924,7 +925,7 @@ export class CompletionPipeline {
       }
 
       const resumeError: TaskError = {
-        code: 'RESUME_ATTEMPT_FAILED',
+        code: resumeStart.error instanceof WorkerTypeDisabledError ? resumeStart.error.type : 'RESUME_ATTEMPT_FAILED',
         message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
         remediation: { action: 'retry' },
       };
@@ -1174,7 +1175,7 @@ export class CompletionPipeline {
       }
       ctx.appendOrchestratorTaskLog(
         task.taskId,
-        'Failed to deliver queued messages, finalizing normally'
+        resumeResult.error instanceof WorkerTypeDisabledError ? resumeResult.error.message : 'Failed to deliver queued messages, finalizing normally'
       );
     }
     /* v8 ignore stop @preserve */

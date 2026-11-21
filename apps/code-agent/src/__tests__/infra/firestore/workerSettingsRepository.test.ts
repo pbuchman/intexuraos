@@ -14,8 +14,9 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
-import type { WorkerConfigInput } from '../../../domain/models/workerSettings.js';
+import type { WorkerConfigInput, WorkerHealthStatus } from '../../../domain/models/workerSettings.js';
 import { WORKER_NAME_REGEX, MAX_WORKERS_PER_USER } from '../../../domain/models/workerSettings.js';
+import type { CodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
 
 describe('workerSettingsRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -46,6 +47,132 @@ describe('workerSettingsRepository', () => {
       ...overrides,
     };
   }
+
+  describe('confirmed worker types', () => {
+    const newer: CodeTaskWorkerTypePolicy = { enabledWorkerTypes: [], workerTypesRevision: 3 };
+    const older: CodeTaskWorkerTypePolicy = { enabledWorkerTypes: ['codex'], workerTypesRevision: 2 };
+
+    function healthyStatus(policy: CodeTaskWorkerTypePolicy, checkedAt: string): WorkerHealthStatus {
+      return {
+        checkedAt,
+        stale: false,
+        state: {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          available: 1,
+          running: 1,
+          dockerHealthy: true,
+          diskHealthy: true,
+          workerAuths: { codex: { status: 'active' } },
+          providerApiKeys: {},
+          responseTimeMs: 70,
+          ...policy,
+        },
+      };
+    }
+
+    it('updates policy in the registration and cached health without modifying the other worker', async () => {
+      const repo = createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      await repo.addWorker('user-1', createWorkerConfig());
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'office-pc', url: 'https://office.example.com' }));
+      const worker = await repo.getWorkerByName('user-1', 'home-mac');
+      const otherWorker = await repo.getWorkerByName('user-1', 'office-pc');
+      if (!worker.ok || worker.value === null || !otherWorker.ok || otherWorker.value === null) {
+        throw new Error('Missing worker fixtures');
+      }
+      const checkedAt = '2026-11-21T11:00:01.000Z';
+      const status = healthyStatus(older, checkedAt);
+      expect(await repo.updateHealthStatus('user-1', 'home-mac', status, worker.value)).toEqual({ ok: true, value: undefined });
+
+      expect(await repo.confirmWorkerTypePolicy('user-1', worker.value, newer)).toEqual({ ok: true, value: newer });
+      expect(await repo.getHealthStatuses('user-1')).toMatchObject({
+        ok: true,
+        value: { 'home-mac': { checkedAt, state: { ...newer, available: 1 } } },
+      });
+      expect(await repo.getWorkerByName('user-1', 'home-mac')).toMatchObject({ ok: true, value: newer });
+      expect(await repo.getWorkerByName('user-1', 'office-pc')).toEqual(otherWorker);
+    });
+
+    it.each([
+      {
+        reason: 'a probe that began before the cached check',
+        delayed: { ...healthyStatus(newer, '2026-11-21T11:00:00.000Z'), state: { _tag: 'tunnel-down', healthy: false, reason: 'dns-failed' } },
+      },
+      {
+        reason: 'an obsolete host revision',
+        delayed: healthyStatus(older, '2026-11-21T11:00:02.000Z'),
+      },
+    ] satisfies { reason: string; delayed: WorkerHealthStatus }[])('keeps the cached status on $reason', async ({ delayed }) => {
+      const repo = createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      await repo.addWorker('user-1', createWorkerConfig());
+      const worker = await repo.getWorkerByName('user-1', 'home-mac');
+      if (!worker.ok || worker.value === null) throw new Error('Missing worker fixture');
+      const currentStatus = healthyStatus(newer, '2026-11-21T11:00:01.000Z');
+      expect(await repo.updateHealthStatus('user-1', 'home-mac', currentStatus, worker.value)).toEqual({ ok: true, value: undefined });
+
+      expect(await repo.updateHealthStatus('user-1', 'home-mac', delayed, worker.value)).toEqual({ ok: true, value: undefined });
+      expect(await repo.getHealthStatuses('user-1')).toMatchObject({ ok: true, value: { 'home-mac': currentStatus } });
+      expect(await repo.getWorkerByName('user-1', 'home-mac')).toMatchObject({ ok: true, value: newer });
+    });
+
+    it('keeps the highest confirmed revision when responses arrive out of order', async () => {
+      const repo = createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      await repo.addWorker('user-1', createWorkerConfig());
+      const worker = await repo.getWorkerByName('user-1', 'home-mac');
+      if (!worker.ok || worker.value === null) throw new Error('Missing worker fixture');
+
+      expect(await repo.confirmWorkerTypePolicy('user-1', worker.value, newer)).toEqual({ ok: true, value: newer });
+      expect(await repo.confirmWorkerTypePolicy('user-1', worker.value, older)).toEqual({ ok: true, value: newer });
+      expect(await repo.getWorkerByName('user-1', 'home-mac')).toMatchObject({ ok: true, value: newer });
+    });
+
+    it('preserves a policy when the worker is disabled and drops it when the endpoint changes', async () => {
+      const repo = createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      await repo.addWorker('user-1', createWorkerConfig());
+      const worker = await repo.getWorkerByName('user-1', 'home-mac');
+      if (!worker.ok || worker.value === null) throw new Error('Missing worker fixture');
+
+      await repo.confirmWorkerTypePolicy('user-1', worker.value, newer);
+      await repo.updateWorker('user-1', 'home-mac', { enabled: false });
+      expect(await repo.getWorkerByName('user-1', 'home-mac')).toMatchObject({ ok: true, value: newer });
+
+      await repo.updateWorker('user-1', 'home-mac', { url: 'https://replacement.example.com' });
+      const replacement = await repo.getWorkerByName('user-1', 'home-mac');
+      expect(replacement).toMatchObject({ ok: true, value: { url: 'https://replacement.example.com' } });
+      expect(replacement).not.toHaveProperty('value.workerTypesRevision');
+      expect(await repo.confirmWorkerTypePolicy('user-1', worker.value, newer)).toMatchObject({
+        ok: false, error: { code: 'registration_changed' },
+      });
+    });
+
+    it('rejects a delayed policy response for a deleted and re-added registration', async () => {
+      const repo = createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      await repo.addWorker('user-1', createWorkerConfig());
+      const worker = await repo.getWorkerByName('user-1', 'home-mac');
+      if (!worker.ok || worker.value === null) throw new Error('Missing worker fixture');
+
+      await repo.deleteWorker('user-1', 'home-mac');
+      await repo.addWorker('user-1', createWorkerConfig());
+      expect(await repo.confirmWorkerTypePolicy('user-1', worker.value, newer)).toMatchObject({
+        ok: false, error: { code: 'registration_changed' },
+      });
+    });
+
+    it('does not return corrupt stored policy fields', async () => {
+      const repo = createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      await repo.addWorker('user-1', createWorkerConfig());
+      const ref = fakeFirestore.collection('code_worker_settings').doc('user-1');
+      const doc = (await ref.get()).data();
+      const workers = doc?.['workers'] as Record<string, unknown>[];
+      await ref.update({ workers: [{ ...workers[0], enabledWorkerTypes: ['corrupt'], workerTypesRevision: 3 }] });
+
+      const result = await repo.getWorkerByName('user-1', 'home-mac');
+      expect(result).toMatchObject({ ok: true, value: { name: 'home-mac' } });
+      expect(result).not.toHaveProperty('value.enabledWorkerTypes');
+      expect(result).not.toHaveProperty('value.workerTypesRevision');
+    });
+  });
 
   describe('getSettings', () => {
     it('should return null for user with no settings', async () => {

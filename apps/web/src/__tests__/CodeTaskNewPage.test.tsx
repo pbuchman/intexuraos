@@ -363,7 +363,7 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
   it('shows updated worker descriptions', () => {
     render(<CodeTaskNewPage />);
 
-    expect(screen.getByText('Automatically select the best available model for the task')).toBeInTheDocument();
+    expect(screen.getByText('Claude Code selects the model using Claude OAuth')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Opus' }));
     expect(screen.getByText('Anthropic\'s most capable model for complex reasoning and coding tasks')).toBeInTheDocument();
@@ -467,7 +467,7 @@ describe('CodeTaskNewPage - default worker selection', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Opus' }).className).toContain('border-blue-500');
     });
-    expect(screen.getByRole('button', { name: 'Auto' }).className).not.toContain('border-blue-500');
+    expect(screen.getByRole('button', { name: 'Claude Auto' }).className).not.toContain('border-blue-500');
   });
 
   it('selects the execution default when switching from planning to execution', async () => {

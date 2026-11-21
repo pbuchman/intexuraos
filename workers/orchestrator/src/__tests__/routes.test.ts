@@ -1,4 +1,5 @@
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { accessConfig, accessHeaders, binding, dispatchProof } from './task-access-fixture.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -9,6 +10,9 @@ import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider } from '../services/isolation/types.js';
 import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
+import { WorkerTypeDisabledError, WorkerTypePolicy } from '../services/worker-type-policy.js';
+import { buildWorkerAuthRegistry } from '../bootstrap/service-wiring.js';
+import { createDeferred } from './deferred.js';
 import type { Logger } from '@intexuraos/common-core';
 
 describe('Routes', () => {
@@ -17,6 +21,7 @@ describe('Routes', () => {
   let tokenService: GitHubTokenService;
   let workerAuthRegistry: WorkerAuthRegistry;
   let isolationProvider: IsolationProvider;
+  let workerTypePolicy: WorkerTypePolicy;
 
   const mockLogger: Logger = {
     info: vi.fn(),
@@ -29,12 +34,13 @@ describe('Routes', () => {
   const orchestratorSecret = 'test-secret';
 
   const createSignedRequest = (
-    payload: object
+    payload: object,
+    operation = ''
   ): { headers: Record<string, string>; body: string } => {
     const timestamp = String(Date.now());
     const nonce = `nonce-${Math.random().toString(36).slice(2)}`;
     const body = JSON.stringify(payload);
-    const message = `${timestamp}.${nonce}.${body}`;
+    const message = `${operation}${timestamp}.${nonce}.${body}`;
     const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 
     return {
@@ -53,6 +59,7 @@ describe('Routes', () => {
     vi.clearAllMocks();
     app = Fastify();
     config = accessConfig();
+    workerTypePolicy = await WorkerTypePolicy.load(join(config.nonceDir, 'worker-types.json'));
 
     dispatcher = {
       submitTask: vi.fn(async () => ({ ok: true, value: undefined })),
@@ -134,7 +141,8 @@ describe('Routes', () => {
       workerAuthRegistry,
       isolationProvider,
       {},
-      () => false
+      () => false,
+      { policy: workerTypePolicy, credentialWatchdog: { idleTicks: 2 } }
     );
     await app.ready();
   });
@@ -144,7 +152,202 @@ describe('Routes', () => {
     rmSync(config.nonceDir, { recursive: true, force: true });
   });
 
+  it('requires dispatch authentication on worker type policy writes', async () => {
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/admin/worker-types',
+      payload: { enabledWorkerTypes: ['codex'], expectedRevision: 0 },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  describe('PUT /admin/worker-types', () => {
+    const url = '/admin/worker-types';
+    const sign = (payload: object): ReturnType<typeof createSignedRequest> =>
+      createSignedRequest(payload, 'PUT /admin/worker-types\n');
+
+    it('rejects signatures copied from task operations', async () => {
+      const response = await app.inject({
+        method: 'PUT',
+        url,
+        ...createSignedRequest({ enabledWorkerTypes: ['codex'], expectedRevision: 0 }),
+      });
+      expect(response.statusCode).toBe(401);
+      expect(workerTypePolicy.isEnabled('opus')).toBe(true);
+    });
+
+    it('reports policy unavailable if the route starts without a policy store', async () => {
+      const appWithoutPolicy = Fastify();
+      registerRoutes(
+        appWithoutPolicy,
+        dispatcher,
+        tokenService,
+        { orchestratorSecret },
+        mockLogger
+      );
+      try {
+        const response = await appWithoutPolicy.inject({
+          method: 'PUT',
+          url,
+          ...sign({ enabledWorkerTypes: ['codex'], expectedRevision: 0 }),
+        });
+
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toEqual({ error: 'Worker type policy unavailable' });
+      } finally {
+        await appWithoutPolicy.close();
+      }
+    });
+
+    it('acknowledges the persisted policy and reports it in health contract v2', async () => {
+      const request = sign({
+        enabledWorkerTypes: ['codex', 'openrouter-free'],
+        expectedRevision: 0,
+      });
+      const response = await app.inject({ method: 'PUT', url, ...request });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        enabledWorkerTypes: ['codex', 'openrouter-free'],
+        workerTypesRevision: 1,
+      });
+      const reloaded = await WorkerTypePolicy.load(join(config.nonceDir, 'worker-types.json'));
+      expect(reloaded.snapshot()).toEqual(response.json());
+      const health = await app.inject({ method: 'GET', url: '/health' });
+      expect(health.json()).toMatchObject({
+        healthContractVersion: 2,
+        enabledWorkerTypes: ['codex', 'openrouter-free'],
+        workerTypesRevision: 1,
+        credentialWatchdog: { idleTicks: 2 },
+      });
+
+      expect((await app.inject({ method: 'PUT', url, ...request })).statusCode).toBe(401);
+    });
+
+    it('acknowledges a stale equivalent revision and rejects a conflicting update', async () => {
+      const put = async (enabledWorkerTypes: string[]): Promise<number> =>
+        (
+          await app.inject({
+            method: 'PUT',
+            url,
+            ...sign({ enabledWorkerTypes, expectedRevision: 0 }),
+          })
+        ).statusCode;
+
+      expect(await put([])).toBe(200);
+      expect(await put([])).toBe(200);
+      expect(await put(['codex'])).toBe(409);
+      expect(workerTypePolicy.snapshot()).toEqual({
+        enabledWorkerTypes: [],
+        workerTypesRevision: 1,
+      });
+    });
+
+    it('returns an error when the host cannot persist the policy', async () => {
+      mkdirSync(join(config.nonceDir, 'worker-types.json'));
+      const response = await app.inject({
+        method: 'PUT',
+        url,
+        ...sign({ enabledWorkerTypes: [], expectedRevision: 0 }),
+      });
+      expect(response.statusCode).toBe(500);
+      expect(workerTypePolicy.snapshot().workerTypesRevision).toBe(0);
+    });
+
+    it('waits for a pending Claude refresh container and its cleanup before publishing a disable', async () => {
+      const sharedCredsPath = join(config.nonceDir, 'claude-creds');
+      mkdirSync(sharedCredsPath);
+      writeFileSync(
+        join(sharedCredsPath, '.credentials.json'),
+        JSON.stringify({
+          claudeAiOauth: { accessToken: 'fixture-oauth-token', expiresAt: Date.now() - 60_000 },
+        })
+      );
+      const creation = createDeferred<{
+        start: () => Promise<void>;
+        remove: () => Promise<void>;
+      }>();
+      const cleanup = createDeferred<undefined>();
+      const createContainer = vi.fn(async () => await creation.promise);
+      const start = vi.fn(async () => undefined);
+      const remove = vi.fn(async () => await cleanup.promise);
+      const registry = buildWorkerAuthRegistry(
+        workerTypePolicy,
+        {
+          sharedCredsPath,
+          sharedCodexAuthPath: join(config.nonceDir, 'codex-auth'),
+          docker: { createContainer } as never,
+          resolveRefreshImage: async () => 'registry/code-worker@sha256:example',
+        },
+        mockLogger as never
+      );
+      vi.mocked(workerAuthRegistry.getStates).mockImplementation(() => registry.getStates());
+      try {
+        const refresh = registry.refresh('claude');
+        await vi.waitFor(() => expect(createContainer).toHaveBeenCalledOnce());
+        const update = app.inject({
+          method: 'PUT',
+          url,
+          ...sign({ enabledWorkerTypes: ['codex'], expectedRevision: 0 }),
+        });
+        await vi.waitFor(() => expect(registry.isExpiringSoon('claude', 60_000)).toBe(false));
+
+        const beforeCreate = await app.inject({ method: 'GET', url: '/health' });
+        expect(beforeCreate.json().workerTypesRevision).toBe(0);
+        creation.resolve({ start, remove });
+        await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+        expect(start).not.toHaveBeenCalled();
+        const beforeCleanup = await app.inject({ method: 'GET', url: '/health' });
+        expect(beforeCleanup.json().workerTypesRevision).toBe(0);
+
+        cleanup.resolve(undefined);
+        expect((await update).statusCode).toBe(200);
+        await expect(refresh).resolves.toBe(false);
+        const health = await app.inject({ method: 'GET', url: '/health' });
+        expect(health.json()).toMatchObject({
+          workerTypesRevision: 1,
+          workerAuths: { claude: { status: 'disabled', refreshSupported: false } },
+        });
+      } finally {
+        creation.resolve({ start, remove });
+        cleanup.resolve(undefined);
+        registry.stopMonitoring();
+      }
+    });
+
+    it.each([
+      { enabledWorkerTypes: ['codex', 'codex'], expectedRevision: 0 },
+      { enabledWorkerTypes: ['unknown'], expectedRevision: 0 },
+      { enabledWorkerTypes: ['opus'], expectedRevision: -1 },
+      { enabledWorkerTypes: ['opus'], expectedRevision: '0' },
+      { enabledWorkerTypes: ['opus'] },
+    ])('rejects a malformed policy request %j', async (payload) => {
+      expect((await app.inject({ method: 'PUT', url, ...sign(payload) })).statusCode).toBe(400);
+    });
+  });
+
   describe('POST /tasks', () => {
+    it('reports a disabled worker type as a policy conflict', async () => {
+      vi.mocked(dispatcher.submitTask).mockResolvedValueOnce({
+        ok: false,
+        error: new WorkerTypeDisabledError('opus'),
+      });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        ...createSignedRequest({
+          taskId: 'task_00000000-0000-0000-0000-000000000001',
+          workerType: 'opus',
+          prompt: 'fixture',
+          webhookUrl: 'https://example.com/hook',
+          webhookSecret: 'fixture',
+        }),
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: 'worker_type_disabled' });
+    });
+
     it('requires the independent code-agent dispatch signature and preserves an existing binding', async () => {
       const payload = {
         taskId: 'task_00000000-0000-0000-0000-000000000001',
@@ -1515,6 +1718,21 @@ describe('Routes', () => {
   });
 
   describe('POST /tasks/:id/message', () => {
+    it('reports a disabled type when a message would start a new attempt', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: false,
+        error: new WorkerTypeDisabledError('opus'),
+      });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/existing/message',
+        ...createSignedRequest({ message: 'Continue' }),
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: 'worker_type_disabled' });
+    });
+
     it('should queue message for running task', async () => {
       vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
         ok: true,

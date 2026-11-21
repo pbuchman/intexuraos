@@ -4,6 +4,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
@@ -14,6 +17,7 @@ import type { Logger } from '@intexuraos/common-core';
 import type { OrchestratorState } from '../types/state.js';
 import type { IsolationProvider, DiscoveredContainer } from '../services/isolation/types.js';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { WorkerTypePolicy } from '../services/worker-type-policy.js';
 
 // Mock Fastify to avoid actual server startup
 vi.mock('fastify', () => ({
@@ -590,6 +594,92 @@ describe('main.ts', () => {
       expect(mockWebhookClient.send).not.toHaveBeenCalled();
     });
 
+    it.each([
+      { containerSurvives: true, pendingResume: false },
+      { containerSurvives: false, pendingResume: true },
+    ])(
+      'reports disabled startup recovery without replacing a live container or starting a pending resume %j',
+      async ({ containerSurvives, pendingResume }) => {
+        const directory = await mkdtemp(join(tmpdir(), 'orchestrator-recovery-policy-'));
+        try {
+          const policy = await WorkerTypePolicy.load(join(directory, 'worker-types.json'));
+          await policy.apply(['codex'], 0);
+          const task = {
+            taskId: 'startup-disabled',
+            workerType: 'opus' as const,
+            prompt: 'Test',
+            repository: 'test/repo',
+            baseBranch: 'main',
+            webhookUrl: 'https://example.com/webhook',
+            webhookSecret: 'secret',
+            status: 'running' as const,
+            containerId: 'container-1',
+            worktreePath: '/path/to/worktree',
+            startedAt: '2025-01-26T00:00:00.000Z',
+            runtimeSessionId: 'persisted-session-id',
+            linearIssueLabels: [],
+            ...(pendingResume
+              ? { pendingResumeStart: { prompt: 'Resume', acceptedAt: '2025-01-26T00:00:00.000Z' } }
+              : {}),
+          };
+          vi.mocked(mockStatePersistence.load).mockResolvedValue({
+            tasks: { [task.taskId]: task },
+            githubToken: null,
+            pendingWebhooks: [],
+          });
+          if (containerSurvives) {
+            mockListWorkerContainers.mockResolvedValue([
+              { containerId: task.containerId, taskId: task.taskId, state: 'running' },
+            ]);
+          }
+
+          const { main } = await import('../main.js');
+          await main(
+            mockConfig,
+            mockStatePersistence,
+            mockDispatcher,
+            mockTokenService,
+            mockWebhookClient,
+            mockHeartbeatManager,
+            mockLogger,
+            undefined,
+            mockIsolationProvider,
+            undefined,
+            undefined,
+            { policy, credentialWatchdog: { idleTicks: 0 } }
+          );
+
+          expect(mockDispatcher.adoptTask).not.toHaveBeenCalled();
+          expect(mockDispatcher.recoverPendingResumeTask).not.toHaveBeenCalled();
+          expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
+          expect(mockStatePersistence.save).toHaveBeenCalledWith(
+            expect.objectContaining({
+              tasks: {
+                [task.taskId]: expect.objectContaining({
+                  status: 'interrupted',
+                  runtimeSessionId: 'persisted-session-id',
+                }),
+              },
+            })
+          );
+          expect(mockWebhookClient.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+              payload: expect.objectContaining({
+                taskId: task.taskId,
+                status: 'interrupted',
+                error: expect.objectContaining({
+                  code: 'worker_type_disabled',
+                  message: expect.stringContaining('opus'),
+                }),
+              }),
+            })
+          );
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
+    );
+
     it('should recover a pending accepted resume instead of interrupting it when no container is discovered', async () => {
       const pendingResumeTask = {
         taskId: 'task-1',
@@ -1031,7 +1121,10 @@ describe('main.ts', () => {
       expect(mockDispatcher.adoptTask).toHaveBeenCalledTimes(2);
     });
 
-    it('falls through to interrupted webhook when adoptTask returns error result', async () => {
+    it.each([
+      { type: 'at_capacity', message: 'No capacity' },
+      { type: 'worker_type_disabled', message: 'Opus disabled during recovery' },
+    ] as const)('emits an interrupted webhook when adoption returns $type', async (error) => {
       const runningTask = {
         taskId: 'task-1',
         workerType: 'opus' as const,
@@ -1059,7 +1152,7 @@ describe('main.ts', () => {
 
       vi.mocked(mockDispatcher.adoptTask).mockResolvedValue({
         ok: false,
-        error: { type: 'at_capacity', message: 'No capacity' },
+        error,
       });
 
       const { main } = await import('../main.js');
@@ -1083,10 +1176,18 @@ describe('main.ts', () => {
       expect(mockDispatcher.adoptTask).toHaveBeenCalledWith(runningTask);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({
+          payload: {
             taskId: 'task-1',
             status: 'interrupted',
-          }),
+            duration: 0,
+            ...(error.type === 'worker_type_disabled' && {
+              error: {
+                code: 'worker_type_disabled',
+                message: 'Opus disabled during recovery',
+                remediation: { action: 'retry' },
+              },
+            }),
+          },
         })
       );
       // INT-1795: Adoption-failed is the expected recovery decision (e.g.
@@ -2008,6 +2109,8 @@ describe('main.ts', () => {
         mockConfig,
         mockLogger,
         expect.any(Function),
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined

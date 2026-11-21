@@ -7,6 +7,8 @@
  */
 
 import type { WorkerConfig, MaskedWorkerConfig } from '../models/workerSettings.js';
+import { workerRegistrationKey } from '../models/workerSettings.js';
+import { isCodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
 
 /** Bullet character used to mask secrets in responses. */
 export const MASK_CHAR = '•';
@@ -75,12 +77,17 @@ export function maskSecret(secret: string): string {
  */
 export function maskWorkerConfig(config: WorkerConfig): MaskedWorkerConfig {
   const masked: MaskedWorkerConfig = {
+    registrationKey: workerRegistrationKey(config),
     name: config.name,
     url: config.url,
     cfAccessClientId: maskSecret(config.cfAccessClientId),
     cfAccessClientSecret: maskSecret(config.cfAccessClientSecret),
     dispatchSigningSecret: maskSecret(config.dispatchSigningSecret),
     enabled: config.enabled,
+    ...(isCodeTaskWorkerTypePolicy(config) && {
+      enabledWorkerTypes: config.enabledWorkerTypes,
+      workerTypesRevision: config.workerTypesRevision,
+    }),
   };
 
   if (config.lastTestedAt !== undefined) {

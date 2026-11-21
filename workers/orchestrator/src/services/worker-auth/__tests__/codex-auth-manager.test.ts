@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import { CodexAuthManager } from '../codex-auth-manager.js';
 import type { Logger } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { createDeferred } from '../../../__tests__/deferred.js';
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -286,6 +287,21 @@ describe('CodexAuthManager', () => {
     );
   });
 
+  it('reports a read error with its filesystem details', () => {
+    mockExistsSync.mockReturnValue(true);
+    const readError = new Error('permission denied');
+    mockReadFileSync.mockImplementation(() => {
+      throw readError;
+    });
+
+    expect(manager.loadCredentials()).toBe(false);
+    expect(manager.getState().status).toBe('invalid');
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: readError }),
+      'Failed to parse Codex auth file'
+    );
+  });
+
   it('reports invalid when ChatGPT token payload is missing', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
@@ -464,6 +480,48 @@ describe('CodexAuthManager', () => {
       expiresAt: '2026-03-26T16:00:00.000Z',
       expiresInMinutes: 240,
       lastRefreshAt: '2026-03-26T11:45:00.000Z',
+    });
+  });
+
+  it('preserves newly loaded auth when a cancelled refresh finishes later', async () => {
+    const outcome = createDeferred<boolean>();
+    manager = new CodexAuthManager(
+      {
+        authPath: '/home/user/.code-orchestrator/codex-auth/auth.json',
+        reloadIntervalMs: 60_000,
+        refresher: { refresh: vi.fn(async () => await outcome.promise) } as never,
+      },
+      mockLogger
+    );
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: { access_token: createJwt(Date.parse('2026-03-26T11:00:00.000Z')) },
+      })
+    );
+    expect(manager.loadCredentials()).toBe(true);
+    expect(manager.getState().status).toBe('expired');
+
+    const controller = new AbortController();
+    const oldRefresh = manager.refresh({
+      signal: controller.signal,
+      runDockerWork: async (work) => await work(),
+    });
+    controller.abort();
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: { access_token: createJwt(Date.parse('2026-03-26T16:00:00.000Z')) },
+      })
+    );
+    expect(manager.loadCredentials()).toBe(true);
+    outcome.resolve(false);
+
+    expect(await oldRefresh).toBe(false);
+    expect(manager.getState()).toMatchObject({
+      status: 'active',
+      expiresAt: '2026-03-26T16:00:00.000Z',
     });
   });
 

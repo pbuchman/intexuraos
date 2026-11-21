@@ -8,6 +8,18 @@
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import { MAX_WORKERS_PER_USER } from '../../domain/models/workerSettings.js';
 
+export const enabledWorkerTypesSchema = {
+  type: 'array',
+  items: { type: 'string', enum: [...CODE_TASK_WORKER_TYPES] },
+  uniqueItems: true,
+} as const;
+
+export const workerTypesRevisionSchema = {
+  type: 'integer',
+  minimum: 0,
+  maximum: Number.MAX_SAFE_INTEGER,
+} as const;
+
 /** Body schema for `POST /code/worker-settings/workers`. */
 export const addWorkerSchema = {
   type: 'object',
@@ -34,6 +46,9 @@ export const updateWorkerSchema = {
     cfAccessClientSecret: { type: 'string', minLength: 1 },
     dispatchSigningSecret: { type: 'string', minLength: 1 },
     enabled: { type: 'boolean' },
+    enabledWorkerTypes: enabledWorkerTypesSchema,
+    expectedRevision: workerTypesRevisionSchema,
+    expectedRegistration: { type: 'string', minLength: 1 },
   },
 } as const;
 
@@ -55,12 +70,15 @@ export const reorderSchema = {
 export const maskedWorkerConfigSchema = {
   type: 'object',
   properties: {
+    registrationKey: { type: 'string' },
     name: { type: 'string' },
     url: { type: 'string' },
     cfAccessClientId: { type: 'string' },
     cfAccessClientSecret: { type: 'string' },
     dispatchSigningSecret: { type: 'string' },
     enabled: { type: 'boolean' },
+    enabledWorkerTypes: enabledWorkerTypesSchema,
+    workerTypesRevision: workerTypesRevisionSchema,
     lastTestedAt: { type: 'string', nullable: true },
     testStatus: { type: 'string', enum: ['success', 'failure'], nullable: true },
     testMessage: { type: 'string', nullable: true },

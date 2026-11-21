@@ -178,6 +178,17 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('sendMessageToWorker non-OK response handling', () => {
+    it('returns the explicit policy refusal from a terminal message resume', async () => {
+      const service = createTaskDispatcherService(deps);
+      nock(WORKER_URL)
+        .post('/tasks/task-disabled/message')
+        .reply(409, { code: 'worker_type_disabled', error: 'This worker no longer accepts auto' });
+
+      expect(await service.sendMessageToWorker('task-disabled', 'test message', workerCredentials)).toEqual({
+        ok: false, error: { code: 'worker_type_disabled', message: 'This worker no longer accepts auto' },
+      });
+    });
+
     it('returns worker_unavailable for retryable infrastructure status 503', async () => {
       const service = createTaskDispatcherService(deps);
 

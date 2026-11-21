@@ -44,6 +44,7 @@ export function detectMainGitDir(worktreePath: string): string | null {
 }
 
 export interface RunAttemptInput {
+  onStarted?: () => void;
   taskId: string;
   config: WorkerConfig;
   workers: Map<string, WorkerEntry>;
@@ -124,6 +125,7 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
     });
 
     const execStream = await execInstance.start({ hijack: false, stdin: false });
+    input.onStarted?.();
     execStream.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf-8');
       worker.attemptLogBuffer += text;
@@ -363,7 +365,7 @@ export interface ResumeInput {
   workers: Map<string, WorkerEntry>;
   preservedWorkers: Map<string, PreservedWorkerEntry>;
   logger: Logger;
-  runAttempt: (taskId: string, config: WorkerConfig) => void;
+  runAttempt: (taskId: string, config: WorkerConfig) => Promise<void>;
 }
 
 export async function resumeFromPreserved(input: ResumeInput): Promise<WorkerHandle | null> {
@@ -397,7 +399,7 @@ export async function resumeFromPreserved(input: ResumeInput): Promise<WorkerHan
       { taskId, containerId: preserved.containerId },
       'Restored preserved container for resume'
     );
-    runAttempt(taskId, config);
+    await runAttempt(taskId, config);
     return handle;
   }
 
@@ -434,7 +436,7 @@ export async function resumeFromOrphan(input: ResumeInput): Promise<WorkerHandle
         { taskId, containerId: orphanInfo.Id },
         'Reusing orphaned container for resume after restart'
       );
-      runAttempt(taskId, config);
+      await runAttempt(taskId, config);
       return handle;
     }
 
@@ -458,7 +460,7 @@ export interface CreateWorkerOrchInput {
   preservedWorkers: Map<string, PreservedWorkerEntry>;
   logger: Logger;
   resolveRuntime: () => WorkerRuntime;
-  runAttempt: (taskId: string, config: WorkerConfig) => void;
+  runAttempt: (taskId: string, config: WorkerConfig) => Promise<void>;
 }
 
 export async function createWorkerOrchestration(
@@ -488,7 +490,7 @@ export async function createWorkerOrchestration(
     }
     await volume.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
     volume.ensureTaskForensicsPath(taskId);
-    runAttempt(taskId, config);
+    await runAttempt(taskId, config);
     return existingWorker.handle;
   }
 
@@ -629,7 +631,7 @@ export async function createWorkerOrchestration(
     });
 
     if (providerConfig.managedAttemptsMode) {
-      runAttempt(taskId, config);
+      await runAttempt(taskId, config);
     } else {
       dockerContainer
         .wait()

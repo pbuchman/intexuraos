@@ -1,6 +1,7 @@
 import * as os from 'node:os';
 import type Docker from 'dockerode';
 import type { Logger } from '@intexuraos/common-core';
+import type { WorkerAuthRefreshContext } from '../worker-auth/types.js';
 
 const CLAUDE_REFRESH_COMMAND = [
   'set -e',
@@ -33,46 +34,62 @@ export class CredentialRefresher {
     this.logger = logger;
   }
 
-  async refresh(): Promise<boolean> {
-    let container: Docker.Container | undefined;
+  async refresh(context?: WorkerAuthRefreshContext): Promise<boolean> {
+    const signal = context?.signal;
+    try {
+      signal?.throwIfAborted();
+      const image = await this.config.resolveImage();
+      signal?.throwIfAborted();
+      const work = async (): Promise<boolean> => await this.refreshWithImage(image, signal);
+      return await (context === undefined ? work() : context.runDockerWork(work));
+    } catch (error) {
+      if (signal?.aborted === true) {
+        return false;
+      }
+      this.logger.error(
+        {
+          error: error instanceof Error ? error : new Error(String(error)),
+          _skipSentry: true,
+        },
+        'Claude credential refresh container failed'
+      );
+      return false;
+    }
+  }
+
+  private async refreshWithImage(image: string, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
     const { uid, gid, userString } = getHostUserString();
+    const container = await this.docker.createContainer({
+      Image: image,
+      name: `claude-cred-refresh-${String(Date.now())}`,
+      Entrypoint: ['/bin/bash', '-lc'],
+      Cmd: [CLAUDE_REFRESH_COMMAND],
+      User: userString,
+      Tty: false,
+      HostConfig: {
+        Binds: [`${this.config.sharedCredsPath}:/home/claude/.claude:rw`],
+        NetworkMode: this.config.networkName,
+        AutoRemove: false,
+        Tmpfs: {
+          '/tmp': 'rw,noexec,nosuid,size=100m',
+          '/home/claude': `rw,noexec,nosuid,size=100m,uid=${String(uid)},gid=${String(gid)}`,
+        },
+        CapDrop: ['ALL'],
+        SecurityOpt: ['no-new-privileges'],
+      },
+    });
 
     try {
-      const image = await this.config.resolveImage();
-      container = await this.docker.createContainer({
-        Image: image,
-        name: `claude-cred-refresh-${String(Date.now())}`,
-        Entrypoint: ['/bin/bash', '-lc'],
-        Cmd: [CLAUDE_REFRESH_COMMAND],
-        User: userString,
-        Tty: false,
-        HostConfig: {
-          Binds: [`${this.config.sharedCredsPath}:/home/claude/.claude:rw`],
-          NetworkMode: this.config.networkName,
-          AutoRemove: false,
-          Tmpfs: {
-            '/tmp': 'rw,noexec,nosuid,size=100m',
-            '/home/claude': `rw,noexec,nosuid,size=100m,uid=${String(uid)},gid=${String(gid)}`,
-          },
-          CapDrop: ['ALL'],
-          SecurityOpt: ['no-new-privileges'],
-        },
-      });
-
+      signal?.throwIfAborted();
       await container.start();
+      signal?.throwIfAborted();
 
       const waitResult = await container.wait({
         condition: 'not-running',
-      } as Docker.ContainerWaitOptions & { signal?: AbortSignal });
-
-      // Capture logs for debugging — log at error level on failure so output is visible
-      let containerOutput: string | undefined;
-      try {
-        const logs = await container.logs({ stdout: true, stderr: true });
-        containerOutput = logs.toString('utf-8').slice(0, 500);
-      } catch {
-        // intentional no-op
-      }
+        ...(signal !== undefined ? { abortSignal: signal } : {}),
+      });
+      signal?.throwIfAborted();
 
       if (waitResult.StatusCode === 0) {
         this.logger.info(
@@ -83,31 +100,15 @@ export class CredentialRefresher {
       }
 
       this.logger.error(
-        {
-          exitCode: waitResult.StatusCode,
-          containerId: container.id,
-          output: containerOutput,
-          _skipSentry: true,
-        },
+        { exitCode: waitResult.StatusCode, containerId: container.id, _skipSentry: true },
         'Claude credential refresh failed with non-zero exit code'
       );
       return false;
-    } catch (error) {
-      this.logger.error(
-        {
-          error: error instanceof Error ? error : new Error(String(error)),
-          _skipSentry: true,
-        },
-        'Claude credential refresh container failed'
-      );
-      return false;
     } finally {
-      if (container !== undefined) {
-        try {
-          await container.remove({ force: true });
-        } catch {
-          // intentional no-op
-        }
+      try {
+        await container.remove({ force: true });
+      } catch {
+        // intentional no-op
       }
     }
   }

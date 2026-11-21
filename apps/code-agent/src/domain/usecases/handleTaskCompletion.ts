@@ -1847,13 +1847,16 @@ export async function handleTaskCompletion(
       }
 
       if (status === 'interrupted') {
+        const interruptionError = error?.code === 'worker_type_disabled'
+          ? { code: error.code, message: error.message }
+          : {
+              code: 'worker_interrupted',
+              message: 'Worker was interrupted during task execution',
+            };
         const updateResult = await codeTaskRepo.update(taskId, {
           status: 'interrupted',
           completedAt,
-          error: {
-            code: 'worker_interrupted',
-            message: 'Worker was interrupted during task execution',
-          },
+          error: interruptionError,
           callbackReceived: true,
         });
 
@@ -1864,14 +1867,7 @@ export async function handleTaskCompletion(
         await cleanupLockIfPR();
 
         // Send WhatsApp notification for interrupted task
-        await whatsappNotifier.notifyTaskFailed(
-          task.userId,
-          task,
-          {
-            code: 'worker_interrupted',
-            message: 'Worker was interrupted during task execution',
-          }
-        );
+        await whatsappNotifier.notifyTaskFailed(task.userId, task, interruptionError);
 
         metricsClient.incrementTasksCompleted(task.workerType, 'interrupted').catch((err) => {
           requestLog.warn(

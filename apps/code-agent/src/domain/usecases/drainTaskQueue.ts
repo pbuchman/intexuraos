@@ -92,8 +92,11 @@ function groupReviewTasksByOwnerAndPR(tasks: CodeTask[]): Map<string, CodeTask[]
 }
 
 function findAffectedDispatchTasks(candidates: readonly CodeTask[], task: CodeTask): CodeTask[] {
+  const now = Date.now();
   return candidates.filter(
-    (candidate) => candidate.userId === task.userId && candidate.workerType === task.workerType
+    (candidate) => candidate.userId === task.userId
+      && candidate.workerType === task.workerType
+      && (candidate.dispatchSchedule?.notBeforeAt.toMillis() ?? 0) <= now
   );
 }
 
@@ -827,6 +830,9 @@ export async function drainTaskQueue(
         cfAccessClientId: w.cfAccessClientId,
         cfAccessClientSecret: w.cfAccessClientSecret,
         dispatchSigningSecret: w.dispatchSigningSecret,
+        ...(w.registrationId !== undefined && { registrationId: w.registrationId }),
+        ...(w.enabledWorkerTypes !== undefined && { enabledWorkerTypes: w.enabledWorkerTypes }),
+        ...(w.workerTypesRevision !== undefined && { workerTypesRevision: w.workerTypesRevision }),
       })),
     };
 

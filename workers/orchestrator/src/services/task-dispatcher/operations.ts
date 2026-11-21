@@ -5,7 +5,12 @@ import type { SendMessageResult, SendMessageError } from '../../types/schemas.js
 import type { DispatcherContext } from './dispatcher-context.js';
 import type { AttemptLifecycle } from './attempt-lifecycle.js';
 import type { DispatchError, CancelError } from '../task-dispatcher.js';
-import { checkDockerAvailability, checkWorkerAuthAvailability } from './preflight.js';
+import { WorkerTypeDisabledError } from '../worker-type-disabled-error.js';
+import {
+  checkDockerAvailability,
+  checkWorkerAuthAvailability,
+  disabledWorkerTypeError,
+} from './preflight.js';
 
 /**
  * INT-1551 §E.6: public dispatcher operations extracted from the
@@ -18,6 +23,9 @@ export async function submitTask(
   attemptLifecycle: AttemptLifecycle,
   request: CreateTaskRequest
 ): Promise<Result<void, DispatchError>> {
+  const disabled = disabledWorkerTypeError(request.workerType, ctx.isolation);
+  if (disabled !== null) return { ok: false, error: disabled };
+
   const healthErr = checkDockerAvailability(ctx.isolation);
   if (healthErr !== null) return healthErr;
 
@@ -47,6 +55,9 @@ export async function adoptTask(
   attemptLifecycle: AttemptLifecycle,
   task: Task
 ): Promise<Result<void, DispatchError>> {
+  const disabled = disabledWorkerTypeError(task.workerType, ctx.isolation);
+  if (disabled !== null) return { ok: false, error: disabled };
+
   const healthErr = checkDockerAvailability(ctx.isolation);
   if (healthErr !== null) return healthErr;
 
@@ -101,6 +112,9 @@ export async function adoptTask(
     ctx.releaseSlot();
     ctx.isolation.tokenRefresher.unregisterTask(task.taskId);
     ctx.logForwarder.unregisterTask(task.taskId);
+    if (startResult.error instanceof WorkerTypeDisabledError) {
+      return { ok: false, error: startResult.error };
+    }
     await ctx.isolation.provider.cleanupTaskSession?.(task.taskId);
     return {
       ok: false,
@@ -229,6 +243,9 @@ export async function sendMessage(
 
     return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
   }
+
+  const disabled = disabledWorkerTypeError(task.workerType, ctx.isolation);
+  if (disabled !== null) return { ok: false, error: disabled };
 
   if (task.agentType === 'review' || task.agentType === 'remediation') {
     return {
