@@ -67,6 +67,24 @@ describe('CredentialMonitor', () => {
   });
 
   describe('loadCredentials', () => {
+    it('clears cached tokens and omits credential text when a reload gets corrupted JSON', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify(VALID_CREDENTIALS));
+      expect(monitor.loadCredentials()).toBe(true);
+
+      mockReadFileSync.mockReturnValue('fixture-private-token');
+      expect(monitor.loadCredentials()).toBe(false);
+      expect(monitor.getCurrentAccessToken()).toBeNull();
+      expect(monitor.getState().status).toBe('not_configured');
+      const errors = vi.mocked(mockLogger.error).mock.calls.flatMap((call) => Object.values(call));
+      for (const error of errors) {
+        expect(String(error)).not.toContain('fixture-private-token');
+        if (typeof error === 'object' && error !== null && 'error' in error) {
+          expect(String(error.error)).not.toContain('fixture-private-token');
+        }
+      }
+    });
+
     it('returns false when file not found', () => {
       mockExistsSync.mockReturnValue(false);
 
@@ -99,6 +117,33 @@ describe('CredentialMonitor', () => {
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(Error) }),
         expect.stringContaining('parse')
+      );
+    });
+
+    it('rejects structurally invalid OAuth that would break expiry calculations', () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        JSON.stringify({
+          claudeAiOauth: { accessToken: 'fixture-access-token', expiresAt: 9e20 },
+        })
+      );
+
+      expect(monitor.loadCredentials()).toBe(false);
+      expect(monitor.getState().status).toBe('not_configured');
+      expect(monitor.getCurrentAccessToken()).toBeNull();
+    });
+
+    it('reports a read error with its filesystem details', () => {
+      mockExistsSync.mockReturnValue(true);
+      const readError = new Error('permission denied');
+      mockReadFileSync.mockImplementation(() => {
+        throw readError;
+      });
+
+      expect(monitor.loadCredentials()).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ error: readError }),
+        'Failed to parse credentials file'
       );
     });
 

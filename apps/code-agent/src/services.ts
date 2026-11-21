@@ -71,7 +71,8 @@ export function initServices(config: ServiceConfig): void {
   const taskAccessKey = loadTaskAccessKey(taskAccessKeyPath);
   const legacyTaskBindings = loadLegacyTaskBindings(taskAccessKeyPath);
   const taskDispatcher = createTaskDispatcherService({
-    logger, workerHealthProbe, legacyTaskBindings, ...(taskAccessKey !== undefined && { taskAccessKey }),
+    logger, workerHealthProbe, workerSettingsRepo: repos.workerSettingsRepo,
+    legacyTaskBindings, ...(taskAccessKey !== undefined && { taskAccessKey }),
   });
   const whatsappNotifier = createWhatsAppNotifier({
     whatsappPublisher,

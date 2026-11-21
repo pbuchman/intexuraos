@@ -31,7 +31,7 @@ export interface DispatcherContextBridges {
   flushTaskLogs: (taskId: string) => Promise<void>;
   handleTaskCompletion: (task: Task) => Promise<void>;
   checkForResult: (task: Task) => Promise<TaskResult | undefined>;
-  saveTask: (task: Task) => Promise<void>;
+  saveTask: DispatcherContext['saveTask'];
   getTask: (taskId: string) => Promise<Task | null>;
   startWorkerAttempt: (
     task: Task,
@@ -61,7 +61,6 @@ export interface DispatcherContextState {
   readonly attemptCompletionSignals: Set<string>;
   readonly completionInProgress: Set<string>;
   readonly inactivityRestartInProgress: Set<string>;
-  readonly pendingMessages: Map<string, string[]>;
   readonly lastOutputAt: Map<string, number>;
   /** INT-1551 §E.7: tracks fire-and-forget handler promises for graceful shutdown. */
   readonly inFlightHandlers: Set<Promise<unknown>>;
@@ -118,7 +117,6 @@ export function buildDispatcherContext(
     attemptCompletionSignals: state.attemptCompletionSignals,
     completionInProgress: state.completionInProgress,
     inactivityRestartInProgress: state.inactivityRestartInProgress,
-    pendingMessages: state.pendingMessages,
     lastOutputAt: state.lastOutputAt,
     inFlightHandlers: state.inFlightHandlers,
     shutdownSignal: undefined,

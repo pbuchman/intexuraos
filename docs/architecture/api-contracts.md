@@ -398,6 +398,35 @@ This provides a stable identifier across sessions.
 All three variables must be set for authentication to work.
 If any are missing, protected endpoints return `503 MISCONFIGURED`.
 
+## Code worker types
+
+`GET /api/code/worker-settings` on the public application (service route `/worker-settings`) returns the authenticated user's worker registrations with masked credentials. Each registration can include `enabledWorkerTypes` and `workerTypesRevision`, the last host-confirmed selection. When the fields are absent, existing registrations support the full catalog. The endpoint-wide `enabled` switch is independent of the host's task types.
+
+`PATCH /api/code/worker-settings/workers/:name` takes a bearer token and resolves the named registration for that user. Send the registration's `registrationKey` from the settings GET as `expectedRegistration`, together with the revision displayed by the panel or returned by the host status probe. These fields bind the edit to the displayed physical endpoint and selection.
+
+```json
+{ "enabledWorkerTypes": ["codex", "codex-xhigh"], "expectedRevision": 0, "expectedRegistration": "example-registration-key" }
+```
+
+The list accepts unique values from `auto`, `opus`, `sonnet`, `openrouter-free`, `codex` and `codex-xhigh`. An empty list blocks all task types on the host. `auto` selects Claude Auto. `expectedRevision` is a nonnegative safe integer. A successful sample response is
+
+```json
+{ "success": true, "data": { "updated": true, "enabledWorkerTypes": ["codex", "codex-xhigh"], "workerTypesRevision": 1 } }
+```
+
+Code-agent probes the registered host and sends `PUT /admin/worker-types` with `enabledWorkerTypes` and `expectedRevision`, the registration's Cloudflare Access credentials, and a replay-protected dispatch HMAC. The signed input is the UTF-8 string `PUT /admin/worker-types\n` followed by `<timestamp>.<nonce>.<JSON body>`, with a single LF after the path. The host returns the applied list and revision as a raw object. Code-agent records only host-confirmed state. After an ambiguous response it checks the host again. Repeating an already-applied selection is idempotent.
+
+| PATCH outcome | Meaning |
+| --- | --- |
+| 400 `INVALID_REQUEST` | Invalid selection or an older orchestrator that cannot accept this change |
+| 404 `NOT_FOUND` | The user has no worker with that name |
+| 409 `CONFLICT` | A concurrent change superseded the displayed revision or registration |
+| 503 `SERVICE_UNAVAILABLE` | Code-agent could not confirm the change on the registered host |
+
+The orchestrator's `GET /health` contract v2 exposes `enabledWorkerTypes`, `workerTypesRevision`, `workerAuths` and `credentialWatchdog.idleTicks`. The user-facing worker status endpoints (`GET /api/code/workers/status` and `POST /api/code/workers/refresh-status`) expose the confirmed selection and safe auth states under each reachable worker's `details`. Claude OAuth reports `disabled` whenever no selected type requires it. `expired` denotes a selected provider with an expired session.
+
+The host returns HTTP 409 with `code: "worker_type_disabled"` for a newly submitted attempt or follow-up whose type is already excluded. If a follow-up was acknowledged before the selection changed, the host reports the refusal in the task log and keeps the pending input for delivery after re-enabling. See the [orchestrator operator guide](../../workers/orchestrator/README.md#per-host-worker-types).
+
 ## user-service Endpoints
 
 The user-service provides Device Authorization Flow helpers for CLI/device authentication.

@@ -7,23 +7,25 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { performHttpFetch } from '@intexuraos/common-http';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { isCodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
 import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
 import type { SentryIssueTaskContext } from '../../domain/models/sentryIssueEvent.js';
-import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
   DispatchRequest,
   DispatchResult,
-  DispatchWorkerCredentials,
   WorkerCancellationCredentials,
   ExecutionMemoryPromptContext,
+  TaskMessageWorkerCredentials,
 } from '../../domain/services/taskDispatcher.js';
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
-import type { WorkerConfig as WorkerSettingsConfig } from '../../domain/models/workerSettings.js';
+import type { WorkerConfig as WorkerSettingsConfig, WorkerHealthState } from '../../domain/models/workerSettings.js';
 import {
   classifyCodeTaskDispatchability,
+  excludesWorkerType,
   healthDiagnostics,
+  type ClassifyCodeTaskDispatchabilityInput,
   type CodeTaskDispatchability,
 } from '../../domain/services/codeTaskDispatchBlockers.js';
 import { isTerminalDispatchBlockerReason } from '../../domain/services/codeTaskDispatchProblems.js';
@@ -31,6 +33,26 @@ import { signTaskAccess, taskAudience, TASK_ACCESS_HEADER } from '@intexuraos/co
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
 type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
+
+function dispatchErrorFromBlocker(blocker: DispatchBlocker): DispatchError {
+  const code = blocker.reason === 'workers_at_capacity' ? 'at_capacity'
+    : blocker.reason === 'worker_type_disabled' ? 'worker_type_disabled'
+    : 'worker_unavailable';
+  return { code, message: blocker.message, blocker };
+}
+
+function workerTypeRefusalMessage(status: number, body: string): string | undefined {
+  if (status !== 409) return undefined;
+  try {
+    const parsed = JSON.parse(body) as { code?: unknown; error?: unknown } | null;
+    if (parsed?.code === 'worker_type_disabled' && typeof parsed.error === 'string' && parsed.error.length > 0) {
+      return parsed.error;
+    }
+  } catch {
+    // A malformed conflict response does not prove the worker refused the type.
+  }
+  return undefined;
+}
 
 /**
  * Check if an HTTP status code is a retryable infrastructure error.
@@ -108,17 +130,6 @@ function isWorkerTaskResponse(value: unknown): value is WorkerTaskResponse {
 }
 
 /**
- * Internal worker config with credentials for dispatch.
- */
-interface WorkerConfigWithCredentials {
-  name: string;
-  location: string;
-  url: string;
-  priority: number;
-  credentials: WorkerCredentials;
-}
-
-/**
  * Task dispatcher implementation with worker fallback.
  *
  * Credentials are per-request, not stored in the instance.
@@ -190,8 +201,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
 
-    // Get workers from per-request credentials
-    const workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
+    const workers: WorkerSettingsConfig[] = request.workerCredentials.workers
+      .filter((worker) => worker.enabled !== false)
+      .map((worker) => ({ ...worker, enabled: true }));
 
     if (workers.length === 0) {
       const blocker = classifyCodeTaskDispatchability({
@@ -199,30 +211,19 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         workers: [],
         healthByWorkerName: {},
       }) as DispatchBlocker;
-      return err({
-        code: 'worker_unavailable',
-        message: blocker.message,
-        blocker,
-      });
+      return err(dispatchErrorFromBlocker(blocker));
     }
 
-    // Probe all workers in parallel for real-time capacity
-    const probeConfigs: WorkerSettingsConfig[] = workers.map((w) => ({
-      name: w.name,
-      url: w.credentials.url,
-      cfAccessClientId: w.credentials.cfAccessClientId,
-      cfAccessClientSecret: w.credentials.cfAccessClientSecret,
-      dispatchSigningSecret: w.credentials.dispatchSigningSecret,
-      enabled: true,
-    }));
-
-    const healthResults = await this.workerHealthProbe.probeAllWorkers(probeConfigs);
-    const dispatchability = classifyCodeTaskDispatchability({
+    // Probe even previously excluded endpoints. An alias can change host policy.
+    const healthResults = await this.workerHealthProbe.probeAllWorkers(workers);
+    await this.rememberWorkerTypePolicies(request.ownerId, workers, healthResults);
+    const dispatchabilityInput = {
       workerType: request.workerType,
-      workers: probeConfigs,
+      workers,
       healthByWorkerName: healthResults,
-    });
-    const unexpectedWorkerHealth = healthDiagnostics(probeConfigs, healthResults).filter(
+    };
+    const dispatchability = classifyCodeTaskDispatchability(dispatchabilityInput);
+    const unexpectedWorkerHealth = healthDiagnostics(workers, healthResults).filter(
       (details) => details.tag === 'unknown'
     );
 
@@ -248,11 +249,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         },
         'Dispatch blocked by worker capability or health state'
       );
-      return err({
-        code: dispatchability.reason === 'workers_at_capacity' ? 'at_capacity' : 'worker_unavailable',
-        message: dispatchability.message,
-        blocker: dispatchability,
-      });
+      return err(dispatchErrorFromBlocker(dispatchability));
     }
 
     if (unexpectedWorkerHealth.length > 0) {
@@ -272,34 +269,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       );
     }
 
-    // Filter to healthy workers and extract available capacity in a single pass.
-    // If failedWorkerLocation is set, prefer workers OTHER than the failed one.
-    // Fall back to the failed worker only when no alternatives exist (transient failures often self-resolve).
-    const workersWithCapacity: { worker: WorkerConfigWithCredentials; available: number }[] = [];
-    const failedWorkerFallback: { worker: WorkerConfigWithCredentials; available: number }[] = [];
-
-    for (const w of workers) {
-      const health = healthResults[w.name];
-      if (health?._tag === 'healthy') {
-        const entry = { worker: w, available: health.available };
-        if (request.failedWorkerLocation !== undefined && w.name === request.failedWorkerLocation) {
-          failedWorkerFallback.push(entry);
-        } else {
-          workersWithCapacity.push(entry);
-        }
-      }
-    }
-
-    // Fall back to the failed worker if no alternatives are healthy
-    if (workersWithCapacity.length === 0) {
-      workersWithCapacity.push(...failedWorkerFallback);
-    }
-
-    // Sort by available capacity descending, priority as tiebreaker
-    workersWithCapacity.sort((a, b) => {
-      if (b.available !== a.available) return b.available - a.available;
-      return a.worker.priority - b.worker.priority;
+    const eligibleNames = new Set(dispatchability.workerNames);
+    const workersWithCapacity = workers.flatMap((worker) => {
+      const health = healthResults[worker.name];
+      if (!eligibleNames.has(worker.name) || health?._tag !== 'healthy') return [];
+      return [{ worker, available: health.available, failed: worker.name === request.failedWorkerLocation }];
     });
+
+    // Prefer another eligible worker on retry and preserve configured order on ties.
+    workersWithCapacity.sort((a, b) => Number(a.failed) - Number(b.failed) || b.available - a.available);
 
     this.logger.info(
       {
@@ -311,19 +289,36 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       'Workers sorted by available capacity for dispatch'
     );
 
-    const sortedWorkers = workersWithCapacity.map((wc) => wc.worker);
-
-    // Try to dispatch to available workers
-    const result = await this.dispatchToWorker(
+    return await this.dispatchToWorker(
       taskRequest,
       body,
       timestamp,
-      sortedWorkers,
+      workersWithCapacity.map(({ worker }) => worker),
+      dispatchabilityInput,
       request.ownerId,
       request.dispatchAttemptId,
     );
+  }
 
-    return result;
+  private async rememberWorkerTypePolicies(
+    ownerId: string,
+    workers: readonly WorkerSettingsConfig[],
+    healthResults: Record<string, WorkerHealthState>,
+  ): Promise<void> {
+    const settings = this.deps.workerSettingsRepo;
+    if (settings === undefined) return;
+
+    // Record newly observed policy for future probes that encounter a legacy
+    // host. A cache failure does not change what the host confirmed for this attempt.
+    await Promise.allSettled(workers.flatMap((worker) => {
+      const health = healthResults[worker.name];
+      if (!isCodeTaskWorkerTypePolicy(health)) return [];
+      if (isCodeTaskWorkerTypePolicy(worker) && worker.workerTypesRevision >= health.workerTypesRevision) return [];
+      return [settings.confirmWorkerTypePolicy(ownerId, worker, {
+        enabledWorkerTypes: health.enabledWorkerTypes,
+        workerTypesRevision: health.workerTypesRevision,
+      })];
+    }));
   }
 
   /**
@@ -334,12 +329,14 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     taskRequest: WorkerTaskRequest,
     body: string,
     timestamp: number,
-    workers: WorkerConfigWithCredentials[],
+    workers: WorkerSettingsConfig[],
+    dispatchabilityInput: ClassifyCodeTaskDispatchabilityInput,
     ownerId: string,
     dispatchAttemptId?: string,
   ): Promise<Result<DispatchResult, DispatchError>> {
     let sawCapacity503 = false;
     let sawExplicitRejection = false;
+    const workerNamesRejectedForType = new Set<string>();
 
     for (const worker of workers) {
       let audience: string;
@@ -353,14 +350,14 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
       // Generate HMAC signature using this worker's signing secret
       const signatureResult = signDispatchRequest(
-        { logger: this.logger, dispatchSigningSecret: worker.credentials.dispatchSigningSecret },
+        { logger: this.logger, dispatchSigningSecret: worker.dispatchSigningSecret },
         { body, timestamp, nonce }
       );
       if (!signatureResult.ok) {
         this.logger.warn(
           {
             taskId: taskRequest.taskId,
-            workerLocation: worker.location,
+            workerLocation: worker.name,
             ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
             [SKIP_SENTRY_KEY]: true,
           },
@@ -386,6 +383,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         );
 
         if (!response.ok) {
+          if (response.error.code === 'worker_type_disabled') {
+            workerNamesRejectedForType.add(worker.name);
+            continue;
+          }
           return response;
         }
 
@@ -393,13 +394,13 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
         if (workerResponse.status === 'accepted') {
           this.logger.info(
-            { taskId: taskRequest.taskId, workerLocation: worker.location },
+            { taskId: taskRequest.taskId, workerLocation: worker.name },
             'Task dispatched successfully to worker'
           );
 
           return ok({
             dispatched: true,
-            workerLocation: worker.location,
+            workerLocation: worker.name,
             workerAudience: audience,
           });
         }
@@ -407,7 +408,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         this.logger.warn(
           {
             taskId: taskRequest.taskId,
-            workerLocation: worker.location,
+            workerLocation: worker.name,
             reason: workerResponse.reason,
             ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
             [SKIP_SENTRY_KEY]: true,
@@ -420,7 +421,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         this.logger.error(
           {
             taskId: taskRequest.taskId,
-            workerLocation: worker.location,
+            workerLocation: worker.name,
             error,
             ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
             [SKIP_SENTRY_KEY]: true,
@@ -440,7 +441,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           code: 'network_error',
           message: `Network error: ${getErrorMessage(error)}`,
           outcomeUnknown: true,
-          workerLocation: worker.location,
+          workerLocation: worker.name,
           workerAudience: audience,
         });
       }
@@ -454,6 +455,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       });
     }
 
+    if (workerNamesRejectedForType.size > 0 && !sawExplicitRejection) {
+      // Every eligible candidate declined this worker type. Reclassification
+      // identifies the remaining blocker among the hosts that were not eligible.
+      const remaining = classifyCodeTaskDispatchability({
+        ...dispatchabilityInput, workerNamesRejectedForType,
+      }) as DispatchBlocker;
+      return err(dispatchErrorFromBlocker(remaining));
+    }
+
     return err({
       code: 'worker_unavailable',
       message: 'No workers available (all rejected or busy)',
@@ -465,7 +475,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
    * Uses per-request credentials for user isolation.
    */
   private async tryDispatch(
-    worker: WorkerConfigWithCredentials,
+    worker: WorkerSettingsConfig,
     taskRequest: WorkerTaskRequest,
     body: string,
     timestamp: number,
@@ -476,14 +486,14 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     dispatchAttemptId?: string,
   ): Promise<Result<WorkerTaskResponse, DispatchError>> {
     this.logger.debug(
-      { taskId: taskRequest.taskId, workerLocation: worker.location },
-      `Attempting dispatch to ${worker.location}`
+      { taskId: taskRequest.taskId, workerLocation: worker.name },
+      `Attempting dispatch to ${worker.name}`
     );
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'CF-Access-Client-Id': worker.credentials.cfAccessClientId,
-      'CF-Access-Client-Secret': worker.credentials.cfAccessClientSecret,
+      'CF-Access-Client-Id': worker.cfAccessClientId,
+      'CF-Access-Client-Secret': worker.cfAccessClientSecret,
       'X-Dispatch-Timestamp': String(timestamp),
       'X-Dispatch-Signature': signature,
       'X-Dispatch-Nonce': nonce,
@@ -493,7 +503,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       return err({ code: 'dispatch_failed', message: 'Task signing identity unavailable' });
     }
     headers[TASK_ACCESS_HEADER] = signTaskAccess(this.deps.taskAccessKey, {
-      ownerId, worker: worker.location, audience,
+      ownerId, worker: worker.name, audience,
       method: 'POST', path: '/tasks', taskId: taskRequest.taskId, body,
     });
     if (taskRequest.traceId !== undefined) {
@@ -512,7 +522,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       this.logger.warn(
         {
           taskId: taskRequest.taskId,
-          workerLocation: worker.location,
+          workerLocation: worker.name,
           status: response.status,
           ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
           [SKIP_SENTRY_KEY]: true,
@@ -532,7 +542,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           code: 'network_error',
           message: `Worker dispatch outcome is ambiguous (HTTP ${String(response.status)}); refusing multi-worker fallback`,
           outcomeUnknown: true,
-          workerLocation: worker.location,
+          workerLocation: worker.name,
           workerAudience: audience,
         });
       }
@@ -540,6 +550,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       const errorText = typeof response.text === 'function'
         ? await response.text().catch(() => '')
         : '';
+      const typeRefusal = workerTypeRefusalMessage(response.status, errorText);
+      if (typeRefusal !== undefined) {
+        return err({ code: 'worker_type_disabled', message: typeRefusal });
+      }
       const errorMessage = extractErrorMessage(errorText);
 
       return err({
@@ -559,7 +573,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         code: 'network_error',
         message: 'Worker returned invalid JSON response',
         outcomeUnknown: true,
-        workerLocation: worker.location,
+        workerLocation: worker.name,
         workerAudience: audience,
       });
     }
@@ -569,7 +583,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         code: 'network_error',
         message: 'Worker returned an unknown response after the dispatch POST',
         outcomeUnknown: true,
-        workerLocation: worker.location,
+        workerLocation: worker.name,
         workerAudience: audience,
       });
     }
@@ -584,34 +598,24 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     return await performHttpFetch(url, options);
   }
 
-  /**
-   * Build worker configurations from per-request credentials.
-   * Workers are already sorted by user's priority (array order).
-   */
-  private getWorkerConfigsFromCredentials(credentials: DispatchWorkerCredentials): WorkerConfigWithCredentials[] {
-    return credentials.workers
-      .filter((worker) => worker.enabled !== false)
-      .map((worker, index) => ({
-        name: worker.name,
-        location: worker.name,
-        url: worker.url,
-        priority: index + 1,
-        credentials: {
-          name: worker.name,
-          url: worker.url,
-          cfAccessClientId: worker.cfAccessClientId,
-          cfAccessClientSecret: worker.cfAccessClientSecret,
-          dispatchSigningSecret: worker.dispatchSigningSecret,
-        },
-      }));
-  }
-
   async sendMessageToWorker(
     taskId: string,
     message: string,
-    credentials: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }
+    credentials: TaskMessageWorkerCredentials
   ): Promise<Result<{ action: 'queued' | 'resumed' }, { code: string; message: string }>> {
     this.logger.info({ taskId }, 'Sending message to worker task');
+
+    if (credentials.resume !== undefined) {
+      const { ownerId, workerType, worker } = credentials.resume;
+      const health = await this.workerHealthProbe.probeWorker({ ...worker, url: credentials.url });
+      await this.rememberWorkerTypePolicies(ownerId, [worker], { [worker.name]: health });
+      if (excludesWorkerType(worker, health, workerType)) {
+        return err({
+          code: 'worker_type_disabled',
+          message: `This worker has disabled ${workerType}. Enable this task type on the assigned worker to resume the task.`,
+        });
+      }
+    }
 
     const body = JSON.stringify({ message });
     const timestamp = Date.now();
@@ -629,8 +633,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
 
     try {
-      const response = await this.fetchWithTimeout(`${credentials.url}/tasks/${taskId}/message`, {
+      const response = await this.fetchWithTimeout(`${credentials.url}/tasks/${encodeURIComponent(taskId)}/message`, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           'CF-Access-Client-Id': credentials.cfAccessClientId,
@@ -661,6 +666,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           });
         }
         const errorText = await response.text().catch(() => 'Unknown error');
+        const typeRefusal = workerTypeRefusalMessage(response.status, errorText);
+        if (typeRefusal !== undefined) {
+          return err({ code: 'worker_type_disabled', message: typeRefusal });
+        }
         const errorMessage = extractErrorMessage(errorText);
         return err({
           code: 'worker_error',

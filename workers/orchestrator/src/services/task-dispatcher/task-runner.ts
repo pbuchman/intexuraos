@@ -17,6 +17,7 @@ import {
   ZOMBIE_CLEANUP_TIMEOUT_MS,
 } from './retry-logic.js';
 import type { DispatcherContext } from './dispatcher-context.js';
+import { disabledWorkerTypeError } from './preflight.js';
 
 /**
  * INT-1551 §E.2: per-attempt execution. Owns the worker-startup pipeline
@@ -49,6 +50,8 @@ export class TaskRunner {
     if (ctx.shutdownSignal?.aborted === true) {
       return { ok: false, error: new Error('Worker startup aborted by shutdown signal') };
     }
+    const disabled = disabledWorkerTypeError(task.workerType, ctx.isolation);
+    if (disabled !== null) return { ok: false, error: disabled };
     ctx.attemptCompletionSignals.delete(task.taskId);
     ctx.appendOrchestratorTaskLog(
       task.taskId,
@@ -197,7 +200,9 @@ export class TaskRunner {
       if (!params.continueSession) {
         ctx.appendOrchestratorTaskLog(task.taskId, 'Phase 2/2: Creating worker container...');
       }
-      createPromise = ctx.isolation.provider.createWorker(workerConfig);
+      const start = (): Promise<WorkerHandle> => ctx.isolation.provider.createWorker(workerConfig);
+      const policy = ctx.isolation.workerTypePolicy;
+      createPromise = policy === undefined ? start() : policy.withStart(task.workerType, start);
 
       const handle = await withTimeout(
         createPromise,

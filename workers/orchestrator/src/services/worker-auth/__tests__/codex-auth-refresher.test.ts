@@ -104,6 +104,35 @@ describe('CodexAuthRefresher', () => {
     expect(mockContainer.remove).not.toHaveBeenCalled();
   });
 
+  it('removes a running refresh container when Codex auth is disabled', async () => {
+    const controller = new AbortController();
+    mockContainer.wait.mockImplementation(
+      ({ abortSignal }: { abortSignal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          abortSignal.addEventListener('abort', () => reject(new Error('wait aborted')), {
+            once: true,
+          });
+        })
+    );
+
+    const result = refresher.refresh({
+      signal: controller.signal,
+      runDockerWork: async (work) => await work(),
+    });
+    await vi.waitFor(() =>
+      expect(mockContainer.wait).toHaveBeenCalledWith({
+        condition: 'not-running',
+        abortSignal: controller.signal,
+      })
+    );
+    controller.abort();
+
+    expect(await result).toBe(false);
+    expect(mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(mockContainer.logs).not.toHaveBeenCalled();
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
   it('creates a refresh container with the shared auth mounted into ~/.codex', async () => {
     await refresher.refresh();
 

@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { TASK_ACCESS_HEADER } from '@intexuraos/code-task-domain/task-access';
+import { isCodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain/worker-types';
 import { TaskAccess, type TaskAccessConfig } from './services/task-access.js';
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Task } from './types/task.js';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
@@ -17,6 +18,12 @@ import {
   TaskStatusSchema,
 } from './types/schemas.js';
 import { isOrchestratorAdmissionFrozen } from './admission-freeze.js';
+import { defaultWorkerTypePolicy, type WorkerTypePolicy } from './services/worker-type-policy.js';
+
+export interface WorkerTypeControls {
+  policy: WorkerTypePolicy;
+  credentialWatchdog: { idleTicks: number };
+}
 
 interface TaskParams {
   id: string;
@@ -68,10 +75,11 @@ export function registerRoutes(
   workerAuthRegistry?: WorkerAuthRegistry,
   isolationProvider?: IsolationProvider,
   providerApiKeys: Record<string, ProviderApiKeyHealth> = {},
-  readAdmissionFreeze: () => boolean = isOrchestratorAdmissionFrozen
+  readAdmissionFreeze: () => boolean = isOrchestratorAdmissionFrozen,
+  workerTypeControls?: WorkerTypeControls
 ): void {
   const access = config.taskAccess === undefined ? undefined : new TaskAccess(config.taskAccess);
-  const nonceCache: NonceCache = {};
+  const nonceCache = Object.create(null) as NonceCache;
   const activeAdmissionRequests = new WeakMap<
     FastifyRequest,
     { handlerSettled: boolean; transportSettled: boolean }
@@ -174,24 +182,25 @@ export function registerRoutes(
     );
   });
 
-  const verifyDispatchSignature = async (
-    request: TaskBodyRequest,
-    reply: FastifyReply
-  ): Promise<void> => {
-    const timestamp = request.headers['x-dispatch-timestamp'] as string | undefined;
-    const signature = request.headers['x-dispatch-signature'] as string | undefined;
-    const nonce = request.headers['x-dispatch-nonce'] as string | undefined;
+  const verifySignature = (request: TaskBodyRequest, reply: FastifyReply, prefix = ''): void => {
+    const timestamp = request.headers['x-dispatch-timestamp'];
+    const signature = request.headers['x-dispatch-signature'];
+    const nonce = request.headers['x-dispatch-nonce'];
 
-    if (timestamp === undefined || signature === undefined || nonce === undefined) {
+    if (
+      typeof timestamp !== 'string' ||
+      typeof signature !== 'string' ||
+      typeof nonce !== 'string'
+    ) {
       reply.status(401).send({ error: 'Missing authentication headers' });
       return;
     }
 
-    const timestampNum = Number.parseInt(timestamp, 10);
+    const timestampNum = Number(timestamp);
     const now = Date.now();
 
     // Check timestamp freshness
-    if (Math.abs(now - timestampNum) > TIMESTAMP_TOLERANCE_MS) {
+    if (!/^\d+$/.test(timestamp) || Math.abs(now - timestampNum) > TIMESTAMP_TOLERANCE_MS) {
       reply.status(401).send({ error: 'Timestamp too old or too new' });
       return;
     }
@@ -204,12 +213,15 @@ export function registerRoutes(
     }
 
     // Verify HMAC signature
-    const message = `${timestamp}.${nonce}.${JSON.stringify(request.body)}`;
+    const message = `${prefix}${timestamp}.${nonce}.${JSON.stringify(request.body)}`;
     const expectedSignature = createHmac('sha256', config.orchestratorSecret)
       .update(message)
-      .digest('hex');
+      .digest();
 
-    if (signature !== expectedSignature) {
+    if (
+      !/^[0-9a-f]{64}$/.test(signature) ||
+      !timingSafeEqual(Buffer.from(signature, 'hex'), expectedSignature)
+    ) {
       reply.status(401).send({ error: 'Invalid signature' });
       return;
     }
@@ -219,6 +231,13 @@ export function registerRoutes(
 
     // Clean up old nonces periodically
     cleanUpExpiredNonces(nonceCache, now);
+  };
+
+  const verifyDispatchSignature = async (
+    request: TaskBodyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
+    verifySignature(request, reply);
   };
 
   // POST /tasks - Submit new task
@@ -306,6 +325,10 @@ export function registerRoutes(
 
       if (!result.ok) {
         const { error } = result;
+        if (error.type === 'worker_type_disabled') {
+          reply.status(409).send({ code: error.type, error: error.message });
+          return;
+        }
         if (
           error.type === 'at_capacity' ||
           error.type === 'docker_unavailable' ||
@@ -428,6 +451,10 @@ export function registerRoutes(
 
         if (!result.ok) {
           const { error } = result;
+          if (error.type === 'worker_type_disabled') {
+            reply.status(409).send({ code: error.type, error: error.message });
+            return;
+          }
           if (error.type === 'not_found') {
             reply.status(404).send({ error: error.message });
             return;
@@ -476,9 +503,12 @@ export function registerRoutes(
     const healthDetails = isolationProvider?.getHealthDetails?.() ?? { docker: true, disk: true };
     /* v8 ignore stop @preserve */
     const admissionFrozen = readAdmissionFrozenFailClosed();
+    const policy = workerTypeControls?.policy.snapshot() ?? defaultWorkerTypePolicy();
 
     reply.send({
       healthContractVersion: 2,
+      ...policy,
+      credentialWatchdog: workerTypeControls?.credentialWatchdog ?? { idleTicks: 0 },
       admissionFrozen,
       pendingAdmissions,
       admissionActivityTotal,
@@ -495,6 +525,55 @@ export function registerRoutes(
       logForwarderDrain: dispatcher.getLogForwarderDrainSnapshot(),
     });
   });
+
+  app.put<{ Body: unknown }>(
+    '/admin/worker-types',
+    {
+      preHandler: [
+        async (request, reply): Promise<void> => {
+          verifySignature(request, reply, 'PUT /admin/worker-types\n');
+        },
+      ],
+    },
+    async (request, reply) => {
+      const body = request.body;
+      if (
+        typeof body !== 'object' ||
+        body === null ||
+        !('enabledWorkerTypes' in body) ||
+        !('expectedRevision' in body)
+      ) {
+        reply.status(400).send({ error: 'Invalid worker type policy request' });
+        return;
+      }
+      const proposed = {
+        enabledWorkerTypes: body.enabledWorkerTypes,
+        workerTypesRevision: body.expectedRevision,
+      };
+      if (!isCodeTaskWorkerTypePolicy(proposed)) {
+        reply.status(400).send({ error: 'Invalid worker type policy request' });
+        return;
+      }
+      if (workerTypeControls === undefined) {
+        reply.status(503).send({ error: 'Worker type policy unavailable' });
+        return;
+      }
+      try {
+        const saved = await workerTypeControls.policy.apply(
+          proposed.enabledWorkerTypes,
+          proposed.workerTypesRevision
+        );
+        if (saved === null) {
+          reply.status(409).send({ error: 'Worker type policy revision conflict' });
+          return;
+        }
+        reply.send(saved);
+      } catch (error) {
+        logger.error({ error }, 'Failed to apply worker type policy');
+        reply.status(500).send({ error: 'Failed to apply worker type policy' });
+      }
+    }
+  );
 
   // GET /meta/worker-image - Worker image diagnostics
   app.get('/meta/worker-image', async (_request, reply) => {

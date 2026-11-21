@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from '../../types/api.js';
-import { WORKER_TYPES } from '../isolation/types.js';
-import type { WorkerAuthProvider } from '../worker-auth/index.js';
+import { CODE_TASK_WORKER_CAPABILITIES } from '@intexuraos/code-task-domain';
+import { WorkerTypeDisabledError } from '../worker-type-disabled-error.js';
 import type { IsolationConfig, DispatchError } from '../task-dispatcher.js';
 
 /**
@@ -10,6 +10,15 @@ import type { IsolationConfig, DispatchError } from '../task-dispatcher.js';
  * Each gate returns `null` on success and a `Result.error` on failure so the
  * caller can early-return.
  */
+
+export function disabledWorkerTypeError(
+  workerType: CreateTaskRequest['workerType'],
+  isolation: IsolationConfig
+): WorkerTypeDisabledError | null {
+  return isolation.workerTypePolicy?.isEnabled(workerType) === false
+    ? new WorkerTypeDisabledError(workerType)
+    : null;
+}
 
 /**
  * Returns `null` if the isolation provider is healthy (or doesn't expose a
@@ -28,23 +37,6 @@ export function checkDockerAvailability(
 }
 
 /**
- * Maps a worker type to the auth provider it requires (or `null` if no
- * managed auth provider is needed — e.g. raw API-key-only workers).
- */
-export function getRequiredWorkerAuthProvider(
-  workerType: CreateTaskRequest['workerType']
-): WorkerAuthProvider | null {
-  const workerTypeConfig = WORKER_TYPES[workerType];
-  if (workerTypeConfig.runtime === 'codex') {
-    return 'codex';
-  }
-  if (workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY') {
-    return 'claude';
-  }
-  return null;
-}
-
-/**
  * Returns `null` if the worker auth provider for the given worker type is
  * ready (active, or — for codex — expired-but-refreshable); otherwise
  * returns an `auth_unavailable` error.
@@ -53,11 +45,16 @@ export function checkWorkerAuthAvailability(
   workerType: CreateTaskRequest['workerType'],
   isolation: IsolationConfig
 ): Result<void, DispatchError> | null {
-  const provider = getRequiredWorkerAuthProvider(workerType);
-  if (provider === null) {
-    return null;
+  const { auth } = CODE_TASK_WORKER_CAPABILITIES[workerType];
+  if (auth.kind === 'api_key') {
+    if (isolation.getSecrets()[auth.envVar].trim() !== '') return null;
+    return {
+      ok: false,
+      error: { type: 'auth_unavailable', message: `Worker type '${workerType}' requires ${auth.envVar} on this host.` },
+    };
   }
 
+  const provider = auth.kind;
   const authState = isolation.workerAuthRegistry.getState(provider);
   const isReady =
     provider === 'codex'

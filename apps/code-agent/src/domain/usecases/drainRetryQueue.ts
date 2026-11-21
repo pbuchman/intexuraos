@@ -13,11 +13,13 @@ import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask } from '../models/codeTask.js';
 import type { DispatchRetry } from '../models/dispatchRetry.js';
+import type { WorkerConfig } from '../models/workerSettings.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import type { CodeTaskDispatchNotificationRepository } from '../repositories/codeTaskDispatchNotificationRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
+import { resolveAssignedTaskMessageWorker } from '../services/assignedTaskMessageWorker.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
@@ -662,6 +664,9 @@ async function handleNewTaskRetry(
       cfAccessClientId: w.cfAccessClientId,
       cfAccessClientSecret: w.cfAccessClientSecret,
       dispatchSigningSecret: w.dispatchSigningSecret,
+      ...(w.registrationId !== undefined && { registrationId: w.registrationId }),
+      ...(w.enabledWorkerTypes !== undefined && { enabledWorkerTypes: w.enabledWorkerTypes }),
+      ...(w.workerTypesRevision !== undefined && { workerTypesRevision: w.workerTypesRevision }),
     })),
   };
 
@@ -788,6 +793,7 @@ async function handleNewTaskRetry(
       executionMemoryContext: dispatchExecutionMemoryContext,
     }),
     ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
+    ...(task.failedWorkerLocation !== undefined && { failedWorkerLocation: task.failedWorkerLocation }),
     // INT-1585: forward optional per-task timeout override on retry, too,
     // so a transient first-dispatch failure does not silently revert to 5h.
     ...(task.timeoutHours !== undefined && { timeoutHours: task.timeoutHours }),
@@ -961,7 +967,7 @@ async function handleTaskMessageRetry(
   deps: DrainRetryQueueDeps,
   entry: DispatchRetry,
 ): Promise<Result<DrainRetryQueueResult, DrainRetryQueueError>> {
-  const { logger, workerSettingsRepo, taskDispatcher, logLineRepo } = deps;
+  const { logger, workerSettingsRepo, logLineRepo } = deps;
 
   if (entry.userId === undefined || entry.taskId === undefined || entry.message === undefined) {
     logger.error({ retryId: entry.id }, 'task_message retry missing required fields');
@@ -993,9 +999,7 @@ async function handleTaskMessageRetry(
 
   const settings = settingsResult.value;
   const enabledWorkers = settings.workers.filter((w) => w.enabled);
-  const worker = enabledWorkers[0];
-
-  if (worker === undefined) {
+  if (enabledWorkers.length === 0) {
     const updateResult = await updateRetryEntryOrError(deps, entry, {
       attempts: entry.attempts + 1,
       lastAttemptAt: new Date(),
@@ -1008,11 +1012,11 @@ async function handleTaskMessageRetry(
   }
 
   // Send message
-  const sendResult = await taskDispatcher.sendMessageToWorker(entry.taskId, entry.message, {
-    url: worker.url,
-    cfAccessClientId: worker.cfAccessClientId,
-    cfAccessClientSecret: worker.cfAccessClientSecret,
-    dispatchSigningSecret: worker.dispatchSigningSecret,
+  const sendResult = await sendRetryMessageToAssignedWorker(deps, {
+    taskId: entry.taskId,
+    userId: entry.userId,
+    message: entry.message,
+    workers: enabledWorkers,
   });
 
   if (!sendResult.ok) {
@@ -1111,4 +1115,22 @@ async function handleTaskMessageRetry(
 
   logger.info({ taskId: entry.taskId }, 'Retry message delivery successful');
   return ok({ action: 'message_sent', taskId: entry.taskId });
+}
+
+async function sendRetryMessageToAssignedWorker(
+  deps: Pick<DrainRetryQueueDeps, 'codeTaskRepo' | 'taskDispatcher'>,
+  input: { taskId: string; userId: string; message: string; workers: WorkerConfig[] },
+): ReturnType<TaskDispatcherService['sendMessageToWorker']> {
+  const taskResult = await deps.codeTaskRepo.findByIdForUser(input.taskId, input.userId);
+  if (!taskResult.ok) {
+    return isTaskNotFoundError(taskResult.error)
+      ? err({ code: 'task_not_found', message: 'Task not found for message retry' })
+      : err({ code: 'worker_unavailable', message: 'Failed to look up task for message retry' });
+  }
+
+  const credentials = resolveAssignedTaskMessageWorker(taskResult.value, input.workers);
+  if (credentials === undefined) {
+    return err({ code: 'worker_unavailable', message: 'Assigned worker is unavailable for message retry' });
+  }
+  return await deps.taskDispatcher.sendMessageToWorker(input.taskId, input.message, credentials);
 }

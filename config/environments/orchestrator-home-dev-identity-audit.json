@@ -145,8 +145,8 @@
   },
   "runtimeBundleClosure": {
     "entryPoints": ["workers/orchestrator/src/index.ts"],
-    "inputCount": 170,
-    "inputsSha256": "8b32333bb3fcbaceaef4989031cc30f6e4f5bfb51c1a469de6a0e3d082a5939a"
+    "inputCount": 172,
+    "inputsSha256": "08f9d60a2d9837061154d4f52524158a2425784aefdfdef4187cbe8b63a4c55b"
   },
   "observabilityIdentityBoundary": {
     "bootstrapConfig": {
@@ -162,11 +162,11 @@
     },
     "soleImporter": {
       "file": "workers/orchestrator/src/start.ts",
-      "reviewedSha256": "48b372bdafb0c635fb27fed0fafd53493082f0ef803b8552593f5f325d18f734"
+      "reviewedSha256": "6b365d98d16d34ea3d321c9f6d37435effae5b286926a1f0684fc57fb9971f91"
     },
     "serviceWiring": {
       "file": "workers/orchestrator/src/bootstrap/service-wiring.ts",
-      "reviewedSha256": "4da733575ae05b88ac7cf8ae4cf87181f54a3b2d568d865863170f44dd820511"
+      "reviewedSha256": "26fd1b7cb7bfcb4c65b42151d4a130f764830f872a3e5452b0d4b1145b68d045"
     },
     "sink": {
       "module": "@intexuraos/infra-sentry",

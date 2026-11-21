@@ -1,7 +1,7 @@
 import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
 
 export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; description: string }> = {
-  auto: { name: 'Auto', description: 'Automatically select the best available model for the task' },
+  auto: { name: 'Claude Auto', description: 'Claude Code selects the model using Claude OAuth' },
   opus: { name: 'Opus', description: 'Anthropic\'s most capable model for complex reasoning and coding tasks' },
   sonnet: { name: 'Sonnet', description: 'Anthropic\'s daily coding model with the best balance of speed and intelligence' },
   codex: { name: 'Codex', description: 'OpenAI Codex runtime for code-task execution with persisted thread resume' },

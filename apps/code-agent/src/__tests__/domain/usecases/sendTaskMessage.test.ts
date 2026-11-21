@@ -17,7 +17,9 @@ import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type { WorkerConfig } from '../../../domain/models/workerSettings.js';
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
+import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 import {
   sendTaskMessage,
   type SendTaskMessageDeps,
@@ -128,7 +130,7 @@ describe('sendTaskMessage', () => {
     };
   }
 
-  function setupWorkerSettings(workers = [workerConfig]): void {
+  function setupWorkerSettings(workers: WorkerConfig[] = [workerConfig]): void {
     mockWorkerSettingsRepo.getSettings.mockResolvedValue(
       ok({
         userId,
@@ -448,7 +450,7 @@ describe('sendTaskMessage', () => {
       );
     });
 
-    it('should fall back to first enabled worker when workerLocation does not match', async () => {
+    it('does not send a message to the first worker when the assigned registration is missing', async () => {
       const task = createMockTask({ status: 'running', workerLocation: 'nonexistent-worker' });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
       mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
@@ -457,17 +459,39 @@ describe('sendTaskMessage', () => {
 
       const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
 
-      expect(result.ok).toBe(true);
-      expect(mockTaskDispatcher.sendMessageToWorker).toHaveBeenCalledWith(
-        taskId,
-        message,
-        {
-          url: workerConfig.url,
-          cfAccessClientId: workerConfig.cfAccessClientId,
-          cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-          dispatchSigningSecret: workerConfig.dispatchSigningSecret,
-        }
-      );
+      expect(result).toMatchObject({ ok: false, error: { code: 'worker_not_configured' } });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
+    it('does not send to a replaced assigned worker endpoint', async () => {
+      setupSuccessPath({ status: 'implemented', workerAudience: 'https://assigned-worker.local' }, 'resumed');
+
+      expect(await sendTaskMessage(createDeps(), { taskId, userId, message })).toMatchObject({
+        ok: false, error: { code: 'worker_not_configured' },
+      });
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks a completed task resume when the saved policy excludes its type and the host has downgraded', async () => {
+      setupSuccessPath({ status: 'implemented', workerAudience: workerConfig.url }, 'resumed');
+      setupWorkerSettings([{
+        ...workerConfig, url: `${workerConfig.url}/`, enabledWorkerTypes: ['codex'], workerTypesRevision: 2,
+      }]);
+      const probeWorker = vi.fn().mockResolvedValue({
+        _tag: 'healthy', healthy: true, capacity: 1, running: 0, available: 1,
+        workerAuths: { claude: { status: 'active' } }, providerApiKeys: {},
+        dockerHealthy: true, diskHealthy: true, responseTimeMs: 1,
+      });
+      const taskDispatcher = createTaskDispatcherService({
+        logger: mockLogger, workerHealthProbe: { probeWorker, probeAllWorkers: vi.fn() },
+      });
+
+      expect(await sendTaskMessage({ ...createDeps(), taskDispatcher }, { taskId, userId, message })).toMatchObject({
+        ok: false, error: { code: 'worker_type_disabled' },
+      });
+      expect(probeWorker).toHaveBeenCalledWith(expect.objectContaining({ url: workerConfig.url }));
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
     });
   });
 
@@ -511,7 +535,7 @@ describe('sendTaskMessage', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('worker_not_configured');
-        expect(result.error.message).toContain('No workers configured');
+        expect(result.error.message).toContain('assigned worker');
       }
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ userId }),
@@ -576,6 +600,21 @@ describe('sendTaskMessage', () => {
         expect.objectContaining({ taskId }),
         expect.any(String)
       );
+    });
+
+    it('preserves the worker policy refusal without marking a terminal task running', async () => {
+      const task = createMockTask({ status: 'implemented' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      setupWorkerSettings();
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(err({
+        code: 'worker_type_disabled', message: 'This worker no longer accepts auto',
+      }));
+
+      expect(await sendTaskMessage(createDeps(), { taskId, userId, message })).toEqual(err({
+        code: 'worker_type_disabled', message: 'This worker no longer accepts auto',
+      }));
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
     });
 
     it('should return worker_unavailable when worker reports unavailable error code', async () => {

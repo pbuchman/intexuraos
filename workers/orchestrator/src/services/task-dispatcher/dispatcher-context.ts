@@ -50,7 +50,6 @@ export interface DispatcherContext {
   readonly attemptCompletionSignals: Set<string>;
   readonly completionInProgress: Set<string>;
   readonly inactivityRestartInProgress: Set<string>;
-  readonly pendingMessages: Map<string, string[]>;
   readonly lastOutputAt: Map<string, number>;
   /**
    * INT-1551 §E.7: Set of in-flight fire-and-forget handler promises. Used by
@@ -65,8 +64,7 @@ export interface DispatcherContext {
    * `main.ts`. `TaskTimers` and `TaskRunner` consult this to cancel pending
    * timers and fail fast on shutdown. `undefined` when no controller has been
    * wired (most unit tests). When the signal is `aborted`, sub-modules MUST
-   * NOT introduce new code paths that drop pending state — `pendingMessages`
-   * etc. remain owned by their existing lifecycles.
+   * NOT introduce new code paths that drop pending state.
    */
   shutdownSignal: AbortSignal | undefined; // @allow-undefined-type -- mutable post-construction setter via TaskDispatcher.setShutdownSignal; using `?:` would change the type identity that sub-modules consume via narrowing checks
 
@@ -104,7 +102,11 @@ export interface DispatcherContext {
    * Saves the task back to state persistence. Module functions need it
    * after mutating `task.runtimeSessionId` etc.
    */
-  saveTask: (task: Task) => Promise<void>;
+  saveTask: (
+    task: Task,
+    deliveredFollowupCount?: number,
+    beforePersist?: () => Promise<void>
+  ) => Promise<void>;
   /**
    * Fetches a task by id (read-through state lookup).
    */

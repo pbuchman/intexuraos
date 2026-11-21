@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button, Layout } from '@/components';
-import { useWorkerSettings, useTimezone } from '@/hooks';
+import { useWorkerSettings, useWorkersStatus, useTimezone } from '@/hooks';
 import type {
   WorkerConfigInput,
   WorkerConfigUpdateInput,
@@ -34,6 +34,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
     updateTimezone,
   } = useTimezone();
 
+  const { status, refreshStatus } = useWorkersStatus();
   const [showAddForm, setShowAddForm] = useState(false);
 
   if (loading) {
@@ -146,8 +147,10 @@ export function WorkerSettingsPage(): React.JSX.Element {
       <div className="space-y-4">
         {workers.map((worker, index) => (
           <WorkerRow
-            key={worker.name}
+            key={worker.registrationKey ?? worker.url}
             worker={worker}
+            status={status?.workers.find((item) => item.name === worker.name && item.url === worker.url)}
+            onRefreshStatus={refreshStatus}
             priority={index + 1}
             onUpdate={async (config: WorkerConfigUpdateInput): Promise<void> => {
               await updateWorker(worker.name, config);

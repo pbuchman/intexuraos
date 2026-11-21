@@ -69,7 +69,8 @@ orchestrator (local)
 | POST      | `/tasks`               | HMAC + code-agent proof | Submit a task and persist its owner and worker |
 | GET, HEAD | `/tasks/:id`           | Code-agent proof        | Read task ID and status                        |
 | DELETE    | `/tasks/:id`           | Code-agent proof        | Cancel a task on its assigned worker           |
-| GET       | `/health`              | None                    | Health check (capacity, running count)         |
+| GET       | `/health`              | None at origin          | Capacity, auth, applied types and watchdog     |
+| PUT       | `/admin/worker-types`  | Method/path-bound HMAC  | Apply a revision-checked host selection        |
 | POST      | `/admin/refresh-token` | HMAC                    | Force GitHub token refresh                     |
 | POST      | `/admin/shutdown`      | HMAC                    | Graceful shutdown                              |
 
@@ -83,6 +84,55 @@ orchestrator (local)
 4. Check local `/health`, the existing authorized worker probe, and rejection of unsigned synthetic task requests. Test positive reads and cancellation only with an explicitly disposable task. Signed GET returns only `taskId` and `status`. HEAD has its own method-bound proof. Code-agent's authenticated UI reads the owner's canonical record directly.
 
 Each proof binds the task ID, owner, worker name, audience, HTTP method, route, request-body digest, issue time, and random nonce. The worker keeps consumed nonces under its persistent state directory for the 30-second validity window. For historical worker records it checks the original callback binding and owner assignment against the configured code-agent metadata endpoint. Unknown records and changed assignments deny access. A rollback to an older worker would reopen its unsigned origin routes. Preserve the trusted ingress boundary and loopback binding when recovering or rotating the app key.
+
+## Per-host worker types
+
+In **Settings → Code**, find this worker and open **Edit worker types**. For a Codex-only host, clear **Claude Code**, select **Codex** and optionally **Codex xhigh**, and choose **Save worker types**. The change takes effect when the host confirms it. All registrations pointing to this physical orchestrator then share that selection. A registration's main enable switch independently controls whether that user routes work here.
+
+| Task types | CLI | Credential source |
+| --- | --- | --- |
+| `auto` (Claude Auto), `opus`, `sonnet` | Claude Code | Claude OAuth |
+| `openrouter-free` | Claude Code | `OPENROUTER_API_KEY` |
+| `codex`, `codex-xhigh` | Codex | Codex worker session |
+
+Code-agent sends the edit to the registered endpoint over Cloudflare Access with a signed management request. The host atomically stores the selection and revision in `~/.code-orchestrator/worker-types.json` and loads it before credential monitoring starts. A missing file enables the full catalog at revision zero. The panel acknowledges a save only after the host has applied it. A stale edit that would replace someone else's change returns a conflict. See the [worker settings API contract](../../docs/architecture/api-contracts.md#code-worker-types).
+
+The dispatcher checks the type again before starting each attempt. A running attempt can finish. New task submissions and follow-ups for a disabled type receive HTTP 409 with reason `worker_type_disabled`. A retry that encounters the same policy also reports this reason. Code-agent can dispatch new work to a different eligible host. Re-enable an OAuth-backed type to resume Claude credential monitoring and expose the current state of the worker session. OpenRouter Free alone leaves Claude OAuth disabled.
+
+If a follow-up was already accepted while an attempt was running, the original request has already returned. When the host subsequently blocks delivery, the task log records `worker_type_disabled` and the host keeps the queued messages with the session. The completed attempt keeps its result. After re-enabling the type, send the next message on that task to deliver the retained input in order.
+
+Check the applied configuration on the host, including after a guarded restart:
+
+```bash
+curl --noproxy '*' -fsS http://127.0.0.1:8199/health |
+  jq '{enabledWorkerTypes, workerTypesRevision, running,
+       claude: .workerAuths.claude.status, codex: .workerAuths.codex.status,
+       idleTicks: .credentialWatchdog.idleTicks, epoch: .logForwarderDrain.counterEpochId}'
+```
+
+For a Codex-only acceptance check, confirm Claude is `disabled` and Codex is `active`. Submit a Codex task and verify the task details show this worker and a running or completed attempt. Then, with the host idle, run the following on that host. It observes container creation events, including containers removed before the check finishes.
+
+```bash
+(
+  set -eo pipefail
+  health() { curl --noproxy '*' -fsS http://127.0.0.1:8199/health; }
+  before=$(health)
+  start=$(date +%s)
+  end=$((start + 130))
+  creates=$(docker events --since "$start" --until "$end" \
+    --filter type=container --filter event=create --format '{{.Actor.Attributes.name}}' |
+    awk '/^claude-cred-refresh-/ { n++ } END { print n+0 }')
+  after=$(health)
+  jq -ne --argjson a "$before" --argjson b "$after" --argjson creates "$creates" '
+    ($b.credentialWatchdog.idleTicks - $a.credentialWatchdog.idleTicks) as $ticks |
+    {idleTicks: $ticks, claudeRefreshCreates: $creates,
+     passed: ($ticks >= 2 and $creates == 0 and
+       $a.logForwarderDrain.counterEpochId == $b.logForwarderDrain.counterEpochId and
+       $a.workerTypesRevision == $b.workerTypesRevision and
+       $a.workerAuths.claude.status == "disabled" and $b.workerAuths.claude.status == "disabled")} |
+    ., .passed'
+)
+```
 
 ## Environment Variables
 
@@ -217,9 +267,6 @@ sudo systemctl stop intexuraos-orchestrator@pbuchman
 # Start
 sudo systemctl start intexuraos-orchestrator@pbuchman
 
-# Restart (after rebuild)
-sudo systemctl restart intexuraos-orchestrator@pbuchman
-
 # Health check
 curl -s http://localhost:8199/health | jq .
 ```
@@ -236,7 +283,7 @@ requires no active tasks or pending callbacks before restarting:
 cd ~/deploy/intexuraos
 test "$(git rev-parse HEAD)" = "<reviewed-40-character-sha>"
 pnpm build   # builds shared packages
-pnpm --filter orchestrator build
+pnpm --filter @intexuraos/orchestrator build
 
 # 2. Use the host-owned helper with the reviewed artifact and its health checks.
 # See pbuchman-dev machine-setup instructions for the exact invocation.
@@ -460,7 +507,7 @@ flow, then exit. The script mounts `~/.code-orchestrator/claude-creds` at
 `/home/claude/.claude` and runs as the host user's UID/GID. Credentials are
 stored in `~/.code-orchestrator/claude-creds/.credentials.json`.
 
-The orchestrator:
+When at least one selected type uses Claude OAuth, the orchestrator:
 
 - Reads the shared worker credentials at startup and reloads them every minute.
 - Checks every minute for tokens within five minutes of expiry; refresh waits

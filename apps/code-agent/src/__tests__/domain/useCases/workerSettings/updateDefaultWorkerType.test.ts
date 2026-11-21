@@ -17,6 +17,7 @@ function makeRepo(overrides: Partial<WorkerSettingsRepository> = {}): WorkerSett
     getWorkerByName: vi.fn(),
     addWorker: vi.fn(),
     updateWorker: vi.fn(),
+    confirmWorkerTypePolicy: vi.fn(),
     deleteWorker: vi.fn(),
     reorderWorkers: vi.fn(),
     updateTestResult: vi.fn(),

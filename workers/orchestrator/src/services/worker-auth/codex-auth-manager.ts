@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import type { Logger } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
-import type { WorkerAuthManager, WorkerAuthState } from './types.js';
+import type { WorkerAuthManager, WorkerAuthRefreshContext, WorkerAuthState } from './types.js';
 import type { CodexAuthRefresher } from './codex-auth-refresher.js';
 
 export interface CodexAuthManagerConfig {
@@ -112,7 +112,12 @@ export class CodexAuthManager implements WorkerAuthManager {
       });
       this.logger.error(
         {
-          error: error instanceof Error ? error : new Error(String(error)),
+          error:
+            error instanceof SyntaxError
+              ? new Error('Invalid credentials JSON')
+              : error instanceof Error
+                ? error
+                : new Error(String(error)),
           path: this.config.authPath,
         },
         'Failed to parse Codex auth file'
@@ -154,13 +159,16 @@ export class CodexAuthManager implements WorkerAuthManager {
     return Date.now() >= Date.parse(this.state.expiresAt) - bufferMs;
   }
 
-  async refresh(): Promise<boolean> {
+  async refresh(context?: WorkerAuthRefreshContext): Promise<boolean> {
     const before = this.state;
     if (!before.refreshSupported || this.config.refresher === undefined) {
       return false;
     }
 
-    const refreshed = await this.config.refresher.refresh();
+    const refreshed = await this.config.refresher.refresh(context);
+    if (context?.signal.aborted === true) {
+      return false;
+    }
     if (!refreshed) {
       this.state = buildState({
         status: 'refresh_failed',
