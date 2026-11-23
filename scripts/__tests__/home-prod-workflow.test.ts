@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -6,6 +6,12 @@ import { describe, expect, it } from 'vitest';
 
 const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/deploy.yml'), 'utf8');
 const ci = readFileSync(resolve(process.cwd(), '.github/workflows/ci.yml'), 'utf8');
+// Select the caller's Bash before isolating fixture environments. macOS's
+// system Bash 3.2 does not enforce the Linux runner's errexit behavior.
+const deployShell = execFileSync('bash', ['-c', 'printf "%s" "$BASH"'], {
+  encoding: 'utf8',
+  env: { PATH: process.env['PATH'] },
+});
 
 const compatibilityJob =
   workflow.split('  deploy-home-prod-compatibility:\n')[1]?.split('  deploy-home-prod:\n')[0] ?? '';
@@ -47,7 +53,7 @@ describe('Home PROD workflow admission', () => {
       expect(step).toContain(`${client} "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"`);
       const shell = step.slice(step.indexOf('run: |\n') + 7).replace(client, 'fixture_request');
       const result = spawnSync(
-        'bash',
+        deployShell,
         [
           '-c',
           'fixture_request() { [[ "$#" == 2 && "$1" == 91 && "$2" == 2 ]] || exit 99; echo requested; return "$FIXTURE_GATE_EXIT"; };\n' +
@@ -77,7 +83,7 @@ describe('Home PROD workflow admission', () => {
       ?.split('      - name: Register Home PROD deployment')[0];
     if (!step) throw new Error('missing hosted intent admission');
     const result = spawnSync(
-      'bash',
+      deployShell,
       ['-c', 'gh() { exit 42; };\n' + step.slice(step.indexOf('run: |\n') + 7)],
       {
         env: {
@@ -148,7 +154,7 @@ describe('Home PROD workflow admission', () => {
         conclusion: input.conclusion,
       };
       const result = spawnSync(
-        'bash',
+        deployShell,
         [
           '-c',
           'gh() { if [[ "$*" == *"/statuses?"* ]]; then echo "$REPORTS"; else echo "$CHECKS"; fi; }; sleep() { exit 42; };\n' +
@@ -217,21 +223,25 @@ describe('Home PROD workflow admission', () => {
     sleep() { :; }
     `;
       try {
-        const result = spawnSync('bash', ['-c', mock + text.slice(text.indexOf('run: |\n') + 7)], {
-          cwd: dir,
-          env: {
-            PATH: '/usr/bin:/bin',
-            MODE: mode,
-            ROW: JSON.stringify(row),
-            GITHUB_REPOSITORY: 'fixture/repo',
-            GITHUB_ENV: join(dir, 'env'),
-            GITHUB_SHA: sha,
-            GITHUB_REF: 'refs/heads/development',
-            PROD_SECRET_PACKAGE_VERSION: '5',
-            GITHUB_RUN_ID: '91',
-            GITHUB_RUN_ATTEMPT: '2',
-          },
-        });
+        const result = spawnSync(
+          deployShell,
+          ['-c', mock + text.slice(text.indexOf('run: |\n') + 7)],
+          {
+            cwd: dir,
+            env: {
+              PATH: '/usr/bin:/bin',
+              MODE: mode,
+              ROW: JSON.stringify(row),
+              GITHUB_REPOSITORY: 'fixture/repo',
+              GITHUB_ENV: join(dir, 'env'),
+              GITHUB_SHA: sha,
+              GITHUB_REF: 'refs/heads/development',
+              PROD_SECRET_PACKAGE_VERSION: '5',
+              GITHUB_RUN_ID: '91',
+              GITHUB_RUN_ATTEMPT: '2',
+            },
+          }
+        );
         expect(result.status === 0).toBe(success);
         expect(
           existsSync(join(dir, 'calls'))

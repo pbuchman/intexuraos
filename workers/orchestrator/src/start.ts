@@ -30,6 +30,7 @@ import { ensureDirectoryExists } from './bootstrap/fs-utils.js';
 import { defaultNodeEnv } from './bootstrap/node-env.js';
 import { initOrchestratorObservability } from './bootstrap/observability-identity.js';
 import { configureTaskAccess } from './bootstrap/task-access.js';
+import { writeErrorHubProbeRuntime } from './bootstrap/error-hub-probe-runtime.js';
 
 function buildOrchestratorConfig(
   env: BootstrapEnvConfig,
@@ -143,6 +144,8 @@ export async function start(): Promise<void> {
     gitUserName,
     gitUserEmail,
   });
+
+  writeErrorHubProbeRuntime(orchestratorDir, env);
 
   // Validate worker API keys asynchronously (non-blocking; warns on failure).
   void validateWorkerApiKeys(

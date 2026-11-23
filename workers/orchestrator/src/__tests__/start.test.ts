@@ -10,11 +10,21 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync } from 'node:crypto';
+import {
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Track invocation order across mocks.
 const callOrder: string[] = [];
+let testHome: string;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bootstrap module mocks (hoisted by vitest.vi.mock)
@@ -113,13 +123,17 @@ vi.mock('../main.js', () => ({
   }),
 }));
 
-// Mock file-system side effects in start.ts itself (mkdirSync, writeFileSync).
+vi.mock('node:os', async () => {
+  const actual = await vi.importActual<typeof import('node:os')>('node:os');
+  return { ...actual, homedir: (): string => testHome };
+});
+
+// Record mkdir calls while keeping real filesystem behavior in the temporary home.
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
   return {
     ...actual,
-    mkdirSync: vi.fn(() => undefined),
-    writeFileSync: vi.fn(() => undefined),
+    mkdirSync: vi.fn(actual.mkdirSync),
   };
 });
 
@@ -176,9 +190,13 @@ import { initOrchestratorObservability } from '../bootstrap/observability-identi
 describe('start() — full bootstrap happy path', () => {
   beforeEach(() => {
     callOrder.length = 0;
+    testHome = mkdtempSync(join(tmpdir(), 'orchestrator-start-home-'));
+    vi.stubEnv('INVOCATION_ID', undefined);
   });
 
   afterEach(() => {
+    rmSync(testHome, { recursive: true, force: true });
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
@@ -200,6 +218,54 @@ describe('start() — full bootstrap happy path', () => {
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
     expect(initOrchestratorObservability).toHaveBeenCalledOnce();
     expect(main).toHaveBeenCalledOnce();
+  });
+
+  it('publishes only the configured image and Error Hub route before accepting traffic', async () => {
+    const path = join(testHome, '.code-orchestrator', 'error-hub-probe-runtime.json');
+    vi.mocked(main).mockImplementationOnce(async () => {
+      expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({
+        schemaVersion: 1,
+        imageRef: 'image:latest',
+        errorHubHost: 'home-dev.example.ts.net:8443',
+        connectAddress: null,
+        invocationId: null,
+      });
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+    });
+    await start();
+  });
+
+  it('atomically replaces the previous projection with this systemd invocation', async () => {
+    const { mkdirSync } = await import('node:fs');
+    const stateDir = join(testHome, '.code-orchestrator');
+    mkdirSync(stateDir);
+    const path = join(stateDir, 'error-hub-probe-runtime.json');
+    const oldInode = join(stateDir, 'previous');
+    writeFileSync(path, 'old projection\n', { mode: 0o644 });
+    linkSync(path, oldInode);
+    const invocationId = '00112233445566778899aabbccddeeff';
+    vi.stubEnv('INVOCATION_ID', invocationId);
+    vi.mocked(loadEnvConfig).mockReturnValueOnce({
+      ...loadEnvConfig(),
+      errorHubConnectAddress: 'fd00:172:28::1',
+    });
+
+    await start();
+
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({
+      schemaVersion: 1,
+      imageRef: 'image:latest',
+      errorHubHost: 'home-dev.example.ts.net:8443',
+      connectAddress: 'fd00:172:28::1',
+      invocationId,
+    });
+    expect(readFileSync(oldInode, 'utf8')).toBe('old projection\n');
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(readdirSync(stateDir).sort()).toEqual([
+      'error-hub-probe-runtime.json',
+      'logs',
+      'previous',
+    ]);
   });
 
   it('wires the operator-pinned public key, audience and listener address into main', async () => {

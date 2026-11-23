@@ -30,6 +30,7 @@ export interface PreservedWorkerEntry {
 export type LifecycleProviderConfig = Pick<
   DockerProviderConfig,
   | 'imageName'
+  | 'errorHubConnectAddress'
   | 'managedAttemptsMode'
   | 'workerReadyTimeoutMs'
   | 'maxConcurrent'

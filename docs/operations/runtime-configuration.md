@@ -167,6 +167,14 @@ inherited value. That host-only `ixos-home-orchestrator-dev` identity has only
 repository-level Artifact Registry reader access and is never mounted into a
 worker.
 
+The Home Dev generator writes `INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS=fd00:172:28::1`.
+New worker containers map the configured Error Hub DNS hostname to that bridge
+relay. The private HTTPS origin, certificate verification and worker
+`ERROR_HUB_HOST` stay the same. A generic orchestrator with the address unset
+uses regular DNS. The local health check above verifies the orchestrator.
+Use the [worker image verifier](../setup/11-claude-code-mcp-setup.md#verification)
+to exercise the Error Hub route.
+
 Grafana/Alloy uses `scripts/observability/load-grafana-cloud-env.sh`. It reads
 only `INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN` from
 `${SECRET_PACKAGE_RENDER_DIR}/current/environment.env` (defaulting to the DEV

@@ -151,10 +151,28 @@ describe('loadEnvConfig', () => {
     expect(config.logLevel).toBe('info');
     expect(config.openRouterApiKey).toBe('openrouter-key');
     expect(config.errorHubHost).toBe('home-dev.example.ts.net:8443');
+    expect(config).not.toHaveProperty('errorHubConnectAddress');
     expect(config.keepContainersAlive).toBe(false);
     expect(config.workerForensicsMode).toBe(false);
     expect(config.preserveWorkerContainers).toBe(true);
   });
+
+  it('accepts the exact worker bridge relay without changing the Error Hub origin', () => {
+    const config = loadEnvConfig(
+      makeValidEnv({ INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS: 'fd00:172:28::1' })
+    );
+    expect(config.errorHubConnectAddress).toBe('fd00:172:28::1');
+    expect(config.errorHubHost).toBe('home-dev.example.ts.net:8443');
+  });
+
+  it.each(['', '127.0.0.1', 'fd00:172:28::2', '[fd00:172:28::1]', ' fd00:172:28::1'])(
+    'rejects a configured relay other than the exact bridge gateway',
+    (address) => {
+      expect(() =>
+        loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS: address }))
+      ).toThrow(/INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS/);
+    }
+  );
 
   it('parses PORT and INTEXURAOS_WORKER_CAPACITY overrides', () => {
     const config = loadEnvConfig(

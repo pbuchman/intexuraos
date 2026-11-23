@@ -67,6 +67,7 @@ The orchestrator / worker runtime requires:
 | Variable | Purpose |
 | --- | --- |
 | `INTEXURAOS_ERROR_HUB_HOST` | Private SentryBox `.ts.net:8443` host, injected into workers as `ERROR_HUB_HOST`. |
+| `INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS` | Home Dev worker bridge gateway. The orchestrator uses it only to map the configured Error Hub DNS hostname in new containers. |
 | `LINEAR_API_KEY` | Existing Linear MCP credential used by the worker for the linked Linear issue. |
 
 Home PROD receives and authenticates the webhook, so it loads
@@ -76,7 +77,8 @@ Home PROD receives and authenticates the webhook, so it loads
 
 The home-dev orchestrator systemd environment sets
 `INTEXURAOS_ERROR_HUB_HOST`. The worker image exposes only the `error_hub` MCP
-for issue evidence. Its fixed bearer value is syntactic only; private network
+for issue evidence. The bridge relay preserves the private HTTPS origin and TLS
+certificate verification. Its fixed bearer value is syntactic only; private network
 reachability is the access boundary. Neither the orchestrator nor an isolated
 worker requires or receives `INTEXURAOS_SENTRY_AUTH_TOKEN` or
 `SENTRY_AUTH_TOKEN`.

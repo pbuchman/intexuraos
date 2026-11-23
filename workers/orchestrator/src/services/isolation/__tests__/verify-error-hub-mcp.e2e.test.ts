@@ -220,17 +220,12 @@ USER claude
     });
 
     expect(JSON.parse(stdout)).toEqual({
-      environment: 'dev',
-      eventId,
-      issueUrl,
+      businessAccess: true,
       mcpName: 'Sentry MCP',
       mcpVersion: '0.37.0',
+      mode: 'acceptance',
       ok: true,
-      project: 'IntexuraOS Backend',
-      release: 'intexuraos-sentrybox-acceptance@1.0.0',
-      stack: 'at emitControlledIssue (scripts/acceptance/emit-controlled-issue.mjs:1:1)',
-      title: 'Controlled SentryBox validation fault',
-      tools: ['get_issue_details', 'search_issue_events'],
+      transportReady: true,
     });
 
     const peerEvidence = JSON.parse(

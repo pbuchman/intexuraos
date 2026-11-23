@@ -201,7 +201,9 @@ export INTEXURAOS_REPOSITORY_PATH=$HOME/claude-orchestrator/intexuraos
 export INTEXURAOS_CODE_AGENT_URL=http://localhost:8128
 export INTEXURAOS_USAGE_WEBHOOK_URL=http://localhost:8128/internal/webhooks/usage-events
 # Private Tailscale SentryBox host used by the pinned error_hub MCP client.
-export INTEXURAOS_ERROR_HUB_HOST=home-dev.taild6ad57.ts.net:8443
+export INTEXURAOS_ERROR_HUB_HOST=home-dev.example.ts.net:8443
+# The Home Dev renderer sets the worker bridge gateway. Leave unset for ordinary DNS.
+# export INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS=fd00:172:28::1
 # Worker image reference for Claude containers (tag or digest)
 # Recommended in production: immutable digest (@sha256:...)
 # export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:<digest>

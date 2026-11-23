@@ -1691,12 +1691,37 @@ describe('orchestrator environment generator', () => {
     );
     expect(generated['INTEXURAOS_REPOSITORY_PATH']).toBe(join(tempRoot, '.code-orchestrator/repo'));
     expect(generated['INTEXURAOS_RUNTIME']).toBe('dev');
+    expect(generated['INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS']).toBe('fd00:172:28::1');
     expect(generated['PORT']).toBe('8199');
     expect(generated['INTEXURAOS_WORKER_CAPACITY']).toBe('3');
     expect(generated['INTEXURAOS_WHATSAPP_ACCESS_TOKEN']).toBeUndefined();
     expect(generated['INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET']).toBeUndefined();
     expect(generated['INTEXURAOS_GEMINI_APP_API_KEY']).toBeUndefined();
     expect(statSync(outputPath).mode & 0o777).toBe(0o600);
+  });
+
+  it('rejects a supplied non-gateway Error Hub address without replacing the generated env', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'orchestrator-env-error-hub-relay-'));
+    const outputPath = join(tempRoot, 'env');
+    writeFileSync(outputPath, 'PREVIOUS=complete\n', { mode: 0o600 });
+    const rejectedAddress = 'not-an-allowed-relay';
+
+    const result = spawnSync(
+      process.execPath,
+      [generateOrchestratorEnvPath, '--output', outputPath, '--user-home', tempRoot],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: validOrchestratorEnvironment({
+          INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS: rejectedAddress,
+        }),
+      }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS');
+    expect(`${result.stdout}${result.stderr}`).not.toContain(rejectedAddress);
+    expect(readFileSync(outputPath, 'utf8')).toBe('PREVIOUS=complete\n');
   });
 
   it.each([

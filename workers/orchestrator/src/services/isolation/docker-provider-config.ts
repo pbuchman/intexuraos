@@ -1,5 +1,6 @@
 export interface DockerProviderConfig {
   imageName: string;
+  errorHubConnectAddress?: string;
   imagePullPolicy: 'always' | 'if-not-present';
   networkName: string;
   maxConcurrent: number;

@@ -238,7 +238,7 @@ const expectedConsumers: ExpectedIdentityConsumer[] = [
     usageBindings: [
       {
         usageClass: 'fixed-value-assignment',
-        line: 140,
+        line: 120,
         column: 5,
         nodeKind: 'PropertyAssignment',
         spanSha256: '2ac7296a50a4c4848499894fbcc06b6142a96e14f58a509dbfb79ce070299905',
@@ -333,7 +333,7 @@ const expectedConsumers: ExpectedIdentityConsumer[] = [
     usageBindings: [
       {
         usageClass: 'fixed-value-assignment',
-        line: 141,
+        line: 121,
         column: 5,
         nodeKind: 'PropertyAssignment',
         spanSha256: 'e25764a3b9ad592cec1698313a3c2206d3426d5cfc36ebaf035cbec6b8af06b3',
@@ -1803,7 +1803,7 @@ describe('Home Dev orchestrator production ownership', () => {
         expect.objectContaining({
           envName: 'INTEXURAOS_ENVIRONMENT',
           file: 'scripts/generate-orchestrator-env.mjs',
-          line: 15,
+          line: 20,
           column: 3,
           nodeKind: 'StringLiteral',
           reviewedSha256: fileSha256(generatorPath),
@@ -2234,8 +2234,8 @@ describe('Home Dev orchestrator production ownership', () => {
     expect(audit.schemaVersion).toBe(6);
     expect(audit.runtimeBundleClosure).toEqual({
       entryPoints: orchestratorRuntimeEntryPoints,
-      inputCount: 172,
-      inputsSha256: '08f9d60a2d9837061154d4f52524158a2425784aefdfdef4187cbe8b63a4c55b',
+      inputCount: 174,
+      inputsSha256: '38cebebee84e6d8211f28a2187f48986d317f3fc4eb2f5cd4661d2bab9745b71',
     });
     expect(audit.observabilityIdentityBoundary.bootstrapConfig.forbiddenField).toBe('environment');
     expect(audit.observabilityIdentityBoundary.boundaryModule).toEqual(

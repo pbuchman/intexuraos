@@ -89,11 +89,11 @@ Each proof binds the task ID, owner, worker name, audience, HTTP method, route, 
 
 In **Settings → Code**, find this worker and open **Edit worker types**. For a Codex-only host, clear **Claude Code**, select **Codex** and optionally **Codex xhigh**, and choose **Save worker types**. The change takes effect when the host confirms it. All registrations pointing to this physical orchestrator then share that selection. A registration's main enable switch independently controls whether that user routes work here.
 
-| Task types | CLI | Credential source |
-| --- | --- | --- |
-| `auto` (Claude Auto), `opus`, `sonnet` | Claude Code | Claude OAuth |
-| `openrouter-free` | Claude Code | `OPENROUTER_API_KEY` |
-| `codex`, `codex-xhigh` | Codex | Codex worker session |
+| Task types                             | CLI         | Credential source    |
+| -------------------------------------- | ----------- | -------------------- |
+| `auto` (Claude Auto), `opus`, `sonnet` | Claude Code | Claude OAuth         |
+| `openrouter-free`                      | Claude Code | `OPENROUTER_API_KEY` |
+| `codex`, `codex-xhigh`                 | Codex       | Codex worker session |
 
 Code-agent sends the edit to the registered endpoint over Cloudflare Access with a signed management request. The host atomically stores the selection and revision in `~/.code-orchestrator/worker-types.json` and loads it before credential monitoring starts. A missing file enables the full catalog at revision zero. The panel acknowledges a save only after the host has applied it. A stale edit that would replace someone else's change returns a conflict. See the [worker settings API contract](../../docs/architecture/api-contracts.md#code-worker-types).
 
@@ -180,6 +180,7 @@ tags only; see [the identity decision](../../docs/operations/orchestrator-identi
 | `INTEXURAOS_REPOSITORY_PATH`                | `~/.code-orchestrator/repo`                              | Local repo clone path                                                                       |
 | `INTEXURAOS_WORKER_CAPACITY`                | `3`                                                      | Max concurrent tasks                                                                        |
 | `INTEXURAOS_CODE_WORKER_IMAGE`              | `.../code-worker:latest`                                 | Worker image reference (tag or digest)                                                      |
+| `INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS`      | Unset outside the Home Dev renderer                      | Map only the Error Hub DNS hostname to the Home Dev IPv6 bridge gateway `fd00:172:28::1`    |
 | `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | `or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash` | Comma-separated OpenRouter model list for completion verification and compliance validation |
 | `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`     | `1`                                                      | Keep worker containers after task completion for debugging                                  |
 | `INTEXURAOS_GIT_USER_NAME`                  | Host `git config user.name`                              | Git author name for worker commits                                                          |
@@ -188,6 +189,22 @@ tags only; see [the identity decision](../../docs/operations/orchestrator-identi
 | `LOG_LEVEL`                                 | `info`                                                   | Pino log level                                                                              |
 
 ---
+
+## Error Hub worker verification
+
+The Home Dev renderer supplies `fd00:172:28::1` for
+`INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS`. New containers on `code-worker-net`
+receive a hosts-file entry for the Error Hub DNS hostname. Workers keep
+`ERROR_HUB_HOST` and its HTTPS port for TLS server name and certificate
+verification. Generic installations use ordinary DNS when the setting is absent.
+
+At startup, the orchestrator atomically writes
+`~/.code-orchestrator/error-hub-probe-runtime.json` with mode `0600`. It
+contains schema version 1, the configured image reference and Error Hub route,
+and the systemd invocation ID when available. A host monitor checks that
+invocation ID against the running service and resolves the local image to an
+immutable ID before starting the verifier. See the
+[worker verification commands](../../docs/setup/11-claude-code-mcp-setup.md#verification).
 
 ## Local Development Setup
 
