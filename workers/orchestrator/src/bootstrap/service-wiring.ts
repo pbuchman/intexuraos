@@ -284,6 +284,9 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
       gcpSaKeyPath: env.gcpSaKeyPath,
       keepContainersAlive: env.keepContainersAlive,
       imageName: env.workerImage,
+      ...(env.errorHubConnectAddress !== undefined && {
+        errorHubConnectAddress: env.errorHubConnectAddress,
+      }),
       sharedCredsPath,
       sharedCodexAuthPath,
       forensicsMode: env.workerForensicsMode,

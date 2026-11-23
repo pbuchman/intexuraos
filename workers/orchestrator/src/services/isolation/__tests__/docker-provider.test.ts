@@ -236,10 +236,16 @@ describe('DockerProvider', () => {
     it('resolves creation after the managed attempt starts, before it finishes', async () => {
       const stream = createMockExecStream();
       let allowStart!: () => void;
-      const startGate = new Promise<void>((resolve) => { allowStart = resolve; });
-      const start = vi.fn(async () => { await startGate; return stream; });
+      const startGate = new Promise<void>((resolve) => {
+        allowStart = resolve;
+      });
+      const start = vi.fn(async () => {
+        await startGate;
+        return stream;
+      });
       mocks.mockContainer.exec.mockImplementation(async (options: { Cmd: string[] }) => {
-        if (options.Cmd[1] === 'run-attempt') return { start, inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }) };
+        if (options.Cmd[1] === 'run-attempt')
+          return { start, inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }) };
         return createMockContainerExec();
       });
       let ready = false;
@@ -248,13 +254,17 @@ describe('DockerProvider', () => {
         ready = true;
         return handle;
       });
-      await vi.waitFor(() => { expect(start).toHaveBeenCalledOnce(); });
+      await vi.waitFor(() => {
+        expect(start).toHaveBeenCalledOnce();
+      });
       expect(ready).toBe(false);
       allowStart();
       await created;
       expect(onComplete).not.toHaveBeenCalled();
       stream.emit('end');
-      await vi.waitFor(() => { expect(onComplete).toHaveBeenCalledWith(0); });
+      await vi.waitFor(() => {
+        expect(onComplete).toHaveBeenCalledWith(0);
+      });
     });
 
     it('starts container with correct config', async () => {
@@ -266,7 +276,25 @@ describe('DockerProvider', () => {
       expect(handle.status).toBe('running');
       expect(handle.startedAt).toBeInstanceOf(Date);
       expect(mocks.mockDocker.createContainer).toHaveBeenCalled();
+      expect(mocks.mockDocker.createContainer.mock.calls[0]?.[0].HostConfig).not.toHaveProperty(
+        'ExtraHosts'
+      );
       expect(mocks.mockContainer.start).toHaveBeenCalled();
+    });
+
+    it('maps only the Error Hub DNS hostname to the configured bridge relay', async () => {
+      provider = new TestableDockerProvider(
+        { errorHubConnectAddress: 'fd00:172:28::1' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      await provider.createWorker(createTestConfig());
+
+      const options = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(options?.HostConfig.ExtraHosts).toEqual(['home-dev.example.ts.net:fd00:172:28::1']);
+      expect(options?.Env).toContain('ERROR_HUB_HOST=home-dev.example.ts.net:8443');
+      expect(options?.Env).not.toContainEqual(expect.stringMatching(/CONNECT_ADDRESS/u));
     });
 
     it('fails fast when worker image pull fails', async () => {

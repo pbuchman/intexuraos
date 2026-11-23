@@ -30,7 +30,7 @@ For a direct local Claude session:
 
 ```bash
 export LINEAR_API_KEY="lin_api_xxxxxxxxxxxxx"
-export ERROR_HUB_HOST="home-dev.taild6ad57.ts.net:8443"
+export ERROR_HUB_HOST="home-dev.example.ts.net:8443"
 ```
 
 `ERROR_HUB_HOST` is not a credential. Tailnet access is the SentryBox access
@@ -101,13 +101,37 @@ From a Claude session, test one known private SentryBox issue URL with
 `error_hub` and list the Linear teams. The SentryBox request must stay on the
 tailnet hostname.
 
-The checked-in real-image verifier is the production-equivalent evidence test:
+Run the checked-in verifier on the worker host. Set the Error Hub hostname and
+the ID of the existing local worker image. Home Dev also sets the bridge
+gateway used by its orchestrator. Resolve the image ID from the same local
+image reference configured in the running orchestrator.
 
 ```bash
+export INTEXURAOS_ERROR_HUB_HOST="home-dev.example.ts.net:8443"
+export INTEXURAOS_CODE_WORKER_IMAGE="$(docker image inspect --format '{{.Id}}' '<configured-local-worker-image>')"
+export INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS='fd00:172:28::1'
+
 pnpm --filter @intexuraos/orchestrator verify:error-hub-mcp \
-  "https://home-dev.taild6ad57.ts.net:8443/organizations/intexuraos/issues/<id>/" \
+  "https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/<id>/" \
   "<event-id>"
 ```
+
+The strict command reads the known event by ID, including its stack frame and
+required metadata. It also verifies recent-event search, whose finite result page
+can contain newer events without the retained original event. For a periodic
+check, pass `--probe <issue-url>` to select
+the current event from the MCP issue details and verify it appears in the MCP
+event search. If the issue or event vanishes during that check, the verifier
+reports `issue_not_found` after a verified HTTPS 404. Use `--transport-only`
+when the store has no issue to select. It checks HTTPS readiness,
+`initialize`, and `tools/list` and reports `businessAccess: false`.
+
+Each mode validates the negotiated MCP protocol and advertised tools capability,
+checks the baked `error_hub` configuration and verifies HTTPS against
+the configured DNS hostname. The verifier runs one disposable, labeled
+container on `code-worker-net` with `--pull=never`. It prints one JSON summary
+with the mode and result. Failures exit nonzero and use fixed categories
+without private issue data or child-process diagnostics.
 
 ## Troubleshooting
 
@@ -125,7 +149,7 @@ version differs.
 ### Connection refused or timeout
 
 1. Confirm Tailscale is connected.
-2. Open `https://home-dev.taild6ad57.ts.net:8443/health/ready` from the same
+2. Open `https://home-dev.example.ts.net:8443/health/ready` from the same
    machine.
 3. Confirm `ERROR_HUB_HOST` contains only the DNS hostname and port, with no
    scheme, path, credentials, or whitespace.
@@ -147,7 +171,7 @@ changing it. SentryBox itself does not require an auth token.
 
 ```text
 [ ] LINEAR_API_KEY is set
-[ ] ERROR_HUB_HOST is home-dev.taild6ad57.ts.net:8443
+[ ] ERROR_HUB_HOST is home-dev.example.ts.net:8443 (replace with the configured hostname)
 [ ] sentry-mcp reports 0.37.0
 [ ] claude mcp list shows linear and error_hub only
 [ ] a known SentryBox issue can be read through error_hub

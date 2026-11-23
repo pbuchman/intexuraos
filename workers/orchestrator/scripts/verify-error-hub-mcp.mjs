@@ -1,15 +1,24 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
+import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
+import {
+  getErrorHubHostMapping,
+  validateErrorHubConnectAddress,
+  validateErrorHubHost,
+} from '../shared/error-hub-routing.mjs';
 
 const EXPECTED_MCP_NAME = 'Sentry MCP';
 const EXPECTED_MCP_VERSION = '0.37.0';
 const MCP_PROTOCOL_VERSION = '2025-06-18';
+const SUPPORTED_MCP_PROTOCOL_VERSIONS = [MCP_PROTOCOL_VERSION, '2025-03-26', '2024-11-05'];
 const ORGANIZATION_SLUG = 'intexuraos';
 const WORKER_NETWORK = 'code-worker-net';
-const REQUEST_TIMEOUT_MS = 60_000;
+const VERIFICATION_TIMEOUT_MS = 65_000;
 const WORKER_READY_TIMEOUT_MS = 30_000;
+const CLEANUP_TIMEOUT_MS = 4_000;
+const PROBE_LABEL = 'com.intexuraos.error-hub-probe';
 const ERROR_HUB_MCP_COMMAND = 'sh';
 const ERROR_HUB_MCP_ARGUMENTS = [
   '-lc',
@@ -21,21 +30,30 @@ const IMMUTABLE_IMAGE_PATTERN =
 const EVENT_ID_PATTERN = /^[a-f0-9]{32}$/u;
 
 export function parseVerificationConfiguration(argv, environment) {
-  if (!Array.isArray(argv) || argv.length !== 2) {
-    throw new TypeError('usage: verify:error-hub-mcp <private issue URL> <event ID>');
-  }
-
-  const issueUrlText = requiredString(argv[0], 'private issue URL');
-  const eventId = requiredString(argv[1], 'event ID');
-  if (!EVENT_ID_PATTERN.test(eventId)) {
-    throw new TypeError('event ID must be exactly 32 lowercase hexadecimal characters');
+  const transportOnly = argv[0] === '--transport-only';
+  if (argv.length !== (transportOnly ? 1 : 2)) {
+    throw new TypeError(
+      'usage: verify:error-hub-mcp <private issue URL> <event ID> | --probe <private issue URL> | --transport-only'
+    );
   }
 
   const host = requiredEnvironment(environment, 'INTEXURAOS_ERROR_HUB_HOST');
-  validatePrivateHost(host);
+  validateErrorHubHost(host);
+  const connectAddress = validateErrorHubConnectAddress(
+    environment.INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS
+  );
   const image = requiredEnvironment(environment, 'INTEXURAOS_CODE_WORKER_IMAGE');
   if (!IMMUTABLE_IMAGE_PATTERN.test(image)) {
     throw new TypeError('INTEXURAOS_CODE_WORKER_IMAGE must be an immutable sha256 image reference');
+  }
+  const route = { host, image, ...(connectAddress !== undefined && { connectAddress }) };
+  if (transportOnly) return { ...route, mode: 'transport-only' };
+
+  const probe = argv[0] === '--probe';
+  const issueUrlText = requiredString(probe ? argv[1] : argv[0], 'private issue URL');
+  const eventId = probe ? undefined : requiredString(argv[1], 'event ID');
+  if (eventId !== undefined && !EVENT_ID_PATTERN.test(eventId)) {
+    throw new TypeError('event ID must be exactly 32 lowercase hexadecimal characters');
   }
 
   let issueUrl;
@@ -63,9 +81,9 @@ export function parseVerificationConfiguration(argv, environment) {
   }
 
   return {
-    eventId,
-    host,
-    image,
+    ...route,
+    mode: probe ? 'probe' : 'acceptance',
+    ...(eventId !== undefined && { eventId }),
     issueId: issueMatch[1],
     issueUrl: issueUrlText,
   };
@@ -73,14 +91,19 @@ export function parseVerificationConfiguration(argv, environment) {
 
 export function buildDockerArguments(config, containerName) {
   requiredString(containerName, 'container name');
+  const mapping = getErrorHubHostMapping(config.host, config.connectAddress);
   return [
     'run',
     '--rm',
     '--detach',
+    '--pull=never',
     '--name',
     containerName,
+    '--label',
+    `${PROBE_LABEL}=${containerName}`,
     '--network',
     WORKER_NETWORK,
+    ...(mapping === undefined ? [] : ['--add-host', `${mapping.hostname}=${mapping.address}`]),
     '--read-only',
     '--cap-drop',
     'ALL',
@@ -142,31 +165,50 @@ export function parseErrorHubMcpEntry(jsonText) {
   };
 }
 
+function validateMcpServer(initializeResult) {
+  const initialize = record(initializeResult, 'MCP initialize result');
+  if (!SUPPORTED_MCP_PROTOCOL_VERSIONS.includes(initialize.protocolVersion)) {
+    throw new Error('Sentry MCP negotiated an unsupported protocol version');
+  }
+  const capabilities = record(initialize.capabilities, 'MCP capabilities');
+  const tools = record(capabilities.tools, 'MCP tools capability');
+  if (tools.listChanged !== undefined && typeof tools.listChanged !== 'boolean') {
+    throw new Error('Sentry MCP returned an invalid tools capability');
+  }
+  const serverInfo = record(initialize.serverInfo, 'MCP serverInfo');
+  if (serverInfo.name !== EXPECTED_MCP_NAME || serverInfo.version !== EXPECTED_MCP_VERSION) {
+    throw new Error('Sentry MCP identity does not match the pinned worker image contract');
+  }
+  return { mcpName: EXPECTED_MCP_NAME, mcpVersion: EXPECTED_MCP_VERSION };
+}
+
+function validateEventSearch(searchResult, eventId) {
+  const searchText = toolText(searchResult, 'search_issue_events');
+  // The pinned client renders the SentryBox eventID as a field in each row.
+  const eventIds = [...searchText.matchAll(/^\*\*eventID\*\*: ([a-f0-9]{32})$/gmu)].map(
+    (match) => match[1]
+  );
+  if (eventIds.length === 0 || (eventId !== undefined && !eventIds.includes(eventId))) {
+    throw new Error('search_issue_events did not return the required event evidence');
+  }
+}
+
 export function validateMcpEvidence({
   initializeResult,
   detailsResult,
   searchResult,
   expectedEventId,
 }) {
-  const initialize = record(initializeResult, 'MCP initialize result');
-  const serverInfo = record(initialize.serverInfo, 'MCP serverInfo');
-  const mcpName = requiredString(serverInfo.name, 'MCP server name');
-  const mcpVersion = requiredString(serverInfo.version, 'MCP server version');
-  if (mcpName !== EXPECTED_MCP_NAME || mcpVersion !== EXPECTED_MCP_VERSION) {
-    throw new Error(
-      `expected ${EXPECTED_MCP_NAME} ${EXPECTED_MCP_VERSION}, received ${mcpName} ${mcpVersion}`
-    );
-  }
-
+  const server = validateMcpServer(initializeResult);
   const eventId = requiredString(expectedEventId, 'expected event ID');
+  if (!EVENT_ID_PATTERN.test(eventId)) throw new Error('Invalid expected event ID');
   const detailsText = toolText(detailsResult, 'get_issue_details');
-  const searchText = toolText(searchResult, 'search_issue_events');
   if (requiredMarkdownField(detailsText, 'Event ID') !== eventId) {
     throw new Error('get_issue_details returned a different event ID');
   }
-  if (!searchText.includes(eventId)) {
-    throw new Error('search_issue_events did not return the expected event ID');
-  }
+  // The by-ID lookup proves the original event. A finite recent-results page
+  // can contain only newer events while that original remains retained.
+  validateEventSearch(searchResult);
 
   const stackMatch = detailsText.match(
     /\*\*(?:Full )?Stacktrace:\*\*\n(?:─+\n)?```\n([\s\S]*?)\n```/u
@@ -182,8 +224,7 @@ export function validateMcpEvidence({
   return {
     environment: requiredMarkdownField(detailsText, 'environment'),
     eventId,
-    mcpName,
-    mcpVersion,
+    ...server,
     project: requiredMarkdownField(detailsText, 'Project'),
     release: requiredMarkdownField(detailsText, 'release'),
     stack,
@@ -192,27 +233,78 @@ export function validateMcpEvidence({
   };
 }
 
-export async function verifyErrorHubMcp(config) {
-  const containerName = `intexura-error-hub-mcp-verify-${process.pid}-${randomUUID().slice(0, 8)}`;
-  let session;
+class VerificationError extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+}
 
-  try {
-    await runDockerCommand(buildDockerArguments(config, containerName));
-    await waitForWorkerReady(containerName);
-    const entryJson = await runDockerCommand([
+// Run inside the worker to exercise its DNS override, CA roots, TLS SNI and
+// hostname verification. Read only the status from the private response.
+const HTTPS_STATUS_SCRIPT = `
+  import { get } from 'node:https';
+  const request = get(process.argv[2], {
+    rejectUnauthorized: true,
+    ...(process.argv[1] === 'compatibility' && {
+      headers: { authorization: 'Bearer tailnet-only' },
+    }),
+  }, (response) => {
+    process.stdout.write(String(response.statusCode));
+    response.destroy();
+  });
+  request.on('error', () => { process.exitCode = 1; });
+`;
+
+async function httpsStatus(containerName, url, signal, compatibility = false) {
+  return await runDockerCommand(
+    [
       'exec',
       containerName,
-      'codex',
-      'mcp',
-      'get',
-      'error_hub',
-      '--json',
-    ]);
+      'node',
+      '--input-type=module',
+      '--eval',
+      HTTPS_STATUS_SCRIPT,
+      compatibility ? 'compatibility' : 'readiness',
+      url,
+    ],
+    signal
+  );
+}
+
+export async function verifyErrorHubMcp(config, options = {}) {
+  const timer = AbortSignal.timeout(VERIFICATION_TIMEOUT_MS);
+  const signal = options.signal === undefined ? timer : AbortSignal.any([timer, options.signal]);
+  const containerName = `intexura-error-hub-mcp-verify-${process.pid}-${randomUUID()}`;
+  let session;
+  let attemptedRun = false;
+  let errorCode = 'worker_start_failed';
+
+  try {
+    const args = buildDockerArguments(config, containerName);
+    attemptedRun = true;
+    await runDockerCommand(args, signal);
+    await waitForWorkerReady(containerName, signal);
+
+    errorCode = 'https_readiness_failed';
+    if (
+      (await httpsStatus(containerName, `https://${config.host}/health/ready`, signal)) !== '200'
+    ) {
+      throw new Error('Error Hub readiness was unsuccessful');
+    }
+
+    errorCode = 'mcp_configuration_invalid';
+    const entryJson = await runDockerCommand(
+      ['exec', containerName, 'codex', 'mcp', 'get', 'error_hub', '--json'],
+      signal
+    );
     const entry = parseErrorHubMcpEntry(entryJson);
+
+    errorCode = 'mcp_transport_failed';
     const child = spawn(
       'docker',
       ['exec', '--interactive', containerName, entry.command, ...entry.args],
-      { stdio: ['pipe', 'pipe', 'pipe'] }
+      { stdio: ['pipe', 'pipe', 'ignore'], signal, killSignal: 'SIGKILL' }
     );
     session = createJsonRpcSession(child);
 
@@ -224,6 +316,7 @@ export async function verifyErrorHubMcp(config) {
         version: '1.0.0',
       },
     });
+    const identity = validateMcpServer(initializeResult);
     session.notify('notifications/initialized', {});
 
     const toolsResult = record(await session.request('tools/list', {}), 'MCP tools result');
@@ -232,13 +325,50 @@ export async function verifyErrorHubMcp(config) {
       throw new Error('Sentry MCP does not expose execute_sentry_tool');
     }
 
+    const businessAccess = config.mode !== 'transport-only';
+    if (businessAccess) {
+      errorCode = 'business_evidence_failed';
+      await readIssueEvidence(config, session, initializeResult, containerName, signal);
+    }
+
+    errorCode = 'mcp_transport_failed';
+    await session.close();
+    return { mode: config.mode, transportReady: true, businessAccess, ...identity };
+  } catch (error) {
+    if (options.signal?.aborted) throw new VerificationError('interrupted');
+    if (timer.aborted) throw new VerificationError('timed_out');
+    if (error instanceof VerificationError) throw error;
+    throw new VerificationError(errorCode);
+  } finally {
+    if (session !== undefined) await session.abort();
+    if (attemptedRun) await removeDisposableContainer(containerName);
+  }
+}
+
+async function readIssueEvidence(config, session, initializeResult, containerName, signal) {
+  let currentEventId;
+  try {
     const detailsResult = await session.request('tools/call', {
       name: 'execute_sentry_tool',
       arguments: {
         name: 'get_issue_details',
-        arguments: { issueUrl: config.issueUrl },
+        arguments:
+          config.mode === 'acceptance'
+            ? {
+                organizationSlug: ORGANIZATION_SLUG,
+                issueId: config.issueId,
+                eventId: config.eventId,
+              }
+            : { issueUrl: config.issueUrl },
       },
     });
+    if (config.mode === 'probe') {
+      const detailsText = toolText(detailsResult, 'get_issue_details');
+      const eventId = requiredMarkdownField(detailsText, 'Event ID');
+      if (!EVENT_ID_PATTERN.test(eventId)) throw new Error('Invalid current event ID');
+      currentEventId = eventId;
+    }
+
     const searchResult = await session.request('tools/call', {
       name: 'execute_sentry_tool',
       arguments: {
@@ -251,61 +381,68 @@ export async function verifyErrorHubMcp(config) {
         },
       },
     });
-    const evidence = validateMcpEvidence({
-      detailsResult,
-      expectedEventId: config.eventId,
-      initializeResult,
-      searchResult,
-    });
-    await session.close();
-    return { issueUrl: config.issueUrl, ...evidence };
+    if (config.mode === 'probe') {
+      validateEventSearch(searchResult, currentEventId);
+    } else {
+      validateMcpEvidence({
+        detailsResult,
+        expectedEventId: config.eventId,
+        initializeResult,
+        searchResult,
+      });
+    }
   } catch (error) {
-    if (session !== undefined) await session.abort();
+    if (config.mode === 'probe' && !signal.aborted) {
+      // A verified 404 allows the monitor to reselect after retention removed
+      // the issue or event. Never interpret an MCP error string as a 404.
+      const url = new URL(
+        `/api/0/organizations/${ORGANIZATION_SLUG}/issues/${config.issueId}/events/${currentEventId ?? 'latest'}/`,
+        config.issueUrl
+      );
+      const status = await httpsStatus(containerName, url.href, signal, true).catch(
+        () => undefined
+      );
+      if (status === '404') throw new VerificationError('issue_not_found');
+    }
     throw error;
-  } finally {
-    await removeDisposableContainer(containerName);
   }
 }
 
-async function waitForWorkerReady(containerName) {
-  const deadline = Date.now() + WORKER_READY_TIMEOUT_MS;
-  while (Date.now() < deadline) {
+async function waitForWorkerReady(containerName, signal) {
+  const readiness = AbortSignal.any([signal, AbortSignal.timeout(WORKER_READY_TIMEOUT_MS)]);
+  while (!readiness.aborted) {
     try {
-      await runDockerCommand(['exec', containerName, 'test', '-f', '/tmp/worker-ready']);
+      await runDockerCommand(['exec', containerName, 'test', '-f', '/tmp/worker-ready'], readiness);
       return;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await delay(250, undefined, { signal: readiness });
     }
   }
-  throw new Error('Code Worker did not become ready for Error Hub MCP verification');
+  readiness.throwIfAborted();
 }
 
-async function runDockerCommand(args) {
-  const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+async function runDockerCommand(args, signal) {
+  signal.throwIfAborted();
+  const child = spawn('docker', args, {
+    stdio: ['ignore', 'pipe', 'ignore'],
+    signal,
+    killSignal: 'SIGKILL',
+  });
   let stdout = '';
-  let stderr = '';
   child.stdout.setEncoding('utf8');
-  child.stderr.setEncoding('utf8');
   child.stdout.on('data', (chunk) => {
     if (stdout.length < 65_536) stdout += String(chunk).slice(0, 65_536 - stdout.length);
   });
-  child.stderr.on('data', (chunk) => {
-    if (stderr.length < 16_384) stderr += String(chunk).slice(0, 16_384 - stderr.length);
-  });
 
   return new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      if (code === 0) {
+    // Wait for close before cleanup even if the child is signalled.
+    child.once('error', () => undefined);
+    child.once('close', (code) => {
+      if (code === 0 && !signal.aborted) {
         resolve(stdout.trim());
-        return;
+      } else {
+        reject(new Error('Docker command failed'));
       }
-      const diagnostic = stderr.trim();
-      reject(
-        new Error(
-          `Docker command exited with ${code === null ? String(signal) : `code ${String(code)}`}${diagnostic === '' ? '' : `: ${diagnostic}`}`
-        )
-      );
     });
   });
 }
@@ -313,17 +450,22 @@ async function runDockerCommand(args) {
 function createJsonRpcSession(child) {
   let nextId = 1;
   let stdoutBuffer = '';
-  let stderrBuffer = '';
   let closed = false;
   const pending = new Map();
 
+  function rejectPending(error) {
+    for (const request of pending.values()) request.reject(error);
+    pending.clear();
+  }
+
   child.stdout.setEncoding('utf8');
-  child.stderr.setEncoding('utf8');
-  child.stderr.on('data', (chunk) => {
-    if (stderrBuffer.length < 16_384) stderrBuffer += String(chunk).slice(0, 16_384);
-  });
   child.stdout.on('data', (chunk) => {
     stdoutBuffer += chunk;
+    if (stdoutBuffer.length > 1_048_576) {
+      rejectPending(new Error('Sentry MCP output exceeded the response limit'));
+      child.kill('SIGKILL');
+      return;
+    }
     while (true) {
       const newline = stdoutBuffer.indexOf('\n');
       if (newline === -1) break;
@@ -335,48 +477,32 @@ function createJsonRpcSession(child) {
         message = JSON.parse(line);
       } catch {
         rejectPending(new Error('Sentry MCP emitted invalid JSON-RPC output'));
-        continue;
+        child.kill('SIGKILL');
+        return;
       }
       if (typeof message !== 'object' || message === null || !('id' in message)) continue;
       const request = pending.get(message.id);
       if (request === undefined) continue;
       pending.delete(message.id);
-      clearTimeout(request.timeout);
-      if ('error' in message) {
-        request.reject(new Error(jsonRpcErrorMessage(message.error)));
+      if (message.jsonrpc !== '2.0' || 'error' in message || !('result' in message)) {
+        request.reject(
+          new Error('Sentry MCP returned an invalid or unsuccessful JSON-RPC response')
+        );
       } else {
         request.resolve(message.result);
       }
     }
   });
 
-  const exit = new Promise((resolve, reject) => {
-    child.once('error', (error) => {
-      rejectPending(error);
-      reject(error);
-    });
-    child.once('close', (code, signal) => {
+  child.stdin.on('error', () => rejectPending(new Error('Sentry MCP input failed')));
+  const exit = new Promise((resolve) => {
+    child.once('error', () => rejectPending(new Error('Sentry MCP could not run')));
+    child.once('close', (code) => {
       closed = true;
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      const diagnostic = stderrBuffer.trim();
-      const error = new Error(
-        `Sentry MCP container exited with ${code === null ? String(signal) : `code ${String(code)}`}${diagnostic === '' ? '' : `: ${diagnostic}`}`
-      );
-      rejectPending(error);
-      reject(error);
+      rejectPending(new Error('Sentry MCP transport closed'));
+      resolve(code);
     });
   });
-
-  function rejectPending(error) {
-    for (const request of pending.values()) {
-      clearTimeout(request.timeout);
-      request.reject(error);
-    }
-    pending.clear();
-  }
 
   function send(message) {
     if (closed || child.stdin.destroyed) throw new Error('Sentry MCP transport is closed');
@@ -388,15 +514,10 @@ function createJsonRpcSession(child) {
       const id = nextId;
       nextId += 1;
       return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          pending.delete(id);
-          reject(new Error(`Sentry MCP request timed out: ${method}`));
-        }, REQUEST_TIMEOUT_MS);
-        pending.set(id, { reject, resolve, timeout });
+        pending.set(id, { reject, resolve });
         try {
           send({ jsonrpc: '2.0', id, method, params });
         } catch (error) {
-          clearTimeout(timeout);
           pending.delete(id);
           reject(error);
         }
@@ -407,16 +528,14 @@ function createJsonRpcSession(child) {
     },
     async close() {
       if (!child.stdin.destroyed) child.stdin.end();
-      await exit;
+      if ((await exit) !== 0) throw new Error('Sentry MCP transport failed to close');
     },
     async abort() {
-      rejectPending(new Error('Sentry MCP verification aborted'));
-      if (!child.stdin.destroyed) child.stdin.destroy();
-      if (!closed) child.kill('SIGTERM');
-      await Promise.race([
-        exit.catch(() => undefined),
-        new Promise((resolve) => setTimeout(resolve, 2_000)),
-      ]);
+      if (!closed) {
+        child.stdin.destroy();
+        child.kill('SIGKILL');
+      }
+      await exit;
     },
   };
 }
@@ -446,31 +565,6 @@ function requiredMarkdownField(text, label) {
   return requiredString(match?.[1], `${label} evidence`);
 }
 
-function validatePrivateHost(value) {
-  if (/\s/u.test(value)) throw new TypeError('INTEXURAOS_ERROR_HUB_HOST is invalid');
-  let origin;
-  try {
-    origin = new URL(`https://${value}`);
-  } catch {
-    throw new TypeError('INTEXURAOS_ERROR_HUB_HOST is invalid');
-  }
-  const tailnetDnsHostnamePattern =
-    /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}ts\.net$/u;
-  if (
-    origin.hostname === '' ||
-    !tailnetDnsHostnamePattern.test(origin.hostname.toLowerCase()) ||
-    origin.port !== '8443' ||
-    origin.host.toLowerCase() !== value.toLowerCase() ||
-    origin.username !== '' ||
-    origin.password !== '' ||
-    origin.pathname !== '/' ||
-    origin.search !== '' ||
-    origin.hash !== ''
-  ) {
-    throw new TypeError('INTEXURAOS_ERROR_HUB_HOST must be a tailnet DNS host on port 8443');
-  }
-}
-
 function requiredEnvironment(environment, key) {
   if (typeof environment !== 'object' || environment === null) {
     throw new TypeError(`${key} is required`);
@@ -497,34 +591,56 @@ function array(value, field) {
   return value;
 }
 
-function jsonRpcErrorMessage(value) {
-  if (typeof value === 'object' && value !== null && 'message' in value) {
-    return requiredString(value.message, 'JSON-RPC error message');
-  }
-  return 'Sentry MCP returned a JSON-RPC error';
-}
-
 async function removeDisposableContainer(containerName) {
-  await new Promise((resolve) => {
-    const cleanup = spawn('docker', ['rm', '--force', containerName], {
-      stdio: 'ignore',
-    });
-    cleanup.once('error', () => resolve());
-    cleanup.once('close', () => resolve());
-  });
+  const signal = AbortSignal.timeout(CLEANUP_TIMEOUT_MS);
+  try {
+    const id = await runDockerCommand(
+      ['ps', '--all', '--quiet', '--no-trunc', '--filter', `name=^/${containerName}$`],
+      signal
+    );
+    if (id === '') return; // Docker may already have auto-removed the container.
+    if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error('Unexpected container identity');
+    const identity = await runDockerCommand(
+      [
+        'inspect',
+        '--type',
+        'container',
+        '--format',
+        `{{.Id}} {{index .Config.Labels "${PROBE_LABEL}"}}`,
+        id,
+      ],
+      signal
+    );
+    if (identity !== `${id} ${containerName}`)
+      throw new Error('Container label did not match this probe');
+    await runDockerCommand(['rm', '--force', id], signal);
+  } catch {
+    throw new VerificationError('cleanup_failed');
+  }
 }
 
 async function main() {
-  const config = parseVerificationConfiguration(process.argv.slice(2), process.env);
-  const result = await verifyErrorHubMcp(config);
-  process.stdout.write(`${JSON.stringify({ ok: true, ...result })}\n`);
+  let mode = null;
+  const interruption = new AbortController();
+  const interrupt = () => interruption.abort();
+  process.on('SIGINT', interrupt);
+  process.on('SIGTERM', interrupt);
+
+  try {
+    const config = parseVerificationConfiguration(process.argv.slice(2), process.env);
+    mode = config.mode;
+    const result = await verifyErrorHubMcp(config, { signal: interruption.signal });
+    process.stdout.write(`${JSON.stringify({ ok: true, ...result })}\n`);
+  } catch (error) {
+    const code = error instanceof VerificationError ? error.code : 'configuration_invalid';
+    process.stdout.write(`${JSON.stringify({ ok: false, mode, error: code })}\n`);
+    process.exitCode = 1;
+  } finally {
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', interrupt);
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main().catch((error) => {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : 'Error Hub MCP verification failed'}\n`
-    );
-    process.exitCode = 1;
-  });
+  await main();
 }

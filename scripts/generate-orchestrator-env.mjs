@@ -4,6 +4,11 @@ import { chmodSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'nod
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  HOME_DEV_ERROR_HUB_CONNECT_ADDRESS,
+  validateErrorHubConnectAddress,
+  validateErrorHubHost,
+} from '../workers/orchestrator/shared/error-hub-routing.mjs';
 
 export const ORCHESTRATOR_ENV_ALLOWLIST = [
   'GOOGLE_APPLICATION_CREDENTIALS',
@@ -13,6 +18,7 @@ export const ORCHESTRATOR_ENV_ALLOWLIST = [
   'INTEXURAOS_CODE_WORKER_IMAGE',
   'INTEXURAOS_COMPLETION_MAX_ATTEMPTS',
   'INTEXURAOS_ENVIRONMENT',
+  'INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS',
   'INTEXURAOS_ERROR_HUB_HOST',
   'INTEXURAOS_GITHUB_APP_ID',
   'INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH',
@@ -59,9 +65,6 @@ const REQUIRED_ORCHESTRATOR_ENV = [
   'INTEXURAOS_USAGE_WEBHOOK_URL',
 ];
 
-const TAILNET_DNS_HOSTNAME_PATTERN =
-  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}ts\.net$/u;
-
 function fail(message) {
   throw new Error(message);
 }
@@ -101,35 +104,12 @@ function parseArgs(args) {
   };
 }
 
-function validateErrorHubHost(value) {
-  let origin;
-  if (!/\s/u.test(value)) {
-    try {
-      origin = new URL(`https://${value}`);
-    } catch {
-      origin = undefined;
-    }
-  }
-
-  if (
-    origin === undefined ||
-    origin.hostname === '' ||
-    !TAILNET_DNS_HOSTNAME_PATTERN.test(origin.hostname.toLowerCase()) ||
-    origin.port !== '8443' ||
-    origin.host.toLowerCase() !== value.toLowerCase() ||
-    origin.username !== '' ||
-    origin.password !== '' ||
-    origin.pathname !== '/' ||
-    origin.search !== '' ||
-    origin.hash !== ''
-  ) {
-    fail('Invalid INTEXURAOS_ERROR_HUB_HOST; expected a private .ts.net host on port 8443');
-  }
-}
-
 function readAllowedEnvironment(source, userHome) {
   const fixedHomeDevValues = {
     INTEXURAOS_ORCHESTRATOR_BIND_HOST: '127.0.0.1',
+    INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS:
+      validateErrorHubConnectAddress(source.INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS) ??
+      HOME_DEV_ERROR_HUB_CONNECT_ADDRESS,
     GOOGLE_APPLICATION_CREDENTIALS: join(
       userHome,
       '.config',

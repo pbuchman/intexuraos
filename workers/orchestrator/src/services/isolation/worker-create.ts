@@ -17,6 +17,7 @@ import type {
   LifecycleProviderConfig,
 } from './worker-entry-types.js';
 import { buildWorkerEnv, resolveForensicsSeccompSecurityOpt } from './worker-env.js';
+import { getErrorHubHostMapping } from '../../../shared/error-hub-routing.mjs';
 import { auditLockfile, snapshotLockfile } from './lockfile-guard.js';
 
 export function detectMainGitDir(worktreePath: string): string | null {
@@ -319,6 +320,10 @@ export function buildCreateContainerSpec(
       ]
     : ['no-new-privileges'];
   const ulimits = providerConfig.forensicsMode ? [{ Name: 'core', Soft: -1, Hard: -1 }] : undefined;
+  const errorHubHostMapping = getErrorHubHostMapping(
+    config.secrets.ERROR_HUB_HOST,
+    providerConfig.errorHubConnectAddress
+  );
 
   const binds = volume.buildBinds({
     worktreePath,
@@ -342,6 +347,9 @@ export function buildCreateContainerSpec(
     HostConfig: {
       Binds: binds,
       NetworkMode: network.getNetworkMode(),
+      ...(errorHubHostMapping !== undefined && {
+        ExtraHosts: [`${errorHubHostMapping.hostname}:${errorHubHostMapping.address}`],
+      }),
       ReadonlyRootfs: false,
       Tmpfs: volume.buildTmpfs(),
       CapDrop: ['ALL'],

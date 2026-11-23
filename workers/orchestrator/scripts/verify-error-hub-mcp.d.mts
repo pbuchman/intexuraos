@@ -1,10 +1,20 @@
-export interface ErrorHubMcpVerificationConfig {
-  readonly eventId: string;
+interface ErrorHubMcpRoute {
   readonly host: string;
   readonly image: string;
-  readonly issueId: string;
-  readonly issueUrl: string;
+  readonly connectAddress?: string;
 }
+
+export type ErrorHubMcpVerificationConfig = ErrorHubMcpRoute &
+  (
+    | { readonly mode: 'transport-only' }
+    | { readonly mode: 'probe'; readonly issueId: string; readonly issueUrl: string }
+    | {
+        readonly mode: 'acceptance';
+        readonly issueId: string;
+        readonly issueUrl: string;
+        readonly eventId: string;
+      }
+  );
 
 export interface ErrorHubMcpEvidence {
   readonly environment: string;
@@ -41,5 +51,12 @@ export function validateMcpEvidence(input: {
 }): ErrorHubMcpEvidence;
 
 export function verifyErrorHubMcp(
-  config: ErrorHubMcpVerificationConfig
-): Promise<{ readonly issueUrl: string } & ErrorHubMcpEvidence>;
+  config: ErrorHubMcpVerificationConfig,
+  options?: { readonly signal?: AbortSignal }
+): Promise<{
+  readonly mode: ErrorHubMcpVerificationConfig['mode'];
+  readonly transportReady: true;
+  readonly businessAccess: boolean;
+  readonly mcpName: string;
+  readonly mcpVersion: string;
+}>;
