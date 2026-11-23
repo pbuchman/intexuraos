@@ -1,3 +1,5 @@
+import { isCodeTaskWorkerTypePolicy, type CodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
+
 export interface LogForwarderDrainContract {
   counterEpochId: string;
   processStartedAt: string;
@@ -15,7 +17,7 @@ export interface LogForwarderDrainContract {
   lastActivityAt: string | null;
 }
 
-export interface OrchestratorHealthContract {
+export interface OrchestratorHealthContract extends Partial<CodeTaskWorkerTypePolicy> {
   healthContractVersion: 2;
   status: 'ready';
   capacity: number;
@@ -139,6 +141,10 @@ export function parseOrchestratorHealthContract(
     return !isRecord(value);
   });
 
+  const hasWorkerTypes = Object.hasOwn(data, 'enabledWorkerTypes') || Object.hasOwn(data, 'workerTypesRevision');
+  if (hasWorkerTypes && !isCodeTaskWorkerTypePolicy(data)) {
+    return { ok: false, missingFields: [...missingFields, 'enabledWorkerTypes', 'workerTypesRevision'] };
+  }
   if (missingFields.length > 0) return { ok: false, missingFields: [...missingFields] };
   return { ok: true, value: data as unknown as OrchestratorHealthContract };
 }

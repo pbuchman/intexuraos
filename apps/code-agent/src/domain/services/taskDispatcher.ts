@@ -1,3 +1,11 @@
+export interface WorkerCancellationCredentials {
+  ownerId: string;
+  workerAudience?: string;
+  url: string;
+  cfAccessClientId: string;
+  cfAccessClientSecret: string;
+}
+
 /**
  * Task dispatcher service interface.
  *
@@ -9,7 +17,9 @@ import type { AgentType, WorkerType } from '../models/codeTask.js';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
 import type { SentryIssueTaskContext } from '../models/sentryIssueEvent.js';
 import type { WorkerLocation } from '../models/worker.js';
+import type { WorkerConfig } from '../models/workerSettings.js';
 import type { WorkerHealthProbe } from '../ports/workerHealthProbe.js';
+import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
 
 /**
@@ -18,15 +28,23 @@ import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
  */
 export interface DispatchWorkerCredentials {
   /** Ordered array of workers with credentials. First = primary. */
-  workers: {
-    name: string;
-    url: string;
-    cfAccessClientId: string;
-    cfAccessClientSecret: string;
-    dispatchSigningSecret: string;
-    enabled?: boolean;
-  }[];
+  workers: (Pick<WorkerConfig,
+    | 'name'
+    | 'registrationId'
+    | 'url'
+    | 'cfAccessClientId'
+    | 'cfAccessClientSecret'
+    | 'dispatchSigningSecret'
+    | 'enabledWorkerTypes'
+    | 'workerTypesRevision'
+  > & { enabled?: boolean })[];
 }
+
+export type TaskMessageWorkerCredentials = Pick<WorkerConfig,
+  'url' | 'cfAccessClientId' | 'cfAccessClientSecret' | 'dispatchSigningSecret'
+> & {
+  resume?: { ownerId: string; workerType: WorkerType; worker: WorkerConfig };
+};
 
 export interface ExecutionMemoryPromptMemory {
   memoryId: string;
@@ -50,6 +68,7 @@ export interface ExecutionMemoryPromptContext {
  * Request to dispatch a code task to a worker.
  */
 export interface DispatchRequest {
+  ownerId: string;
   taskId: string;
   /** Per-claim identifier used only to correlate dispatch logs; never sent to the Worker. */
   dispatchAttemptId?: string;
@@ -100,6 +119,7 @@ export interface DispatchRequest {
 export interface DispatchResult {
   dispatched: true;
   workerLocation: WorkerLocation;
+  workerAudience?: string;
 }
 
 /**
@@ -108,6 +128,7 @@ export interface DispatchResult {
 export interface DispatchError {
   code:
     | 'worker_unavailable'
+    | 'worker_type_disabled'
     | 'worker_busy'
     | 'at_capacity'       // All workers returned 503 (INT-619)
     | 'dispatch_failed'
@@ -118,6 +139,7 @@ export interface DispatchError {
   outcomeUnknown?: boolean;
   /** Worker that received the POST, retained so an ambiguous dispatch can still be cancelled. */
   workerLocation?: WorkerLocation;
+  workerAudience?: string;
   blocker?: Extract<CodeTaskDispatchability, { dispatchable: false }>;
 }
 
@@ -128,15 +150,18 @@ export interface DispatchError {
  * This enables user isolation - each user's dispatch uses their own credentials.
  */
 export interface TaskDispatcherDeps {
+  legacyTaskBindings?: readonly import('@intexuraos/code-task-domain/task-access').TaskBinding[];
+  taskAccessKey?: import('node:crypto').KeyObject;
   logger: Logger;
   workerHealthProbe: WorkerHealthProbe;
+  workerSettingsRepo?: Pick<WorkerSettingsRepository, 'confirmWorkerTypePolicy'>;
 }
 
 /**
  * Task dispatcher service interface.
  *
  * Dispatches code tasks to available workers with HMAC-signed requests.
- * Implements worker fallback on 503 responses.
+ * Implements worker fallback on definite capacity or task-type refusals.
  */
 export interface TaskDispatcherService {
   /**
@@ -147,7 +172,7 @@ export interface TaskDispatcherService {
    * 2. Generate unique nonce and webhook secret
    * 3. Compute HMAC signature
    * 4. POST to worker /tasks endpoint
-   * 5. Fall back to other worker on 503
+   * 5. Fall back to other eligible workers on definite refusals
    *
    * @param request - Dispatch request with task details
    * @returns Dispatch result with worker location or error
@@ -169,7 +194,7 @@ export interface TaskDispatcherService {
   cancelOnWorker(
     taskId: string,
     location: string,
-    credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }
+    credentials?: WorkerCancellationCredentials
   ): Promise<void>;
 
   /**
@@ -186,6 +211,6 @@ export interface TaskDispatcherService {
   sendMessageToWorker(
     taskId: string,
     message: string,
-    credentials: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }
+    credentials: TaskMessageWorkerCredentials
   ): Promise<Result<{ action: 'queued' | 'resumed'; pendingMessages?: string[] }, { code: string; message: string }>>;
 }

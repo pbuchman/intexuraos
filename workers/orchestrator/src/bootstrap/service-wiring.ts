@@ -36,6 +36,7 @@ import {
   CodexAuthRefresher,
   WorkerAuthRegistry,
 } from '../services/worker-auth/index.js';
+import { WorkerTypePolicy } from '../services/worker-type-policy.js';
 import { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from '../services/task-dispatcher.js';
@@ -83,6 +84,7 @@ export interface WiredServices {
   dispatcher: TaskDispatcher;
   heartbeatManager: HeartbeatManager;
   workerAuthRegistry: WorkerAuthRegistry;
+  workerTypePolicy: WorkerTypePolicy;
   isolationProvider: IsolationProvider;
   providerApiKeys: Record<string, ProviderApiKeyHealth>;
 }
@@ -124,6 +126,62 @@ export function buildTaskDispatcherWorkerSecrets(
   };
 }
 
+export function buildWorkerAuthRegistry(
+  policy: WorkerTypePolicy,
+  inputs: {
+    sharedCredsPath: string;
+    sharedCodexAuthPath: string;
+    docker: Docker;
+    resolveRefreshImage: () => Promise<string>;
+  },
+  logger: Logger
+): WorkerAuthRegistry {
+  const { sharedCredsPath, sharedCodexAuthPath, docker, resolveRefreshImage } = inputs;
+  const credentialMonitor = new CredentialMonitor(
+    {
+      credentialsPath: join(sharedCredsPath, '.credentials.json'),
+      reloadIntervalMs: CREDENTIAL_RELOAD_INTERVAL_MS,
+    },
+    logger
+  );
+  const credentialRefresher = new CredentialRefresher(
+    { sharedCredsPath, resolveImage: resolveRefreshImage, networkName: DOCKER_NETWORK_NAME },
+    docker,
+    logger
+  );
+  const codexAuthRefresher = new CodexAuthRefresher(
+    {
+      sharedAuthPath: sharedCodexAuthPath,
+      resolveImage: resolveRefreshImage,
+      networkName: DOCKER_NETWORK_NAME,
+    },
+    docker,
+    logger
+  );
+
+  const registry = new WorkerAuthRegistry(
+    [
+      new ClaudeAuthManager(credentialMonitor, credentialRefresher),
+      new CodexAuthManager(
+        {
+          authPath: join(sharedCodexAuthPath, 'auth.json'),
+          reloadIntervalMs: CREDENTIAL_RELOAD_INTERVAL_MS,
+          refresher: codexAuthRefresher,
+        },
+        logger
+      ),
+    ],
+    policy.snapshot().enabledWorkerTypes
+  );
+  policy.onChange(async ({ enabledWorkerTypes }) => {
+    await registry.setEnabledWorkerTypes(enabledWorkerTypes);
+  });
+  registry.loadCredentials();
+  registry.startMonitoring();
+  logWorkerAuthStartupStatus(registry, logger);
+  return registry;
+}
+
 /**
  * Builds every long-lived service the orchestrator needs and wires them
  * together. Does NOT start listeners — the caller invokes `main()` and
@@ -132,6 +190,7 @@ export function buildTaskDispatcherWorkerSecrets(
 /* v8 ignore start -- module-init: bootstrap-only service graph wiring cannot be unit-tested without real Docker, worker-auth subsystem, and LLM clients; exercised indirectly by the orchestrator runtime @preserve */
 export async function buildOrchestratorServices(inputs: WiringInputs): Promise<WiredServices> {
   const { env, config, logger, orchestratorDir, repoPath, gitUserName, gitUserEmail } = inputs;
+  const workerTypePolicy = await WorkerTypePolicy.load(join(orchestratorDir, 'worker-types.json'));
 
   const statePersistence = new StatePersistence(config.stateFilePath, logger);
 
@@ -225,6 +284,9 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
       gcpSaKeyPath: env.gcpSaKeyPath,
       keepContainersAlive: env.keepContainersAlive,
       imageName: env.workerImage,
+      ...(env.errorHubConnectAddress !== undefined && {
+        errorHubConnectAddress: env.errorHubConnectAddress,
+      }),
       sharedCredsPath,
       sharedCodexAuthPath,
       forensicsMode: env.workerForensicsMode,
@@ -245,52 +307,22 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     logger
   );
 
-  const credentialsPath = join(sharedCredsPath, '.credentials.json');
-  const codexAuthPath = join(sharedCodexAuthPath, 'auth.json');
-  const docker = new Docker({ socketPath: '/var/run/docker.sock' });
-  const resolveRefreshImage = createWorkerAuthImageResolver(isolationProvider);
-
-  const credentialMonitor = new CredentialMonitor(
-    { credentialsPath, reloadIntervalMs: CREDENTIAL_RELOAD_INTERVAL_MS },
-    logger
-  );
-
-  const credentialRefresher = new CredentialRefresher(
-    { sharedCredsPath, resolveImage: resolveRefreshImage, networkName: DOCKER_NETWORK_NAME },
-    docker,
-    logger
-  );
-
-  const codexAuthRefresher = new CodexAuthRefresher(
+  const workerAuthRegistry = buildWorkerAuthRegistry(
+    workerTypePolicy,
     {
-      sharedAuthPath: sharedCodexAuthPath,
-      resolveImage: resolveRefreshImage,
-      networkName: DOCKER_NETWORK_NAME,
+      sharedCredsPath,
+      sharedCodexAuthPath,
+      docker: new Docker({ socketPath: '/var/run/docker.sock' }),
+      resolveRefreshImage: createWorkerAuthImageResolver(isolationProvider),
     },
-    docker,
     logger
   );
-
-  const workerAuthRegistry = new WorkerAuthRegistry([
-    new ClaudeAuthManager(credentialMonitor, credentialRefresher),
-    new CodexAuthManager(
-      {
-        authPath: codexAuthPath,
-        reloadIntervalMs: CREDENTIAL_RELOAD_INTERVAL_MS,
-        refresher: codexAuthRefresher,
-      },
-      logger
-    ),
-  ]);
-
-  workerAuthRegistry.loadCredentials();
-  workerAuthRegistry.startMonitoring();
-  logWorkerAuthStartupStatus(workerAuthRegistry, logger);
-
-  const apiKeySecrets = buildTaskDispatcherWorkerSecrets(
-    env,
-    workerAuthRegistry.getCurrentAccessToken('claude') ?? ''
-  );
+  const apiKeySecrets: WorkerSecrets = {
+    ...buildTaskDispatcherWorkerSecrets(env, ''),
+    get ANTHROPIC_API_KEY(): string {
+      return workerAuthRegistry.getCurrentAccessToken('claude') ?? '';
+    },
+  };
 
   const providerApiKeys: Record<string, ProviderApiKeyHealth> = {
     OPENROUTER_API_KEY: { configured: env.openRouterApiKey.trim() !== '' },
@@ -303,11 +335,8 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     tokenRefresher,
     apiKeyValidator,
     workerAuthRegistry,
-    getSecrets: () => ({
-      ...apiKeySecrets,
-      ANTHROPIC_API_KEY:
-        workerAuthRegistry.getCurrentAccessToken('claude') ?? apiKeySecrets.ANTHROPIC_API_KEY,
-    }),
+    workerTypePolicy,
+    getSecrets: () => apiKeySecrets,
     gcpSaKeyPath: env.gcpSaKeyPath,
     githubAppKeyPath: config.githubAppPrivateKeyPath,
   };
@@ -435,6 +464,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     dispatcher,
     heartbeatManager,
     workerAuthRegistry,
+    workerTypePolicy,
     isolationProvider,
     providerApiKeys,
   };
@@ -459,7 +489,7 @@ export function runCredentialRefreshTick(
   workerAuthRegistry: WorkerAuthRegistry,
   getRunningTaskIds: () => readonly string[],
   logger: Logger
-): void {
+): boolean {
   const runningTasks = getRunningTaskIds();
   if (runningTasks.length > 0) {
     if (
@@ -471,7 +501,7 @@ export function runCredentialRefreshTick(
         'Worker auth expiring soon but workers running — refresh deferred'
       );
     }
-    return;
+    return false;
   }
 
   for (const provider of ['claude', 'codex'] as const) {
@@ -484,6 +514,7 @@ export function runCredentialRefreshTick(
       logger.error({ provider, error: err }, 'Worker auth refresh failed');
     });
   }
+  return true;
 }
 
 /**
@@ -492,14 +523,15 @@ export function runCredentialRefreshTick(
  *
  * Returns the interval handle so callers can `clearInterval` in tests.
  */
-/* v8 ignore start -- module-init: bootstrap setInterval wrapper cannot be unit-tested without running real timers; tick behavior is unit-tested via runCredentialRefreshTick @preserve */
 export function startCredentialRefreshLoop(
   workerAuthRegistry: WorkerAuthRegistry,
   getRunningTaskIds: () => readonly string[],
-  logger: Logger
+  logger: Logger,
+  watchdog: { idleTicks: number }
 ): NodeJS.Timeout {
   return setInterval(() => {
-    runCredentialRefreshTick(workerAuthRegistry, getRunningTaskIds, logger);
+    if (runCredentialRefreshTick(workerAuthRegistry, getRunningTaskIds, logger)) {
+      watchdog.idleTicks += 1;
+    }
   }, CREDENTIAL_REFRESH_TICK_MS);
 }
-/* v8 ignore stop @preserve */

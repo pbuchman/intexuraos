@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import {
   spawn,
   spawnSync,
@@ -13,6 +14,7 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -73,6 +75,7 @@ function executable(path: string, contents: string): void {
 function deploymentFixture(
   options: {
     candidateFails?: boolean;
+    taskAccess?: boolean;
     foreignPort?: boolean;
     occupiedPort?: boolean;
     ownOccupiedPort?: boolean;
@@ -106,6 +109,12 @@ function deploymentFixture(
     join(repoRoot, 'scripts', 'home-prod', 'compare-web-releases.mjs'),
     join(source, 'scripts', 'home-prod', 'compare-web-releases.mjs')
   );
+  const mount = join(deployHome, 'private-task-mount/signing.pem');
+  if (options.taskAccess === true) {
+    const loader = 'apps/code-agent/src/infra/services/taskAccessKey.ts';
+    mkdirSync(dirname(join(source, loader)), { recursive: true });
+    copyFileSync(join(repoRoot, loader), join(source, loader));
+  }
   const serviceNames =
     options.profile === 'full'
       ? [...BASIC_SERVICE_NAMES, 'research-agent', 'message-digest-service']
@@ -117,6 +126,8 @@ function deploymentFixture(
         : name,
     env: {
       HOST: '127.0.0.1',
+      ...(name === 'code-agent' &&
+        options.taskAccess === true && { INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH: mount }),
       PORT: String(options.foreignPort === true && index === 0 ? 8110 : 18110 + index),
     },
   }));
@@ -166,7 +177,7 @@ function deploymentFixture(
   mkdirSync(bin);
   executable(
     join(bin, 'pnpm'),
-    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "pnpm:%s\\n" "$*" >> "$HOME_PROD_TEST_LOG"\nif [[ "${1:-}" == install ]]; then if [[ -n "${HOME_PROD_TEST_INSTALL_GATE:-}" ]]; then while [[ ! -f "$HOME_PROD_TEST_INSTALL_GATE" ]]; do sleep 0.05; done; fi; mkdir -p node_modules; ln -s "$HOME_PROD_TEST_DOTENV" node_modules/dotenv; fi\n'
+    '#!/usr/bin/env bash\nset -euo pipefail\nprintf "pnpm:%s\\n" "$*" >> "$HOME_PROD_TEST_LOG"\nif [[ "${1:-}" == install ]]; then if [[ -n "${HOME_PROD_TEST_INSTALL_GATE:-}" ]]; then while [[ ! -f "$HOME_PROD_TEST_INSTALL_GATE" ]]; do sleep 0.05; done; fi; mkdir -p node_modules; ln -s "$HOME_PROD_TEST_DOTENV" node_modules/dotenv; if [[ -f apps/code-agent/src/infra/services/taskAccessKey.ts ]]; then mkdir -p node_modules/@intexuraos; ln -s "$HOME_PROD_TEST_MODULES/tsx" node_modules/tsx; ln -s "$HOME_PROD_TEST_CODE_AGENT_MODULES/zod" node_modules/zod; ln -s "$HOME_PROD_TEST_CODE_AGENT_MODULES/@intexuraos/code-task-domain" node_modules/@intexuraos/code-task-domain; fi; fi\n'
   );
   executable(
     join(bin, 'pm2'),
@@ -206,6 +217,8 @@ function deploymentEnvironment(
     DEPLOY_USER: process.env.USER ?? 'pbuchman',
     HOME: input.deployHome,
     HOME_PROD_TEST_DOTENV: join(repoRoot, 'node_modules', 'dotenv'),
+    HOME_PROD_TEST_MODULES: join(repoRoot, 'node_modules'),
+    HOME_PROD_TEST_CODE_AGENT_MODULES: join(repoRoot, 'apps/code-agent/node_modules'),
     HOME_PROD_TEST_LOG: input.log,
     PATH: `${join(input.root, 'bin')}:${dirname(process.execPath)}:/usr/bin:/bin`,
     PM2_HOME: input.expectedPm2Home,
@@ -491,6 +504,118 @@ describe('Home PROD release deployment', () => {
     expect(result.status).not.toBe(0);
     expect(readFileSync(input.log, 'utf8')).not.toContain(':stop all');
   });
+  it('rejects the shared PM2 issuer even when given a valid signing key before touching active apps', () => {
+    const input = deploymentFixture({ taskAccess: true });
+    const mount = join(input.deployHome, 'private-task-mount/signing.pem');
+    const legacy = join(dirname(mount), 'legacy-worker-bindings.json');
+    const verifyDenied = (): void => {
+      const result = runDeployment(input);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('Shared PM2 cannot host the task signing identity');
+      expect(result.stderr).not.toContain('private-fixture-value');
+      expect(result.stderr).not.toContain('BEGIN PRIVATE KEY');
+      expect(readlinkSync(join(input.deployHome, 'deploy/current'))).toBe(input.oldCodeRelease);
+      expect(readlinkSync(input.webCurrent)).toBe(input.oldWebRelease);
+      expect(readFileSync(input.log, 'utf8')).not.toMatch(/:stop all|reload:/);
+    };
+    verifyDenied();
+    mkdirSync(dirname(mount), { mode: 0o700 });
+    const { privateKey } = generateKeyPairSync('ed25519');
+    writeFileSync(mount, privateKey.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 });
+    chmodSync(mount, 0o644);
+    verifyDenied();
+    chmodSync(mount, 0o600);
+    writeFileSync(legacy, 'private-fixture-value', { mode: 0o600 });
+    verifyDenied();
+    writeFileSync(legacy, '[]');
+    verifyDenied();
+  });
+
+  it('loads the production code-agent bundle and validates its environment and signing credentials before it listens', () => {
+    const root = mkdtempSync(join(tmpdir(), 'isolated-code-agent-'));
+    try {
+      const credentials = join(root, 'credentials');
+      const cwd = join(root, 'a'.repeat(40));
+      mkdirSync(credentials, { mode: 0o700 });
+      mkdirSync(cwd);
+      const { privateKey } = generateKeyPairSync('ed25519');
+      writeFileSync(
+        join(credentials, 'signing.pem'),
+        privateKey.export({ type: 'pkcs8', format: 'pem' }),
+        { mode: 0o600 }
+      );
+      writeFileSync(join(credentials, 'legacy-worker-bindings.json'), '[]', { mode: 0o600 });
+      const projection = {
+        INTEXURAOS_PROD_PROFILE: 'basic',
+        INTEXURAOS_GITHUB_WEBHOOK_SECRET: 'fixture-github',
+        INTEXURAOS_INTERNAL_AUTH_TOKEN: 'fixture-internal',
+        INTEXURAOS_OPENROUTER_APP_API_KEY: 'fixture-openrouter',
+        INTEXURAOS_ORCHESTRATOR_SECRET: 'fixture-orchestrator',
+        INTEXURAOS_SENTRY_WEBHOOK_SECRET: 'fixture-sentry',
+        INTEXURAOS_TOKEN_ENCRYPTION_KEY: 'fixture-encryption-key-32-bytes!',
+      };
+      const application = join(credentials, 'application.json');
+      writeFileSync(application, JSON.stringify(projection), { mode: 0o600 });
+      const build = spawnSync(process.execPath, ['scripts/build-service.mjs', 'code-agent'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      });
+      expect(build.status, build.stderr).toBe(0);
+      const networkGuard = join(root, 'forbid-network.mjs');
+      writeFileSync(
+        networkGuard,
+        `import { Server, Socket } from 'node:net';
+        function forbidden() { process.exit(91); }
+        Server.prototype.listen = forbidden;
+        Socket.prototype.connect = forbidden;
+        globalThis.fetch = forbidden;`
+      );
+      const missingExternal = join(root, 'missing-external.mjs');
+      writeFileSync(
+        missingExternal,
+        `export function resolve(specifier, context, nextResolve) {
+        if (specifier === '@sentry/node' && context.parentURL?.endsWith('/apps/code-agent/dist/index.js')) {
+          throw new Error('Fixture missing bundle dependency');
+        }
+        return nextResolve(specifier, context);
+      }`
+      );
+      const run = (nodeArgs: string[] = []): SpawnSyncReturns<string> =>
+        spawnSync(
+          process.execPath,
+          [
+            '--import',
+            networkGuard,
+            ...nodeArgs,
+            join(repoRoot, 'scripts/home-prod/start-code-agent.mjs'),
+            '--preflight',
+          ],
+          {
+            cwd,
+            env: { CREDENTIALS_DIRECTORY: credentials, PATH: '/usr/bin:/bin' },
+            encoding: 'utf8',
+          }
+        );
+      const valid = run();
+      expect(valid.status, valid.stderr).toBe(0);
+      const missing = run(['--experimental-loader', missingExternal]);
+      expect(missing.status).not.toBe(0);
+      expect(missing.stderr).toContain('Fixture missing bundle dependency');
+      writeFileSync(
+        application,
+        JSON.stringify({ ...projection, INTEXURAOS_INTERNAL_AUTH_TOKEN: '' })
+      );
+      const invalidApplication = run();
+      expect(invalidApplication.status).not.toBe(0);
+      expect(invalidApplication.stderr).toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN');
+      writeFileSync(application, JSON.stringify(projection));
+      chmodSync(join(credentials, 'signing.pem'), 0o644);
+      expect(run().status).not.toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects a dirty canonical clone before preparing a release', () => {
     const input = deploymentFixture();
     writeFileSync(join(input.clone, 'operator-note.txt'), 'preserve me\n');

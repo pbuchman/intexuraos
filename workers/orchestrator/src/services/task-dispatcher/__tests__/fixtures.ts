@@ -154,7 +154,6 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
     attemptCompletionSignals: new Set(),
     completionInProgress: new Set(),
     inactivityRestartInProgress: new Set(),
-    pendingMessages: new Map(),
     lastOutputAt: new Map(),
     inFlightHandlers: new Set(),
     shutdownSignal: undefined,

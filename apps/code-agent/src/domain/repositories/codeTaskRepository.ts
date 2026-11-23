@@ -131,6 +131,7 @@ export interface UpdateTaskInput {
   dispatchStatus?: CodeTaskDispatchStatusCreateInput | null;
   statusSummary?: CodeTask['statusSummary'];
   workerLocation?: string;
+  workerAudience?: string;
   callbackReceived?: boolean;
   callbackState?: CodeTaskCallbackStateCreateInput;
   queuedAt?: Date;               // When task entered queue (INT-619)
@@ -375,7 +376,7 @@ export interface CodeTaskRepository {
   findPreservedPullRequestTask(
     repository: string,
     prNumber: number,
-  ): Promise<Result<{ id: string; workerLocation: string; userId: string } | null, RepositoryError>>;
+  ): Promise<Result<{ id: string; workerLocation: string; userId: string; workerAudience?: string } | null, RepositoryError>>;
 
   /**
    * Find the most recent non-archived ask-agent task for a user.

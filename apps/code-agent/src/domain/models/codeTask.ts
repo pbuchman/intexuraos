@@ -183,6 +183,7 @@ export type CodeTaskDispatchStatusReason =
   | 'workers_unreachable'
   | 'worker_health_contract_mismatch'
   | 'workers_at_capacity'
+  | 'worker_type_disabled'
   | 'codex_auth_unavailable'
   | 'claude_auth_unavailable'
   | 'provider_auth_unavailable'
@@ -292,6 +293,8 @@ export interface CodeTask {
   userId: string;
   workerType: WorkerType;
   workerLocation: WorkerLocation;
+  /** Canonical URL of the selected worker at dispatch, before settings can change. */
+  workerAudience?: string;
 
   // Task state
   status: TaskStatus;

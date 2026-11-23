@@ -211,7 +211,7 @@ describe('cancelTaskWithNonce', () => {
   });
 
   it('successfully cancels task with valid nonce', async () => {
-    vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
+    vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok({ ...baseTask, workerAudience: 'https://cc-mac.intexuraos.cloud' }));
     vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
       ok({ ...baseTask, status: 'cancelled' as const })
     );
@@ -237,6 +237,8 @@ describe('cancelTaskWithNonce', () => {
     );
 
     expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', {
+      ownerId: 'user-789',
+      workerAudience: 'https://cc-mac.intexuraos.cloud',
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'test-client-id',
       cfAccessClientSecret: 'test-client-secret',
@@ -421,6 +423,7 @@ describe('cancelTaskWithNonce', () => {
         'task-123',
         'home-mac',
         {
+          ownerId: 'user-789',
           url: 'https://cc-mac.intexuraos.cloud',
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',

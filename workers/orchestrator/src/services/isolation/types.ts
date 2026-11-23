@@ -5,7 +5,7 @@
  * Implementations may use Docker containers, VMs, or other isolation mechanisms.
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
+import { CODE_TASK_WORKER_CAPABILITIES, type CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type { WorkerRuntime } from '../runtime/types.js';
 
 export interface AnthropicOAuthCredentials {
@@ -42,13 +42,13 @@ export interface WorkerTypeConfig {
 
 export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
   auto: {
-    runtime: 'claude',
+    runtime: CODE_TASK_WORKER_CAPABILITIES.auto.cliRuntime,
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     telemetryExpectation: 'required',
   },
   opus: {
-    runtime: 'claude',
+    runtime: CODE_TASK_WORKER_CAPABILITIES.opus.cliRuntime,
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'opus',
@@ -56,25 +56,25 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     telemetryExpectation: 'required',
   },
   sonnet: {
-    runtime: 'claude',
+    runtime: CODE_TASK_WORKER_CAPABILITIES.sonnet.cliRuntime,
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
     model: 'sonnet',
     telemetryExpectation: 'required',
   },
   codex: {
-    runtime: 'codex',
+    runtime: CODE_TASK_WORKER_CAPABILITIES.codex.cliRuntime,
     apiBaseUrl: 'https://api.openai.com',
     telemetryExpectation: 'optional',
   },
   'codex-xhigh': {
-    runtime: 'codex',
+    runtime: CODE_TASK_WORKER_CAPABILITIES['codex-xhigh'].cliRuntime,
     apiBaseUrl: 'https://api.openai.com',
     effort: 'xhigh',
     telemetryExpectation: 'optional',
   },
   'openrouter-free': {
-    runtime: 'claude',
+    runtime: CODE_TASK_WORKER_CAPABILITIES['openrouter-free'].cliRuntime,
     apiBaseUrl: 'https://openrouter.ai/api',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
     model: 'google/gemma-4-31b-it:free',

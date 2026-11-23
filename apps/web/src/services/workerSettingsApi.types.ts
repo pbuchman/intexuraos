@@ -1,3 +1,5 @@
+import type { CodeTaskWorkerType, CodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain/worker-types';
+
 /**
  * Types for worker settings API.
  */
@@ -5,7 +7,8 @@
 /**
  * Masked worker config returned from API (secrets hidden).
  */
-export interface MaskedWorkerConfig {
+export interface MaskedWorkerConfig extends Partial<CodeTaskWorkerTypePolicy> {
+  registrationKey?: string;
   name: string;
   url: string;
   cfAccessClientId: string; // masked (e.g., "•••••abc")
@@ -45,6 +48,9 @@ export interface WorkerConfigInput {
  * Request body for PATCH /code/worker-settings/workers/:name
  */
 export interface WorkerConfigUpdateInput {
+  enabledWorkerTypes?: CodeTaskWorkerType[];
+  expectedRevision?: number;
+  expectedRegistration?: string;
   url?: string;
   cfAccessClientId?: string;
   cfAccessClientSecret?: string;
@@ -69,7 +75,7 @@ export interface AddWorkerResponse {
 /**
  * Response from PATCH /code/worker-settings/workers/:name
  */
-export interface UpdateWorkerResponse {
+export interface UpdateWorkerResponse extends Partial<CodeTaskWorkerTypePolicy> {
   updated: boolean;
 }
 

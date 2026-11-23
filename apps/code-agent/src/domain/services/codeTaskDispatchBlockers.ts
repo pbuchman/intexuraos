@@ -1,7 +1,9 @@
 import {
   CODE_TASK_WORKER_CAPABILITIES,
   isCodeTaskWorkerType,
+  isCodeTaskWorkerTypePolicy,
   type CodeTaskAuthRequirement,
+  type CodeTaskWorkerType,
 } from '@intexuraos/code-task-domain';
 import type { WorkerConfig, WorkerHealthState } from '../models/workerSettings.js';
 import type { WorkerHealthDiagnostic } from '../models/workerSettings.js';
@@ -11,6 +13,7 @@ export type CodeTaskDispatchBlockerReason =
   | 'workers_unreachable'
   | 'worker_health_contract_mismatch'
   | 'workers_at_capacity'
+  | 'worker_type_disabled'
   | 'codex_auth_unavailable'
   | 'claude_auth_unavailable'
   | 'provider_auth_unavailable'
@@ -34,6 +37,7 @@ export interface ClassifyCodeTaskDispatchabilityInput {
   workerType: string;
   workers: readonly WorkerConfig[];
   healthByWorkerName: Record<string, WorkerHealthState>;
+  workerNamesRejectedForType?: ReadonlySet<string>;
 }
 
 interface HealthyWorker {
@@ -69,6 +73,10 @@ function blocker(
     workers_at_capacity: {
       message: `All capable workers for ${label} are currently at capacity.`,
       remediation: 'Wait for a running task to finish or add worker capacity.',
+    },
+    worker_type_disabled: {
+      message: `The worker type ${label} is disabled on all enabled workers.`,
+      remediation: 'Enable this task type on a worker in worker settings, then retry the task.',
     },
     codex_auth_unavailable: {
       message: `No reachable worker has active Codex auth for ${label}.`,
@@ -157,10 +165,10 @@ export function healthDiagnostics(
 function hasRequiredAuth(auth: CodeTaskAuthRequirement, health: HealthyWorker['health']): boolean {
   if (auth.kind === 'codex') {
     const codexAuth = health.workerAuths.codex;
-    return codexAuth.status === 'active'
-      || (codexAuth.status === 'expired' && codexAuth.refreshSupported === true);
+    return codexAuth?.status === 'active'
+      || (codexAuth?.status === 'expired' && codexAuth.refreshSupported === true);
   }
-  if (auth.kind === 'claude') return health.workerAuths.claude.status === 'active';
+  if (auth.kind === 'claude') return health.workerAuths.claude?.status === 'active';
   return health.providerApiKeys[auth.envVar]?.configured === true;
 }
 
@@ -168,6 +176,20 @@ function authBlockerReason(auth: CodeTaskAuthRequirement): CodeTaskDispatchBlock
   if (auth.kind === 'codex') return 'codex_auth_unavailable';
   if (auth.kind === 'claude') return 'claude_auth_unavailable';
   return 'provider_auth_unavailable';
+}
+
+export function excludesWorkerType(
+  worker: WorkerConfig,
+  health: WorkerHealthState | undefined,
+  workerType: CodeTaskWorkerType,
+): boolean {
+  const recordedExclusion = worker.enabledWorkerTypes?.includes(workerType) === false;
+  if (health?._tag !== 'healthy' || !isCodeTaskWorkerTypePolicy(health)) return recordedExclusion;
+
+  // A downgraded or stale host can still report an older policy. Keep the known
+  // exclusion until the host confirms at least the saved revision.
+  const currentPolicy = health.workerTypesRevision >= (worker.workerTypesRevision ?? 0);
+  return !health.enabledWorkerTypes.includes(workerType) || (!currentPolicy && recordedExclusion);
 }
 
 export function classifyCodeTaskDispatchability(
@@ -184,29 +206,38 @@ export function classifyCodeTaskDispatchability(
     return blocker('no_enabled_workers', workerType, []);
   }
 
-  const healthyWorkers = enabled.flatMap((worker): HealthyWorker[] => {
+  const eligible = enabled.filter((worker) => (
+    input.workerNamesRejectedForType?.has(worker.name) !== true
+    && !excludesWorkerType(worker, healthByWorkerName[worker.name], workerType)
+  ));
+  if (eligible.length === 0) {
+    return blocker('worker_type_disabled', workerType, enabled.map((worker) => worker.name));
+  }
+
+  const healthyWorkers = eligible.flatMap((worker): HealthyWorker[] => {
     const health = healthByWorkerName[worker.name];
     if (health?._tag !== 'healthy') return [];
     return [{ worker, health }];
   });
 
   if (healthyWorkers.length === 0) {
-    const enabledHealthStates = enabled.map((worker) => healthByWorkerName[worker.name]);
-    const hasHealthContractMismatch = enabledHealthStates.length > 0
-      && enabledHealthStates.every((health) => health?._tag === 'unknown' && health.contractMismatch === true);
+    const eligibleHealthStates = eligible.map((worker) => healthByWorkerName[worker.name]);
+    const hasHealthContractMismatch = eligibleHealthStates.every((health) => (
+      health?._tag === 'unknown' && health.contractMismatch === true
+    ));
     if (hasHealthContractMismatch) {
       return blocker(
         'worker_health_contract_mismatch',
         workerType,
-        enabled.map((worker) => worker.name),
-        healthDiagnostics(enabled, healthByWorkerName)
+        eligible.map((worker) => worker.name),
+        healthDiagnostics(eligible, healthByWorkerName)
       );
     }
     return blocker(
       'workers_unreachable',
       workerType,
-      enabled.map((worker) => worker.name),
-      healthDiagnostics(enabled, healthByWorkerName)
+      eligible.map((worker) => worker.name),
+      healthDiagnostics(eligible, healthByWorkerName)
     );
   }
 

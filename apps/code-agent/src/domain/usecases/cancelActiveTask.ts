@@ -265,6 +265,8 @@ export async function cancelActiveTask(
       request.taskId,
       preparation.task.workerLocation,
       {
+        ownerId: preparation.task.userId,
+        ...(preparation.task.workerAudience !== undefined && { workerAudience: preparation.task.workerAudience }),
         url: worker.url,
         cfAccessClientId: worker.cfAccessClientId,
         cfAccessClientSecret: worker.cfAccessClientSecret,

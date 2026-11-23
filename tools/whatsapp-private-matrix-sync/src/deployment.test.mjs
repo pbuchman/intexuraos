@@ -277,3 +277,46 @@ test('rendered Compose has exactly one service on its own network and verified H
   assert.match(unit, /ExecStop=.*--project-name intexuraos-matrix-sync .*stop .*matrix-sync/);
   assert.doesNotMatch(unit, /\bdown\b|remove-orphans|whatsapp-matrix\.service|synapse|postgres/);
 });
+
+test('protected unit selects its reviewed control file independently of the application environment', async (t) => {
+  const f = await fixture(t);
+  assert.equal(f.invoke().status, 0);
+  const unsafeDestination = f.invoke(['--deploy-dir', '/etc/intexuraos-matrix-sync']);
+  assert.equal(JSON.parse(unsafeDestination.stderr).error, 'use_protected_host_control_stager');
+  const controls = await fsp.readFile(path.join(deploy, 'control.env.example'), 'utf8');
+  const synthetic = controls
+    .replace('=REVIEWED_SOURCE_SHA', '=' + sha)
+    .replaceAll('/run/home-dev-matrix-sources/adapter', f.directory);
+  await fsp.writeFile(path.join(f.directory, 'control.env'), synthetic);
+  await fsp.writeFile(
+    path.join(f.directory, 'application.env'),
+    'INTEXURAOS_SOURCE_SHA=application-value\nMATRIX_SYNC_STATE_DIR=/application-only\n'
+  );
+  const model = JSON.parse(
+    execFileSync(
+      'docker',
+      [
+        'compose',
+        '--env-file',
+        path.join(f.directory, 'control.env'),
+        '-f',
+        path.join(deploy, 'compose.yaml'),
+        'config',
+        '--format',
+        'json',
+      ],
+      { encoding: 'utf8', env: { PATH: process.env.PATH } }
+    )
+  );
+  const service = model.services['matrix-sync'];
+  assert.equal(service.image, 'intexuraos-matrix-sync:' + sha);
+  assert.equal(
+    service.volumes.find((entry) => entry.target === '/data').source,
+    path.join(f.directory, 'state')
+  );
+  assert.ok(service.volumes.every((entry) => entry.source.startsWith(f.directory + '/')));
+  const unit = await fsp.readFile(path.join(f.target, 'intexuraos-matrix-sync.service'), 'utf8');
+  assert.doesNotMatch(unit, /@DEPLOY_DIR@|\/home\/|--env-file .*\/\.env\b/);
+  assert.match(unit, /--env-file \/etc\/intexuraos-matrix-sync\/control.env/);
+  assert.match(unit, /Requires=.*home-dev-matrix-mounts@adapter.service/);
+});

@@ -30,6 +30,9 @@ function generatorEnvironment(): Record<string, string> {
     PATH: process.env.PATH ?? '',
     PROJECT_ID: 'intexuraos-dev-pbuchman',
     INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8128',
+    INTEXURAOS_ORCHESTRATOR_BIND_HOST: '0.0.0.0',
+    INTEXURAOS_TASK_ACCESS_AUDIENCE: 'https://worker.example',
+    INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH: '/test/public.pem',
     INTEXURAOS_ENVIRONMENT: 'prod',
     INTEXURAOS_ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     INTEXURAOS_GITHUB_APP_ID: '123',
@@ -217,6 +220,8 @@ const expectedCredentialAuthorities = [
   'GOOGLE_APPLICATION_CREDENTIALS',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_ORCHESTRATOR_SECRET',
+  'INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH',
+  'INTEXURAOS_TASK_ACCESS_AUDIENCE',
 ];
 const expectedPendingLiveGates = [
   'credential-principal-metadata',
@@ -233,7 +238,7 @@ const expectedConsumers: ExpectedIdentityConsumer[] = [
     usageBindings: [
       {
         usageClass: 'fixed-value-assignment',
-        line: 136,
+        line: 120,
         column: 5,
         nodeKind: 'PropertyAssignment',
         spanSha256: '2ac7296a50a4c4848499894fbcc06b6142a96e14f58a509dbfb79ce070299905',
@@ -328,7 +333,7 @@ const expectedConsumers: ExpectedIdentityConsumer[] = [
     usageBindings: [
       {
         usageClass: 'fixed-value-assignment',
-        line: 137,
+        line: 121,
         column: 5,
         nodeKind: 'PropertyAssignment',
         spanSha256: 'e25764a3b9ad592cec1698313a3c2206d3426d5cfc36ebaf035cbec6b8af06b3',
@@ -1798,7 +1803,7 @@ describe('Home Dev orchestrator production ownership', () => {
         expect.objectContaining({
           envName: 'INTEXURAOS_ENVIRONMENT',
           file: 'scripts/generate-orchestrator-env.mjs',
-          line: 15,
+          line: 20,
           column: 3,
           nodeKind: 'StringLiteral',
           reviewedSha256: fileSha256(generatorPath),
@@ -2204,6 +2209,9 @@ describe('Home Dev orchestrator production ownership', () => {
     );
 
     const generated = parse(readFileSync(outputPath, 'utf8'));
+    expect(generated['INTEXURAOS_ORCHESTRATOR_BIND_HOST']).toBe('127.0.0.1');
+    expect(generated['INTEXURAOS_TASK_ACCESS_AUDIENCE']).toBe('https://worker.example');
+    expect(generated['INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH']).toBe('/test/public.pem');
     expect(generated['INTEXURAOS_CODE_AGENT_URL']).toBe('https://intexuraos.cloud/api/code');
     expect(generated['INTEXURAOS_USAGE_WEBHOOK_URL']).toBe(
       'https://intexuraos.cloud/api/code/internal/webhooks/usage-events'
@@ -2226,8 +2234,8 @@ describe('Home Dev orchestrator production ownership', () => {
     expect(audit.schemaVersion).toBe(6);
     expect(audit.runtimeBundleClosure).toEqual({
       entryPoints: orchestratorRuntimeEntryPoints,
-      inputCount: 167,
-      inputsSha256: '58f29f6bbf260a46305bc5c96cf94ccce5d3d34ffd65ffdb8911372349392101',
+      inputCount: 174,
+      inputsSha256: '38cebebee84e6d8211f28a2187f48986d317f3fc4eb2f5cd4661d2bab9745b71',
     });
     expect(audit.observabilityIdentityBoundary.bootstrapConfig.forbiddenField).toBe('environment');
     expect(audit.observabilityIdentityBoundary.boundaryModule).toEqual(

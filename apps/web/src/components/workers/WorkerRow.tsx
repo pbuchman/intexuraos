@@ -7,9 +7,13 @@ import type {
   WorkerConfigUpdateInput,
   TestWorkerConnectivityResponse,
 } from '@/services/workerSettingsApi.types';
+import type { WorkerStatus } from '@/types';
+import { WorkerTypeSettings } from './WorkerTypeSettings.js';
 
 export interface WorkerRowProps {
   worker: MaskedWorkerConfig;
+  status?: WorkerStatus | undefined;
+  onRefreshStatus?: (() => Promise<void>) | undefined;
   priority: number;
   onUpdate: (config: WorkerConfigUpdateInput) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -20,6 +24,8 @@ export interface WorkerRowProps {
 
 export function WorkerRow({
   worker,
+  status,
+  onRefreshStatus,
   priority,
   onUpdate,
   onDelete,
@@ -248,6 +254,10 @@ export function WorkerRow({
           </div>
         ) : null}
       </div>
+
+      {!isEditing && !showDeleteConfirm && (
+        <WorkerTypeSettings key={worker.url} worker={worker} status={status} onUpdate={onUpdate} onRefreshStatus={onRefreshStatus} />
+      )}
 
       {saveSuccess ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">

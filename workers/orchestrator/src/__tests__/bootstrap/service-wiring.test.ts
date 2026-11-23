@@ -1,16 +1,24 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Logger } from 'pino';
 import {
+  buildWorkerAuthRegistry,
   buildTaskDispatcherWorkerSecrets,
   createWorkerAuthImageResolver,
   CREDENTIAL_REFRESH_BUFFER_MS,
+  CREDENTIAL_REFRESH_TICK_MS,
   runCredentialRefreshTick,
   resolveSettingsLocalTemplatePath,
+  startCredentialRefreshLoop,
 } from '../../bootstrap/service-wiring.js';
 import { loadEnvConfig, type BootstrapEnvConfig } from '../../bootstrap/env-config.js';
 import type { WorkerAuthRegistry } from '../../services/worker-auth/index.js';
 import type { IsolationProvider } from '../../services/isolation/types.js';
 import { IMAGE_PULL_TIMEOUT_MS } from '../../services/task-dispatcher/retry-logic.js';
+import { WorkerTypePolicy } from '../../services/worker-type-policy.js';
+import { createDeferred } from '../deferred.js';
 
 describe('createWorkerAuthImageResolver', () => {
   afterEach(() => {
@@ -158,6 +166,29 @@ function makeParsedEnv(errorHubHost = 'home-dev.example.ts.net:8443'): Bootstrap
 }
 
 describe('runCredentialRefreshTick', () => {
+  it('counts idle watchdog ticks independently of whether any credentials need refresh', async () => {
+    vi.useFakeTimers();
+    const snapshot = { idleTicks: 0 };
+    const registry = makeRegistry({});
+    let runningTasks: string[] = [];
+    const interval = startCredentialRefreshLoop(
+      registry,
+      () => runningTasks,
+      makeLogger(),
+      snapshot
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(CREDENTIAL_REFRESH_TICK_MS * 2);
+      expect(snapshot.idleTicks).toBe(2);
+      runningTasks = ['running-task'];
+      await vi.advanceTimersByTimeAsync(CREDENTIAL_REFRESH_TICK_MS);
+      expect(snapshot.idleTicks).toBe(2);
+    } finally {
+      clearInterval(interval);
+      vi.useRealTimers();
+    }
+  });
+
   it('is a no-op when no tasks running AND nothing is expiring', () => {
     const logger = makeLogger();
     const refresh = vi.fn(async () => undefined);
@@ -260,6 +291,142 @@ describe('runCredentialRefreshTick', () => {
 
     // Called once per provider (claude, codex)
     expect(bufferArgs[0]).toBe(CREDENTIAL_REFRESH_BUFFER_MS);
+  });
+});
+
+describe('worker auth policy wiring', () => {
+  async function writeExpiredClaudeAndActiveCodex(directory: string): Promise<{
+    sharedCredsPath: string;
+    sharedCodexAuthPath: string;
+    credentialsPath: string;
+  }> {
+    const sharedCredsPath = join(directory, 'claude-creds');
+    const sharedCodexAuthPath = join(directory, 'codex-auth');
+    const credentialsPath = join(sharedCredsPath, '.credentials.json');
+    await mkdir(sharedCredsPath);
+    await mkdir(sharedCodexAuthPath);
+    await writeFile(
+      credentialsPath,
+      JSON.stringify({
+        claudeAiOauth: {
+          accessToken: 'test-claude-token',
+          expiresAt: Date.now() - 60_000,
+          subscriptionType: 'max',
+        },
+      })
+    );
+    const encodedToken = Buffer.from(
+      JSON.stringify({
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      })
+    ).toString('base64url');
+    await writeFile(
+      join(sharedCodexAuthPath, 'auth.json'),
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: { access_token: `header.${encodedToken}.signature` },
+      })
+    );
+    return { sharedCredsPath, sharedCodexAuthPath, credentialsPath };
+  }
+
+  it('keeps Codex active, aborts a pending Claude refresh, and reloads Claude on enable', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'worker-auth-policy-'));
+    const { sharedCredsPath, sharedCodexAuthPath, credentialsPath } =
+      await writeExpiredClaudeAndActiveCodex(directory);
+    const image = createDeferred<string>();
+    const resolveRefreshImage = vi.fn(() => image.promise);
+    const createContainer = vi.fn(() => Promise.reject(new Error('unexpected refresh container')));
+    const policy = await WorkerTypePolicy.load(join(directory, 'worker-types.json'));
+    const logger = makeLogger();
+    const registry = buildWorkerAuthRegistry(
+      policy,
+      {
+        sharedCredsPath,
+        sharedCodexAuthPath,
+        docker: { createContainer } as never,
+        resolveRefreshImage,
+      },
+      logger
+    );
+    try {
+      expect(registry.getState('claude').status).toBe('expired');
+      const refresh = registry.refresh('claude');
+      expect(resolveRefreshImage).toHaveBeenCalledOnce();
+      await policy.apply(['codex', 'openrouter-free'], 0);
+      expect(registry.getStates()).toMatchObject({
+        claude: { status: 'disabled', refreshSupported: false },
+        codex: { status: 'active' },
+      });
+      expect(registry.getCurrentAccessToken('claude')).toBeNull();
+
+      await rm(credentialsPath);
+      await policy.apply(['opus', 'codex', 'openrouter-free'], 1);
+      expect(registry.getState('claude').status).toBe('not_configured');
+      expect(registry.getCurrentAccessToken('claude')).toBeNull();
+      image.resolve('registry/code-worker@sha256:resolved');
+      await expect(refresh).resolves.toBe(false);
+      expect(createContainer).not.toHaveBeenCalled();
+    } finally {
+      registry.stopMonitoring();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('survives restart with Claude disabled across idle ticks and resumes refresh after enabling Claude', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'worker-auth-watchdog-'));
+    const { sharedCredsPath, sharedCodexAuthPath } =
+      await writeExpiredClaudeAndActiveCodex(directory);
+    const policyPath = join(directory, 'worker-types.json');
+    await (await WorkerTypePolicy.load(policyPath)).apply(['codex'], 0);
+    const policy = await WorkerTypePolicy.load(policyPath);
+    const remove = vi.fn(async () => undefined);
+    const createContainer = vi.fn(async () => ({
+      id: 'fixture-refresh-container',
+      start: async (): Promise<void> => undefined,
+      wait: async (): Promise<{ StatusCode: number }> => ({ StatusCode: 0 }),
+      remove,
+    }));
+    const logger = makeLogger();
+    const watchdog = { idleTicks: 0 };
+    vi.useFakeTimers();
+    const registry = buildWorkerAuthRegistry(
+      policy,
+      {
+        sharedCredsPath,
+        sharedCodexAuthPath,
+        docker: { createContainer } as never,
+        resolveRefreshImage: async () => 'registry/code-worker@sha256:fixture',
+      },
+      logger
+    );
+    const interval = startCredentialRefreshLoop(registry, () => [], logger, watchdog);
+    try {
+      await vi.advanceTimersByTimeAsync(CREDENTIAL_REFRESH_TICK_MS * 2);
+      expect(watchdog.idleTicks).toBe(2);
+      expect(registry.getStates()).toMatchObject({
+        claude: { status: 'disabled', refreshSupported: false },
+        codex: { status: 'active' },
+      });
+      expect(createContainer).not.toHaveBeenCalled();
+
+      await policy.apply(['opus', 'codex'], 1);
+      expect(registry.getState('claude').status).toBe('expired');
+      await vi.advanceTimersByTimeAsync(CREDENTIAL_REFRESH_TICK_MS);
+
+      expect(watchdog.idleTicks).toBe(3);
+      expect(createContainer).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          name: expect.stringMatching(/^claude-cred-refresh-/),
+        })
+      );
+      expect(remove).toHaveBeenCalledWith({ force: true });
+    } finally {
+      clearInterval(interval);
+      registry.stopMonitoring();
+      vi.useRealTimers();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

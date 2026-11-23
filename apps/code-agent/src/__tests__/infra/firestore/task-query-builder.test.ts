@@ -320,10 +320,10 @@ describe('selectPreservedPullRequest', () => {
   it('returns the first non-merge-conflict doc with workerLocation/userId', () => {
     const out = selectPreservedPullRequest([
       doc('mc', { followUpReason: 'merge_conflict', userId: 'u1', workerLocation: 'vmX' }),
-      doc('keep', { userId: 'uK', workerLocation: 'vmK' }),
+      doc('keep', { userId: 'uK', workerLocation: 'vmK', workerAudience: 'https://worker.example' }),
       doc('later', { userId: 'uL', workerLocation: 'vmL' }),
     ]);
-    expect(out).toEqual({ id: 'keep', workerLocation: 'vmK', userId: 'uK' });
+    expect(out).toEqual({ id: 'keep', workerLocation: 'vmK', workerAudience: 'https://worker.example', userId: 'uK' });
   });
 
   it('falls back to empty strings when userId/workerLocation are missing', () => {

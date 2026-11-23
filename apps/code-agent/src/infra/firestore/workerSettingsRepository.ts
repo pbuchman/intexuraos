@@ -8,10 +8,15 @@
  */
 
 import { FieldValue } from '@intexuraos/infra-firestore';
+import { randomUUID } from 'node:crypto';
 import type { Firestore } from '@intexuraos/infra-firestore';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
+import {
+  isCodeTaskWorkerTypePolicy,
+  type CodeTaskWorkerType,
+  type CodeTaskWorkerTypePolicy,
+} from '@intexuraos/code-task-domain';
 import type {
   WorkerSettingsRepository,
   WorkerSettingsError,
@@ -56,14 +61,16 @@ interface WorkerSettingsDoc {
     state: unknown;
     checkedAt: string;
     stale: boolean;
+    registrationId?: string;
   }>;
 }
 
 /**
  * Worker config as stored in Firestore (credentials encrypted).
  */
-interface EncryptedWorkerConfig {
+interface EncryptedWorkerConfig extends Partial<CodeTaskWorkerTypePolicy> {
   name: string;
+  registrationId?: string;
   url: string;
   cfAccessClientId: string; // encrypted
   cfAccessClientSecret: string; // encrypted
@@ -88,6 +95,11 @@ function decryptWorkerConfig(
     cfAccessClientSecret: decryptToken(encrypted.cfAccessClientSecret),
     dispatchSigningSecret: decryptToken(encrypted.dispatchSigningSecret),
     enabled: encrypted.enabled ?? true,
+    ...(encrypted.registrationId !== undefined && { registrationId: encrypted.registrationId }),
+    ...(isCodeTaskWorkerTypePolicy(encrypted) && {
+      enabledWorkerTypes: encrypted.enabledWorkerTypes,
+      workerTypesRevision: encrypted.workerTypesRevision,
+    }),
   };
 
   if (encrypted.lastTestedAt !== undefined) {
@@ -101,6 +113,27 @@ function decryptWorkerConfig(
   }
 
   return config;
+}
+
+function isSameRegistration(stored: EncryptedWorkerConfig, worker: WorkerConfig): boolean {
+  return stored.name === worker.name && stored.url === worker.url && stored.registrationId === worker.registrationId;
+}
+
+function registrationChanged(): WorkerSettingsError {
+  return { code: 'registration_changed', message: 'Worker registration changed. Refresh worker settings and try again.' };
+}
+
+function selectPolicy(
+  stored: EncryptedWorkerConfig,
+  policy: CodeTaskWorkerTypePolicy
+): CodeTaskWorkerTypePolicy {
+  if (isCodeTaskWorkerTypePolicy(stored) && stored.workerTypesRevision >= policy.workerTypesRevision) {
+    return {
+      enabledWorkerTypes: stored.enabledWorkerTypes,
+      workerTypesRevision: stored.workerTypesRevision,
+    };
+  }
+  return policy;
 }
 
 export interface WorkerSettingsRepositoryDeps {
@@ -192,56 +225,59 @@ export function createWorkerSettingsRepository(
       config: WorkerConfigInput
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
-        const docRef = collection.doc(userId);
-        const doc = await docRef.get();
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(userId);
+          const doc = await transaction.get(docRef);
 
-        /* v8 ignore start -- ts-type: FakeFirestore always returns data() when exists is true @preserve */
-        const existingWorkers = doc.exists
-          ? ((doc.data() as WorkerSettingsDoc | undefined)?.workers ?? [])
-          : [];
-        /* v8 ignore stop @preserve */
+          /* v8 ignore start -- ts-type: FakeFirestore always returns data() when exists is true @preserve */
+          const existingWorkers = doc.exists
+            ? ((doc.data() as WorkerSettingsDoc | undefined)?.workers ?? [])
+            : [];
+          /* v8 ignore stop @preserve */
 
-        // Check max workers limit
-        if (existingWorkers.length >= MAX_WORKERS_PER_USER) {
-          return err({
-            code: 'max_workers_exceeded',
-            message: `Maximum ${String(MAX_WORKERS_PER_USER)} workers allowed per user`,
-          });
-        }
+          // Check max workers limit
+          if (existingWorkers.length >= MAX_WORKERS_PER_USER) {
+            return err({
+              code: 'max_workers_exceeded',
+              message: `Maximum ${String(MAX_WORKERS_PER_USER)} workers allowed per user`,
+            });
+          }
 
-        // Check for duplicate name
-        if (existingWorkers.some((w: EncryptedWorkerConfig) => w.name === config.name)) {
-          return err({
-            code: 'already_exists',
-            message: `Worker with name '${config.name}' already exists`,
-          });
-        }
+          // Check for duplicate name
+          if (existingWorkers.some((w: EncryptedWorkerConfig) => w.name === config.name)) {
+            return err({
+              code: 'already_exists',
+              message: `Worker with name '${config.name}' already exists`,
+            });
+          }
 
-        // Encrypt credentials and add to array
-        const encryptedWorker: EncryptedWorkerConfig = {
-          name: config.name,
-          url: normalizeUrl(config.url),
-          cfAccessClientId: encryptToken(config.cfAccessClientId),
-          cfAccessClientSecret: encryptToken(config.cfAccessClientSecret),
-          dispatchSigningSecret: encryptToken(config.dispatchSigningSecret),
-          enabled: true,
-        };
+          // Encrypt credentials and add to array
+          const encryptedWorker: EncryptedWorkerConfig = {
+            name: config.name,
+            registrationId: randomUUID(),
+            url: normalizeUrl(config.url),
+            cfAccessClientId: encryptToken(config.cfAccessClientId),
+            cfAccessClientSecret: encryptToken(config.cfAccessClientSecret),
+            dispatchSigningSecret: encryptToken(config.dispatchSigningSecret),
+            enabled: true,
+          };
 
-        const newWorkers = [...existingWorkers, encryptedWorker];
-        const now = new Date().toISOString();
+          const newWorkers = [...existingWorkers, encryptedWorker];
+          const now = new Date().toISOString();
 
-        if (doc.exists) {
-          await docRef.update({ workers: newWorkers, updatedAt: now });
-        } else {
-          await docRef.set({
-            userId,
-            workers: newWorkers,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+          if (doc.exists) {
+            transaction.update(docRef, { workers: newWorkers, updatedAt: now });
+          } else {
+            transaction.set(docRef, {
+              userId,
+              workers: newWorkers,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
 
-        return ok(undefined);
+          return ok(undefined);
+        });
       } catch (error) {
         const message = getErrorMessage(error);
 
@@ -267,60 +303,71 @@ export function createWorkerSettingsRepository(
       config: WorkerConfigUpdateInput
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
-        const docRef = collection.doc(userId);
-        const doc = await docRef.get();
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(userId);
+          const doc = await transaction.get(docRef);
 
-        if (!doc.exists) {
-          return err({
-            code: 'not_found',
-            message: `Worker '${workerName}' not found`,
+          if (!doc.exists) {
+            return err({
+              code: 'not_found',
+              message: `Worker '${workerName}' not found`,
+            });
+          }
+
+          const existingData = doc.data() as WorkerSettingsDoc;
+          const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
+
+          const existingWorker = existingData.workers[workerIndex];
+          if (workerIndex === -1 || existingWorker === undefined) {
+            return err({
+              code: 'not_found',
+              message: `Worker '${workerName}' not found`,
+            });
+          }
+
+          const now = new Date().toISOString();
+          const url = config.url === undefined ? existingWorker.url : normalizeUrl(config.url);
+          const endpointChanged = url !== existingWorker.url;
+          const registrationId = endpointChanged ? randomUUID() : existingWorker.registrationId;
+
+          // Build updated worker config - only include optional fields if they have values
+          const updatedWorker: EncryptedWorkerConfig = {
+            name: workerName, // Name is immutable
+            url,
+            cfAccessClientId:
+              config.cfAccessClientId !== undefined
+                ? encryptToken(config.cfAccessClientId)
+                : existingWorker.cfAccessClientId,
+            cfAccessClientSecret:
+              config.cfAccessClientSecret !== undefined
+                ? encryptToken(config.cfAccessClientSecret)
+                : existingWorker.cfAccessClientSecret,
+            dispatchSigningSecret:
+              config.dispatchSigningSecret !== undefined
+                ? encryptToken(config.dispatchSigningSecret)
+                : existingWorker.dispatchSigningSecret,
+            enabled: config.enabled ?? existingWorker.enabled ?? true,
+            ...(registrationId !== undefined && { registrationId }),
+            ...(!endpointChanged && isCodeTaskWorkerTypePolicy(existingWorker) && {
+              enabledWorkerTypes: existingWorker.enabledWorkerTypes,
+              workerTypesRevision: existingWorker.workerTypesRevision,
+            }),
+            ...(existingWorker.lastTestedAt !== undefined && { lastTestedAt: existingWorker.lastTestedAt }),
+            ...(existingWorker.testStatus !== undefined && { testStatus: existingWorker.testStatus }),
+            ...(existingWorker.testMessage !== undefined && { testMessage: existingWorker.testMessage }),
+          };
+
+          const updatedWorkers = [...existingData.workers];
+          updatedWorkers[workerIndex] = updatedWorker;
+
+          transaction.update(docRef, {
+            workers: updatedWorkers,
+            updatedAt: now,
+            ...(endpointChanged && { [`workerHealthStatuses.${workerName}`]: FieldValue.delete() }),
           });
-        }
 
-        const existingData = doc.data() as WorkerSettingsDoc;
-        const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
-
-        const existingWorker = existingData.workers[workerIndex];
-        if (workerIndex === -1 || existingWorker === undefined) {
-          return err({
-            code: 'not_found',
-            message: `Worker '${workerName}' not found`,
-          });
-        }
-
-        const now = new Date().toISOString();
-
-        // Build updated worker config - only include optional fields if they have values
-        const updatedWorker: EncryptedWorkerConfig = {
-          name: workerName, // Name is immutable
-          url: config.url !== undefined ? normalizeUrl(config.url) : existingWorker.url,
-          cfAccessClientId:
-            config.cfAccessClientId !== undefined
-              ? encryptToken(config.cfAccessClientId)
-              : existingWorker.cfAccessClientId,
-          cfAccessClientSecret:
-            config.cfAccessClientSecret !== undefined
-              ? encryptToken(config.cfAccessClientSecret)
-              : existingWorker.cfAccessClientSecret,
-          dispatchSigningSecret:
-            config.dispatchSigningSecret !== undefined
-              ? encryptToken(config.dispatchSigningSecret)
-              : existingWorker.dispatchSigningSecret,
-          enabled: config.enabled ?? existingWorker.enabled ?? true,
-          ...(existingWorker.lastTestedAt !== undefined && { lastTestedAt: existingWorker.lastTestedAt }),
-          ...(existingWorker.testStatus !== undefined && { testStatus: existingWorker.testStatus }),
-          ...(existingWorker.testMessage !== undefined && { testMessage: existingWorker.testMessage }),
-        };
-
-        const updatedWorkers = [...existingData.workers];
-        updatedWorkers[workerIndex] = updatedWorker;
-
-        await docRef.update({
-          workers: updatedWorkers,
-          updatedAt: now,
+          return ok(undefined);
         });
-
-        return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update worker');
@@ -331,40 +378,83 @@ export function createWorkerSettingsRepository(
       }
     },
 
+    async confirmWorkerTypePolicy(
+      userId: string,
+      worker: WorkerConfig,
+      policy: CodeTaskWorkerTypePolicy
+    ): Promise<Result<CodeTaskWorkerTypePolicy, WorkerSettingsError>> {
+      try {
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(userId);
+          const data = (await transaction.get(docRef)).data() as WorkerSettingsDoc | undefined;
+          const stored = data?.workers.find((candidate) => candidate.name === worker.name);
+          if (data === undefined || stored === undefined || !isSameRegistration(stored, worker)) {
+            return err(registrationChanged());
+          }
+
+          const confirmed = selectPolicy(stored, policy);
+          if (confirmed === policy) {
+            const cachedState = data.workerHealthStatuses?.[worker.name]?.state;
+            transaction.update(docRef, {
+              workers: data.workers.map((candidate) =>
+                candidate === stored ? {
+                  ...candidate,
+                  enabledWorkerTypes: policy.enabledWorkerTypes,
+                  workerTypesRevision: policy.workerTypesRevision,
+                } : candidate
+              ),
+              ...(isCodeTaskWorkerTypePolicy(cachedState) && cachedState.workerTypesRevision < policy.workerTypesRevision && {
+                [`workerHealthStatuses.${worker.name}.state.enabledWorkerTypes`]: policy.enabledWorkerTypes,
+                [`workerHealthStatuses.${worker.name}.state.workerTypesRevision`]: policy.workerTypesRevision,
+              }),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+          return ok(confirmed);
+        });
+      } catch (error) {
+        logger.error({ userId, workerName: worker.name, error }, 'Failed to confirm worker types');
+        return err({ code: 'internal_error', message: 'Failed to confirm worker types' });
+      }
+    },
+
     async deleteWorker(
       userId: string,
       workerName: string
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
-        const docRef = collection.doc(userId);
-        const doc = await docRef.get();
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(userId);
+          const doc = await transaction.get(docRef);
 
-        if (!doc.exists) {
-          return err({
-            code: 'not_found',
-            message: `Worker '${workerName}' not found`,
+          if (!doc.exists) {
+            return err({
+              code: 'not_found',
+              message: `Worker '${workerName}' not found`,
+            });
+          }
+
+          const existingData = doc.data() as WorkerSettingsDoc;
+          const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
+
+          if (workerIndex === -1) {
+            return err({
+              code: 'not_found',
+              message: `Worker '${workerName}' not found`,
+            });
+          }
+
+          const now = new Date().toISOString();
+
+          const updatedWorkers = existingData.workers.filter((w) => w.name !== workerName);
+          transaction.update(docRef, {
+            workers: updatedWorkers,
+            updatedAt: now,
+            [`workerHealthStatuses.${workerName}`]: FieldValue.delete(),
           });
-        }
 
-        const existingData = doc.data() as WorkerSettingsDoc;
-        const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
-
-        if (workerIndex === -1) {
-          return err({
-            code: 'not_found',
-            message: `Worker '${workerName}' not found`,
-          });
-        }
-
-        const now = new Date().toISOString();
-
-        const updatedWorkers = existingData.workers.filter((w) => w.name !== workerName);
-        await docRef.update({
-          workers: updatedWorkers,
-          updatedAt: now,
+          return ok(undefined);
         });
-
-        return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to delete worker');
@@ -380,42 +470,44 @@ export function createWorkerSettingsRepository(
       workerNames: string[]
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
-        const docRef = collection.doc(userId);
-        const doc = await docRef.get();
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(userId);
+          const doc = await transaction.get(docRef);
 
-        if (!doc.exists) {
-          return err({
-            code: 'not_found',
-            message: 'Worker settings not found',
+          if (!doc.exists) {
+            return err({
+              code: 'not_found',
+              message: 'Worker settings not found',
+            });
+          }
+
+          const existingData = doc.data() as WorkerSettingsDoc;
+          const existingNames = existingData.workers.map((w) => w.name).sort();
+
+          // Verify the reorder contains exactly the same workers
+          const sortedInput = [...workerNames].sort();
+          if (JSON.stringify(existingNames) !== JSON.stringify(sortedInput)) {
+            return err({
+              code: 'internal_error',
+              message: 'Reorder must contain exactly all existing worker names',
+            });
+          }
+
+          // Reorder workers according to the provided order
+          // We've verified all names exist via the sort comparison above
+          const reorderedWorkers: EncryptedWorkerConfig[] = workerNames
+            .map((name) => existingData.workers.find((w) => w.name === name))
+            .filter((w): w is EncryptedWorkerConfig => w !== undefined);
+
+          const now = new Date().toISOString();
+
+          transaction.update(docRef, {
+            workers: reorderedWorkers,
+            updatedAt: now,
           });
-        }
 
-        const existingData = doc.data() as WorkerSettingsDoc;
-        const existingNames = existingData.workers.map((w) => w.name).sort();
-
-        // Verify the reorder contains exactly the same workers
-        const sortedInput = [...workerNames].sort();
-        if (JSON.stringify(existingNames) !== JSON.stringify(sortedInput)) {
-          return err({
-            code: 'internal_error',
-            message: 'Reorder must contain exactly all existing worker names',
-          });
-        }
-
-        // Reorder workers according to the provided order
-        // We've verified all names exist via the sort comparison above
-        const reorderedWorkers: EncryptedWorkerConfig[] = workerNames
-          .map((name) => existingData.workers.find((w) => w.name === name))
-          .filter((w): w is EncryptedWorkerConfig => w !== undefined);
-
-        const now = new Date().toISOString();
-
-        await docRef.update({
-          workers: reorderedWorkers,
-          updatedAt: now,
+          return ok(undefined);
         });
-
-        return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId }, 'Failed to reorder workers');
@@ -432,43 +524,45 @@ export function createWorkerSettingsRepository(
       result: TestResult
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
-        const docRef = collection.doc(userId);
-        const doc = await docRef.get();
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(userId);
+          const doc = await transaction.get(docRef);
 
-        if (!doc.exists) {
-          return err({
-            code: 'not_found',
-            message: 'Worker settings not found',
+          if (!doc.exists) {
+            return err({
+              code: 'not_found',
+              message: 'Worker settings not found',
+            });
+          }
+
+          const existingData = doc.data() as WorkerSettingsDoc;
+          const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
+
+          const existingWorker = existingData.workers[workerIndex];
+          if (workerIndex === -1 || existingWorker === undefined) {
+            return err({
+              code: 'not_found',
+              message: `Worker '${workerName}' not found`,
+            });
+          }
+
+          const now = new Date().toISOString();
+
+          const updatedWorkers = [...existingData.workers];
+          updatedWorkers[workerIndex] = {
+            ...existingWorker,
+            lastTestedAt: now,
+            testStatus: result.status,
+            testMessage: result.message,
+          };
+
+          transaction.update(docRef, {
+            workers: updatedWorkers,
+            updatedAt: now,
           });
-        }
 
-        const existingData = doc.data() as WorkerSettingsDoc;
-        const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
-
-        const existingWorker = existingData.workers[workerIndex];
-        if (workerIndex === -1 || existingWorker === undefined) {
-          return err({
-            code: 'not_found',
-            message: `Worker '${workerName}' not found`,
-          });
-        }
-
-        const now = new Date().toISOString();
-
-        const updatedWorkers = [...existingData.workers];
-        updatedWorkers[workerIndex] = {
-          ...existingWorker,
-          lastTestedAt: now,
-          testStatus: result.status,
-          testMessage: result.message,
-        };
-
-        await docRef.update({
-          workers: updatedWorkers,
-          updatedAt: now,
+          return ok(undefined);
         });
-
-        return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update test result');
@@ -505,15 +599,56 @@ export function createWorkerSettingsRepository(
     async updateHealthStatus(
       userId: string,
       workerName: string,
-      status: WorkerHealthStatus
+      status: WorkerHealthStatus,
+      registration?: WorkerConfig
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
         const docRef = collection.doc(userId);
-        await docRef.update({
+        const update = {
           [`workerHealthStatuses.${workerName}`]: status,
           updatedAt: new Date().toISOString(),
+        };
+        if (registration === undefined) {
+          await docRef.update(update);
+          return ok(undefined);
+        }
+
+        return await firestore.runTransaction(async (transaction) => {
+          const data = (await transaction.get(docRef)).data() as WorkerSettingsDoc | undefined;
+          const stored = data?.workers.find((candidate) => candidate.name === workerName);
+          if (data === undefined || stored === undefined || !isSameRegistration(stored, registration)) {
+            return err(registrationChanged());
+          }
+
+          const cached = data.workerHealthStatuses?.[workerName];
+          const policy = isCodeTaskWorkerTypePolicy(status.state) ? status.state : undefined;
+          const confirmed = policy === undefined ? undefined : selectPolicy(stored, policy);
+          if ((cached !== undefined && cached.checkedAt > status.checkedAt) ||
+              (confirmed !== undefined && policy !== undefined && confirmed.workerTypesRevision > policy.workerTypesRevision)) {
+            return ok(undefined);
+          }
+
+          transaction.update(docRef, {
+            ...update,
+            [`workerHealthStatuses.${workerName}`]: {
+              ...status,
+              ...(registration.registrationId !== undefined && { registrationId: registration.registrationId }),
+              ...(status.state._tag === 'healthy' && confirmed !== undefined && {
+                state: { ...status.state, ...confirmed },
+              }),
+            },
+            ...(confirmed !== undefined && confirmed === policy && {
+              workers: data.workers.map((candidate) =>
+                candidate === stored ? {
+                  ...candidate,
+                  enabledWorkerTypes: confirmed.enabledWorkerTypes,
+                  workerTypesRevision: confirmed.workerTypesRevision,
+                } : candidate
+              ),
+            }),
+          });
+          return ok(undefined);
         });
-        return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update health status');
@@ -530,23 +665,25 @@ export function createWorkerSettingsRepository(
       workerType: CodeTaskWorkerType
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
-        const docRef = collection.doc(userId);
-        const doc = await docRef.get();
-        const now = new Date().toISOString();
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(userId);
+          const doc = await transaction.get(docRef);
+          const now = new Date().toISOString();
 
-        if (doc.exists) {
-          await docRef.update({ [field]: workerType, updatedAt: now });
-        } else {
-          await docRef.set({
-            userId,
-            workers: [],
-            [field]: workerType,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
+          if (doc.exists) {
+            transaction.update(docRef, { [field]: workerType, updatedAt: now });
+          } else {
+            transaction.set(docRef, {
+              userId,
+              workers: [],
+              [field]: workerType,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
 
-        return ok(undefined);
+          return ok(undefined);
+        });
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, field }, 'Failed to update default worker type');

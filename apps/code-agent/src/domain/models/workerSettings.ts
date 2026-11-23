@@ -5,7 +5,7 @@
  * with per-user encrypted credentials.
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
+import type { CodeTaskWorkerType, CodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
 
 /**
  * Worker name validation regex.
@@ -34,9 +34,11 @@ export function isValidWorkerName(name: string): boolean {
  * Configuration for a single worker.
  * Credentials are stored encrypted in Firestore.
  */
-export interface WorkerConfig {
+export interface WorkerConfig extends Partial<CodeTaskWorkerTypePolicy> {
   /** User-defined worker name (e.g., "home-mac", "office-pc") */
   name: string;
+  /** Internal identity of the registration at this endpoint. */
+  registrationId?: string;
   /** Worker URL (e.g., "https://cc-mac.intexuraos.cloud") */
   url: string;
   /** Cloudflare Access Client ID for this worker */
@@ -108,11 +110,22 @@ export interface WorkerConfigUpdateInput {
   enabled?: boolean;
 }
 
+export interface WorkerTypePolicyUpdate {
+  enabledWorkerTypes: CodeTaskWorkerType[];
+  expectedRevision: number;
+}
+
+/** Older registrations are identified by their registered URL until replaced. */
+export function workerRegistrationKey(worker: WorkerConfig): string {
+  return worker.registrationId ?? worker.url;
+}
+
 /**
  * Masked version of worker config for API responses.
  * Secrets show only last 3 characters.
  */
-export interface MaskedWorkerConfig {
+export interface MaskedWorkerConfig extends Partial<CodeTaskWorkerTypePolicy> {
+  registrationKey: string;
   name: string;
   url: string;
   cfAccessClientId: string;
@@ -161,8 +174,17 @@ export type WorkerHealthState =
 
 export type WorkerAuthProvider = 'claude' | 'codex';
 
+export const WORKER_AUTH_STATUSES = [
+  'active',
+  'disabled',
+  'expired',
+  'not_configured',
+  'invalid',
+  'refresh_failed',
+] as const;
+
 export interface WorkerAuthStatusDetails {
-  status: 'active' | 'expired' | 'not_configured';
+  status: (typeof WORKER_AUTH_STATUSES)[number];
   authMode?: string | null;
   refreshSupported?: boolean;
   expiresAt?: string;
@@ -178,13 +200,13 @@ export interface ProviderApiKeyStatus {
 /**
  * Worker is healthy and responding.
  */
-export interface HealthyState {
+export interface HealthyState extends Partial<CodeTaskWorkerTypePolicy> {
   _tag: 'healthy';
   healthy: true;
   capacity: number;
   running: number;
   available: number;
-  workerAuths: Record<WorkerAuthProvider, WorkerAuthStatusDetails>;
+  workerAuths: Partial<Record<WorkerAuthProvider, WorkerAuthStatusDetails>>;
   providerApiKeys: Record<string, ProviderApiKeyStatus>;
   dockerHealthy: boolean;
   diskHealthy: boolean;
@@ -240,4 +262,5 @@ export interface WorkerHealthStatus {
   state: WorkerHealthState;
   checkedAt: string;
   stale: boolean;
+  registrationId?: string;
 }

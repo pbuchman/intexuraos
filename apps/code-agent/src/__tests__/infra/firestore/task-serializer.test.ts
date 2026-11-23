@@ -507,6 +507,7 @@ describe('buildUpdateData', () => {
         updatedAt: Timestamp.fromDate(new Date('2025-01-10')),
       },
       workerLocation: 'vm1',
+      workerAudience: 'https://worker.example',
       callbackReceived: true,
       logChunksDropped: 7,
       pendingUserMessages: ['hi'],
@@ -533,6 +534,7 @@ describe('buildUpdateData', () => {
     expect(data['result']).toEqual({ summary: 'ok' });
     expect(data['statusSummary']).toEqual(input.statusSummary);
     expect(data['workerLocation']).toBe('vm1');
+    expect(data['workerAudience']).toBe('https://worker.example');
     expect(data['callbackReceived']).toBe(true);
     expect(data['logChunksDropped']).toBe(7);
     expect(data['pendingUserMessages']).toEqual(['hi']);

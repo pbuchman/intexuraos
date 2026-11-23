@@ -8,7 +8,7 @@ export type WorkerType = CodeTaskWorkerType;
 export const WORKER_TYPES: WorkerType[] = [...CODE_TASK_WORKER_TYPES];
 
 export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
-  auto: 'Auto',
+  auto: 'Claude Auto',
   opus: 'Opus',
   sonnet: 'Sonnet',
   codex: 'Codex',

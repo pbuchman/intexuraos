@@ -9,6 +9,10 @@
 
 import { IntexuraOSError } from '@intexuraos/common-core';
 import {
+  validateErrorHubConnectAddress,
+  validateErrorHubHost,
+} from '../../shared/error-hub-routing.mjs';
+import {
   DEFAULT_CAPACITY,
   DEFAULT_COMPLETION_MAX_ATTEMPTS,
   DEFAULT_PORT,
@@ -27,6 +31,9 @@ export type EnvReader = Record<string, string | undefined>;
  */
 export interface BootstrapEnvConfig {
   repoUrl: string;
+  bindHost?: string;
+  taskAccessPublicKeyPath?: string;
+  taskAccessAudience?: string;
   repoPath?: string;
   codeAgentUrl: string;
   internalAuthToken: string;
@@ -48,6 +55,7 @@ export interface BootstrapEnvConfig {
   preserveWorkerContainers: boolean;
   linearApiKey: string;
   errorHubHost: string;
+  errorHubConnectAddress?: string;
   openRouterApiKey: string;
   gitUserNameOverride?: string;
   gitUserEmailOverride?: string;
@@ -112,39 +120,22 @@ function readOptionalString(env: EnvReader, name: string): string | undefined {
   return raw !== undefined && raw !== '' ? raw : undefined;
 }
 
-const TAILNET_DNS_HOSTNAME_PATTERN =
-  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}ts\.net$/u;
-
-function readErrorHubHost(env: EnvReader): string {
-  const value = getRequiredEnv('INTEXURAOS_ERROR_HUB_HOST', env);
-  let origin: URL | undefined;
-  if (!/\s/u.test(value)) {
-    try {
-      origin = new URL(`https://${value}`);
-    } catch {
-      origin = undefined;
-    }
-  }
-
-  if (
-    origin === undefined ||
-    origin.hostname === '' ||
-    !TAILNET_DNS_HOSTNAME_PATTERN.test(origin.hostname.toLowerCase()) ||
-    origin.port !== '8443' ||
-    origin.host.toLowerCase() !== value.toLowerCase() ||
-    origin.username !== '' ||
-    origin.password !== '' ||
-    origin.pathname !== '/' ||
-    origin.search !== '' ||
-    origin.hash !== ''
-  ) {
-    throw new IntexuraOSError(
-      'MISCONFIGURED',
-      'Invalid INTEXURAOS_ERROR_HUB_HOST. Expected a tailnet DNS host on port 8443.'
+function readErrorHubRouting(
+  env: EnvReader
+): Pick<BootstrapEnvConfig, 'errorHubHost' | 'errorHubConnectAddress'> {
+  const errorHubHost = getRequiredEnv('INTEXURAOS_ERROR_HUB_HOST', env);
+  try {
+    validateErrorHubHost(errorHubHost);
+    const errorHubConnectAddress = validateErrorHubConnectAddress(
+      env['INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS']
     );
+    return {
+      errorHubHost,
+      ...(errorHubConnectAddress !== undefined && { errorHubConnectAddress }),
+    };
+  } catch (error) {
+    throw new IntexuraOSError('MISCONFIGURED', (error as TypeError).message);
   }
-
-  return value;
 }
 
 function normalizeWorkerImageRef(image: string): string {
@@ -213,7 +204,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const gitUserNameOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_NAME');
   const gitUserEmailOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_EMAIL');
   const sentryDsn = readOptionalString(env, 'INTEXURAOS_SENTRY_DSN');
-  const errorHubHost = readErrorHubHost(env);
+  const errorHubRouting = readErrorHubRouting(env);
   // Release identifier: prefer Cloud Run's K_REVISION (auto-injected on every
   // deploy) and fall back to an explicit override for non-Cloud-Run hosts.
   const release =
@@ -221,6 +212,13 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
 
   return {
     repoUrl,
+    bindHost: getOptionalEnv('INTEXURAOS_ORCHESTRATOR_BIND_HOST', '127.0.0.1', env),
+    ...(env['INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH'] && {
+      taskAccessPublicKeyPath: env['INTEXURAOS_TASK_ACCESS_PUBLIC_KEY_PATH'],
+    }),
+    ...(env['INTEXURAOS_TASK_ACCESS_AUDIENCE'] && {
+      taskAccessAudience: env['INTEXURAOS_TASK_ACCESS_AUDIENCE'],
+    }),
     ...(repoPath !== undefined ? { repoPath } : {}),
     codeAgentUrl,
     internalAuthToken,
@@ -241,7 +239,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     ...(workerForensicsBasePath !== undefined ? { workerForensicsBasePath } : {}),
     preserveWorkerContainers,
     linearApiKey,
-    errorHubHost,
+    ...errorHubRouting,
     openRouterApiKey,
     ...(gitUserNameOverride !== undefined ? { gitUserNameOverride } : {}),
     ...(gitUserEmailOverride !== undefined ? { gitUserEmailOverride } : {}),

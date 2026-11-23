@@ -36,6 +36,7 @@ const REQUIRED_ENV = [
 
 // Additional env vars required in production but optional in E2E mode
 const PRODUCTION_ONLY_ENV = [
+  'INTEXURAOS_TASK_ACCESS_SIGNING_KEY_PATH',
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC',
@@ -56,13 +57,14 @@ const PRODUCTION_ONLY_ENV = [
 
 // In E2E mode, only validate core env vars; others have sensible defaults
 const isE2eMode = process.env['E2E_MODE'] === 'true';
+const preflight = process.argv[2] === '--preflight';
 // Direct local starts keep the same default as PM2; basic Home PROD supplies false.
 process.env['INTEXURAOS_PR_TRIAGE_ENABLED'] ??= 'true';
 validateRequiredEnv(isE2eMode ? REQUIRED_ENV : [...REQUIRED_ENV, ...PRODUCTION_ONLY_ENV]);
 
 // Initialize Sentry (required - DSN is validated above)
 const dsn = process.env['INTEXURAOS_SENTRY_DSN'];
-if (dsn !== undefined) {
+if (!preflight && dsn !== undefined) {
   initSentry({
     dsn,
     environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
@@ -92,10 +94,18 @@ async function main(): Promise<void> {
   });
 
   const { firestore, logger } = getServices();
-  await runAgentRoutingContractMigration({ firestore, logger });
-  await assertNoLegacyAgentRoutingContractValues({ firestore, logger });
+  if (!preflight) {
+    await runAgentRoutingContractMigration({ firestore, logger });
+    await assertNoLegacyAgentRoutingContractValues({ firestore, logger });
+  }
 
   const app = await buildServer();
+  if (preflight) {
+    // Exercise plugin registration in the isolated network namespace before the live service stops.
+    await app.ready();
+    await app.close();
+    return;
+  }
 
   // Drain registered usage sinks on SIGTERM/SIGINT before exit so the 500ms
   // batching window doesn't lose events when Cloud Run scales down.

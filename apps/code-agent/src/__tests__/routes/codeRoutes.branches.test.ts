@@ -1697,6 +1697,24 @@ describe('codeRoutes branch coverage', () => {
       expect(body.error.code).toBe('WORKER_UNAVAILABLE');
     });
 
+    it('returns CONFLICT when the assigned worker does not permit a terminal resume', async () => {
+      mockedSendTaskMessage.mockResolvedValue(err({
+        code: 'worker_type_disabled', message: 'This worker no longer accepts auto',
+      }));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/tasks/task-123/messages',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { message: 'Hello' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        error: { code: 'CONFLICT', message: 'This worker no longer accepts auto' },
+      });
+    });
+
     it('returns SESSION_EXPIRED for session_expired', async () => {
       mockedSendTaskMessage.mockResolvedValue(err({
         code: 'session_expired',

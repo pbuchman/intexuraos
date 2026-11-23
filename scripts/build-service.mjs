@@ -221,7 +221,7 @@ if (bundledNpmPackages.size > 0) {
  * with no separate install step. Add a service here when it adopts a
  * deploy path that does not run `pnpm install --prod` inside `dist/`.
  */
-const SOURCE_TREE_RUN_SERVICES = new Set(['orchestrator']);
+const SOURCE_TREE_RUN_SERVICES = new Set(['code-agent', 'orchestrator']);
 function canResolveFrom(pkg, fromDir) {
   let dir = fromDir;
   while (true) {

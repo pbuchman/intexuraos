@@ -64,9 +64,15 @@ Research tasks return structured reports with sources, summaries, and findings. 
 
 ### Configure Your AI Workers
 
-The Worker Configuration page lets you register, test, and manage the code execution workers that run agent tasks. Each worker requires Cloudflare Access credentials and an orchestrator secret. You can reorder workers to set priority, test connectivity with a live check, and set a default review worker type per your preferences — choosing which AI model handles review tasks by default. Up to two workers can be registered at a time.
+Open **Settings → Code** to register up to two workers, test connectivity, set their priority and choose a default review type. Each worker has its own **Edit worker types** control. The worker's main enable switch controls whether your tasks can use that endpoint at all.
 
-**Example:** You have two workers registered — one running Opus for complex tasks and one running Sonnet for speed. You set Sonnet as your default review worker type so that quick review passes happen faster without consuming Opus capacity for your main implementation tasks.
+To run only Codex on Home Dev, open **Edit worker types** on the Home Dev row. Clear **Claude Code**, select **Codex** and optionally **Codex xhigh**, then choose **Save worker types**. Wait for **Worker types applied** and check that **Claude OAuth · Disabled** appears. The group includes Claude Auto, Claude Opus, Claude Sonnet and OpenRouter Free. OpenRouter Free runs Claude Code with an OpenRouter key and can also be enabled individually without starting Claude OAuth refresh.
+
+The host applies the selection when it confirms the save and keeps it across restarts. Running attempts finish normally. New attempts, including queued tasks and retries, use the current selection. With two workers, a new task can use the other host if it supports the requested type. If every enabled worker excludes it, the task shows which type was disabled. To turn Claude back on, select the group or individual types and save again. Enabling an OAuth-backed type restores the credential check and shows the actual session state.
+
+Clicking the **Claude Code** group clears it even when only some of its types are selected. If a follow-up was queued just before you disabled its type, check the task log. Re-enable the type and send the next message in the same task to deliver the waiting messages in order.
+
+Registrations without a saved selection start with all types enabled. If the panel asks for an orchestrator update or cannot confirm the save, your selection stays in the editor. A conflicting host change requires a fresh status check before you can save again.
 
 ### Everything Else in One Place
 

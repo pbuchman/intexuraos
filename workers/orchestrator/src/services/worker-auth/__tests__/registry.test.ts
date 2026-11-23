@@ -125,4 +125,45 @@ describe('WorkerAuthRegistry', () => {
 
     expect(registry.loadCredentials()).toEqual({ claude: false, codex: true });
   });
+
+  it('does not read or refresh Claude OAuth when only Codex and OpenRouter workers are enabled', async () => {
+    const claude = createManager('claude', {
+      status: 'expired',
+      authMode: 'oauth',
+      refreshSupported: true,
+    });
+    const codex = createManager('codex', {
+      status: 'active',
+      authMode: 'chatgpt',
+      refreshSupported: true,
+    });
+    const registry = new WorkerAuthRegistry([claude, codex], ['codex-xhigh', 'openrouter-free']);
+    registry.loadCredentials();
+    registry.startMonitoring();
+
+    expect(registry.getStates()).toEqual({
+      claude: { status: 'disabled', authMode: null, refreshSupported: false },
+      codex: { status: 'active', authMode: 'chatgpt', refreshSupported: true },
+    });
+    expect(registry.isExpiringSoon('claude', 60_000)).toBe(false);
+    expect(await registry.refresh('claude')).toBe(false);
+    expect(registry.getCurrentAccessToken('claude')).toBeNull();
+    expect(claude.loadCredentials).not.toHaveBeenCalled();
+    expect(claude.startMonitoring).not.toHaveBeenCalled();
+    expect(claude.refresh).not.toHaveBeenCalled();
+  });
+
+  it('starts one monitoring interval per provider when startup is repeated', () => {
+    const codex = createManager('codex', {
+      status: 'active',
+      authMode: 'chatgpt',
+      refreshSupported: true,
+    });
+    const registry = new WorkerAuthRegistry([codex], ['codex']);
+
+    registry.startMonitoring();
+    registry.startMonitoring();
+
+    expect(codex.startMonitoring).toHaveBeenCalledOnce();
+  });
 });

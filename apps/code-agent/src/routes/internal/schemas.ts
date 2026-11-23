@@ -326,6 +326,9 @@ export const GET_TASK_DISPATCH_METADATA_SCHEMA = {
       additionalProperties: false,
       properties: {
         taskId: { type: 'string' },
+        ownerId: { type: 'string' },
+        workerLocation: { type: 'string' },
+        workerAudience: { type: 'string' },
         prompt: { type: 'string' },
         repository: { type: 'string' },
         baseBranch: { type: 'string' },

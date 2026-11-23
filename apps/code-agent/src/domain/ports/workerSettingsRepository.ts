@@ -5,7 +5,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
+import type { CodeTaskWorkerType, CodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain';
 import type {
   UserWorkerSettings,
   WorkerConfig,
@@ -24,7 +24,7 @@ export type DefaultWorkerTypeField =
   | 'defaultSentryWorkerType';
 
 export interface WorkerSettingsError {
-  code: 'not_found' | 'already_exists' | 'max_workers_exceeded' | 'internal_error';
+  code: 'not_found' | 'already_exists' | 'max_workers_exceeded' | 'registration_changed' | 'internal_error';
   message: string;
 }
 
@@ -70,6 +70,13 @@ export interface WorkerSettingsRepository {
     config: WorkerConfigUpdateInput
   ): Promise<Result<void, WorkerSettingsError>>;
 
+  /** Cache a policy confirmed by the host and return the newest known policy for this registration. */
+  confirmWorkerTypePolicy(
+    userId: string,
+    worker: WorkerConfig,
+    policy: CodeTaskWorkerTypePolicy
+  ): Promise<Result<CodeTaskWorkerTypePolicy, WorkerSettingsError>>;
+
   /**
    * Delete a worker by name.
    * Fails if worker not found.
@@ -111,7 +118,8 @@ export interface WorkerSettingsRepository {
   updateHealthStatus(
     userId: string,
     workerName: string,
-    status: WorkerHealthStatus
+    status: WorkerHealthStatus,
+    registration?: WorkerConfig
   ): Promise<Result<void, WorkerSettingsError>>;
 
   /**

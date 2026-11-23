@@ -86,6 +86,10 @@ const server = createServer(
       sendJson(response, 200, { ok: true });
       return;
     }
+    if (request.method === 'GET' && request.url === '/health/ready') {
+      sendJson(response, 200, { status: 'ready' });
+      return;
+    }
     if (request.method !== 'GET' || request.headers.authorization !== 'Bearer tailnet-only') {
       sendJson(response, 401, { detail: 'Unauthorized' });
       return;
@@ -112,7 +116,10 @@ const server = createServer(
       });
       return;
     }
-    if (path === `/api/0/organizations/${organization}/issues/${shortId}/events/latest/`) {
+    if (
+      path === `/api/0/organizations/${organization}/issues/${shortId}/events/latest/` ||
+      path === `/api/0/organizations/${organization}/issues/${shortId}/events/${eventId}/`
+    ) {
       sendJson(response, 200, eventPayload());
       return;
     }

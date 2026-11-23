@@ -1,5 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createHmac } from 'node:crypto';
+import { TASK_ACCESS_HEADER } from '@intexuraos/code-task-domain/task-access';
+import { isCodeTaskWorkerTypePolicy } from '@intexuraos/code-task-domain/worker-types';
+import { TaskAccess, type TaskAccessConfig } from './services/task-access.js';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { Task } from './types/task.js';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { IsolationProvider } from './services/isolation/types.js';
@@ -8,8 +12,18 @@ import type { OrchestratorStatus } from './types/state.js';
 import type { Logger } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CreateTaskRequest, ProviderApiKeyHealth } from './types/api.js';
-import { CreateTaskRequestSchema, SendMessageRequestSchema } from './types/schemas.js';
+import {
+  CreateTaskRequestSchema,
+  SendMessageRequestSchema,
+  TaskStatusSchema,
+} from './types/schemas.js';
 import { isOrchestratorAdmissionFrozen } from './admission-freeze.js';
+import { defaultWorkerTypePolicy, type WorkerTypePolicy } from './services/worker-type-policy.js';
+
+export interface WorkerTypeControls {
+  policy: WorkerTypePolicy;
+  credentialWatchdog: { idleTicks: number };
+}
 
 interface TaskParams {
   id: string;
@@ -55,15 +69,17 @@ export function registerRoutes(
   app: FastifyInstance,
   dispatcher: TaskDispatcher,
   tokenService: GitHubTokenService,
-  config: { orchestratorSecret: string },
+  config: { orchestratorSecret: string; taskAccess?: TaskAccessConfig },
   logger: Logger,
   getStatus?: () => OrchestratorStatus,
   workerAuthRegistry?: WorkerAuthRegistry,
   isolationProvider?: IsolationProvider,
   providerApiKeys: Record<string, ProviderApiKeyHealth> = {},
-  readAdmissionFreeze: () => boolean = isOrchestratorAdmissionFrozen
+  readAdmissionFreeze: () => boolean = isOrchestratorAdmissionFrozen,
+  workerTypeControls?: WorkerTypeControls
 ): void {
-  const nonceCache: NonceCache = {};
+  const access = config.taskAccess === undefined ? undefined : new TaskAccess(config.taskAccess);
+  const nonceCache = Object.create(null) as NonceCache;
   const activeAdmissionRequests = new WeakMap<
     FastifyRequest,
     { handlerSettled: boolean; transportSettled: boolean }
@@ -166,24 +182,25 @@ export function registerRoutes(
     );
   });
 
-  const verifyDispatchSignature = async (
-    request: TaskBodyRequest,
-    reply: FastifyReply
-  ): Promise<void> => {
-    const timestamp = request.headers['x-dispatch-timestamp'] as string | undefined;
-    const signature = request.headers['x-dispatch-signature'] as string | undefined;
-    const nonce = request.headers['x-dispatch-nonce'] as string | undefined;
+  const verifySignature = (request: TaskBodyRequest, reply: FastifyReply, prefix = ''): void => {
+    const timestamp = request.headers['x-dispatch-timestamp'];
+    const signature = request.headers['x-dispatch-signature'];
+    const nonce = request.headers['x-dispatch-nonce'];
 
-    if (timestamp === undefined || signature === undefined || nonce === undefined) {
+    if (
+      typeof timestamp !== 'string' ||
+      typeof signature !== 'string' ||
+      typeof nonce !== 'string'
+    ) {
       reply.status(401).send({ error: 'Missing authentication headers' });
       return;
     }
 
-    const timestampNum = Number.parseInt(timestamp, 10);
+    const timestampNum = Number(timestamp);
     const now = Date.now();
 
     // Check timestamp freshness
-    if (Math.abs(now - timestampNum) > TIMESTAMP_TOLERANCE_MS) {
+    if (!/^\d+$/.test(timestamp) || Math.abs(now - timestampNum) > TIMESTAMP_TOLERANCE_MS) {
       reply.status(401).send({ error: 'Timestamp too old or too new' });
       return;
     }
@@ -196,12 +213,15 @@ export function registerRoutes(
     }
 
     // Verify HMAC signature
-    const message = `${timestamp}.${nonce}.${JSON.stringify(request.body)}`;
+    const message = `${prefix}${timestamp}.${nonce}.${JSON.stringify(request.body)}`;
     const expectedSignature = createHmac('sha256', config.orchestratorSecret)
       .update(message)
-      .digest('hex');
+      .digest();
 
-    if (signature !== expectedSignature) {
+    if (
+      !/^[0-9a-f]{64}$/.test(signature) ||
+      !timingSafeEqual(Buffer.from(signature, 'hex'), expectedSignature)
+    ) {
       reply.status(401).send({ error: 'Invalid signature' });
       return;
     }
@@ -213,23 +233,16 @@ export function registerRoutes(
     cleanUpExpiredNonces(nonceCache, now);
   };
 
+  const verifyDispatchSignature = async (
+    request: TaskBodyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
+    verifySignature(request, reply);
+  };
+
   // POST /tasks - Submit new task
   app.post('/tasks', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
     await runTaskMutation(request, reply, async () => {
-      // Log incoming request (redact secrets)
-      const rawBody = request.body as Record<string, unknown>;
-      logger.info(
-        {
-          method: 'POST',
-          path: '/tasks',
-          body: {
-            ...rawBody,
-            webhookSecret: rawBody['webhookSecret'] ? '[REDACTED]' : undefined,
-          },
-        },
-        'Task submission payload'
-      );
-
       const parseResult = CreateTaskRequestSchema.safeParse(request.body);
       if (!parseResult.success) {
         const errorResponse = { error: parseResult.error.message };
@@ -245,9 +258,31 @@ export function registerRoutes(
         return;
       }
       const parsed = parseResult.data;
+      if (access === undefined) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+      const proof = await access.authenticate(
+        request.headers[TASK_ACCESS_HEADER],
+        'POST',
+        request.url,
+        parsed.taskId,
+        JSON.stringify(request.body)
+      );
+      if (proof === null) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+
+      const existing = await dispatcher.getTask(parsed.taskId);
+      if (existing !== null && !(await access.ownsTask(proof, existing))) {
+        reply.status(409).send({ error: 'Task is already assigned' });
+        return;
+      }
 
       const body: CreateTaskRequest = {
         taskId: parsed.taskId,
+        accessBinding: { ownerId: proof.ownerId, worker: proof.worker, audience: proof.audience },
         workerType: parsed.workerType,
         prompt: parsed.prompt,
         webhookUrl: parsed.webhookUrl,
@@ -290,6 +325,10 @@ export function registerRoutes(
 
       if (!result.ok) {
         const { error } = result;
+        if (error.type === 'worker_type_disabled') {
+          reply.status(409).send({ code: error.type, error: error.message });
+          return;
+        }
         if (
           error.type === 'at_capacity' ||
           error.type === 'docker_unavailable' ||
@@ -318,23 +357,58 @@ export function registerRoutes(
     });
   });
 
-  // GET /tasks/:id - Get task status
-  app.get<{ Params: TaskParams }>('/tasks/:id', async (request: TaskParamsRequest, reply) => {
+  const authorizeTask = async (
+    request: TaskParamsRequest,
+    reply: FastifyReply
+  ): Promise<Task | null> => {
     const { id } = request.params;
+    const path = '/tasks/' + encodeURIComponent(id);
+    if (
+      access === undefined ||
+      request.body !== undefined ||
+      request.url !== path ||
+      request.headers['transfer-encoding'] !== undefined ||
+      (request.headers['content-length'] ?? '0') !== '0'
+    ) {
+      reply.status(401).send({ error: 'Unauthorized' });
+      return null;
+    }
+    const proof = await access.authenticate(
+      request.headers[TASK_ACCESS_HEADER],
+      request.method,
+      path,
+      id,
+      ''
+    );
+    if (proof === null) {
+      reply.status(401).send({ error: 'Unauthorized' });
+      return null;
+    }
     const task = await dispatcher.getTask(id);
-
-    if (task === null) {
+    if (task?.taskId !== id || !(await access.ownsTask(proof, task))) {
       reply.status(404).send({ error: 'Task not found' });
+      return null;
+    }
+    return task;
+  };
+
+  // Fastify also registers HEAD and passes its actual method to authorization.
+  app.get<{ Params: TaskParams }>('/tasks/:id', async (request, reply) => {
+    const task = await authorizeTask(request, reply);
+    if (task === null) return;
+    const status = TaskStatusSchema.safeParse(task.status);
+    if (!status.success) {
+      reply.status(500).send({ error: 'Invalid stored task status' });
       return;
     }
-
-    reply.send(task);
+    reply.send({ taskId: task.taskId, status: status.data });
   });
 
-  // DELETE /tasks/:id - Cancel task
-  app.delete<{ Params: TaskParams }>('/tasks/:id', async (request: TaskParamsRequest, reply) => {
+  app.delete<{ Params: TaskParams }>('/tasks/:id', async (request, reply) => {
+    const task = await authorizeTask(request, reply);
+    if (task === null) return;
     await runTaskMutation(request, reply, async () => {
-      const { id } = request.params;
+      const id = task.taskId;
       const result = await dispatcher.cancelTask(id);
 
       if (!result.ok) {
@@ -377,6 +451,10 @@ export function registerRoutes(
 
         if (!result.ok) {
           const { error } = result;
+          if (error.type === 'worker_type_disabled') {
+            reply.status(409).send({ code: error.type, error: error.message });
+            return;
+          }
           if (error.type === 'not_found') {
             reply.status(404).send({ error: error.message });
             return;
@@ -425,9 +503,12 @@ export function registerRoutes(
     const healthDetails = isolationProvider?.getHealthDetails?.() ?? { docker: true, disk: true };
     /* v8 ignore stop @preserve */
     const admissionFrozen = readAdmissionFrozenFailClosed();
+    const policy = workerTypeControls?.policy.snapshot() ?? defaultWorkerTypePolicy();
 
     reply.send({
       healthContractVersion: 2,
+      ...policy,
+      credentialWatchdog: workerTypeControls?.credentialWatchdog ?? { idleTicks: 0 },
       admissionFrozen,
       pendingAdmissions,
       admissionActivityTotal,
@@ -444,6 +525,55 @@ export function registerRoutes(
       logForwarderDrain: dispatcher.getLogForwarderDrainSnapshot(),
     });
   });
+
+  app.put<{ Body: unknown }>(
+    '/admin/worker-types',
+    {
+      preHandler: [
+        async (request, reply): Promise<void> => {
+          verifySignature(request, reply, 'PUT /admin/worker-types\n');
+        },
+      ],
+    },
+    async (request, reply) => {
+      const body = request.body;
+      if (
+        typeof body !== 'object' ||
+        body === null ||
+        !('enabledWorkerTypes' in body) ||
+        !('expectedRevision' in body)
+      ) {
+        reply.status(400).send({ error: 'Invalid worker type policy request' });
+        return;
+      }
+      const proposed = {
+        enabledWorkerTypes: body.enabledWorkerTypes,
+        workerTypesRevision: body.expectedRevision,
+      };
+      if (!isCodeTaskWorkerTypePolicy(proposed)) {
+        reply.status(400).send({ error: 'Invalid worker type policy request' });
+        return;
+      }
+      if (workerTypeControls === undefined) {
+        reply.status(503).send({ error: 'Worker type policy unavailable' });
+        return;
+      }
+      try {
+        const saved = await workerTypeControls.policy.apply(
+          proposed.enabledWorkerTypes,
+          proposed.workerTypesRevision
+        );
+        if (saved === null) {
+          reply.status(409).send({ error: 'Worker type policy revision conflict' });
+          return;
+        }
+        reply.send(saved);
+      } catch (error) {
+        logger.error({ error }, 'Failed to apply worker type policy');
+        reply.status(500).send({ error: 'Failed to apply worker type policy' });
+      }
+    }
+  );
 
   // GET /meta/worker-image - Worker image diagnostics
   app.get('/meta/worker-image', async (_request, reply) => {

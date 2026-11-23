@@ -46,6 +46,35 @@ describe('WorkerHealthProbe', () => {
   });
 
   describe('probeWorker', () => {
+    it('carries forward the current worker types and revision', async () => {
+      mockedFetch.mockResolvedValueOnce(Response.json(readyHealth({
+        enabledWorkerTypes: [],
+        workerTypesRevision: 0,
+      })));
+
+      expect(await probe.probeWorker(mockWorker)).toMatchObject({
+        _tag: 'healthy',
+        enabledWorkerTypes: [],
+        workerTypesRevision: 0,
+      });
+    });
+
+    it.each([
+      { enabledWorkerTypes: ['unknown'], workerTypesRevision: 1 },
+      { enabledWorkerTypes: ['codex', 'codex'], workerTypesRevision: 1 },
+      { enabledWorkerTypes: ['codex'], workerTypesRevision: -1 },
+      { workerTypesRevision: 1 },
+      { enabledWorkerTypes: ['codex'] },
+    ])('marks a present but invalid policy %j as a contract mismatch', async (policy) => {
+      mockedFetch.mockResolvedValueOnce(Response.json(readyHealth(policy)));
+
+      expect(await probe.probeWorker(mockWorker)).toMatchObject({
+        _tag: 'unknown',
+        healthy: false,
+        contractMismatch: true,
+      });
+    });
+
     it('should return healthy state when orchestrator responds with ready status', async () => {
       mockedFetch.mockResolvedValueOnce({
         ok: true,

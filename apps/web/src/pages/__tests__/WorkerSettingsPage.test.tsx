@@ -8,6 +8,10 @@ const { mockUseWorkerSettings, mockDefaultWorkerTypeCard, mockWorkerRow } = vi.h
 }));
 
 vi.mock('@/hooks', () => ({
+  useWorkersStatus: (): { status: null; refreshStatus: ReturnType<typeof vi.fn> } => ({
+    status: null,
+    refreshStatus: vi.fn(),
+  }),
   useWorkerSettings: (): ReturnType<typeof mockUseWorkerSettings> => mockUseWorkerSettings(),
   useTimezone: (): {
     timezone: string;

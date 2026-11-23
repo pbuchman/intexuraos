@@ -17,6 +17,7 @@ import type {
   LifecycleProviderConfig,
 } from './worker-entry-types.js';
 import { buildWorkerEnv, resolveForensicsSeccompSecurityOpt } from './worker-env.js';
+import { getErrorHubHostMapping } from '../../../shared/error-hub-routing.mjs';
 import { auditLockfile, snapshotLockfile } from './lockfile-guard.js';
 
 export function detectMainGitDir(worktreePath: string): string | null {
@@ -44,6 +45,7 @@ export function detectMainGitDir(worktreePath: string): string | null {
 }
 
 export interface RunAttemptInput {
+  onStarted?: () => void;
   taskId: string;
   config: WorkerConfig;
   workers: Map<string, WorkerEntry>;
@@ -124,6 +126,7 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
     });
 
     const execStream = await execInstance.start({ hijack: false, stdin: false });
+    input.onStarted?.();
     execStream.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf-8');
       worker.attemptLogBuffer += text;
@@ -317,6 +320,10 @@ export function buildCreateContainerSpec(
       ]
     : ['no-new-privileges'];
   const ulimits = providerConfig.forensicsMode ? [{ Name: 'core', Soft: -1, Hard: -1 }] : undefined;
+  const errorHubHostMapping = getErrorHubHostMapping(
+    config.secrets.ERROR_HUB_HOST,
+    providerConfig.errorHubConnectAddress
+  );
 
   const binds = volume.buildBinds({
     worktreePath,
@@ -340,6 +347,9 @@ export function buildCreateContainerSpec(
     HostConfig: {
       Binds: binds,
       NetworkMode: network.getNetworkMode(),
+      ...(errorHubHostMapping !== undefined && {
+        ExtraHosts: [`${errorHubHostMapping.hostname}:${errorHubHostMapping.address}`],
+      }),
       ReadonlyRootfs: false,
       Tmpfs: volume.buildTmpfs(),
       CapDrop: ['ALL'],
@@ -363,7 +373,7 @@ export interface ResumeInput {
   workers: Map<string, WorkerEntry>;
   preservedWorkers: Map<string, PreservedWorkerEntry>;
   logger: Logger;
-  runAttempt: (taskId: string, config: WorkerConfig) => void;
+  runAttempt: (taskId: string, config: WorkerConfig) => Promise<void>;
 }
 
 export async function resumeFromPreserved(input: ResumeInput): Promise<WorkerHandle | null> {
@@ -397,7 +407,7 @@ export async function resumeFromPreserved(input: ResumeInput): Promise<WorkerHan
       { taskId, containerId: preserved.containerId },
       'Restored preserved container for resume'
     );
-    runAttempt(taskId, config);
+    await runAttempt(taskId, config);
     return handle;
   }
 
@@ -434,7 +444,7 @@ export async function resumeFromOrphan(input: ResumeInput): Promise<WorkerHandle
         { taskId, containerId: orphanInfo.Id },
         'Reusing orphaned container for resume after restart'
       );
-      runAttempt(taskId, config);
+      await runAttempt(taskId, config);
       return handle;
     }
 
@@ -458,7 +468,7 @@ export interface CreateWorkerOrchInput {
   preservedWorkers: Map<string, PreservedWorkerEntry>;
   logger: Logger;
   resolveRuntime: () => WorkerRuntime;
-  runAttempt: (taskId: string, config: WorkerConfig) => void;
+  runAttempt: (taskId: string, config: WorkerConfig) => Promise<void>;
 }
 
 export async function createWorkerOrchestration(
@@ -488,7 +498,7 @@ export async function createWorkerOrchestration(
     }
     await volume.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
     volume.ensureTaskForensicsPath(taskId);
-    runAttempt(taskId, config);
+    await runAttempt(taskId, config);
     return existingWorker.handle;
   }
 
@@ -629,7 +639,7 @@ export async function createWorkerOrchestration(
     });
 
     if (providerConfig.managedAttemptsMode) {
-      runAttempt(taskId, config);
+      await runAttempt(taskId, config);
     } else {
       dockerContainer
         .wait()

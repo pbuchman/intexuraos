@@ -83,6 +83,10 @@ describe('classifyCodeTaskDispatchability', () => {
       message: 'All capable workers',
       remediation: 'Wait for a running task to finish',
     },
+    worker_type_disabled: {
+      message: 'is disabled on all enabled workers',
+      remediation: 'Enable this task type on a worker',
+    },
     codex_auth_unavailable: {
       message: 'No reachable worker has active Codex auth',
       remediation: 'Refresh Codex/ChatGPT authentication',
@@ -145,6 +149,13 @@ describe('classifyCodeTaskDispatchability', () => {
       workers: [worker('home-dev')],
       health: { 'home-dev': healthy({ available: 0, running: 2, capacity: 2 }) },
       reason: 'workers_at_capacity',
+    },
+    {
+      name: 'worker policy excludes the requested type',
+      workerType: 'sonnet',
+      workers: [worker('home-dev')],
+      health: { 'home-dev': healthy({ enabledWorkerTypes: ['codex'], workerTypesRevision: 1 }) },
+      reason: 'worker_type_disabled',
     },
     {
       name: 'codex auth unavailable when expired auth is not refreshable',

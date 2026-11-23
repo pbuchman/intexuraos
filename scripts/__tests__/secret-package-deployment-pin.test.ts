@@ -16,17 +16,14 @@ describe('admission-gated Home PROD deployment', () => {
     expect(actions.every((reference) => /@[0-9a-f]{40}$/u.test(reference))).toBe(true);
   });
 
-  it('reconciles the numeric package version before the bounded privileged launcher', () => {
-    const verification =
-      'node scripts/home-prod/verify-secret-package-version-pins.mjs "$PROD_SECRET_PACKAGE_VERSION" config/environments/secret-packages.json';
+  it('reconciles the numeric package version before signing the release request', () => {
+    const verification = '.packages.prod.stableVersion == $version';
     expect(workflow).toContain(
       'PROD_SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}'
     );
     expect(workflow).not.toMatch(/PROD_SECRET_PACKAGE_VERSION[^\n]*latest/u);
     expect(workflow).toContain(verification);
-    expect(workflow.indexOf(verification)).toBeLessThan(
-      workflow.indexOf('/usr/local/sbin/intexuraos-home-prod-deploy')
-    );
+    expect(workflow.indexOf(verification)).toBeLessThan(workflow.indexOf('uses: actions/attest@'));
   });
 
   it('admits and builds the candidate before stopping or replacing the active runtime', () => {

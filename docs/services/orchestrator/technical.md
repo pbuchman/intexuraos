@@ -2,7 +2,7 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running the shared code-worker runtime (Claude or Codex), streams logs back in real time, and delivers completion results via signed webhooks and a redundant StatusUpdateClient. It manages GitHub App installation tokens plus shared worker auth for Claude and Codex, persists state atomically to disk, and recovers interrupted tasks (including container adoption and pending resume recovery) on restart. After each worker attempt, a deterministic completion verifier parses the agent final block against the agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, an Agent Compliance Validator performs post-completion transcript analysis via the configured validation model chain - verifying claims, checking contract compliance, detecting anomalies, and posting a structured report on the PR. The Remediation Agent autonomously addresses review findings on existing PR branches. Execution memory from past tasks is injected into prompts with a simplified verification pipeline. The Ask Agent provides interactive code-aware Q&A sessions. Inactivity detection kills unresponsive sessions after ten minutes of silence and auto-restarts them up to three times. Terminal finalization persists status, releases capacity, commits status to code-agent, and sends the completion webhook before timeout-bound worker cleanup, so Docker teardown hangs do not leave completed tasks stuck in `running`.
+The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC- and Ed25519-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running the shared code-worker runtime (Claude or Codex), streams logs back in real time, and delivers completion results via signed webhooks and a redundant StatusUpdateClient. It manages GitHub App installation tokens plus shared worker auth for Claude and Codex, persists state atomically to disk, and recovers interrupted tasks (including container adoption and pending resume recovery) on restart. After each worker attempt, a deterministic completion verifier parses the agent final block against the agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, an Agent Compliance Validator performs post-completion transcript analysis via the configured validation model chain - verifying claims, checking contract compliance, detecting anomalies, and posting a structured report on the PR. The Remediation Agent autonomously addresses review findings on existing PR branches. Execution memory from past tasks is injected into prompts with a simplified verification pipeline. The Ask Agent provides interactive code-aware Q&A sessions. Inactivity detection kills unresponsive sessions after ten minutes of silence and auto-restarts them up to three times. Terminal finalization persists status, releases capacity, commits status to code-agent, and sends the completion webhook before timeout-bound worker cleanup, so Docker teardown hangs do not leave completed tasks stuck in `running`.
 
 ## Agent-Based Routing and Contracts
 
@@ -258,14 +258,16 @@ Added `inactivityRestartCount` to the Task model, tracking lifetime inactivity r
 
 | Method | Path                   | Auth        | Request Body                        | Response                                                       |
 | ------ | ---------------------- | ----------- | ----------------------------------- | -------------------------------------------------------------- |
-| POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`                           |
-| GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
-| DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
+| POST   | `/tasks`               | Worker HMAC and code-agent proof | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`                           |
+| GET, HEAD | `/tasks/:id`        | Code-agent proof | Empty body | GET returns `200 { taskId, status }`. HEAD returns only headers. |
+| DELETE | `/tasks/:id`           | Code-agent proof | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
 | POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`/`410`                   |
 | GET    | `/health`              | None        | -                                   | `200 { healthContractVersion: 2, admissionFrozen, pendingAdmissions, admissionActivityTotal, status, capacity, running, available, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain }` |
 | GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`                  |
+
+The dedicated Ed25519 proof binds the task, owner, worker, audience, method, route, body digest, issue time, and nonce. The worker pins the code-agent public key and stores accepted nonce markers for the 30-second validity window across restarts. Legacy assignments require independent confirmation. See the [task authorization rollout](../../../workers/orchestrator/README.md#task-authorization-rollout).
 
 ### HMAC Authentication
 
@@ -733,7 +735,7 @@ Collects per-task resource and token metrics after completion:
 
 - **Image pull on every task:** The DockerProvider always pulls the worker image before each task. There is no cached-image fallback. If the registry is unreachable, the task fails.
 - **Git mutex scope:** The worktree mutex serializes all git operations across all tasks. Two concurrent worktree creations are sequential, not parallel.
-- **Nonce cache is in-memory:** If the orchestrator restarts, all nonces are lost. Replayed requests during the 5-minute timestamp window after a restart will be accepted.
+- **Dispatch HMAC nonce cache:** The in-memory HMAC replay cache resets on restart during its five-minute request window. The separate Ed25519 task read/cancel verifier persists accepted nonce markers across restarts.
 - **State file is a single JSON blob:** All tasks are stored in one file. Very high task volumes could cause write contention.
 - **Container preservation is selective:** Only execution and planning containers are preserved on completion. Review, pull request, and remediation containers are destroyed immediately. One preserved container per PR is enforced.
 - **macOS metrics are zero:** `TurnMetricsCollector` relies on cgroup v2. macOS Docker does not expose cgroup paths, so CPU and memory metrics are always zero.

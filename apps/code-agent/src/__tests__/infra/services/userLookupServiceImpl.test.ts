@@ -45,6 +45,7 @@ function createMockRepo(): WorkerSettingsRepository {
     getWorkerByName: async (): ReturnType<WorkerSettingsRepository['getWorkerByName']> => ok(null),
     addWorker: async (): ReturnType<WorkerSettingsRepository['addWorker']> => ok(undefined),
     updateWorker: async (): ReturnType<WorkerSettingsRepository['updateWorker']> => ok(undefined),
+    confirmWorkerTypePolicy: async (_userId, _worker, policy) => ok(policy),
     deleteWorker: async (): ReturnType<WorkerSettingsRepository['deleteWorker']> => ok(undefined),
     reorderWorkers: async (): ReturnType<WorkerSettingsRepository['reorderWorkers']> => ok(undefined),
     updateTestResult: async (): ReturnType<WorkerSettingsRepository['updateTestResult']> => ok(undefined),

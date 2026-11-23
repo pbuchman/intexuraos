@@ -147,7 +147,15 @@ main() {
   flock --exclusive --wait 60 "${LOCK_FD}" || fail 'Timed out waiting for the privileged deployment lock'
   fetch_candidate "$2"
   ensure_pm2_service
-  run_user_deployment "$1" "$2"
+  local helper='/usr/local/libexec/intexuraos-code-agent/release.py'
+  if [[ -e "${helper}" || -L "${helper}" ]]; then
+    [[ ! -L "${helper}" && "$(stat -c '%U:%G:%a:%F' "${helper}")" == 'root:root:644:regular file' ]] \
+      || fail 'Unsafe isolated code-agent coordinator'
+    /usr/bin/python3 -I "${helper}" "$1" "$2" "${CANDIDATE_DIR}/payload.json"
+  else
+    # The installed user driver rejects signer-aware SHAs without isolated activation.
+    run_user_deployment "$1" "$2"
+  fi
 }
 
 main "$@"
