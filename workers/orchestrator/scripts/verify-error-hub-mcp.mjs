@@ -600,20 +600,28 @@ async function removeDisposableContainer(containerName) {
     );
     if (id === '') return; // Docker may already have auto-removed the container.
     if (!/^[a-f0-9]{64}$/u.test(id)) throw new Error('Unexpected container identity');
-    const identity = await runDockerCommand(
-      [
-        'inspect',
-        '--type',
-        'container',
-        '--format',
-        `{{.Id}} {{index .Config.Labels "${PROBE_LABEL}"}}`,
-        id,
-      ],
-      signal
-    );
-    if (identity !== `${id} ${containerName}`)
-      throw new Error('Container label did not match this probe');
-    await runDockerCommand(['rm', '--force', id], signal);
+    try {
+      const identity = await runDockerCommand(
+        [
+          'inspect',
+          '--type',
+          'container',
+          '--format',
+          `{{.Id}} {{index .Config.Labels "${PROBE_LABEL}"}}`,
+          id,
+        ],
+        signal
+      );
+      if (identity !== `${id} ${containerName}`) throw new VerificationError('cleanup_failed');
+      await runDockerCommand(['rm', '--force', id], signal);
+    } catch (error) {
+      if (error instanceof VerificationError) throw error;
+      const remaining = await runDockerCommand(
+        ['ps', '--all', '--quiet', '--no-trunc', '--filter', `id=${id}`],
+        signal
+      );
+      if (remaining !== '') throw error;
+    }
   } catch {
     throw new VerificationError('cleanup_failed');
   }

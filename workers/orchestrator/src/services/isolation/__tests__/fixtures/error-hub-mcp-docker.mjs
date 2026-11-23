@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import process from 'node:process';
 
@@ -15,14 +15,24 @@ if (args[0] === 'run') {
   writeFileSync(statePath, args[args.indexOf('--label') + 1]);
   console.log(containerId);
 } else if (args[0] === 'ps') {
-  console.log(containerId);
+  if (existsSync(statePath)) console.log(containerId);
 } else if (args[0] === 'inspect') {
+  if (scenario === 'auto-remove-before-inspect') {
+    unlinkSync(statePath);
+    process.exit(1);
+  }
   const label =
     scenario === 'foreign-label'
       ? 'com.intexuraos.error-hub-probe=other-invocation'
       : readFileSync(statePath, 'utf8');
   console.log(`${containerId} ${label.split('=')[1]}`);
-} else if (args[0] === 'rm' || args[2] === 'test') {
+} else if (args[0] === 'rm') {
+  if (scenario === 'issue-gone-auto-remove-before-rm') {
+    unlinkSync(statePath);
+    process.exit(1);
+  }
+  if (scenario === 'rm-failure') process.exit(1);
+} else if (args[2] === 'test') {
   // The disposable container exists and has completed its managed boot.
 } else if (args[2] === 'node') {
   if (scenario === 'hold-readiness') {
@@ -32,7 +42,7 @@ if (args[0] === 'run') {
     process.exit(1);
   } else {
     console.log(
-      scenario === 'issue-gone' &&
+      scenario.startsWith('issue-gone') &&
         args.at(-1).startsWith('https://') &&
         new URL(args.at(-1)).pathname.startsWith('/api/0/')
         ? '404'
@@ -115,7 +125,7 @@ if (args[0] === 'run') {
       JSON.stringify({
         jsonrpc: '2.0',
         id: message.id,
-        ...(scenario === 'issue-gone' && tool !== undefined
+        ...(scenario.startsWith('issue-gone') && tool !== undefined
           ? { error: { code: -32000, message: sentinel } }
           : { result }),
       })

@@ -464,6 +464,18 @@ describe('verifier CLI', () => {
       error: 'issue_not_found',
     },
     {
+      scenario: 'issue-gone-auto-remove-before-rm',
+      args: ['--probe', ISSUE_URL],
+      mode: 'probe',
+      error: 'issue_not_found',
+    },
+    {
+      scenario: 'rm-failure',
+      args: ['--transport-only'],
+      mode: 'transport-only',
+      error: 'cleanup_failed',
+    },
+    {
       scenario: 'foreign-label',
       args: ['--transport-only'],
       mode: 'transport-only',
@@ -481,6 +493,23 @@ describe('verifier CLI', () => {
     expect(result.stderr).toBe('');
     expect(JSON.parse(result.stdout)).toEqual({ ok: false, mode, error });
     if (scenario === 'foreign-label') expect(readFileSync(log, 'utf8')).not.toContain('["rm"');
+  });
+
+  it('preserves a successful result when Docker auto-removes the container before inspection', () => {
+    const { env, log } = prepareDocker('auto-remove-before-inspect');
+    const result = spawnSync(process.execPath, [script, '--transport-only'], {
+      env,
+      encoding: 'utf8',
+      timeout: 4_000,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, mode: 'transport-only' });
+    expect(readFileSync(log, 'utf8')).toContain(
+      JSON.stringify(['ps', '--all', '--quiet', '--no-trunc', '--filter', `id=${'d'.repeat(64)}`])
+    );
+    expect(readFileSync(log, 'utf8')).not.toContain('["rm"');
   });
 
   it('kills a hung Docker read on termination and removes only the label-verified container', async () => {

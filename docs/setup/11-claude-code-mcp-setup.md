@@ -102,14 +102,19 @@ From a Claude session, test one known private SentryBox issue URL with
 tailnet hostname.
 
 Run the checked-in verifier on the worker host. Set the Error Hub hostname and
-the ID of the existing local worker image. Home Dev also sets the bridge
-gateway used by its orchestrator. Resolve the image ID from the same local
-image reference configured in the running orchestrator.
+the ID of the existing local worker image. Resolve the image ID from the same
+local image reference configured in the running orchestrator.
+
+On deployments that use the Home Dev relay, run this export before invoking
+the verifier. Leave the variable unset on deployments that use normal DNS.
+
+```bash
+export INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS='fd00:172:28::1'
+```
 
 ```bash
 export INTEXURAOS_ERROR_HUB_HOST="home-dev.example.ts.net:8443"
 export INTEXURAOS_CODE_WORKER_IMAGE="$(docker image inspect --format '{{.Id}}' '<configured-local-worker-image>')"
-export INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS='fd00:172:28::1'
 
 pnpm --filter @intexuraos/orchestrator verify:error-hub-mcp \
   "https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/<id>/" \

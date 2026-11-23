@@ -207,14 +207,16 @@ USER claude
 
   it('runs Sentry MCP 0.37.0 from the Code Worker image over HTTPS on code-worker-net', async () => {
     const issueUrl = `https://${fixtureHost}:8443/organizations/intexuraos/issues/42/`;
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...dockerProxyEnvironment,
+      INTEXURAOS_CODE_WORKER_IMAGE: trustedImageId,
+      INTEXURAOS_ERROR_HUB_HOST: `${fixtureHost}:8443`,
+      PATH: `${directory}:${process.env['PATH'] ?? ''}`,
+    };
+    delete env['INTEXURAOS_ERROR_HUB_CONNECT_ADDRESS'];
     const { stdout } = await execFileAsync(process.execPath, [scriptPath, issueUrl, eventId], {
-      env: {
-        ...process.env,
-        ...dockerProxyEnvironment,
-        INTEXURAOS_CODE_WORKER_IMAGE: trustedImageId,
-        INTEXURAOS_ERROR_HUB_HOST: `${fixtureHost}:8443`,
-        PATH: `${directory}:${process.env['PATH'] ?? ''}`,
-      },
+      env,
       maxBuffer: 1024 * 1024,
       timeout: 90_000,
     });
